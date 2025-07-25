@@ -257,11 +257,14 @@ The GitHub Actions CI/CD pipeline consists of several workflows with concurrency
 #### Release Please Workflow (`.github/workflows/release-please.yml`)
 - Manages automated releases using Google's release-please action
 - Creates and maintains release PRs with changelogs
-- **Multi-platform desktop builds**: When a desktop release is created:
+- **Multi-platform desktop builds**: Runs on every push to main (as of PR #79):
+  - Previously only ran when a desktop release was created
+  - Now provides continuous integration by building on all main branch commits
   - Builds Tauri desktop applications for Linux (ubuntu-latest) and Windows (windows-latest)
   - Uses matrix strategy with `fail-fast: false` to ensure all platforms build
   - Creates draft GitHub releases with platform-specific binaries
   - Tags releases with format `app-v__VERSION__`
+  - Note: Currently includes a placeholder build step that needs implementation
 
 #### Interactive Claude Workflow (`.github/workflows/claude.yml`)
 - Triggers on `@claude` mentions in issues, PR comments, and reviews  

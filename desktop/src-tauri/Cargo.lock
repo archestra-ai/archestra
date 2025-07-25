@@ -153,6 +153,7 @@ dependencies = [
  "futures-util",
  "http-body-util",
  "lazy_static",
+ "once_cell",
  "reqwest 0.12.22",
  "rmcp",
  "rstest",

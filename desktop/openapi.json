@@ -12,6 +12,119 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/chat": {
+      "get": {
+        "tags": ["chat"],
+        "operationId": "get_all_chats",
+        "responses": {
+          "200": {
+            "description": "List all chats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Chat"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": ["chat"],
+        "operationId": "create_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Chat created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/chat/{id}": {
+      "get": {
+        "tags": ["chat"],
+        "operationId": "get_chat_by_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Chat ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Chat with messages found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatWithMessages"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Chat not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["chat"],
+        "operationId": "delete_chat",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Chat ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Chat deleted successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/api/external_mcp_client": {
       "get": {
         "tags": ["external_mcp_client"],
@@ -513,11 +626,77 @@
   },
   "components": {
     "schemas": {
+      "Chat": {
+        "type": "object",
+        "required": ["id", "title", "llm_provider", "llm_model", "created_at", "updated_at"],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "llm_model": {
+            "type": "string"
+          },
+          "llm_provider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ChatDefinition": {
+        "type": "object",
+        "required": ["llm_provider", "llm_model"],
+        "properties": {
+          "llm_model": {
+            "type": "string"
+          },
+          "llm_provider": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatWithMessages": {
+        "type": "object",
+        "required": ["chat", "messages"],
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/Chat"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        }
+      },
       "ConnectExternalMCPClientRequest": {
         "type": "object",
         "required": ["client_name"],
         "properties": {
           "client_name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateChatRequest": {
+        "type": "object",
+        "required": ["llm_provider", "llm_model"],
+        "properties": {
+          "llm_model": {
+            "type": "string"
+          },
+          "llm_provider": {
             "type": "string"
           }
         }
@@ -898,6 +1077,46 @@
           }
         }
       },
+      "Message": {
+        "type": "object",
+        "required": ["id", "chat_id", "role", "content", "created_at"],
+        "properties": {
+          "chat_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageDefinition": {
+        "type": "object",
+        "required": ["chat_id", "role", "content"],
+        "properties": {
+          "chat_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "content": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "PaginatedMCPRequestLogResponse_MCPRequestLog": {
         "type": "object",
         "required": ["data", "total", "page", "page_size"],
@@ -989,6 +1208,10 @@
     }
   },
   "tags": [
+    {
+      "name": "chat",
+      "description": "Chat and message management API"
+    },
     {
       "name": "external_mcp_client",
       "description": "External MCP Client management API"

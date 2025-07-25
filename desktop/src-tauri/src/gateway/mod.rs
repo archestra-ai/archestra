@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
 pub mod api;
-mod llm_providers;
+pub mod llm_providers;
 mod mcp;
 mod mcp_proxy;
 

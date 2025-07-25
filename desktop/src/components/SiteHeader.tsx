@@ -13,11 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useSidebar } from '@/components/ui/sidebar';
 
+import { TypewriterText } from './TypewriterText';
 import { ModeToggle } from './mode-toggle';
 
 interface SiteHeaderProps {
   title?: string;
   breadcrumbs?: string[];
+  isAnimatedTitle?: boolean;
 }
 
 export function SiteHeader(props: SiteHeaderProps) {
@@ -61,7 +63,9 @@ export function SiteHeader(props: SiteHeaderProps) {
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
                   {index === (props.breadcrumbs?.length ?? 0) - 1 ? (
-                    <BreadcrumbPage>{breadcrumb}</BreadcrumbPage>
+                    <BreadcrumbPage>
+                      {props.isAnimatedTitle && index === 1 ? <TypewriterText text={breadcrumb} /> : breadcrumb}
+                    </BreadcrumbPage>
                   ) : (
                     <BreadcrumbLink>{breadcrumb}</BreadcrumbLink>
                   )}

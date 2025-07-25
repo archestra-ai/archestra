@@ -8,9 +8,21 @@ import type {
   ConnectExternalMcpClientData,
   ConnectExternalMcpClientErrors,
   ConnectExternalMcpClientResponses,
+  CreateChatData,
+  CreateChatErrors,
+  CreateChatResponses,
+  DeleteChatData,
+  DeleteChatErrors,
+  DeleteChatResponses,
   DisconnectExternalMcpClientData,
   DisconnectExternalMcpClientErrors,
   DisconnectExternalMcpClientResponses,
+  GetAllChatsData,
+  GetAllChatsErrors,
+  GetAllChatsResponses,
+  GetChatByIdData,
+  GetChatByIdErrors,
+  GetChatByIdResponses,
   GetConnectedExternalMcpClientsData,
   GetConnectedExternalMcpClientsErrors,
   GetConnectedExternalMcpClientsResponses,
@@ -58,6 +70,38 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    * used to access values that aren't defined as part of the SDK function.
    */
   meta?: Record<string, unknown>;
+};
+
+export const getAllChats = <ThrowOnError extends boolean = false>(options?: Options<GetAllChatsData, ThrowOnError>) => {
+  return (options?.client ?? _heyApiClient).get<GetAllChatsResponses, GetAllChatsErrors, ThrowOnError>({
+    url: '/api/chat',
+    ...options,
+  });
+};
+
+export const createChat = <ThrowOnError extends boolean = false>(options: Options<CreateChatData, ThrowOnError>) => {
+  return (options.client ?? _heyApiClient).post<CreateChatResponses, CreateChatErrors, ThrowOnError>({
+    url: '/api/chat',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+export const deleteChat = <ThrowOnError extends boolean = false>(options: Options<DeleteChatData, ThrowOnError>) => {
+  return (options.client ?? _heyApiClient).delete<DeleteChatResponses, DeleteChatErrors, ThrowOnError>({
+    url: '/api/chat/{id}',
+    ...options,
+  });
+};
+
+export const getChatById = <ThrowOnError extends boolean = false>(options: Options<GetChatByIdData, ThrowOnError>) => {
+  return (options.client ?? _heyApiClient).get<GetChatByIdResponses, GetChatByIdErrors, ThrowOnError>({
+    url: '/api/chat/{id}',
+    ...options,
+  });
 };
 
 export const getConnectedExternalMcpClients = <ThrowOnError extends boolean = false>(

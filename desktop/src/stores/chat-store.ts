@@ -1,7 +1,10 @@
+import { listen } from '@tauri-apps/api/event';
 import { Message as OllamaMessage, ToolCall as OllamaToolCall } from 'ollama/browser';
 import { create } from 'zustand';
 
 import type { ToolContext } from '../components/kibo/ai-input';
+import type { Chat } from '../lib/api';
+import { createChat, deleteChat, getAllChats, getChatById } from '../lib/api';
 import { ChatMessage, ToolCallInfo } from '../types';
 import { useDeveloperModeStore } from './developer-mode-store';
 import { useMCPServersStore } from './mcp-servers-store';
@@ -15,16 +18,25 @@ interface ParsedContent {
 }
 
 interface ChatState {
+  chats: Chat[];
+  currentChatId: number | null;
   chatHistory: ChatMessage[];
   streamingMessageId: string | null;
   abortController: AbortController | null;
+  isLoadingChats: boolean;
+  isLoadingMessages: boolean;
 }
 
 interface ChatActions {
+  loadChats: () => Promise<void>;
+  createNewChat: () => Promise<void>;
+  selectChat: (chatId: number) => Promise<void>;
+  deleteCurrentChat: () => Promise<void>;
   sendChatMessage: (message: string, selectedTools?: ToolContext[]) => Promise<void>;
   clearChatHistory: () => void;
   cancelStreaming: () => void;
   updateStreamingMessage: (messageId: string, content: string) => void;
+  initializeStore: () => void;
 }
 
 type ChatStore = ChatState & ChatActions;
@@ -155,11 +167,90 @@ const executeToolsAndCollectResults = async (
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   // State
+  chats: [],
+  currentChatId: null,
   chatHistory: [],
   streamingMessageId: null,
   abortController: null,
+  isLoadingChats: false,
+  isLoadingMessages: false,
 
   // Actions
+  loadChats: async () => {
+    set({ isLoadingChats: true });
+    try {
+      const { data } = await getAllChats();
+      set({ chats: data || [], isLoadingChats: false });
+    } catch (error) {
+      console.error('Failed to load chats:', error);
+      set({ isLoadingChats: false });
+    }
+  },
+
+  createNewChat: async () => {
+    const { selectedModel } = useOllamaStore.getState();
+    try {
+      const { data } = await createChat({
+        body: {
+          llm_provider: 'ollama',
+          llm_model: selectedModel,
+        },
+      });
+      if (data) {
+        set((state) => ({
+          chats: [data, ...state.chats],
+          currentChatId: data.id,
+          chatHistory: [],
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to create chat:', error);
+    }
+  },
+
+  selectChat: async (chatId: number) => {
+    set({ isLoadingMessages: true, currentChatId: chatId });
+    try {
+      const { data } = await getChatById({ path: { id: chatId } });
+      if (data) {
+        const messages: ChatMessage[] = data.messages.map((msg) => ({
+          id: msg.id.toString(),
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+          timestamp: new Date(msg.created_at),
+        }));
+        set({ chatHistory: messages, isLoadingMessages: false });
+      }
+    } catch (error) {
+      console.error('Failed to load chat messages:', error);
+      set({ isLoadingMessages: false });
+    }
+  },
+
+  deleteCurrentChat: async () => {
+    const { currentChatId } = get();
+    if (!currentChatId) return;
+
+    try {
+      await deleteChat({ path: { id: currentChatId } });
+      set((state) => {
+        const newChats = state.chats.filter((chat) => chat.id !== currentChatId);
+        const newCurrentChatId = newChats.length > 0 ? newChats[0].id : null;
+        return {
+          chats: newChats,
+          currentChatId: newCurrentChatId,
+          chatHistory: [],
+        };
+      });
+
+      if (get().currentChatId) {
+        await get().selectChat(get().currentChatId!);
+      }
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+    }
+  },
+
   clearChatHistory: () => {
     set({ chatHistory: [] });
   },
@@ -219,12 +310,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   sendChatMessage: async (message: string, selectedTools?: ToolContext[]) => {
     const { chat, selectedModel } = useOllamaStore.getState();
+    const { currentChatId } = get();
 
     const allTools = useMCPServersStore.getState().allAvailableTools();
     const { isDeveloperMode, systemPrompt } = useDeveloperModeStore.getState();
 
     if (!message.trim()) {
       return;
+    }
+
+    // Create a new chat if none exists
+    if (!currentChatId) {
+      await get().createNewChat();
+      if (!get().currentChatId) {
+        console.error('Failed to create chat');
+        return;
+      }
     }
 
     const modelSupportsTools = checkModelSupportsTools(selectedModel);
@@ -417,7 +518,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({ streamingMessageId: null, abortController: null });
     }
   },
+
+  initializeStore: () => {
+    // Load chats on initialization
+    get().loadChats();
+
+    // Listen for chat title updates from the backend
+    listen<{ chatId: number; title: string }>('chat-title-updated', (event) => {
+      set((state) => ({
+        chats: state.chats.map((chat) =>
+          chat.id === event.payload.chatId
+            ? { ...chat, title: event.payload.title, updated_at: new Date().toISOString() }
+            : chat
+        ),
+      }));
+    });
+  },
 }));
+
+// Initialize the chat store on mount
+useChatStore.getState().initializeStore();
 
 // Computed selectors
 export const useIsStreaming = () => useChatStore((state) => state.streamingMessageId !== null);

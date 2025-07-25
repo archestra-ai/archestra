@@ -232,14 +232,15 @@ The GitHub Actions CI/CD pipeline consists of several workflows with concurrency
 
 #### Pull Request Workflow (`.github/workflows/on-pull-requests.yml`)
 - Runs the main testing workflow on all PRs
-- **Automated Claude Code Reviews**: Uses Claude Opus 4 model to provide automated PR reviews with feedback on code quality, security, and best practices
-- **Automated CLAUDE.md Updates**: Uses Claude Sonnet 4 model to automatically:
+- **Automated Claude Code Integration**: Uses Claude Opus 4 model (with Sonnet 4 as fallback) to:
+  - Provide automated PR reviews with feedback on code quality, security, and best practices
   - Update the CLAUDE.md file to reflect changes made in PRs
   - Add PR descriptions when they are missing
   - Ensure documentation stays current with codebase changes
-- Both Claude jobs skip release-please PRs; the review job also skips WIP PRs
+- Skips release-please PRs and WIP PRs (those with [WIP] in the title)
+- Uses sticky comments to maintain a single comment thread per PR
+- Includes CI permissions for Claude to read action results
 - Concurrency control cancels in-progress runs when new commits are pushed
-- Consolidates functionality from the removed `claude-code-review.yml` workflow
 
 #### Interactive Claude Workflow (`.github/workflows/claude.yml`)
 - Triggers on `@claude` mentions in issues, PR comments, and reviews  

@@ -210,6 +210,15 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
   - Unique tool identification format: `{serverId}:{toolName}`
   - Dynamic tool rendering in assistant messages with execution states
   - WebSocket broadcasts include tools in sandbox status updates
+  - **Tool Analysis**: Automatic analysis of tool properties using Ollama
+    - Uses `phi3:3.8b` model to analyze each tool's characteristics
+    - Analyzes tools for: `is_read`, `is_write`, `idempotent`, `reversible` properties
+    - Analysis performed when new tools are discovered
+    - Results stored in database and displayed in ToolHoverCard UI
+    - Batch processing (10 tools at a time) for performance
+    - Graceful fallback if analysis fails - tools still saved without analysis
+    - Re-analysis capability for unanalyzed tools
+    - Analysis results enhance user understanding of tool capabilities and risks
 - **LLM Provider Support**:
   - **Cloud Providers**: Anthropic, OpenAI, Google Gemini
   - **Local Providers**: Ollama for running models locally
@@ -242,9 +251,10 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
     - Graceful error handling - continues operation if downloads fail
   - **API Client** (`src/backend/ollama/client.ts`):
     - Full Ollama API support with TypeScript/Zod validation
-    - Methods: `generate()`, `pull()`, `list()`, `generateChatTitle()`
+    - Methods: `generate()`, `pull()`, `list()`, `generateChatTitle()`, `analyzeTools()`
     - Streaming support for model downloads and generation
     - Automatic retry logic for server connectivity
+    - `analyzeTools()`: Analyzes MCP tools for read/write, idempotent, and reversible properties
   - **API Endpoints**:
     - `GET /api/ollama/required-models` - Check model installation status
     - `/llm/ollama/*` - Proxy routes to local Ollama server
@@ -344,6 +354,12 @@ Key tables (snake_case naming):
   - `has_completed_onboarding`: Tracks onboarding completion status
   - `collect_telemetry_data`: Stores telemetry opt-in preferences
   - Auto-created on application startup via `ensureUserExists()`
+- `tools`: MCP tool metadata and analysis results
+  - Primary key: `{mcp_server_id}__{tool_name}` (double underscore separator)
+  - Foreign key to `mcp_servers` with cascade delete
+  - Stores tool name, description, and input schema
+  - Analysis results: `is_read`, `is_write`, `idempotent`, `reversible` (nullable booleans)
+  - Timestamps: `analyzed_at`, `created_at`, `updated_at`
 
 ### API Patterns
 

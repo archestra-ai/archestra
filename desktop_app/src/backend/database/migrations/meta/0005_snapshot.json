@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ecb9da1d-8c1e-4e78-b856-634814da0ac8",
-  "prevId": "423c2ca5-c274-4a03-9fd7-23c6d4090eb6",
+  "id": "4ae56f96-2f59-4c03-a64a-032fc733754e",
+  "prevId": "ecb9da1d-8c1e-4e78-b856-634814da0ac8",
   "tables": {
     "chats": {
       "name": "chats",
@@ -53,6 +53,13 @@
             "session_id"
           ],
           "isUnique": true
+        },
+        "chats_created_at_idx": {
+          "name": "chats_created_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -271,6 +278,27 @@
             "request_id"
           ],
           "isUnique": true
+        },
+        "mcp_request_logs_server_name_idx": {
+          "name": "mcp_request_logs_server_name_idx",
+          "columns": [
+            "server_name"
+          ],
+          "isUnique": false
+        },
+        "mcp_request_logs_timestamp_idx": {
+          "name": "mcp_request_logs_timestamp_idx",
+          "columns": [
+            "timestamp"
+          ],
+          "isUnique": false
+        },
+        "mcp_request_logs_mcp_session_id_idx": {
+          "name": "mcp_request_logs_mcp_session_id_idx",
+          "columns": [
+            "mcp_session_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -364,7 +392,23 @@
           "default": "(current_timestamp)"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "messages_chat_id_idx": {
+          "name": "messages_chat_id_idx",
+          "columns": [
+            "chat_id"
+          ],
+          "isUnique": false
+        },
+        "messages_chat_id_created_at_idx": {
+          "name": "messages_chat_id_created_at_idx",
+          "columns": [
+            "chat_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "messages_chat_id_chats_id_fk": {
           "name": "messages_chat_id_chats_id_fk",

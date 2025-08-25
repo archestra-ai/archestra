@@ -6,6 +6,161 @@
   },
   "components": {
     "schemas": {
+      "ToolAnalysisResultInput": {
+        "type": "object",
+        "properties": {
+          "is_read": {
+            "type": "boolean"
+          },
+          "is_write": {
+            "type": "boolean"
+          },
+          "idempotent": {
+            "type": "boolean"
+          },
+          "reversible": {
+            "type": "boolean"
+          }
+        },
+        "required": ["is_read", "is_write", "idempotent", "reversible"]
+      },
+      "ToolInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "mcp_server_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "is_write": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "idempotent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "reversible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "analyzed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mcp_server_id",
+          "name",
+          "description",
+          "input_schema",
+          "is_read",
+          "is_write",
+          "idempotent",
+          "reversible",
+          "analyzed_at",
+          "created_at",
+          "updated_at"
+        ]
+      },
       "SandboxStatusSummaryInput": {
         "type": "object",
         "properties": {
@@ -752,9 +907,81 @@
           "mcpServerName": {
             "description": "MCP server name",
             "type": "string"
+          },
+          "analysis": {
+            "description": "Tool analysis results",
+            "type": "object",
+            "properties": {
+              "status": {
+                "description": "Analysis status",
+                "type": "string",
+                "enum": ["awaiting_ollama_model", "in_progress", "error", "completed"]
+              },
+              "error": {
+                "description": "Error message if analysis failed",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "is_read": {
+                "description": "Whether the tool is read-only",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "is_write": {
+                "description": "Whether the tool writes data",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "idempotent": {
+                "description": "Whether the tool is idempotent",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "reversible": {
+                "description": "Whether the tool actions are reversible",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              }
+            },
+            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"]
           }
         },
-        "required": ["id", "name", "mcpServerId", "mcpServerName"]
+        "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"]
       },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
@@ -793,6 +1020,163 @@
           }
         },
         "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+      },
+      "ToolAnalysisResult": {
+        "type": "object",
+        "properties": {
+          "is_read": {
+            "type": "boolean"
+          },
+          "is_write": {
+            "type": "boolean"
+          },
+          "idempotent": {
+            "type": "boolean"
+          },
+          "reversible": {
+            "type": "boolean"
+          }
+        },
+        "required": ["is_read", "is_write", "idempotent", "reversible"],
+        "additionalProperties": false
+      },
+      "Tool": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "mcp_server_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "is_write": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "idempotent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "reversible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "analyzed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mcp_server_id",
+          "name",
+          "description",
+          "input_schema",
+          "is_read",
+          "is_write",
+          "idempotent",
+          "reversible",
+          "analyzed_at",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false
       },
       "SandboxStatusSummary": {
         "type": "object",
@@ -1560,9 +1944,82 @@
           "mcpServerName": {
             "description": "MCP server name",
             "type": "string"
+          },
+          "analysis": {
+            "description": "Tool analysis results",
+            "type": "object",
+            "properties": {
+              "status": {
+                "description": "Analysis status",
+                "type": "string",
+                "enum": ["awaiting_ollama_model", "in_progress", "error", "completed"]
+              },
+              "error": {
+                "description": "Error message if analysis failed",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "is_read": {
+                "description": "Whether the tool is read-only",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "is_write": {
+                "description": "Whether the tool writes data",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "idempotent": {
+                "description": "Whether the tool is idempotent",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              },
+              "reversible": {
+                "description": "Whether the tool actions are reversible",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "nullable": true,
+                    "enum": [null]
+                  }
+                ]
+              }
+            },
+            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"],
+            "additionalProperties": false
           }
         },
-        "required": ["id", "name", "mcpServerId", "mcpServerName"],
+        "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"],
         "additionalProperties": false
       },
       "OllamaRequiredModelStatus": {

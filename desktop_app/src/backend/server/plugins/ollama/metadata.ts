@@ -2,7 +2,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
 import config from '@backend/config';
-import OllamaClient from '@backend/ollama/client';
+import { OllamaClient } from '@backend/ollama';
 
 const {
   ollama: { requiredModels: ollamaRequiredModels },

@@ -26,13 +26,8 @@ jobs:
           persist-credentials: true # credentials are needed here as Claude will use them to read stuffs
 
       - name: Run Claude Code
-        uses: anthropics/claude-code-action@e26577a930883943cf9d90885cd1e8da510078dd # beta tag
+        uses: anthropics/claude-code-action@28f83620103c48a57093dcc2837eec89e036bb9f # v0.0.63
         with:
-          # We need to use the default GitHub token as a workaround for a bug in Anthropic's
-          # GitHub Action
-          #
-          # see https://github.com/anthropics/claude-code-action/issues/443
-          github_token: ${{ github.token }}
           # Dynamically set the secret based on the user who triggered the workflow
           # use their oauth token, since otherwise Anthropic will ban accounts for abuse :(
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

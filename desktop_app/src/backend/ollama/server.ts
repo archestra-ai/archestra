@@ -45,9 +45,23 @@ class OllamaServer {
         log.info(`[Ollama stdout]: ${data.toString()}`);
       });
 
-      // Handle stderr
+      /**
+       * Handle stderr (Ollama outputs normal logs to stderr, not just errors)
+       *
+       * Ollama uses stderr for normal logging output, not just errors
+       * Check if it's actually an error by looking for error indicators
+       */
       this.serverProcess.stderr?.on('data', (data) => {
-        log.error(`[Ollama stderr]: ${data.toString()}`);
+        const message = data.toString();
+        if (
+          message.toLowerCase().includes('error') ||
+          message.toLowerCase().includes('failed') ||
+          message.toLowerCase().includes('fatal')
+        ) {
+          log.error(`[Ollama stderr]: ${message}`);
+        } else {
+          log.info(`[Ollama stdout]: ${message}`);
+        }
       });
 
       // Handle process exit

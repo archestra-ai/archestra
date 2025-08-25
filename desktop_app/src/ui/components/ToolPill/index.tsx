@@ -25,20 +25,18 @@ export default function ToolPill({ tool }: ToolPillProps) {
       showInstructions={true}
       instructionText="Click the × to remove this tool from your context"
     >
-      <div>
-        <Badge variant="secondary" className="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer">
-          <ToolServerIcon toolServerName={mcpServerName} />
-          <ToolStatusIcon enabled={selectedToolIds.has(id)} />
-          <span>{formatToolName(name)}</span>
-          <button
-            onClick={() => removeSelectedTool(id)}
-            className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-            type="button"
-          >
-            <XIcon className="h-3 w-3" />
-          </button>
-        </Badge>
-      </div>
+      <Badge variant="secondary" className="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer">
+        <ToolServerIcon toolServerName={mcpServerName} />
+        <ToolStatusIcon enabled={selectedToolIds.has(id)} />
+        <span>{formatToolName(name)}</span>
+        <button
+          onClick={() => removeSelectedTool(id)}
+          className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+          type="button"
+        >
+          <XIcon className="h-3 w-3" />
+        </button>
+      </Badge>
     </ToolHoverCard>
   );
 }

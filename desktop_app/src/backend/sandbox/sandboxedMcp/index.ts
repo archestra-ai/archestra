@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import config from '@backend/config';
 import { type McpServer } from '@backend/models/mcpServer';
+import { ToolModel } from '@backend/models/tools';
 import PodmanContainer, { PodmanContainerStatusSummarySchema } from '@backend/sandbox/podman/container';
 import log from '@backend/utils/logger';
 
@@ -30,6 +31,17 @@ export const AvailableToolSchema = z.object({
   inputSchema: z.any().optional().describe('Tool input schema'),
   mcpServerId: z.string().describe('MCP server ID'),
   mcpServerName: z.string().describe('MCP server name'),
+  // Analysis results
+  analysis: z
+    .object({
+      status: z.enum(['awaiting_ollama_model', 'in_progress', 'error', 'completed']).describe('Analysis status'),
+      error: z.string().nullable().describe('Error message if analysis failed'),
+      is_read: z.boolean().nullable().describe('Whether the tool is read-only'),
+      is_write: z.boolean().nullable().describe('Whether the tool writes data'),
+      idempotent: z.boolean().nullable().describe('Whether the tool is idempotent'),
+      reversible: z.boolean().nullable().describe('Whether the tool actions are reversible'),
+    })
+    .describe('Tool analysis results'),
 });
 
 export const SandboxedMcpServerStatusSummarySchema = z.object({
@@ -54,8 +66,18 @@ export default class SandboxedMcpServer {
   private podmanContainer: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
+  private analysisUpdateInterval: NodeJS.Timeout | null = null;
 
   tools: McpTools = {};
+  private cachedToolAnalysis: Map<
+    string,
+    {
+      is_read: boolean | null;
+      is_write: boolean | null;
+      idempotent: boolean | null;
+      reversible: boolean | null;
+    }
+  > = new Map();
 
   constructor(mcpServer: McpServer, podmanSocketPath: string) {
     this.mcpServer = mcpServer;
@@ -64,6 +86,100 @@ export default class SandboxedMcpServer {
 
     this.podmanSocketPath = podmanSocketPath;
     this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
+
+    // Try to fetch cached tools on initialization
+    this.fetchCachedTools();
+
+    // Set up periodic updates for cached analysis
+    this.startPeriodicAnalysisUpdates();
+  }
+
+  /**
+   * Try to fetch cached tool analysis results from the database
+   */
+  private async fetchCachedTools() {
+    try {
+      const cachedTools = await ToolModel.getByMcpServerId(this.mcpServerId);
+      if (cachedTools.length > 0) {
+        log.info(`Found ${cachedTools.length} cached tool analysis results for ${this.mcpServerId}`);
+
+        // Only cache the analysis results, not the tools themselves
+        for (const cachedTool of cachedTools) {
+          // Cache the analysis results
+          this.cachedToolAnalysis.set(cachedTool.name, {
+            is_read: cachedTool.is_read,
+            is_write: cachedTool.is_write,
+            idempotent: cachedTool.idempotent,
+            reversible: cachedTool.reversible,
+          });
+        }
+      }
+    } catch (error) {
+      log.error(`Failed to fetch cached tool analysis results for ${this.mcpServerId}:`, error);
+    }
+  }
+
+  /**
+   * Update cached tool analysis results from database
+   * This is called periodically to pick up background analysis results
+   */
+  private async updateCachedAnalysis() {
+    try {
+      const tools = await ToolModel.getByMcpServerId(this.mcpServerId);
+      let hasUpdates = false;
+
+      for (const tool of tools) {
+        const cachedAnalysis = this.cachedToolAnalysis.get(tool.name);
+
+        // Check if this tool has new analysis results
+        if (
+          tool.analyzed_at &&
+          (!cachedAnalysis ||
+            cachedAnalysis.is_read !== tool.is_read ||
+            cachedAnalysis.is_write !== tool.is_write ||
+            cachedAnalysis.idempotent !== tool.idempotent ||
+            cachedAnalysis.reversible !== tool.reversible)
+        ) {
+          // Update cache
+          this.cachedToolAnalysis.set(tool.name, {
+            is_read: tool.is_read,
+            is_write: tool.is_write,
+            idempotent: tool.idempotent,
+            reversible: tool.reversible,
+          });
+          hasUpdates = true;
+          log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
+        }
+      }
+
+      return hasUpdates;
+    } catch (error) {
+      log.error(`Failed to update cached tool analysis for ${this.mcpServerId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Start periodic updates for cached analysis
+   */
+  private startPeriodicAnalysisUpdates() {
+    // Update every 5 seconds
+    this.analysisUpdateInterval = setInterval(async () => {
+      const hasUpdates = await this.updateCachedAnalysis();
+      if (hasUpdates) {
+        log.info(`Analysis cache updated for MCP server ${this.mcpServerId}`);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Stop periodic updates for cached analysis
+   */
+  private stopPeriodicAnalysisUpdates() {
+    if (this.analysisUpdateInterval) {
+      clearInterval(this.analysisUpdateInterval);
+      this.analysisUpdateInterval = null;
+    }
   }
 
   /**
@@ -74,12 +190,29 @@ export default class SandboxedMcpServer {
     log.info(`Fetching tools for ${this.mcpServerId}...`);
 
     const tools = await this.mcpClient.tools();
+    const previousToolCount = Object.keys(this.tools).length;
+
+    // Clear existing tools to ensure we have fresh data
+    this.tools = {};
+
     for (const [toolName, tool] of Object.entries(tools)) {
       const toolId = `${this.mcpServerId}${TOOL_ID_SEPARATOR}${toolName}`;
       this.tools[toolId] = tool;
     }
 
-    log.info(`Fetched ${Object.keys(this.tools).length} tools for ${this.mcpServerId}`);
+    const newToolCount = Object.keys(this.tools).length;
+    log.info(`Fetched ${newToolCount} tools for ${this.mcpServerId}`);
+
+    // If we have new tools or the count changed, analyze them
+    if (newToolCount > 0 && (newToolCount !== previousToolCount || previousToolCount === 0)) {
+      try {
+        log.info(`Starting async analysis of tools for ${this.mcpServerId}...`);
+        await ToolModel.analyze(tools, this.mcpServerId);
+      } catch (error) {
+        log.error(`Failed to save tools for ${this.mcpServerId}:`, error);
+        // Continue even if saving fails
+      }
+    }
   }
 
   private async createMcpClient() {
@@ -89,7 +222,7 @@ export default class SandboxedMcpServer {
 
     try {
       const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerProxyUrl));
-      this.mcpClient = await experimental_createMCPClient({ transport: transport as any });
+      this.mcpClient = await experimental_createMCPClient({ transport });
     } catch (error) {
       log.error(`Failed to connect MCP client for ${this.mcpServerId}:`, error);
     }
@@ -144,6 +277,8 @@ export default class SandboxedMcpServer {
   }
 
   async stop() {
+    this.stopPeriodicAnalysisUpdates();
+
     await this.podmanContainer.stopContainer();
 
     if (this.mcpClient) {
@@ -191,7 +326,10 @@ export default class SandboxedMcpServer {
   get availableToolsList(): AvailableTool[] {
     return Object.entries(this.tools).map(([id, tool]) => {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
-      const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + 1) : id;
+      const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
+
+      // Get analysis results from cache if available
+      const cachedAnalysis = this.cachedToolAnalysis.get(toolName);
 
       return {
         id,
@@ -200,6 +338,24 @@ export default class SandboxedMcpServer {
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: this.mcpServerId,
         mcpServerName: this.mcpServer.name,
+        // Include analysis results - default to awaiting_ollama_model if not analyzed
+        analysis: cachedAnalysis
+          ? {
+              status: 'completed',
+              error: null,
+              is_read: cachedAnalysis.is_read,
+              is_write: cachedAnalysis.is_write,
+              idempotent: cachedAnalysis.idempotent,
+              reversible: cachedAnalysis.reversible,
+            }
+          : {
+              status: 'awaiting_ollama_model',
+              error: null,
+              is_read: null,
+              is_write: null,
+              idempotent: null,
+              reversible: null,
+            },
       };
     });
   }

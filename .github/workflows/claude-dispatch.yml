@@ -28,10 +28,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        # NOTE: for right now we're using the eap tag because that it what is present
-        # in the GitHub gist that we're using (and I can't seem to find the eap tag in
-        # Anthropic's repo)
-        uses: anthropics/claude-code-action@eap # zizmor: ignore[unpinned-uses]
+        uses: anthropics/claude-code-action@28f83620103c48a57093dcc2837eec89e036bb9f # v0.0.63
         with:
           mode: "remote-agent"
 

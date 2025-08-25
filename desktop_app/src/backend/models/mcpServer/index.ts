@@ -123,12 +123,11 @@ export default class McpServerModel {
         // Use the provider's token handler to get the correct env vars
         const tokenEnvVars = await handleProviderTokens(provider, tokens, id);
 
-        // Add tokens to server config environment
+        // Use env variabled from oauth provider intead default ones
         if (tokenEnvVars) {
           finalServerConfig = {
             ...serverConfig,
             env: {
-              ...serverConfig.env,
               ...tokenEnvVars,
             },
           };

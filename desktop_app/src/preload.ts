@@ -11,9 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Generic provider browser auth
   providerBrowserAuth: (provider: string) => ipcRenderer.invoke('provider-browser-auth', provider),
 
-  // Legacy Slack auth (backward compatibility - uses provider-browser-auth internally)
-  slackAuth: () => ipcRenderer.invoke('slack-auth'),
-
   onOAuthCallback: (callback: (params: any) => void) => {
     ipcRenderer.on('oauth-callback', (_event: IpcRendererEvent, params: any) => {
       callback(params);

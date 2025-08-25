@@ -24,7 +24,7 @@ export const slackProvider: OAuthProviderDefinition = {
 
   // Slack uses standard env vars
   tokenEnvVarPattern: {
-    accessToken: 'SLACK_MCP_ACCESS_TOKEN',
+    accessToken: 'SLACK_MCP_XOXP_TOKEN',
     // Slack doesn't use refresh tokens
   },
 

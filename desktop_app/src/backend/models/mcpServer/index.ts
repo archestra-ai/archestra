@@ -105,8 +105,8 @@ export default class McpServerModel {
     let finalServerConfig = serverConfig;
     if (oauthAccessToken && oauthProvider) {
       // Import the provider configuration to get token mapping
-      const { getOAuthProvider, hasOAuthProvider } = await import('@backend/config/oauth-providers');
-      const { handleProviderTokens } = await import('@backend/utils/oauth-provider-helper');
+      const { getOAuthProvider, hasOAuthProvider } = await import('@backend/server/plugins/oauth');
+      const { handleProviderTokens } = await import('@backend/server/plugins/oauth/utils/oauth-provider-helper');
 
       if (hasOAuthProvider(oauthProvider)) {
         const provider = getOAuthProvider(oauthProvider);

@@ -5,8 +5,9 @@
  */
 import { BrowserWindow } from 'electron';
 
-import { BrowserTokenResponse, OAuthProviderDefinition } from '@backend/config/oauth-provider-interface';
 import log from '@backend/utils/logger';
+
+import { BrowserTokenResponse, OAuthProviderDefinition } from '../provider-interface';
 
 /**
  * Token extraction handler configuration

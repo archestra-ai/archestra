@@ -4,8 +4,9 @@
  * This module provides helper functions for handling OAuth providers
  * in a unified way, supporting both standard and custom token handlers.
  */
-import { BrowserTokenResponse, OAuthProviderDefinition, TokenResponse } from '@backend/config/oauth-provider-interface';
 import log from '@backend/utils/logger';
+
+import { BrowserTokenResponse, OAuthProviderDefinition, TokenResponse } from '../provider-interface';
 
 /**
  * Handle OAuth tokens for a provider.

@@ -6,13 +6,17 @@
  */
 import { BrowserWindow, ipcMain } from 'electron';
 
-import { BrowserTokenResponse, OAuthProviderDefinition } from './backend/config/oauth-provider-interface';
-import { getOAuthProvider, hasOAuthProvider } from './backend/config/oauth-providers';
+import {
+  BrowserTokenResponse,
+  OAuthProviderDefinition,
+  getOAuthProvider,
+  hasOAuthProvider,
+} from './backend/server/plugins/oauth';
 import {
   BROWSER_AUTH_WINDOW_CONFIG,
   getProviderSessionPartition,
   setupTokenExtractionHandlers,
-} from './backend/utils/browser-auth-utils';
+} from './backend/server/plugins/oauth/utils/browser-auth-utils';
 import log from './backend/utils/logger';
 
 /**

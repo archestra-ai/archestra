@@ -560,6 +560,50 @@
         "type": "string",
         "enum": ["HTTP 200", "HTTP 40x", "HTTP 50x"]
       },
+      "McpServerConfigInput": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["command"],
+        "additionalProperties": false
+      },
+      "McpServerUserConfigValuesInput": {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
       "McpServerInput": {
         "type": "object",
         "properties": {
@@ -570,50 +614,45 @@
             "type": "string"
           },
           "serverConfig": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "type": "string"
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "env": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": ["command"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/McpServerConfigInput"
           },
           "userConfigValues": {
             "anyOf": [
               {
-                "type": "object",
-                "additionalProperties": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  ]
-                }
+                "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthAccessToken": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthRefreshToken": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthExpiryDate": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "nullable": true,
@@ -625,7 +664,56 @@
             "type": "string"
           }
         },
-        "required": ["id", "name", "serverConfig", "userConfigValues", "createdAt"]
+        "required": [
+          "id",
+          "name",
+          "serverConfig",
+          "userConfigValues",
+          "oauthAccessToken",
+          "oauthRefreshToken",
+          "oauthExpiryDate",
+          "createdAt"
+        ]
+      },
+      "McpServerInstallInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-\\s]{1,63}$"
+          },
+          "serverConfig": {
+            "$ref": "#/components/schemas/McpServerConfigInput"
+          },
+          "userConfigValues": {
+            "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
+          },
+          "oauthProvider": {
+            "type": "string",
+            "enum": ["google", "slack", "slack-browser"]
+          },
+          "oauthAccessToken": {
+            "type": "string"
+          },
+          "oauthRefreshToken": {
+            "type": "string"
+          },
+          "oauthExpiryDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["displayName", "serverConfig"]
       },
       "McpServerContainerLogsInput": {
         "type": "object",
@@ -1277,6 +1365,50 @@
         "type": "string",
         "enum": ["HTTP 200", "HTTP 40x", "HTTP 50x"]
       },
+      "McpServerConfig": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["command"],
+        "additionalProperties": false
+      },
+      "McpServerUserConfigValues": {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
       "McpServer": {
         "type": "object",
         "properties": {
@@ -1287,50 +1419,45 @@
             "type": "string"
           },
           "serverConfig": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "type": "string"
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "env": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": ["command"],
-            "additionalProperties": false
+            "$ref": "#/components/schemas/McpServerConfig"
           },
           "userConfigValues": {
             "anyOf": [
               {
-                "type": "object",
-                "additionalProperties": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  ]
-                }
+                "$ref": "#/components/schemas/McpServerUserConfigValues"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthAccessToken": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthRefreshToken": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "oauthExpiryDate": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "nullable": true,
@@ -1342,7 +1469,57 @@
             "type": "string"
           }
         },
-        "required": ["id", "name", "serverConfig", "userConfigValues", "createdAt"],
+        "required": [
+          "id",
+          "name",
+          "serverConfig",
+          "userConfigValues",
+          "oauthAccessToken",
+          "oauthRefreshToken",
+          "oauthExpiryDate",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpServerInstall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-\\s]{1,63}$"
+          },
+          "serverConfig": {
+            "$ref": "#/components/schemas/McpServerConfig"
+          },
+          "userConfigValues": {
+            "$ref": "#/components/schemas/McpServerUserConfigValues"
+          },
+          "oauthProvider": {
+            "type": "string",
+            "enum": ["google", "slack", "slack-browser"]
+          },
+          "oauthAccessToken": {
+            "type": "string"
+          },
+          "oauthRefreshToken": {
+            "type": "string"
+          },
+          "oauthExpiryDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["displayName", "serverConfig"],
         "additionalProperties": false
       },
       "McpServerContainerLogs": {
@@ -2188,65 +2365,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "displayName": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9-\\s]{1,63}$"
-                  },
-                  "serverConfig": {
-                    "type": "object",
-                    "properties": {
-                      "command": {
-                        "type": "string"
-                      },
-                      "args": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "env": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "required": ["command"],
-                    "additionalProperties": false
-                  },
-                  "userConfigValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      ]
-                    }
-                  }
-                },
-                "required": ["displayName", "serverConfig"]
+                "$ref": "#/components/schemas/McpServerInstallInput"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2332,189 +2454,6 @@
         }
       }
     },
-    "/api/mcp_server/start_oauth": {
-      "post": {
-        "operationId": "startMcpServerOauth",
-        "tags": ["MCP Server"],
-        "description": "Start MCP server OAuth flow",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "catalogName": {
-                    "type": "string"
-                  },
-                  "installData": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "displayName": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z0-9-\\s]{1,63}$"
-                      },
-                      "serverConfig": {
-                        "type": "object",
-                        "properties": {
-                          "command": {
-                            "type": "string"
-                          },
-                          "args": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "env": {
-                            "type": "object",
-                            "additionalProperties": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["command"],
-                        "additionalProperties": false
-                      },
-                      "userConfigValues": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          ]
-                        }
-                      }
-                    },
-                    "required": ["displayName", "serverConfig"]
-                  }
-                },
-                "required": ["catalogName", "installData"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "authUrl": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["authUrl", "state"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp_server/complete_oauth": {
-      "post": {
-        "operationId": "completeMcpServerOauth",
-        "tags": ["MCP Server"],
-        "description": "Complete MCP server OAuth flow and install with tokens",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "service": {
-                    "type": "string"
-                  },
-                  "access_token": {
-                    "type": "string"
-                  },
-                  "refresh_token": {
-                    "type": "string"
-                  },
-                  "expiry_date": {
-                    "type": "string"
-                  },
-                  "state": {
-                    "type": "string"
-                  }
-                },
-                "required": ["service", "access_token", "refresh_token", "state"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/mcp_proxy/{id}/logs": {
       "get": {
         "operationId": "getMcpServerLogs",
@@ -2585,6 +2524,201 @@
                   "items": {
                     "$ref": "#/components/schemas/AvailableTool"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp_server/start_oauth": {
+      "post": {
+        "operationId": "startMcpServerOauth",
+        "tags": ["MCP Server", "OAuth"],
+        "description": "Start MCP server OAuth flow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "catalogName": {
+                    "type": "string"
+                  },
+                  "installData": {
+                    "$ref": "#/components/schemas/McpServerInstallInput"
+                  }
+                },
+                "required": ["catalogName", "installData"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authUrl": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["authUrl", "state"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oauth/callback": {
+      "get": {
+        "operationId": "oauthCallback",
+        "tags": ["OAuth"],
+        "description": "OAuth callback endpoint for provider redirects",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "code",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "state",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "error",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "error_description",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/mcp_server/complete_oauth": {
+      "post": {
+        "operationId": "completeMcpServerOauth",
+        "tags": ["MCP Server", "OAuth"],
+        "description": "Complete MCP server OAuth flow and install with tokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "service": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "access_token": {
+                    "type": "string"
+                  },
+                  "refresh_token": {
+                    "type": "string"
+                  },
+                  "expiry_date": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": ["service", "state"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }

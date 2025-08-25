@@ -144,20 +144,38 @@ export type McpRequestLogStatsInput = {
 
 export type McpRequestLogFilterStatusInput = 'HTTP 200' | 'HTTP 40x' | 'HTTP 50x';
 
+export type McpServerConfigInput = {
+  command: string;
+  args?: Array<string>;
+  env?: {
+    [key: string]: string;
+  };
+};
+
+export type McpServerUserConfigValuesInput = {
+  [key: string]: string | number | boolean | Array<string>;
+};
+
 export type McpServerInput = {
   id: string;
   name: string;
-  serverConfig: {
-    command: string;
-    args?: Array<string>;
-    env?: {
-      [key: string]: string;
-    };
-  };
-  userConfigValues: {
-    [key: string]: string | number | boolean | Array<string>;
-  } | null;
+  serverConfig: McpServerConfigInput;
+  userConfigValues: McpServerUserConfigValuesInput | null;
+  oauthAccessToken: string | null;
+  oauthRefreshToken: string | null;
+  oauthExpiryDate: string | null;
   createdAt: string;
+};
+
+export type McpServerInstallInput = {
+  id?: string;
+  displayName: string;
+  serverConfig: McpServerConfigInput;
+  userConfigValues?: McpServerUserConfigValuesInput;
+  oauthProvider?: 'google' | 'slack' | 'slack-browser';
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthExpiryDate?: string | null;
 };
 
 export type McpServerContainerLogsInput = {
@@ -350,20 +368,38 @@ export type McpRequestLogStats = {
 
 export type McpRequestLogFilterStatus = 'HTTP 200' | 'HTTP 40x' | 'HTTP 50x';
 
+export type McpServerConfig = {
+  command: string;
+  args?: Array<string>;
+  env?: {
+    [key: string]: string;
+  };
+};
+
+export type McpServerUserConfigValues = {
+  [key: string]: string | number | boolean | Array<string>;
+};
+
 export type McpServer = {
   id: string;
   name: string;
-  serverConfig: {
-    command: string;
-    args?: Array<string>;
-    env?: {
-      [key: string]: string;
-    };
-  };
-  userConfigValues: {
-    [key: string]: string | number | boolean | Array<string>;
-  } | null;
+  serverConfig: McpServerConfig;
+  userConfigValues: McpServerUserConfigValues | null;
+  oauthAccessToken: string | null;
+  oauthRefreshToken: string | null;
+  oauthExpiryDate: string | null;
   createdAt: string;
+};
+
+export type McpServerInstall = {
+  id?: string;
+  displayName: string;
+  serverConfig: McpServerConfig;
+  userConfigValues?: McpServerUserConfigValues;
+  oauthProvider?: 'google' | 'slack' | 'slack-browser';
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthExpiryDate?: string | null;
 };
 
 export type McpServerContainerLogs = {
@@ -806,20 +842,7 @@ export type GetMcpServersResponses = {
 export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersResponses];
 
 export type InstallMcpServerData = {
-  body: {
-    id?: string;
-    displayName: string;
-    serverConfig: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-    };
-    userConfigValues?: {
-      [key: string]: string | number | boolean | Array<string>;
-    };
-  };
+  body?: McpServerInstallInput;
   path?: never;
   query?: never;
   url: '/api/mcp_server/install';
@@ -871,80 +894,6 @@ export type UninstallMcpServerResponses = {
 
 export type UninstallMcpServerResponse = UninstallMcpServerResponses[keyof UninstallMcpServerResponses];
 
-export type StartMcpServerOauthData = {
-  body: {
-    catalogName: string;
-    installData: {
-      id?: string;
-      displayName: string;
-      serverConfig: {
-        command: string;
-        args?: Array<string>;
-        env?: {
-          [key: string]: string;
-        };
-      };
-      userConfigValues?: {
-        [key: string]: string | number | boolean | Array<string>;
-      };
-    };
-  };
-  path?: never;
-  query?: never;
-  url: '/api/mcp_server/start_oauth';
-};
-
-export type StartMcpServerOauthResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    authUrl: string;
-    state: string;
-  };
-};
-
-export type StartMcpServerOauthResponse = StartMcpServerOauthResponses[keyof StartMcpServerOauthResponses];
-
-export type CompleteMcpServerOauthData = {
-  body: {
-    service: string;
-    access_token: string;
-    refresh_token: string;
-    expiry_date?: string;
-    state: string;
-  };
-  path?: never;
-  query?: never;
-  url: '/api/mcp_server/complete_oauth';
-};
-
-export type CompleteMcpServerOauthErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-  };
-  /**
-   * Default Response
-   */
-  500: {
-    error: string;
-  };
-};
-
-export type CompleteMcpServerOauthError = CompleteMcpServerOauthErrors[keyof CompleteMcpServerOauthErrors];
-
-export type CompleteMcpServerOauthResponses = {
-  /**
-   * Default Response
-   */
-  200: McpServer;
-};
-
-export type CompleteMcpServerOauthResponse = CompleteMcpServerOauthResponses[keyof CompleteMcpServerOauthResponses];
-
 export type GetMcpServerLogsData = {
   body?: never;
   path: {
@@ -991,6 +940,98 @@ export type GetAvailableToolsResponses = {
 };
 
 export type GetAvailableToolsResponse = GetAvailableToolsResponses[keyof GetAvailableToolsResponses];
+
+export type StartMcpServerOauthData = {
+  body: {
+    catalogName: string;
+    installData: McpServerInstallInput;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/mcp_server/start_oauth';
+};
+
+export type StartMcpServerOauthErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type StartMcpServerOauthError = StartMcpServerOauthErrors[keyof StartMcpServerOauthErrors];
+
+export type StartMcpServerOauthResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    authUrl: string;
+    state: string;
+  };
+};
+
+export type StartMcpServerOauthResponse = StartMcpServerOauthResponses[keyof StartMcpServerOauthResponses];
+
+export type OauthCallbackData = {
+  body?: never;
+  path?: never;
+  query: {
+    code: string;
+    state: string;
+    error?: string;
+    error_description?: string;
+  };
+  url: '/api/oauth/callback';
+};
+
+export type OauthCallbackResponses = {
+  /**
+   * Default Response
+   */
+  200: unknown;
+};
+
+export type CompleteMcpServerOauthData = {
+  body: {
+    service: string;
+    state: string;
+    access_token?: string;
+    refresh_token?: string;
+    expiry_date?: string;
+    code?: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/mcp_server/complete_oauth';
+};
+
+export type CompleteMcpServerOauthErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type CompleteMcpServerOauthError = CompleteMcpServerOauthErrors[keyof CompleteMcpServerOauthErrors];
+
+export type CompleteMcpServerOauthResponses = {
+  /**
+   * Default Response
+   */
+  200: McpServer;
+};
+
+export type CompleteMcpServerOauthResponse = CompleteMcpServerOauthResponses[keyof CompleteMcpServerOauthResponses];
 
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;

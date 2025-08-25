@@ -128,7 +128,7 @@ export type ArchestraMcpServerManifest = {
       provider: 'google' | 'slack';
       required: boolean;
     };
-    browser_based: {
+    browser_based?: {
       required: boolean;
     };
   };

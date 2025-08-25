@@ -97,19 +97,19 @@ export default class PodmanContainer {
       // Wrap the command to create the credentials file on startup
       const originalCommand = [command, ...(args || [])].join(' ');
       const email = env.GOOGLE_OAUTH_EMAIL;
-      
+
       this.command = 'sh';
       this.args = [
         '-c',
         `mkdir -p ~/.google_workspace_mcp/credentials && ` +
-        `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
-        `${originalCommand}`
+          `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
+          `${originalCommand}`,
       ];
     } else {
       this.command = command;
       this.args = args || [];
     }
-    
+
     this.envVars = env;
 
     // Set the socket path for the container (needed for attach operations)

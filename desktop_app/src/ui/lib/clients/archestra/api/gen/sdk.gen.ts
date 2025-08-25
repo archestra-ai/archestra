@@ -54,7 +54,10 @@ import type {
   InstallMcpServerData,
   InstallMcpServerErrors,
   InstallMcpServerResponses,
+  OauthCallbackData,
+  OauthCallbackResponses,
   StartMcpServerOauthData,
+  StartMcpServerOauthErrors,
   StartMcpServerOauthResponses,
   UninstallMcpServerData,
   UninstallMcpServerResponses,
@@ -314,14 +317,14 @@ export const getMcpServers = <ThrowOnError extends boolean = false>(
  * Install an MCP server. Either from the catalog, or a customer server
  */
 export const installMcpServer = <ThrowOnError extends boolean = false>(
-  options: Options<InstallMcpServerData, ThrowOnError>
+  options?: Options<InstallMcpServerData, ThrowOnError>
 ) => {
-  return (options.client ?? _heyApiClient).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
+  return (options?.client ?? _heyApiClient).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
     url: '/api/mcp_server/install',
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...options?.headers,
     },
   });
 };
@@ -335,42 +338,6 @@ export const uninstallMcpServer = <ThrowOnError extends boolean = false>(
   return (options.client ?? _heyApiClient).delete<UninstallMcpServerResponses, unknown, ThrowOnError>({
     url: '/api/mcp_server/{id}',
     ...options,
-  });
-};
-
-/**
- * Start MCP server OAuth flow
- */
-export const startMcpServerOauth = <ThrowOnError extends boolean = false>(
-  options: Options<StartMcpServerOauthData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<StartMcpServerOauthResponses, unknown, ThrowOnError>({
-    url: '/api/mcp_server/start_oauth',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-};
-
-/**
- * Complete MCP server OAuth flow and install with tokens
- */
-export const completeMcpServerOauth = <ThrowOnError extends boolean = false>(
-  options: Options<CompleteMcpServerOauthData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<
-    CompleteMcpServerOauthResponses,
-    CompleteMcpServerOauthErrors,
-    ThrowOnError
-  >({
-    url: '/api/mcp_server/complete_oauth',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
   });
 };
 
@@ -395,6 +362,54 @@ export const getAvailableTools = <ThrowOnError extends boolean = false>(
   return (options?.client ?? _heyApiClient).get<GetAvailableToolsResponses, unknown, ThrowOnError>({
     url: '/api/mcp_server/tools',
     ...options,
+  });
+};
+
+/**
+ * Start MCP server OAuth flow
+ */
+export const startMcpServerOauth = <ThrowOnError extends boolean = false>(
+  options: Options<StartMcpServerOauthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<StartMcpServerOauthResponses, StartMcpServerOauthErrors, ThrowOnError>({
+    url: '/api/mcp_server/start_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * OAuth callback endpoint for provider redirects
+ */
+export const oauthCallback = <ThrowOnError extends boolean = false>(
+  options: Options<OauthCallbackData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).get<OauthCallbackResponses, unknown, ThrowOnError>({
+    url: '/api/oauth/callback',
+    ...options,
+  });
+};
+
+/**
+ * Complete MCP server OAuth flow and install with tokens
+ */
+export const completeMcpServerOauth = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteMcpServerOauthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    CompleteMcpServerOauthResponses,
+    CompleteMcpServerOauthErrors,
+    ThrowOnError
+  >({
+    url: '/api/mcp_server/complete_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 

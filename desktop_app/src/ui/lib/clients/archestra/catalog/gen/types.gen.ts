@@ -129,7 +129,6 @@ export type ArchestraMcpServerManifest = {
       required: boolean;
     };
     browser_based?: {
-    browser_based: {
       required: boolean;
     };
   };

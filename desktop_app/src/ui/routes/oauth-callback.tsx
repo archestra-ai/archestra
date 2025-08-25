@@ -25,16 +25,15 @@ export const Route = createFileRoute('/oauth-callback')({
 
 function OAuthCallbackPage() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
+  const [status, setStatus] = useState<'waiting' | 'processing' | 'success' | 'error'>('waiting');
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [oauthParams, setOauthParams] = useState<OAuthCallbackParams | null>(null);
   const { loadInstalledMcpServers } = useMcpServersStore();
 
   useEffect(() => {
     // Listen for OAuth callback from deep link
     const handleOAuthCallback = async (params: OAuthCallbackParams) => {
       console.log('OAuth callback received:', params);
-      setOauthParams(params);
+      setStatus('processing');
 
       // Get the state from session storage if not in params
       const state = params.state || sessionStorage.getItem('oauth_state');
@@ -131,12 +130,25 @@ function OAuthCallbackPage() {
         <CardHeader>
           <CardTitle>OAuth Authentication</CardTitle>
           <CardDescription>
+            {status === 'waiting' && 'Continue authentication in your browser'}
             {status === 'processing' && 'Processing authentication...'}
             {status === 'success' && 'Authentication successful!'}
             {status === 'error' && 'Authentication failed'}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {status === 'waiting' && (
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+              <div className="text-center space-y-2">
+                <p className="text-muted-foreground">The authentication page has been opened in your browser.</p>
+                <p className="text-muted-foreground">
+                  Please complete the authentication process there and this page will update automatically.
+                </p>
+              </div>
+            </div>
+          )}
+
           {status === 'processing' && (
             <div className="flex flex-col items-center space-y-4">
               <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
@@ -169,25 +181,6 @@ function OAuthCallbackPage() {
                 <Button onClick={() => navigate({ to: '/connectors' })}>Back to Connectors</Button>
               </div>
             </div>
-          )}
-
-          {oauthParams && (
-            <details className="mt-6">
-              <summary className="cursor-pointer text-sm text-muted-foreground">Debug Information</summary>
-              <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-auto">
-                {JSON.stringify(
-                  {
-                    ...oauthParams,
-                    // Redact sensitive tokens
-                    access_token: oauthParams.access_token ? '[REDACTED]' : undefined,
-                    refresh_token: oauthParams.refresh_token ? '[REDACTED]' : undefined,
-                    code: oauthParams.code ? '[REDACTED]' : undefined,
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-            </details>
           )}
         </CardContent>
       </Card>

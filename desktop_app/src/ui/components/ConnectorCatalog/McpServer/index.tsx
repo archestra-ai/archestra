@@ -204,7 +204,7 @@ export default function McpServer({
           <Separator />
 
           {/* Actions */}
-          <div className="flex justify-between items-center">
+          <div className="space-y-2">
             <div className="text-xs text-muted-foreground">v{server.version}</div>
             <div>
               {!sandboxIsRunning ? (
@@ -229,23 +229,21 @@ export default function McpServer({
                     'Uninstall'
                   )}
                 </Button>
+              ) : isInstalling ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <span className="text-sm">Installing...</span>
+                </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-1">
                   <Button
                     size="sm"
-                    variant={!requiresBrowserBasedSetup && !requiresOAuthSetup ? 'default' : 'outline'}
+                    variant="outline"
                     onClick={() => onInstallClick(server)}
                     disabled={isInstalling}
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs px-2 h-7"
                   >
-                    {isInstalling ? (
-                      <>
-                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                        Installing...
-                      </>
-                    ) : (
-                      'Install'
-                    )}
+                    Install
                   </Button>
                   {requiresOAuthSetup && (
                     <Button
@@ -253,7 +251,7 @@ export default function McpServer({
                       variant="outline"
                       onClick={() => onOAuthInstallClick?.(server)}
                       disabled={isInstalling}
-                      className="cursor-pointer"
+                      className="cursor-pointer text-xs px-2 h-7"
                     >
                       Install (OAuth)
                     </Button>
@@ -261,6 +259,7 @@ export default function McpServer({
                   {requiresBrowserBasedSetup && (
                     <Button
                       size="sm"
+                      variant="default"
                       onClick={() => {
                         if (onBrowserInstallClick) {
                           onBrowserInstallClick(server);
@@ -269,9 +268,9 @@ export default function McpServer({
                         }
                       }}
                       disabled={isInstalling}
-                      className="cursor-pointer"
+                      className="cursor-pointer text-xs px-2 h-7"
                     >
-                      Install (browser)
+                      Install (Browser)
                     </Button>
                   )}
                 </div>

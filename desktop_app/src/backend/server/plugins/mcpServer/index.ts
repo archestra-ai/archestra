@@ -29,6 +29,27 @@ interface PendingOAuthInstall {
 const pendingOAuthInstalls = new Map<string, PendingOAuthInstall>();
 
 /**
+ * Helper function to extract email from Google ID token
+ * ID tokens are JWT tokens with payload containing user info
+ */
+function extractEmailFromIdToken(idToken: string): string | undefined {
+  try {
+    // ID token is a JWT: header.payload.signature
+    const parts = idToken.split('.');
+    if (parts.length !== 3) return undefined;
+    
+    // Decode the payload (base64url encoded)
+    const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
+    const data = JSON.parse(payload);
+    
+    return data.email;
+  } catch (error) {
+    log.error('Failed to extract email from ID token:', error);
+    return undefined;
+  }
+}
+
+/**
  * Register our zod schemas into the global registry, such that they get output as components in the openapi spec
  * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-create-refs-to-the-schemas
  */
@@ -354,6 +375,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const tokenEnvVars = await handleProviderTokens(provider, tokens, installData.id || installData.displayName);
 
+        // For Google provider, extract email from user config values
+        let googleEmail: string | undefined;
+        if (providerName === 'google' && installData.userConfigValues) {
+          // Try to find email from user config values
+          // Common field names: email, user_email, account_email, google_email
+          const emailValue = installData.userConfigValues.email || 
+                            installData.userConfigValues.user_email || 
+                            installData.userConfigValues.account_email ||
+                            installData.userConfigValues.google_email;
+          
+          // Convert to string if it's a valid value
+          if (typeof emailValue === 'string') {
+            googleEmail = emailValue;
+          } else if (emailValue) {
+            googleEmail = String(emailValue);
+          } else {
+            // If no email in config, try to decode from ID token if available
+            googleEmail = (tokens.id_token ? extractEmailFromIdToken(tokens.id_token) : undefined) ||
+                         // Fallback to a default
+                         'user@example.com';
+          }
+        }
+
         // If provider has custom handler, tokenEnvVars will be undefined
         // Otherwise, add the env vars to the server config
         const updatedConfig = tokenEnvVars
@@ -362,6 +406,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               env: {
                 ...installData.serverConfig.env,
                 ...tokenEnvVars,
+                // Add Google email if available
+                ...(googleEmail ? { GOOGLE_OAUTH_EMAIL: googleEmail } : {}),
               },
             }
           : installData.serverConfig;

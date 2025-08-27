@@ -1,6 +1,0 @@
-
-# mkcert certificates
-localhost.pem
-localhost-key.pem
-certs/
-*.pem

@@ -197,45 +197,25 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const providerName = service || pendingInstall.installData.oauthProvider || 'google';
           const oauthProxyUrl = getOAuthProxyUrl();
 
-          // For development with self-signed certificates, we need special handling
-          let tokenResponse;
-          try {
-            const tokenUrl = `${oauthProxyUrl}/oauth/token`;
-            fastify.log.info(`Exchanging OAuth token at: ${tokenUrl}`);
-            fastify.log.info(`NODE_ENV: ${process.env.NODE_ENV}`);
-            fastify.log.info(`OAuth Proxy URL: ${oauthProxyUrl}`);
+          // Exchange code for tokens via OAuth proxy
+          const tokenUrl = `${oauthProxyUrl}/oauth/token`;
+          fastify.log.info(`Exchanging OAuth token at: ${tokenUrl}`);
 
-            // In development, handle self-signed certificates
-            // Check for localhost URLs regardless of NODE_ENV since we're clearly in local development
-            if (oauthProxyUrl.includes('localhost')) {
-              fastify.log.info('Disabling certificate validation for localhost');
-              // Temporarily disable certificate validation for local development
-              process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-            }
-
-            tokenResponse = await fetch(tokenUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                grant_type: 'authorization_code',
-                provider: service || pendingInstall.installData.oauthProvider || 'google',
-                code: body.code,
-                code_verifier: pendingInstall.codeVerifier,
-                redirect_uri: pendingInstall.redirectUri,
-              }),
-            });
-
-            // Re-enable certificate validation
-            if (oauthProxyUrl.includes('localhost')) {
-              delete process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
-            }
-          } catch (fetchError) {
+          const tokenResponse = await fetch(tokenUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              grant_type: 'authorization_code',
+              provider: service || pendingInstall.installData.oauthProvider || 'google',
+              code: body.code,
+              code_verifier: pendingInstall.codeVerifier,
+              redirect_uri: pendingInstall.redirectUri,
+            }),
+          }).catch((fetchError) => {
             fastify.log.error('Fetch error details:', fetchError);
             fastify.log.error('Fetch error stack:', fetchError.stack);
-            // Re-enable certificate validation in case of error
-            delete process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
             throw new Error(`Failed to connect to OAuth proxy at ${oauthProxyUrl}: ${fetchError.message}`);
-          }
+          });
 
           if (!tokenResponse.ok) {
             const error = await tokenResponse.json();

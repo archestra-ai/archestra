@@ -50,13 +50,9 @@ jobs:
             actions: read
 
           direct_prompt: |
-            So I want you to do a few things to help with the current pull request:
-            1. If the pull request description is missing, add one based on the changes.
-            2. Update the CLAUDE.md file to reflect the changes made in this PR.
-            3. Please review this pull request and provide feedback on the below items, be constructive and helpful in
-            your feedback:
-              - Code quality and best practices
-              - Potential bugs or issues
-              - Performance considerations
-              - Security concerns
-              - Test coverage
+            Be concise. Keep comments short and clear. Only elaborate if critical issues found.
+            
+            Tasks:
+            1. Add PR description if missing
+            2. Update CLAUDE.md if needed
+            3. Quick review: bugs, security, performance (skip if none found)

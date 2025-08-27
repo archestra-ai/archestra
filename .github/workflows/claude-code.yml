@@ -66,22 +66,11 @@ jobs:
           # Additional context added to Claude's system prompt while still respecting normal triggers.
           # These instructions modify Claude's behavior but don't replace the triggering comment.
           custom_instructions: |
-            Analyze the following GitHub Pull Request and respond to the comment from $TRIGGER_USERNAME: "$TRIGGER_COMMENT"
-
-            Repository: $REPOSITORY
-            PR #: $PR_NUMBER
-
-            Changed files:
-            $CHANGED_FILES
-
-            Title:
-            $PR_TITLE
-
-            Description:
-            $PR_BODY
-
-            All PR comments:
-            $PR_COMMENTS
+            Respond to $TRIGGER_USERNAME's comment: "$TRIGGER_COMMENT"
+            
+            Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested.
+            
+            Context: PR #$PR_NUMBER in $REPOSITORY
 
           # Optional: Custom environment variables for Claude
           # claude_env: |

@@ -106,13 +106,13 @@ function OAuthCallbackPage() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('code') || urlParams.get('access_token')) {
       handleOAuthCallback({
-        service: urlParams.get('service'),
-        code: urlParams.get('code'),
-        access_token: urlParams.get('access_token'),
-        refresh_token: urlParams.get('refresh_token'),
-        expiry_date: urlParams.get('expiry_date'),
-        state: urlParams.get('state'),
-        error: urlParams.get('error'),
+        service: urlParams.get('service') ?? undefined,
+        code: urlParams.get('code') ?? undefined,
+        access_token: urlParams.get('access_token') ?? undefined,
+        refresh_token: urlParams.get('refresh_token') ?? undefined,
+        expiry_date: urlParams.get('expiry_date') ?? undefined,
+        state: urlParams.get('state') ?? undefined,
+        error: urlParams.get('error') ?? undefined,
       });
     }
 

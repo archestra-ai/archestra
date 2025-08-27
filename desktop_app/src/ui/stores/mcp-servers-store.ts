@@ -56,6 +56,9 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       env: {},
     },
     userConfigValues: {},
+    oauthAccessToken: null,
+    oauthRefreshToken: null,
+    oauthExpiryDate: null,
     state: 'initializing',
     startupPercentage: 0,
     message: null,
@@ -129,7 +132,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
   },
 
   installMcpServer: async (requiresOAuth: boolean, installData: InstallMcpServerData['body']) => {
-    const { id } = installData;
+    const { id } = installData || {};
     try {
       set({
         /**
@@ -153,9 +156,9 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
           // Send tokens as OAuth fields for consistent handling
           const { data } = await installMcpServer({
             body: {
-              ...installData,
+              ...installData!,
               oauthAccessToken: tokens.access_token,
-              oauthRefreshToken: tokens.refresh_token || null,
+              oauthRefreshToken: tokens.refresh_token ?? undefined,
               oauthExpiryDate: tokens.expires_at || null,
             },
           });
@@ -184,7 +187,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         const serviceDescription = provider === 'slack' ? 'Slack workspace' : 'Gmail account';
 
         const userConfirmed = window.confirm(
-          `You're about to connect ${installData.displayName || id} to Archestra.\n\n` +
+          `You're about to connect ${installData?.displayName || id} to Archestra.\n\n` +
             `This will:\n` +
             `• Open ${providerName}'s authentication page in your browser\n` +
             `• Request permission to access your ${serviceDescription}\n` +
@@ -195,7 +198,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         if (!userConfirmed) {
           // User cancelled the OAuth flow
           console.log('User cancelled OAuth flow');
-          set({ isInstallingMcpServer: false });
+          set({ installingMcpServerId: null });
           return;
         }
 
@@ -203,7 +206,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         const { data } = await startMcpServerOauth({
           body: {
             catalogName: id || '',
-            installData: installData,
+            installData: installData!,
           },
         });
 

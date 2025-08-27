@@ -42,7 +42,7 @@ function ConnectorCatalogPage() {
     // Only allow letters, numbers, spaces, and dashes
     const sanitizedDisplayName = mcpServer.display_name.replace(/[^A-Za-z0-9\s-]/g, '-');
 
-    _installMcpServer(mcpServer.archestra_config.oauth?.required || false, {
+    const installData: any = {
       id: mcpServer.name,
       displayName: sanitizedDisplayName,
       /**
@@ -53,13 +53,19 @@ function ConnectorCatalogPage() {
        */
       serverConfig: mcpServer.server.mcp_config,
       userConfigValues: userConfigValues || {},
-      useBrowserAuth,
       // If using browser auth for Slack, use the slack-browser provider
       oauthProvider:
         useBrowserAuth && mcpServer.archestra_config.oauth?.provider === 'slack'
           ? 'slack-browser'
           : mcpServer.archestra_config.oauth?.provider,
-    });
+    };
+
+    // Add useBrowserAuth flag for internal handling
+    if (useBrowserAuth) {
+      installData.useBrowserAuth = true;
+    }
+
+    _installMcpServer(mcpServer.archestra_config.oauth?.required || false, installData);
   };
 
   const handleInstallClick = (mcpServer: ArchestraMcpServerManifest) => {

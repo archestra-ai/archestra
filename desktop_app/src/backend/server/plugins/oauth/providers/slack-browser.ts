@@ -28,9 +28,22 @@ export const slackBrowserProvider: OAuthProviderDefinition = {
 
     navigationRules: (url: string) => {
       // Only allow navigation to official Slack domains
-      return (
-        url.startsWith('https://slack.com/') || url.startsWith('https://app.slack.com/') || url.includes('.slack.com/')
-      );
+      try {
+        const parsedUrl = new URL(url);
+        // Allow "slack.com", "app.slack.com", and "*.slack.com"
+        const hostname = parsedUrl.hostname;
+        return (
+          hostname === 'slack.com' ||
+          hostname === 'app.slack.com' ||
+          (
+            hostname.endsWith('.slack.com') &&
+            hostname.length > '.slack.com'.length
+          )
+        );
+      } catch (e) {
+        // If URL parsing fails, deny navigation
+        return false;
+      }
     },
 
     extractTokens: async (windowWithContext: any) => {

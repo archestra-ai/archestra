@@ -8,6 +8,10 @@ declare global {
 
       // Generic provider browser auth
       providerBrowserAuth: (provider: string) => Promise<Record<string, string>>;
+
+      // OAuth callback methods
+      onOAuthCallback: (callback: (params: any) => void) => void;
+      removeOAuthCallbackListener: () => void;
     };
   }
 }

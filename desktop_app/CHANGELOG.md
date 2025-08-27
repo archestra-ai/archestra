@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.2-alpha](https://github.com/archestra-ai/archestra/compare/v0.0.1-alpha...v0.0.2-alpha) (2025-08-27)
+
+
+### Features
+
+* add MCP tool analysis feature ([#242](https://github.com/archestra-ai/archestra/issues/242)) ([88336bd](https://github.com/archestra-ai/archestra/commit/88336bdddc0fbff05294c2546307913d44471321))
+* add quick slack mcp auth and installation via login page ([#235](https://github.com/archestra-ai/archestra/issues/235)) ([b3c7fba](https://github.com/archestra-ai/archestra/commit/b3c7fbae8f9b7bd815bdecaf4955da6b8b1da29c))
+* oauth providers ([#244](https://github.com/archestra-ai/archestra/issues/244)) ([5b712b1](https://github.com/archestra-ai/archestra/commit/5b712b14ff49e73c8179475af92e5a8ec73b2da4))
+* tools analysis ([#240](https://github.com/archestra-ai/archestra/issues/240)) ([e7645b6](https://github.com/archestra-ai/archestra/commit/e7645b6824d772243dba70247696da916111444e))
+
+
+### Dependencies
+
+* **frontend:** bump the frontend-dependencies group across 1 directory with 43 updates ([#239](https://github.com/archestra-ai/archestra/issues/239)) ([b743286](https://github.com/archestra-ai/archestra/commit/b7432860cb29a2c24564c433095cc092d3d8ed31))
+
 ## [0.0.1-alpha](https://github.com/archestra-ai/archestra/compare/v0.0.0-alpha...v0.0.1-alpha) (2025-08-18)
 
 

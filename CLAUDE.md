@@ -95,7 +95,7 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
   - Combined progress calculation (50% machine startup + 50% image pull)
   - Progress parsing utilities for real-time output processing
 - **McpServerSandboxManager**: High-level orchestration of MCP servers
-  - Base image management (`europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.1`)
+  - Base image management (`europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest`)
   - Manages multiple `SandboxedMcpServer` instances
   - WebSocket progress broadcasting with detailed status updates
   - Comprehensive `statusSummary` getter combining runtime and container statuses

@@ -1,33 +1,17 @@
-import { z } from 'zod';
-
 import { setSocketPath } from '@backend/clients/libpod/client';
 import McpServerModel, { type McpServer } from '@backend/models/mcpServer';
-import { PodmanContainerStatusSummarySchema } from '@backend/sandbox/podman/container';
-import PodmanRuntime, { PodmanRuntimeStatusSummarySchema } from '@backend/sandbox/podman/runtime';
-import SandboxedMcpServer, {
+import PodmanRuntime from '@backend/sandbox/podman/runtime';
+import SandboxedMcpServer, { type McpTools } from '@backend/sandbox/sandboxedMcp';
+import {
   type AvailableTool,
-  type McpTools,
-  SandboxedMcpServerStatusSummarySchema,
-} from '@backend/sandbox/sandboxedMcp';
+  type SandboxStatus,
+  type SandboxStatusSummary,
+  SandboxStatusSummarySchema,
+} from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
 
-export const SandboxStatusSchema = z.enum(['not_installed', 'initializing', 'running', 'error', 'stopping', 'stopped']);
-
-export const SandboxStatusSummarySchema = z.object({
-  status: SandboxStatusSchema,
-  runtime: PodmanRuntimeStatusSummarySchema,
-  mcpServers: z.record(z.string().describe('The MCP server ID'), SandboxedMcpServerStatusSummarySchema),
-});
-
-/**
- * Register our zod schemas into the global registry, such that they get output as components in the openapi spec
- * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-create-refs-to-the-schemas
- */
-z.globalRegistry.add(SandboxStatusSummarySchema, { id: 'SandboxStatusSummary' });
-z.globalRegistry.add(PodmanContainerStatusSummarySchema, { id: 'PodmanContainerStatusSummary' });
-
-type SandboxStatus = z.infer<typeof SandboxStatusSchema>;
-export type SandboxStatusSummary = z.infer<typeof SandboxStatusSummarySchema>;
+// Re-export for backward compatibility
+export { SandboxStatusSummarySchema } from '@backend/sandbox/schemas';
 
 /**
  * McpServerSandboxManager is a singleton "manager" responsible for.. managing

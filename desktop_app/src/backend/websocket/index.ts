@@ -2,7 +2,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 
 import config from '@backend/config';
-import McpServerSandboxManager, { SandboxStatusSummarySchema } from '@backend/sandbox/manager';
+import McpServerSandboxManager from '@backend/sandbox/manager';
+import { SandboxStatusSummarySchema } from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
 
 const OllamaModelDownloadProgressWebsocketPayloadSchema = z.object({

@@ -2,12 +2,18 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type experimental_MCPClient, experimental_createMCPClient } from 'ai';
 import type { RawReplyDefaultExpression } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';
 
 import config from '@backend/config';
 import { type McpServer } from '@backend/models/mcpServer';
 import { ToolModel } from '@backend/models/tools';
-import PodmanContainer, { PodmanContainerStatusSummarySchema } from '@backend/sandbox/podman/container';
+import PodmanContainer from '@backend/sandbox/podman/container';
+import {
+  type AvailableTool,
+  AvailableToolSchema,
+  McpServerContainerLogsSchema,
+  type SandboxedMcpServerStatusSummary,
+  SandboxedMcpServerStatusSummarySchema,
+} from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
 
 const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.http;
@@ -19,39 +25,15 @@ const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.htt
  */
 const TOOL_ID_SEPARATOR = '__';
 
-export const McpServerContainerLogsSchema = z.object({
-  logs: z.string(),
-  containerName: z.string(),
-});
-
-export const AvailableToolSchema = z.object({
-  id: z.string().describe('Tool ID in format sanitizedServerId__sanitizedToolName'),
-  name: z.string().describe('Tool name'),
-  description: z.string().optional().describe('Tool description'),
-  inputSchema: z.any().optional().describe('Tool input schema'),
-  mcpServerId: z.string().describe('MCP server ID'),
-  mcpServerName: z.string().describe('MCP server name'),
-  // Analysis results
-  analysis: z
-    .object({
-      status: z.enum(['awaiting_ollama_model', 'in_progress', 'error', 'completed']).describe('Analysis status'),
-      error: z.string().nullable().describe('Error message if analysis failed'),
-      is_read: z.boolean().nullable().describe('Whether the tool is read-only'),
-      is_write: z.boolean().nullable().describe('Whether the tool writes data'),
-      idempotent: z.boolean().nullable().describe('Whether the tool is idempotent'),
-      reversible: z.boolean().nullable().describe('Whether the tool actions are reversible'),
-    })
-    .describe('Tool analysis results'),
-});
-
-export const SandboxedMcpServerStatusSummarySchema = z.object({
-  container: PodmanContainerStatusSummarySchema,
-  tools: z.array(AvailableToolSchema),
-});
+// Re-export schemas for backward compatibility
+export {
+  AvailableToolSchema,
+  McpServerContainerLogsSchema,
+  SandboxedMcpServerStatusSummarySchema,
+} from '@backend/sandbox/schemas';
+export type { AvailableTool } from '@backend/sandbox/schemas';
 
 export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
-export type AvailableTool = z.infer<typeof AvailableToolSchema>;
-type SandboxedMcpServerStatusSummary = z.infer<typeof SandboxedMcpServerStatusSummarySchema>;
 
 /**
  * SandboxedMcpServer represents an MCP server running in a podman container.

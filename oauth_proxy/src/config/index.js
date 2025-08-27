@@ -6,7 +6,6 @@ export const config = {
   server: {
     port: process.env.PORT || 8080,
     host: '0.0.0.0',
-    useHttps: process.env.USE_LOCAL_HTTPS === 'true',
   },
   
   providers: {

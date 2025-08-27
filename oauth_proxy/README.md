@@ -43,7 +43,6 @@ sequenceDiagram
 - 🚀 **Fast**: Built with Fastify for high performance
 - 🔌 **Extensible**: Easy to add new OAuth providers
 - 🛡️ **PKCE Support**: Full support for PKCE flow
-- 🔒 **HTTPS**: Local HTTPS support with mkcert
 - 📝 **Simple**: Minimal dependencies, clean architecture
 
 ## Installation
@@ -65,7 +64,6 @@ Edit `.env` file with your OAuth credentials:
 ```env
 # Server
 PORT=8080
-USE_LOCAL_HTTPS=true
 LOG_LEVEL=info
 
 # CORS
@@ -92,29 +90,24 @@ pnpm dev
 pnpm start
 ```
 
-### With HTTPS (Local Development)
+### With ngrok (https for slack, etc)
 
-1. Install mkcert:
+1. Install ngrok:
 ```bash
-brew install mkcert
-mkcert -install
+brew install ngrok/ngrok/ngrok
 ```
 
-2. Generate certificates:
-```bash
-cd oauth_proxy
-mkcert localhost
-```
-
-3. Set in `.env`:
-```env
-USE_LOCAL_HTTPS=true
-```
-
-4. Run the server:
+2. Start the server:
 ```bash
 pnpm start
 ```
+
+3. In another terminal, start ngrok:
+```bash
+ngrok http 8080
+```
+
+4. Use the provided HTTPS URL from ngrok for secure OAuth callbacks.
 
 ## API Endpoints
 
@@ -267,7 +260,7 @@ const tokens = await response.json();
 ## Security Considerations
 
 1. **Client Secrets**: Never expose client secrets to frontend code
-2. **HTTPS**: Always use HTTPS in production
+
 3. **CORS**: Configure allowed origins properly
 4. **State Parameter**: Use state parameter to prevent CSRF attacks
 5. **PKCE**: Always use PKCE for public clients

@@ -9,13 +9,12 @@ import tokenRoutes from './routes/token.js';
 import callbackRoutes from './routes/callback.js';
 import providersRoute from './routes/providers.js';
 
-export async function buildApp(httpsOptions = null) {
+export async function buildApp() {
   // Initialize providers
   initializeProviders();
 
-  // Create Fastify instance with HTTPS if provided
+  // Create Fastify instance
   const app = Fastify({
-    https: httpsOptions,
     logger: {
       level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
       // Log security-relevant events in production
@@ -35,27 +34,24 @@ export async function buildApp(httpsOptions = null) {
     },
   });
 
-  // Register security plugins
-  await app.register(helmet, {
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"], // For inline redirect script
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        mediaSrc: ["'self'"],
-        frameSrc: ["'none'"],
-      },
-    },
-    hsts: {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true,
-    },
-  });
+  // // Register security plugins
+  // await app.register(helmet, {
+  //   contentSecurityPolicy: {
+  //     directives: {
+  //       defaultSrc: ["'self'"],
+  //       scriptSrc: ["'self'", "'unsafe-inline'"], // For inline redirect script
+  //       styleSrc: ["'self'", "'unsafe-inline'"],
+  //       imgSrc: ["'self'", 'data:', 'https:'],
+  //       connectSrc: ["'self'"],
+  //       fontSrc: ["'self'"],
+  //       objectSrc: ["'none'"],
+  //       mediaSrc: ["'self'"],
+  //       frameSrc: ["'none'"],
+  //     },
+  //   },
+  //   // HSTS disabled since we're using HTTP only (with ngrok handling HTTPS)
+  //   hsts: false,
+  // });
 
   // Rate limiting per IP
   await app.register(rateLimit, {

@@ -2,7 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { ArchestraMcpServerManifestSchema } from '@mcpCatalog/schemas';
+import { ArchestraMcpServerManifestSchema } from '@schemas';
 
 import { MCP_SERVERS_EVALUATIONS_DIR } from './paths';
 

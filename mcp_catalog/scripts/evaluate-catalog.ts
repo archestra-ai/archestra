@@ -5,9 +5,9 @@ import path from 'path';
 import z from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { DxtManifestServerSchema, DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
-import { extractServerInfo, loadServers } from '@mcpCatalog/lib/catalog';
-import { calculateQualityScore } from '@mcpCatalog/lib/quality-calculator';
+import { ArchestraMcpServerGitHubRepoInfo, ArchestraMcpServerManifest } from '@archestra/types';
+import { extractServerInfo, loadServers } from '@lib/catalog';
+import { calculateQualityScore } from '@lib/quality-calculator';
 import {
   ArchestraClientConfigPermutationsSchema,
   ArchestraMcpServerProtocolFeaturesSchema,
@@ -15,8 +15,8 @@ import {
   ArchestraSupportedOauthProvidersSchema,
   MCPDependencySchema,
   McpServerCategorySchema,
-} from '@mcpCatalog/schemas';
-import { ArchestraMcpServerGitHubRepoInfo, ArchestraMcpServerManifest } from '@mcpCatalog/types';
+} from '@schemas';
+import { DxtManifestServerSchema, DxtUserConfigurationOptionSchema } from '@schemas/dxt';
 
 import { MCP_SERVERS_EVALUATIONS_DIR, MCP_SERVERS_JSON_FILE_PATH } from './paths';
 

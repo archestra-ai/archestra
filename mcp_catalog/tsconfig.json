@@ -20,9 +20,10 @@
       "@archestra/types": ["src/types.ts"],
       "@constants": ["src/constants.ts"],
       "@lib/*": ["src/lib/*"],
-      "@schemas": ["src/schemas/index.ts"]
+      "@schemas": ["src/schemas/index.ts"],
+      "@schemas/*": ["src/schemas/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist"]
 }

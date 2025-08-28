@@ -26,6 +26,9 @@ importers:
       zod:
         specifier: ^4.0.17
         version: 4.1.4
+      zod-to-json-schema:
+        specifier: ^3.24.6
+        version: 3.24.6(zod@4.1.4)
     devDependencies:
       '@trivago/prettier-plugin-sort-imports':
         specifier: ^5.2.2
@@ -1181,6 +1184,11 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
+  zod-to-json-schema@3.24.6:
+    resolution: {integrity: sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==}
+    peerDependencies:
+      zod: ^3.24.1
+
   zod@4.1.4:
     resolution: {integrity: sha512-2YqJuWkU6IIK9qcE4k1lLLhyZ6zFw7XVRdQGpV97jEIZwTrscUw+DY31Xczd8nwaoksyJUIxCojZXwckJovWxA==}
 
@@ -2222,5 +2230,9 @@ snapshots:
       strip-ansi: 7.1.0
 
   yaml@2.8.1: {}
+
+  zod-to-json-schema@3.24.6(zod@4.1.4):
+    dependencies:
+      zod: 4.1.4
 
   zod@4.1.4: {}

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { ArchestraMcpServerManifest, McpServerCategory } from '@mcpCatalog/types';
+import { ArchestraMcpServerManifest, McpServerCategory } from '@archestra/types';
 
 import { MCP_SERVERS_JSON_FILE_PATH } from './paths';
 

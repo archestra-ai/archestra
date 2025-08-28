@@ -159,37 +159,6 @@ jobs:
       - name: Validate catalog data
         run: pnpm catalog:validate
 
-  verify-mcp-catalog-has-no-pending-openapi-schema-changes:
-    name: Verify MCP Catalog has no pending OpenAPI schema changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # needed to commit generated code for review
-    defaults:
-      run:
-        working-directory: mcp_catalog
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: true
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: mcp_catalog
-
-      - name: Codegen
-        run: pnpm openapi:generate
-
-      - name: Check for changes and commit if needed
-        run: |
-          # Check both unstaged and staged changes
-          if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            git add .
-            git commit -m "chore: update MCP Catalog OpenAPI schema"
-            git push --no-verify
-          fi
-
   oauth-proxy-linting-and-tests:
     name: OAuth Proxy Linting and Tests
     runs-on: ubuntu-latest

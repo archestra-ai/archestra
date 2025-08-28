@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "prettier": "prettier --write .",
-    "catalog:evaluate": "npx tsx src/scripts/evaluate-catalog.ts",
-    "catalog:validate": "npx tsx src/scripts/validate-catalog.ts"
+    "catalog:evaluate": "npx tsx scripts/evaluate-catalog.ts",
+    "catalog:validate": "npx tsx scripts/validate-catalog.ts"
   },
   "packageManager": "pnpm@10.15.0",
   "dependencies": {
@@ -19,7 +19,8 @@
     "@fastify/swagger-ui": "^5.2.3",
     "fastify": "^5.5.0",
     "fastify-type-provider-zod": "^5.0.3",
-    "zod": "^4.0.17"
+    "zod": "^4.0.17",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",

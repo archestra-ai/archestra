@@ -35,10 +35,7 @@ export const slackBrowserProvider: OAuthProviderDefinition = {
         return (
           hostname === 'slack.com' ||
           hostname === 'app.slack.com' ||
-          (
-            hostname.endsWith('.slack.com') &&
-            hostname.length > '.slack.com'.length
-          )
+          (hostname.endsWith('.slack.com') && hostname.length > '.slack.com'.length)
         );
       } catch (e) {
         // If URL parsing fails, deny navigation

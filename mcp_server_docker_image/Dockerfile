@@ -90,7 +90,7 @@ WORKDIR /home/mcp
 # Configure git for the mcp user before switching
 RUN git config --system http.sslVerify true && \
     git config --system http.postBuffer 524288000 && \
-    git config --system http.timeout 120 && \
+    git config --system http.timeout 180 && \
     git config --system core.compression 0
 
 USER mcp

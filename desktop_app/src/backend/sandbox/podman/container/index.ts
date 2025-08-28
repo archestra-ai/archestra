@@ -85,6 +85,8 @@ export default class PodmanContainer {
 
   private logStream: NodeJS.WritableStream | null = null;
 
+  private customImage: string | null = null;
+
   constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
@@ -92,8 +94,17 @@ export default class PodmanContainer {
       userConfigValues
     );
 
-    // Check if Google OAuth tokens are present and wrap command if needed
-    if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
+    // Check if this is a Docker-style configuration
+    if (command === 'docker' || command === 'podman') {
+      // Parse Docker/Podman run command to extract image and real args
+      const dockerConfig = PodmanContainer.parseDockerCommand(args || []);
+      this.customImage = dockerConfig.image;
+      this.command = dockerConfig.command;
+      this.args = dockerConfig.args;
+      // Merge environment variables - OAuth tokens from env override Docker config placeholders
+      this.envVars = { ...dockerConfig.env, ...env };
+    } else if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
+      // Check if Google OAuth tokens are present and wrap command if needed
       // Wrap the command to create the credentials file on startup
       const originalCommand = [command, ...(args || [])].join(' ');
       const email = env.GOOGLE_OAUTH_EMAIL;
@@ -105,12 +116,12 @@ export default class PodmanContainer {
           `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
           `${originalCommand}`,
       ];
+      this.envVars = env;
     } else {
       this.command = command;
       this.args = args || [];
+      this.envVars = env;
     }
-
-    this.envVars = env;
 
     // Set the socket path for the container (needed for attach operations)
     this.socketPath = socketPath;
@@ -130,6 +141,90 @@ export default class PodmanContainer {
    */
   private static prettifyServerNameIntoContainerName = (serverName: string) =>
     `archestra-ai-${serverName.replace(/ /g, '-').toLowerCase()}-mcp-server`;
+
+  /**
+   * Parse Docker/Podman run command arguments to extract image and configuration
+   * Handles commands like: ["run", "--rm", "-i", "-e", "LINKEDIN_COOKIE", "stickerdaniel/linkedin-mcp-server:latest"]
+   */
+  private static parseDockerCommand(args: string[]): {
+    image: string;
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+  } {
+    let image = '';
+    const env: Record<string, string> = {};
+    const dockerArgs: string[] = [];
+    let i = 0;
+
+    // Skip 'run' if it's the first argument
+    if (args[0] === 'run') {
+      i = 1;
+    }
+
+    // Parse flags and options
+    while (i < args.length) {
+      const arg = args[i];
+
+      if (arg === '-e' || arg === '--env') {
+        // Environment variable
+        i++;
+        if (i < args.length) {
+          const envVar = args[i];
+          // Check if it's KEY=VALUE format or just KEY
+          if (envVar.includes('=')) {
+            const [key, ...valueParts] = envVar.split('=');
+            env[key] = valueParts.join('=');
+          } else {
+            // Just the key, value will come from env vars
+            env[envVar] = '';
+          }
+        }
+        i++;
+      } else if (arg.startsWith('-')) {
+        // Other Docker flags we want to skip (--rm, -i, etc.)
+        if (
+          arg === '--rm' ||
+          arg === '-i' ||
+          arg === '--interactive' ||
+          arg === '-t' ||
+          arg === '--tty' ||
+          arg === '-it'
+        ) {
+          i++;
+        } else {
+          // Unknown flag, skip it and its value if needed
+          i++;
+          // Some flags take values, skip the next arg if it doesn't start with -
+          if (i < args.length && !args[i].startsWith('-')) {
+            i++;
+          }
+        }
+      } else {
+        // This should be the image name
+        image = arg;
+        i++;
+        // Everything after the image is the command and its args
+        while (i < args.length) {
+          dockerArgs.push(args[i]);
+          i++;
+        }
+        break;
+      }
+    }
+
+    // If no command specified after the image, don't set command/args
+    // This allows the container to use its default entrypoint
+    const command = dockerArgs.length > 0 ? dockerArgs[0] : '';
+    const commandArgs = dockerArgs.slice(1);
+
+    return {
+      image,
+      command,
+      args: commandArgs,
+      env,
+    };
+  }
 
   private async startLoggingToFile() {
     try {
@@ -456,7 +551,7 @@ export default class PodmanContainer {
    */
   async startOrCreateContainer() {
     log.info(
-      `Starting MCP server container ${this.containerName} with command: ${this.command} ${this.args.join(' ')}`
+      `Starting MCP server container ${this.containerName} with image: ${this.customImage || config.sandbox.baseDockerImage}`
     );
 
     // Update state to initializing
@@ -507,9 +602,7 @@ export default class PodmanContainer {
       }
     }
 
-    log.info(
-      `MCP server container ${this.containerName} does not exist, creating it with base image and command: ${this.command} ${this.args.join(' ')}`
-    );
+    log.info(`Container ${this.containerName} does not exist, creating it...`);
 
     try {
       // Update state for creation
@@ -517,28 +610,28 @@ export default class PodmanContainer {
       this.startupPercentage = 30;
       this.statusMessage = 'Creating container';
 
+      // Only include command if it's not empty
+      const createBody: any = {
+        name: this.containerName,
+        image: this.customImage || config.sandbox.baseDockerImage,
+        env: this.envVars,
+        /**
+         * Keep stdin open for interactive communication with MCP servers
+         */
+        stdin: true,
+        /**
+         * Don't auto-remove the container - we need it to persist for MCP communication
+         */
+        remove: false,
+      };
+
+      // Only add command if we have one (let container use its default CMD/ENTRYPOINT if not)
+      if (this.command) {
+        createBody.command = [this.command, ...this.args];
+      }
+
       const response = await containerCreateLibpod({
-        body: {
-          name: this.containerName,
-          image: config.sandbox.baseDockerImage,
-          command: [this.command, ...this.args],
-          env: this.envVars,
-          /**
-           * Keep stdin open for interactive communication with MCP servers
-           */
-          stdin: true,
-          /**
-           * Don't auto-remove the container - we need it to persist for MCP communication
-           */
-          remove: false,
-          // MCP servers communicate via stdin/stdout, not HTTP ports
-          // portmappings: [
-          //   {
-          //     container_port: this.containerPort,
-          //     host_port: this.hostPort,
-          //   },
-          // ],
-        },
+        body: createBody,
       });
 
       if (response.response.status !== 201) {
@@ -571,10 +664,18 @@ export default class PodmanContainer {
       await this.startStreamingLogs();
 
       this.setContainerAsRunning();
-    } catch (error) {
-      log.error(`Error creating MCP server container ${this.containerName}`, error);
-      this.setContainerAsError(error instanceof Error ? error.message : 'Failed to create container');
-      throw error;
+    } catch (error: any) {
+      // Log the full error details for debugging
+      if (error.error) {
+        log.error(`[PodmanContainer] Container creation failed:`, error.error);
+      } else {
+        log.error(`Error creating MCP server container ${this.containerName}:`, error);
+      }
+
+      // Extract meaningful error message
+      const errorMessage = error?.error?.message || error?.message || 'Failed to create container';
+      this.setContainerAsError(errorMessage);
+      throw new Error(errorMessage);
     }
   }
 

@@ -51,12 +51,13 @@ function ConnectorCatalogPage() {
        *
        * https://github.com/anthropics/dxt/blob/main/MANIFEST.md#server-configuration
        */
-      serverConfig: mcpServer.server.mcp_config,
+      // Prefer server_docker over server.mcp_config when available
+      serverConfig: mcpServer.server_docker || mcpServer.server.mcp_config,
       userConfigValues: userConfigValues || {},
-      // If using browser auth for Slack, use the slack-browser provider
+      // If using browser auth, append -browser to the provider name
       oauthProvider:
-        useBrowserAuth && mcpServer.archestra_config.oauth?.provider === 'slack'
-          ? 'slack-browser'
+        useBrowserAuth && mcpServer.archestra_config.oauth?.provider
+          ? `${mcpServer.archestra_config.oauth.provider}-browser`
           : mcpServer.archestra_config.oauth?.provider,
     };
 
@@ -85,11 +86,9 @@ function ConnectorCatalogPage() {
   };
 
   const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
-    // Special handling for Slack MCP server - skip the config dialog and use browser auth
-    if (mcpServer.name === 'korotovsky__slack-mcp-server') {
-      // Directly install with browser auth flag
-      await installMcpServer(mcpServer, undefined, true);
-    }
+    // For any server that supports browser-based authentication
+    // Directly install with browser auth flag
+    await installMcpServer(mcpServer, undefined, true);
   };
 
   const handleInstallWithConfig = async (config: McpServerUserConfigValues) => {

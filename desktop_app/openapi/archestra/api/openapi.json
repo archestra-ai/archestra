@@ -848,7 +848,7 @@
           },
           "oauthProvider": {
             "type": "string",
-            "enum": ["google", "slack", "slack-browser"]
+            "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
           },
           "oauthAccessToken": {
             "type": "string"
@@ -1883,7 +1883,7 @@
           },
           "oauthProvider": {
             "type": "string",
-            "enum": ["google", "slack", "slack-browser"]
+            "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
           },
           "oauthAccessToken": {
             "type": "string"

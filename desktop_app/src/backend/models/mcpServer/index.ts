@@ -28,7 +28,7 @@ export const McpServerInstallSchema = z.object({
     .regex(/^[A-Za-z0-9-\s]{1,63}$/, 'Name can only contain letters, numbers, spaces, and dashes (-)'),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
-  oauthProvider: z.enum(['google', 'slack', 'slack-browser']).optional(),
+  oauthProvider: z.enum(['google', 'slack', 'slack-browser', 'linkedin-browser']).optional(),
   oauthAccessToken: z.string().optional(),
   oauthRefreshToken: z.string().optional(),
   oauthExpiryDate: z.string().nullable().optional(),
@@ -123,12 +123,13 @@ export default class McpServerModel {
         // Use the provider's token handler to get the correct env vars
         const tokenEnvVars = await handleProviderTokens(provider, tokens, id);
 
-        // Use env variabled from oauth provider intead default ones
+        // Merge OAuth env variables with existing ones (including those from server_docker)
         if (tokenEnvVars) {
           finalServerConfig = {
             ...serverConfig,
             env: {
-              ...tokenEnvVars,
+              ...serverConfig.env, // Keep existing env vars
+              ...tokenEnvVars, // Add/override with OAuth tokens
             },
           };
         }

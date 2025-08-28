@@ -1,0 +1,210 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ddukbg__github-enterprise-mcp",
+  "display_name": "github-enterprise-mcp",
+  "version": "1.0.0",
+  "description": "github-enterprise-mcp",
+  "author": {
+    "name": "ddukbg"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/containerelic-github-enterprise-mcp-badge.png)](https://mseep.ai/app/containerelic-github-enterprise-mcp)\n\n# GitHub Enterprise MCP Server\n\n![image](https://github.com/user-attachments/assets/55403caa-c81d-486a-8ec7-3a2532e7545e)\n\nAn MCP (Model Context Protocol) server for integration with GitHub Enterprise API. This server provides an MCP interface to easily access repository information, issues, PRs, and more from GitHub Enterprise in Cursor.\n\n## Compatibility\n\nThis project is primarily designed for GitHub Enterprise Server environments, but it also works with:\n\n- GitHub.com\n- GitHub Enterprise Cloud\n\n> **Note**: Some enterprise-specific features (like license information and enterprise statistics) will not work with GitHub.com or GitHub Enterprise Cloud.\n\n## Key Features\n\n- Retrieve repository list from GitHub Enterprise instances\n- Get detailed repository information\n- List repository branches\n- View file and directory contents\n- Manage issues and pull requests\n- Repository management (create, update, delete)\n- GitHub Actions workflows management\n- User management (list, create, update, delete, suspend/unsuspend users)\n- Access enterprise statistics\n- Enhanced error handling and user-friendly response formatting\n\n## Getting Started\n\n### Prerequisites\n\n- Node.js 18 or higher\n- Access to a GitHub Enterprise instance\n- Personal Access Token (PAT)\n\n### Docker Installation and Setup\n\n#### Option 1: Running with Docker\n\n1. Build the Docker image:\n\n    ```bash\n    docker build -t github-enterprise-mcp .\n    ```\n\n2. Run the Docker container with environment variables:\n\n    ```bash\n    docker run -p 3000:3000 \\\n      -e GITHUB_TOKEN=\"your_github_token\" \\\n      -e GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\" \\\n      -e DEBUG=true \\\n      github-enterprise-mcp\n    ```\n\n> **Note**: The Dockerfile is configured to run with `--transport http` by default. If you need to change this, you can override the command:\n\n```bash\ndocker run -p 3000:3000 \\\n  -e GITHUB_TOKEN=\"your_github_token\" \\\n  -e GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\" \\\n  -e DEBUG=true \\\n  github-enterprise-mcp node dist/index.js --transport http --debug\n```\n\n#### Option 2: Using Docker Compose\n\n1. Create a `.env` file in the project root with the required environment variables:\n\n    ```shell\n    GITHUB_ENTERPRISE_URL=https://github.your-company.com/api/v3\n    GITHUB_TOKEN=your_github_token\n    DEBUG=true\n    ```\n\n2. Start the container with Docker Compose:\n\n    ```bash\n    docker-compose up -d\n    ```\n\n3. Check the logs:\n\n    ```bash\n    docker-compose logs -f\n    ```\n\n4. Stop the container:\n\n    ```bash\n    docker-compose down\n    ```\n\n### Installation and Setup\n\n#### Local Development (Using Concurrent Mode)\n\nThis method is recommended for active development with automatic recompilation and server restarts:\n\n1. Clone the repository and install required packages:\n\n    ```bash\n    git clone https://github.com/ddukbg/github-enterprise-mcp.git\n    cd github-enterprise-mcp\n    npm install\n    ```\n\n2. Run the development server:\n\n    ```bash\n    export GITHUB_TOKEN=\"your_github_token\"\n    export GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\"\n    npm run dev\n    ```\n\n    This will:\n    - Compile TypeScript code automatically when files change\n    - Restart the server when compiled files are updated\n    - Run the server in HTTP mode for URL-based connections\n\n3. Connect to Cursor using URL mode as described below\n\n### Installation and Setup for Production\n\n#### Option 1: Using URL Mode (Recommended for Local Development)\n\nThis method is the most stable and recommended for local development or testing:\n\n1. Clone the repository and install required packages:\n\n    ```bash\n    git clone https://github.com/ddukbg/github-enterprise-mcp.git\n    cd github-enterprise-mcp\n    npm install\n    ```\n\n2. Build the project:\n\n    ```bash\n    npm run build\n    chmod +x dist/index.js\n    ```\n\n3. Run the server:\n\n    ```bash\n    export GITHUB_TOKEN=\"your_github_token\"\n    export GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\"\n    node dist/index.js --transport http --debug\n    ```\n\n4. Connect to Cursor using URL mode:\n   - Add the following to your Cursor's `.cursor/mcp.json` file:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"github-enterprise\": {\n         \"url\": \"http://localhost:3000/sse\"\n       }\n     }\n   }\n   ```\n\n#### Option 2: Install as a Global Command (npm link)\n\nThis method is useful for local development:\n\n```bash\n# After cloning the repository\ngit clone https://github.com/ddukbg/github-enterprise-mcp.git\ncd github-enterprise-mcp\n\n# Install required packages\nnpm install\n\n# Build\nnpm run build\nchmod +x dist/index.js\n\n# Link globally\nnpm link\n\n# Run as a global command\nexport GITHUB_TOKEN=\"your_github_token\"\nexport GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\"\ngithub-enterprise-mcp --transport=http --debug\n```\n\n#### Option 3: Using npx (When Package is Published)\n\nIf the package is published to the public npm registry:\n\n```bash\nnpx @ddukbg/github-enterprise-mcp --token=your_github_token --github-enterprise-url=https://github.your-company.com/api/v3\n```\n\n## Integration with AI Tools\n\n### Claude Desktop\n\nAdd the following to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"github-enterprise\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@ddukbg/github-enterprise-mcp\", \"--token=YOUR_GITHUB_TOKEN\", \"--github-enterprise-url=YOUR_GITHUB_ENTERPRISE_URL\"]\n    }\n  }\n}\n```\n\nReplace `YOUR_GITHUB_TOKEN` and `YOUR_GITHUB_ENTERPRISE_URL` with your actual values.\n\n### Cursor\n\n#### Recommended: URL Mode (Most Stable)\n\nFor the most reliable operation in Cursor, using URL mode is recommended:\n\n1. Start the server in a separate terminal window:\n\n   ```bash\n   cd /path/to/github-enterprise-mcp\n   GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\" GITHUB_TOKEN=\"your_github_token\" node dist/index.js --transport http\n   ```\n\n2. Configure Cursor's MCP settings:\n   - Open Cursor and go to **Settings**\n   - Navigate to **AI > MCP Servers**\n   - Edit your `.cursor/mcp.json` file:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"github-enterprise\": {\n         \"url\": \"http://localhost:3000/sse\"\n       }\n     }\n   }\n   ```\n\n3. Restart Cursor to apply the changes\n\n#### Alternative: Command Mode\n\nAlternatively, you can configure Cursor to use the command mode, although URL mode is more reliable:\n\n1. Open Cursor and go to **Settings**\n2. Navigate to **AI > MCP Servers**\n3. Click **Add MCP Server**\n4. Enter the following details:\n   - **Name**: GitHub Enterprise\n   - **Command**: `npx`\n   - **Arguments**: `@ddukbg/github-enterprise-mcp`\n   - **Environment Variables**:\n     - `GITHUB_ENTERPRISE_URL`: Your GitHub Enterprise API URL\n     - `GITHUB_TOKEN`: Your GitHub personal access token\n\nAlternatively, you can manually edit your `.cursor/mcp.json` file to include:\n\n```json\n{\n  \"mcpServers\": {\n    \"github-enterprise\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@ddukbg/github-enterprise-mcp\"\n      ],\n      \"env\": {\n        \"GITHUB_ENTERPRISE_URL\": \"https://github.your-company.com/api/v3\",\n        \"GITHUB_TOKEN\": \"your_github_token\"\n      }\n    }\n  }\n}\n```\n\n## Language Configuration\n\nThis MCP server supports both English and Korean languages. You can configure the language using:\n\n### Environment Variables\n\n```bash\n# Set language to Korean\nexport LANGUAGE=ko\n\n# Or in .env file\nLANGUAGE=ko\n```\n\n### Command-line Arguments\n\n```bash\n# Set language to Korean\nnode dist/index.js --language ko\n```\n\nThe default language is English if not specified.\n\n## Additional Options in HTTP Mode\n\n- `--debug`: Enable debug logging\n- `--github-enterprise-url <URL>`: Set GitHub Enterprise API URL\n- `--token <TOKEN>`: Set GitHub Personal Access Token\n- `--language <LANG>`: Set language (en or ko, default: en)\n\n## Available MCP Tools\n\nThis MCP server provides the following tools:\n\n| Tool Name | Description | Parameters | Required PAT Permissions |\n|---|---|---|---|\n| `list-repositories` | Retrieve repository list for a user or organization | `owner`: Username/org name<br>`isOrg`: Whether it's an organization<br>`type`: Repository type<br>`sort`: Sort criteria<br>`page`: Page number<br>`perPage`: Items per page | `repo` |\n| `get-repository` | Get detailed repository information | `owner`: Repository owner<br>`repo`: Repository name | `repo` |\n| `list-branches` | List branches of a repository | `owner`: Repository owner<br>`repo`: Repository name<br>`protected_only`: Whether to show only protected branches<br>`page`: Page number<br>`perPage`: Items per page | `repo` |\n| `get-content` | Retrieve file or directory contents | `owner`: Repository owner<br>`repo`: Repository name<br>`path`: File/directory path<br>`ref`: Branch/commit (optional) | `repo` |\n| `list-pull-requests` | List pull requests in a repository | `owner`: Repository owner<br>`repo`: Repository name<br>`state`: PR state filter<br>`sort`: Sort criteria<br>`direction`: Sort direction<br>`page`: Page number<br>`per_page`: Items per page | `repo` |\n| `get-pull-request` | Get pull request details | `owner`: Repository owner<br>`repo`: Repository name<br>`pull_number`: Pull request number | `repo` |\n| `create-pull-request` | Create a new pull request | `owner`: Repository owner<br>`repo`: Repository name<br>`title`: PR title<br>`head`: Head branch<br>`base`: Base branch<br>`body`: PR description<br>`draft`: Create as draft PR | `repo` |\n| `merge-pull-request` | Merge a pull request | `owner`: Repository owner<br>`repo`: Repository name<br>`pull_number`: Pull request number<br>`merge_method`: Merge method<br>`commit_title`: Commit title<br>`commit_message`: Commit message | `repo` |\n| `list-issues` | List issues in a repository | `owner`: Repository owner<br>`repo`: Repository name<br>`state`: Issue state filter<br>`sort`: Sort criteria<br>`direction`: Sort direction<br>`page`: Page number<br>`per_page`: Items per page | `repo` |\n| `get-issue` | Get issue details | `owner`: Repository owner<br>`repo`: Repository name<br>`issue_number`: Issue number | `repo` |\n| `list-issue-comments` | List comments on an issue or pull request | `owner`: Repository owner<br>`repo`: Repository name<br>`issue_number`: Issue/PR number<br>`page`: Page number<br>`per_page`: Items per page | `repo` |\n| `create-issue` | Create a new issue | `owner`: Repository owner<br>`repo`: Repository name<br>`title`: Issue title<br>`body`: Issue body content<br>`labels`: Array of label names<br>`assignees`: Array of user logins<br>`milestone`: Milestone ID | `repo` |\n| `create-repository` | Create a new repository | `name`: Repository name<br>`description`: Repository description<br>`private`: Whether private<br>`auto_init`: Initialize with README<br>`gitignore_template`: Add .gitignore<br>`license_template`: Add license<br>`org`: Organization name | `repo` |\n| `update-repository` | Update repository settings | `owner`: Repository owner<br>`repo`: Repository name<br>`description`: New description<br>`private`: Change privacy<br>`default_branch`: Change default branch<br>`has_issues`: Enable/disable issues<br>`has_projects`: Enable/disable projects<br>`has_wiki`: Enable/disable wiki<br>`archived`: Archive/unarchive | `repo` |\n| `delete-repository` | Delete a repository | `owner`: Repository owner<br>`repo`: Repository name<br>`confirm`: Confirmation (must be true) | `delete_repo` |\n| `list-workflows` | List GitHub Actions workflows | `owner`: Repository owner<br>`repo`: Repository name<br>`page`: Page number<br>`perPage`: Items per page | `actions:read` |\n| `list-workflow-runs` | List workflow runs | `owner`: Repository owner<br>`repo`: Repository name<br>`workflow_id`: Workflow ID/filename<br>`branch`: Filter by branch<br>`status`: Filter by status<br>`page`: Page number<br>`perPage`: Items per page | `actions:read` |\n| `trigger-workflow` | Trigger a workflow | `owner`: Repository owner<br>`repo`: Repository name<br>`workflow_id`: Workflow ID/filename<br>`ref`: Git reference<br>`inputs`: Workflow inputs | `actions:write` |\n| `get-license-info` | Get GitHub Enterprise license information | - | **Requires site_admin (Administrator) account** |\n| `get-enterprise-stats` | Get GitHub Enterprise system statistics | - | **Requires site_admin (Administrator) account** |\n\n> **Note**: For Enterprise-specific tools (`get-license-info` and `get-enterprise-stats`), a user with **site administrator** privileges is required. A Classic Personal Access Token is recommended, as Fine-grained tokens may not support these Enterprise-level permissions.\n\n## Using the Tools in Cursor\n\nOnce you have set up the MCP server and configured Cursor to connect to it, you can use the GitHub Enterprise tools directly in Cursor's AI chat. Here are some examples:\n\n### Listing Repositories\n\n```js\nmcp_github_enterprise_list_repositories(owner=\"octocat\")\n```\n\n### Getting Repository Information\n\n```js\nmcp_github_enterprise_get_repository(owner=\"octocat\", repo=\"hello-world\")\n```\n\n### Listing Pull Requests\n\n```js\nmcp_github_enterprise_list_pull_requests(owner=\"octocat\", repo=\"hello-world\", state=\"open\")\n```\n\n### Managing Issues\n\n```js\n# List issues\nmcp_github_enterprise_list_issues(owner=\"octocat\", repo=\"hello-world\", state=\"all\")\n# Get issue details\nmcp_github_enterprise_get_issue(owner=\"octocat\", repo=\"hello-world\", issue_number=1)\n\n# Get issue/PR comments\nmcp_github_enterprise_list_issue_comments(owner=\"octocat\", repo=\"hello-world\", issue_number=1)\n\n\n# Create a new issue\nmcp_github_enterprise_create_issue(\n  owner=\"octocat\", \n  repo=\"hello-world\",\n  title=\"Found a bug\",\n  body=\"Here is a description of the bug\",\n  labels=[\"bug\", \"important\"]\n)\n```\n\n### Working with Repository Content\n\n```js\nmcp_github_enterprise_get_content(owner=\"octocat\", repo=\"hello-world\", path=\"README.md\")\n```\n\n### Repository Management\n\n```\n# Create a new repository\nmcp_github_enterprise_create_repository(\n  name=\"new-project\",\n  description=\"This is a new project\",\n  private=true,\n  auto_init=true\n)\n\n# Update repository settings\nmcp_github_enterprise_update_repository(\n  owner=\"octocat\",\n  repo=\"hello-world\",\n  description=\"Updated description\",\n  has_issues=true\n)\n```\n\n### User Management (Enterprise Only)\n\nThese features are specifically designed for GitHub Enterprise Server environments and require administrative permissions:\n\n```js\n# List all users in the GitHub Enterprise instance\nmcp_github_enterprise_list_users(filter=\"active\", per_page=100)\n\n# Get a specific user's details\nmcp_github_enterprise_get_user(username=\"octocat\")\n\n# Create a new user (Enterprise only)\nmcp_github_enterprise_create_user(\n  login=\"newuser\",\n  email=\"newuser@example.com\",\n  name=\"New User\",\n  company=\"ACME Inc.\"\n)\n\n# Update a user's information (Enterprise only)\nmcp_github_enterprise_update_user(\n  username=\"octocat\",\n  email=\"updated-email@example.com\",\n  location=\"San Francisco\"\n)\n\n# Suspend a user (Enterprise only)\nmcp_github_enterprise_suspend_user(\n  username=\"octocat\",\n  reason=\"Violation of terms of service\"\n)\n\n# Unsuspend a user (Enterprise only)\nmcp_github_enterprise_unsuspend_user(username=\"octocat\")\n\n# List organizations a user belongs to\nmcp_github_enterprise_list_user_orgs(username=\"octocat\")\n```\n\n## API Improvements\n\n- Flexible API URL configuration (supports various environment variables and command-line arguments)\n- Enhanced error handling and timeout management\n- User-friendly response formatting and messages\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nISC\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "github-enterprise-mcp-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "3000:3000",
+            "-e",
+            "GITHUB_TOKEN=\"your_github_token\"",
+            "-e",
+            "GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\"",
+            "-e",
+            "DEBUG=true",
+            "github-enterprise-mcp"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3",
+            "DEBUG": "true"
+          }
+        },
+        "github-enterprise-mcp-docker-override": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "3000:3000",
+            "-e",
+            "GITHUB_TOKEN=\"your_github_token\"",
+            "-e",
+            "GITHUB_ENTERPRISE_URL=\"https://github.your-company.com/api/v3\"",
+            "-e",
+            "DEBUG=true",
+            "github-enterprise-mcp",
+            "node",
+            "dist/index.js",
+            "--transport",
+            "http",
+            "--debug"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3",
+            "DEBUG": "true"
+          }
+        },
+        "github-enterprise-mcp-docker-compose": {
+          "command": "docker-compose",
+          "args": ["up", "-d"],
+          "env": {
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3",
+            "GITHUB_TOKEN": "your_github_token",
+            "DEBUG": "true"
+          }
+        },
+        "github-enterprise-mcp-dev": {
+          "command": "npm",
+          "args": ["run", "dev"],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3"
+          }
+        },
+        "github-enterprise-mcp-node-http": {
+          "command": "node",
+          "args": ["dist/index.js", "--transport", "http", "--debug"],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3"
+          }
+        },
+        "github-enterprise-mcp-node-http-cursor": {
+          "command": "node",
+          "args": ["dist/index.js", "--transport", "http"],
+          "env": {
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3",
+            "GITHUB_TOKEN": "your_github_token"
+          }
+        },
+        "github-enterprise-mcp-global": {
+          "command": "github-enterprise-mcp",
+          "args": ["--transport=http", "--debug"],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3"
+          }
+        },
+        "ddukbg-github-enterprise-mcp-npx": {
+          "command": "npx",
+          "args": [
+            "@ddukbg/github-enterprise-mcp",
+            "--token=your_github_token",
+            "--github-enterprise-url=https://github.your-company.com/api/v3"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token",
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3"
+          }
+        },
+        "ddukbg-github-enterprise-mcp-npx-claude": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "@ddukbg/github-enterprise-mcp",
+            "--token=YOUR_GITHUB_TOKEN",
+            "--github-enterprise-url=YOUR_GITHUB_ENTERPRISE_URL"
+          ],
+          "env": {
+            "GITHUB_TOKEN": "YOUR_GITHUB_TOKEN",
+            "GITHUB_ENTERPRISE_URL": "YOUR_GITHUB_ENTERPRISE_URL"
+          }
+        },
+        "ddukbg-github-enterprise-mcp-npx-cursor": {
+          "command": "npx",
+          "args": ["@ddukbg/github-enterprise-mcp"],
+          "env": {
+            "GITHUB_ENTERPRISE_URL": "https://github.your-company.com/api/v3",
+            "GITHUB_TOKEN": "your_github_token"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "ddukbg",
+    "repo": "github-enterprise-mcp",
+    "url": "https://github.com/ddukbg/github-enterprise-mcp",
+    "name": "github-enterprise-mcp",
+    "path": null,
+    "stars": 22,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "deb811cf0ee2265358a82535cdd9706ea0a34c5e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:53:55.176Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "universal-user-agent",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@ddukbg/github-enterprise-mcp\",\n  \"version\": \"1.3.0\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"github-enterprise-mcp\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && npm run copy-i18n\",\n    \"copy-i18n\": \"mkdir -p dist/i18n/en dist/i18n/ko && cp i18n/en/*.json dist/i18n/en/ && cp i18n/ko/*.json dist/i18n/ko/\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"concurrently \\\"npm run build:watch\\\" \\\"npm run dev:js\\\"\",\n    \"build:watch\": \"tsc --watch && npm run copy-i18n\",\n    \"dev:js\": \"nodemon dist/index.js --transport http\",\n    \"test\": \"npm run build && node test-i18n.js\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"github\",\n    \"enterprise\",\n    \"llm\",\n    \"ai\",\n    \"claude\",\n    \"cursor\",\n    \"model context protocol\",\n    \"issue tracking\",\n    \"pull request\",\n    \"git\",\n    \"repository\",\n    \"workflow\"\n  ],\n  \"author\": \"ddukbg\",\n  \"license\": \"ISC\",\n  \"description\": \"MCP server for GitHub Enterprise API integration with Cursor, enabling AI access to repositories, issues, PRs and workflows\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/ddukbg/github-enterprise-mcp.git\"\n  },\n  \"homepage\": \"https://github.com/ddukbg/github-enterprise-mcp\",\n  \"bugs\": {\n    \"url\": \"https://github.com/ddukbg/github-enterprise-mcp/issues\"\n  },\n  \"devDependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/node\": \"^22.13.10\",\n    \"concurrently\": \"^9.1.2\",\n    \"nodemon\": \"^3.1.9\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"dependencies\": {\n    \"axios\": \"^1.8.4\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.19.2\",\n    \"node-fetch\": \"^3.3.2\",\n    \"universal-user-agent\": \"^7.0.2\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

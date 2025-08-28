@@ -1,0 +1,230 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "last9__last9-mcp-server",
+  "display_name": "last9-mcp-server",
+  "version": "1.0.0",
+  "description": "Last9 MCP Server",
+  "author": {
+    "name": "last9"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Last9 MCP Server\n\n![last9 mcp demo](mcp-demo.gif)\n\nA [Model Context Protocol](https://modelcontextprotocol.io/) server\nimplementation for [Last9](https://last9.io/mcp/) that enables AI agents to\nseamlessly bring real-time production context — logs, metrics, and traces — into\nyour local environment to auto-fix code faster.\n\n- [View demo](https://www.youtube.com/watch?v=AQH5xq6qzjI)\n- Read our\n  [announcement blog post](https://last9.io/blog/launching-last9-mcp-server/)\n\n## Status\n\nWorks with Claude desktop app, or Cursor, Windsurf, and VSCode (Github Copilot)\nIDEs. Implements the following MCP\n[tools](https://modelcontextprotocol.io/docs/concepts/tools):\n\n- `get_exceptions`: Get the list of exceptions.\n- `get_service_graph`: Get service graph for an endpoint from the exception.\n- `get_logs`: Get logs filtered by service name and/or severity level.\n- `get_drop_rules`: Get drop rules for logs that determine what logs get\n  filtered out at [Last9 Control Plane](https://last9.io/control-plane)\n- `add_drop_rule`: Create a drop rule for logs at\n  [Last9 Control Plane](https://last9.io/control-plane)\n\n## Tools Documentation\n\n### get_exceptions\n\nRetrieves server-side exceptions over a specified time range.\n\nParameters:\n\n- `limit` (integer, optional): Maximum number of exceptions to return.\n  Default: 20.\n- `lookback_minutes` (integer, recommended): Number of minutes to look back from\n  now. Default: 60. Examples: 60, 30, 15.\n- `start_time_iso` (string, optional): Start time in ISO format (YYYY-MM-DD\n  HH:MM:SS). Leave empty to use lookback_minutes.\n- `end_time_iso` (string, optional): End time in ISO format (YYYY-MM-DD\n  HH:MM:SS). Leave empty to default to current time.\n- `span_name` (string, optional): Name of the span to filter by.\n\n### get_service_graph\n\nGets the upstream and downstream services for a given span name, along with the\nthroughput for each service.\n\nParameters:\n\n- `span_name` (string, required): Name of the span to get dependencies for.\n- `lookback_minutes` (integer, recommended): Number of minutes to look back from\n  now. Default: 60. Examples: 60, 30, 15.\n- `start_time_iso` (string, optional): Start time in ISO format (YYYY-MM-DD\n  HH:MM:SS). Leave empty to use lookback_minutes.\n\n### get_logs\n\nGets logs filtered by optional service name and/or severity level within a\nspecified time range.\n\nParameters:\n\n- `service` (string, optional): Name of the service to get logs for.\n- `severity` (string, optional): Severity of the logs to get.\n- `lookback_minutes` (integer, recommended): Number of minutes to look back from\n  now. Default: 60. Examples: 60, 30, 15.\n- `start_time_iso` (string, optional): Start time in ISO format (YYYY-MM-DD\n  HH:MM:SS). Leave empty to use lookback_minutes.\n- `end_time_iso` (string, optional): End time in ISO format (YYYY-MM-DD\n  HH:MM:SS). Leave empty to default to current time.\n- `limit` (integer, optional): Maximum number of logs to return. Default: 20.\n\n### get_drop_rules\n\nGets drop rules for logs, which determine what logs get filtered out from\nreaching Last9.\n\n### add_drop_rule\n\nAdds a new drop rule to filter out specific logs at\n[Last9 Control Plane](https://last9.io/control-plane)\n\nParameters:\n\n- `name` (string, required): Name of the drop rule.\n- `filters` (array, required): List of filter conditions to apply. Each filter\n  has:\n  - `key` (string, required): The key to filter on. Only attributes and\n    resource.attributes keys are supported. For resource attributes, use format:\n    resource.attributes[key_name] and for log attributes, use format:\n    attributes[key_name] Double quotes in key names must be escaped.\n  - `value` (string, required): The value to filter against.\n  - `operator` (string, required): The operator used for filtering. Valid\n    values:\n    - \"equals\"\n    - \"not_equals\"\n  - `conjunction` (string, required): The logical conjunction between filters.\n    Valid values:\n    - \"and\"\n\n## Installation\n\nYou can install the Last9 Observability MCP server using either:\n\n### Homebrew\n\n```\n# Add the Last9 tap\nbrew tap last9/tap\n\n# Install the Last9 MCP CLI\nbrew install last9-mcp\n```\n\n### NPM\n\n```bash\n# Install globally\nnpm install -g @last9/mcp-server\n\n# Or run directly with npx\nnpx @last9/mcp-server\n```\n\n## Configuration\n\n### Environment Variables\n\nThe Last9 MCP server requires the following environment variables:\n\n- `LAST9_BASE_URL`: (required) Last9 API URL from\n  [OTel integration](https://app.last9.io/integrations?integration=OpenTelemetry)\n- `LAST9_AUTH_TOKEN`: (required) Authentication token for Last9 MCP server from\n  [OTel integration](https://app.last9.io/integrations?integration=OpenTelemetry)\n- `LAST9_REFRESH_TOKEN`: (required) Refresh Token with Write permissions, needed\n  for accessing control plane APIs from\n  [API Access](https://app.last9.io/settings/api-access)\n\n## Usage with Claude Desktop\n\nConfigure the Claude app to use the MCP server:\n\n1. Open the Claude Desktop app, go to Settings, then Developer\n2. Click Edit Config\n3. Open the `claude_desktop_config.json` file\n4. Copy and paste the server config to your existing file, then save\n5. Restart Claude\n\n```json\n{\n  \"mcpServers\": {\n    \"last9\": {\n      \"command\": \"/opt/homebrew/bin/last9-mcp\",\n      \"env\": {\n        \"LAST9_BASE_URL\": \"<last9_otlp_host>\",\n        \"LAST9_AUTH_TOKEN\": \"<last9_otlp_auth_token>\",\n        \"LAST9_REFRESH_TOKEN\": \"<last9_write_refresh_token>\"\n      }\n    }\n  }\n}\n```\n\n## Usage with Cursor\n\nConfigure Cursor to use the MCP server:\n\n1. Open Cursor, go to Settings, then Cursor Settings\n2. Select MCP on the left\n3. Click Add \"New Global MCP Server\" at the top right\n4. Copy and paste the server config to your existing file, then save\n5. Restart Cursor\n\n```json\n{\n  \"mcpServers\": {\n    \"last9\": {\n      \"command\": \"/opt/homebrew/bin/last9-mcp\",\n      \"env\": {\n        \"LAST9_BASE_URL\": \"<last9_otlp_host>\",\n        \"LAST9_AUTH_TOKEN\": \"<last9_otlp_auth_token>\",\n        \"LAST9_REFRESH_TOKEN\": \"<last9_write_refresh_token>\"\n      }\n    }\n  }\n}\n```\n\n## Usage with Windsurf\n\nConfigure Windsurf to use the MCP server:\n\n1. Open Windsurf, go to Settings, then Developer\n2. Click Edit Config\n3. Open the `windsurf_config.json` file\n4. Copy and paste the server config to your existing file, then save\n5. Restart Windsurf\n\n```json\n{\n  \"mcpServers\": {\n    \"last9\": {\n      \"command\": \"/opt/homebrew/bin/last9-mcp\",\n      \"env\": {\n        \"LAST9_BASE_URL\": \"<last9_otlp_host>\",\n        \"LAST9_AUTH_TOKEN\": \"<last9_otlp_auth_token>\",\n        \"LAST9_REFRESH_TOKEN\": \"<last9_write_refresh_token>\"\n      }\n    }\n  }\n}\n```\n\n## Usage with VS Code\n\n> Note: MCP support in VS Code is available starting v1.99 and is currently in\n> preview. For advanced configuration options and alternative setup methods,\n> [view the VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).\n\n1.  Open VS Code, go to Settings, select the User tab, then Features, then Chat\n2.  Click \"Edit settings.json\"\n3.  Copy and paste the server config to your existing file, then save\n4.  Restart VS Code\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"last9\": {\n        \"type\": \"stdio\",\n        \"command\": \"/opt/homebrew/bin/last9-mcp\",\n        \"env\": {\n          \"LAST9_BASE_URL\": \"<last9_otlp_host>\",\n          \"LAST9_AUTH_TOKEN\": \"<last9_otlp_auth_token>\",\n          \"LAST9_REFRESH_TOKEN\": \"<last9_write_refresh_token>\"\n        }\n      }\n    }\n  }\n}\n```\n\n## Badges\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/last9-last9-mcp-server-badge.png)](https://mseep.ai/app/last9-last9-mcp-server)\n",
+  "category": "Monitoring",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "last9-mcp-server": {
+          "command": "npx",
+          "args": ["-y", "@last9/mcp-server"],
+          "env": {}
+        },
+        "last9-mcp-configured": {
+          "command": "/opt/homebrew/bin/last9-mcp",
+          "args": [],
+          "env": {
+            "LAST9_BASE_URL": "<last9_otlp_host>",
+            "LAST9_AUTH_TOKEN": "<last9_otlp_auth_token>",
+            "LAST9_REFRESH_TOKEN": "<last9_write_refresh_token>"
+          }
+        },
+        "last9-mcp-stdio": {
+          "command": "/opt/homebrew/bin/last9-mcp",
+          "args": [],
+          "env": {
+            "LAST9_BASE_URL": "<last9_otlp_host>",
+            "LAST9_AUTH_TOKEN": "<last9_otlp_auth_token>",
+            "LAST9_REFRESH_TOKEN": "<last9_write_refresh_token>"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "last9",
+    "repo": "last9-mcp-server",
+    "url": "https://github.com/last9/last9-mcp-server",
+    "name": "last9-mcp-server",
+    "path": null,
+    "stars": 41,
+    "contributors": 6,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "dd86f02afab19ab18c873af8801cb1385d1bf243"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:22:19.212Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "acrmp/mcp",
+      "importance": 10
+    },
+    {
+      "name": "peterbourgon/ff/v3",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/time",
+      "importance": 7
+    },
+    {
+      "name": "atombender/go-jsonschema",
+      "importance": 7
+    },
+    {
+      "name": "fatih/color",
+      "importance": 4
+    },
+    {
+      "name": "goccy/go-yaml",
+      "importance": 5
+    },
+    {
+      "name": "inconshreveable/mousetrap",
+      "importance": 3
+    },
+    {
+      "name": "mattn/go-colorable",
+      "importance": 4
+    },
+    {
+      "name": "mattn/go-isatty",
+      "importance": 4
+    },
+    {
+      "name": "mitchellh/go-wordwrap",
+      "importance": 3
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 6
+    },
+    {
+      "name": "sanity-io/litter",
+      "importance": 3
+    },
+    {
+      "name": "sourcegraph/jsonrpc2",
+      "importance": 9
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "spf13/pflag",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/exp",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/sys",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/xerrors}]}``` 1. **`acrmp/mcp`**: This is the core MCP (Model Context Protocol) library, central to the server's functionality. (Importance: 10) 2. **`sourcegraph/jsonrpc2`**: The Model Context Protocol often relies on JSON-RPC for communication, making this library essential for the server's protocol implementation. (Importance: 9) 3. **`spf13/cobra`**: A popular library for building powerful command-line interfaces in Go, indicating the server has a significant CLI component. (Importance: 8) 4. **`spf13/pflag`**: Commonly used with Cobra for parsing command-line flags, supporting the CLI functionality. (Importance: 8) 5. **`peterbourgon/ff/v3`**: Another library for parsing command-line flags and configuration, likely used for flexible server setup. (Importance: 8) 6. **`golang.org/x/time`**: Provides extended time functionalities, crucial for handling time-based queries in the MCP tools (e.g., `lookback_minutes`, `start_time_iso`). (Importance: 7) 7. **`atombender/go-jsonschema`**: Likely used for validating incoming MCP requests or outgoing responses against defined JSON schemas, ensuring protocol compliance. (Importance: 7) 8. **`pkg/errors`**: A widely adopted Go library for robust error handling, contributing to the server's stability. (Importance: 6) 9. **`golang.org/x/sys`**: Provides low-level system calls, often used in CLI applications for interacting with the operating system. (Importance: 6) 10. **`golang.org/x/exp`**: Contains experimental Go packages, which might be used for specific, advanced features or optimizations. (Importance: 6) 11. **`golang.org/x/xerrors`**: Another Go standard library extension for error handling, complementing `pkg/errors`. (Importance: 6) 12. **`goccy/go-yaml`**: A YAML parsing library, potentially used for reading configuration files for the server. (Importance: 5) 13. **`fatih/color`**: Used for adding colored output to the command-line interface, improving user experience. (Importance: 4) 14. **`mattn/go-colorable`**: Provides support for colored output on Windows terminals. (Importance: 4) 15. **`mattn/go-isatty`**: Checks if the program is running in a TTY (terminal) to enable conditional colored output. (Importance: 4) 16. **`mitchellh/go-wordwrap`**: A utility for word-wrapping text, possibly used for formatting output in the CLI. (Importance: 3) 17. **`sanity-io/litter`**: A library for pretty-printing Go data structures, likely used for debugging or logging. (Importance: 3) 18. **`inconshreveable/mousetrap`**: A small utility often used with Cobra to handle Windows-specific command-line behaviors. (Importance: 3) 19. No npm dependencies were found as the provided `package.json` does not contain a `dependencies` field.```</thought> 2. **`sourcegraph/jsonrpc2`**: The Model Context Protocol often relies on JSON-RPC for communication, making this library essential for the server's protocol implementation. (Importance: 9) 3. **`spf13/cobra`**: A popular library for building powerful command-line interfaces in Go, indicating the server has a significant CLI component. (Importance: 8) 4. **`spf13/pflag`**: Commonly used with Cobra for parsing command-line flags, supporting the CLI functionality. (Importance: 8) 5. **`peterbourgon/ff/v3`**: Another library for parsing command-line flags and configuration, likely used for flexible server setup. (Importance: 8) 6. **`golang.org/x/time`**: Provides extended time functionalities, crucial for handling time-based queries in the MCP tools (e.g., `lookback_minutes`, `start_time_iso`). (Importance: 7) 7. **`atombender/go-jsonschema`**: Likely used for validating incoming MCP requests or outgoing responses against defined JSON schemas, ensuring protocol compliance. (Importance: 7) 8. **`pkg/errors`**: A widely adopted Go library for robust error handling, contributing to the server's stability. (Importance: 6) 9. **`golang.org/x/sys`**: Provides low-level system calls, often used in CLI applications for interacting with the operating system. (Importance: 6) 10. **`golang.org/x/exp`**: Contains experimental Go packages, which might be used for specific, advanced features or optimizations. (Importance: 6) 11. **`golang.org/x/xerrors`**: Another Go standard library extension for error handling, complementing `pkg/errors`. (Importance: 6) 12. **`goccy/go-yaml`**: A YAML parsing library, potentially used for reading configuration files for the server. (Importance: 5) 13. **`fatih/color`**: Used for adding colored output to the command-line interface, improving user experience. (Importance: 4) 14. **`mattn/go-colorable`**: Provides support for colored output on Windows terminals. (Importance: 4) 15. **`mattn/go-isatty`**: Checks if the program is running in a TTY (terminal) to enable conditional colored output. (Importance: 4) 16. **`mitchellh/go-wordwrap`**: A utility for word-wrapping text, possibly used for formatting output in the CLI. (Importance: 3) 17. **`sanity-io/litter`**: A library for pretty-printing Go data structures, likely used for debugging or logging. (Importance: 3) 18. **`inconshreveable/mousetrap`**: A small utility often used with Cobra to handle Windows-specific command-line behaviors. (Importance: 3) 19. No npm dependencies were found as the provided `package.json` does not contain a `dependencies` field.```json{",
+      "importance": 6
+    },
+    {
+      "name": "peterbourgon/ff/v3",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/time",
+      "importance": 7
+    },
+    {
+      "name": "atombender/go-jsonschema",
+      "importance": 7
+    },
+    {
+      "name": "fatih/color",
+      "importance": 4
+    },
+    {
+      "name": "goccy/go-yaml",
+      "importance": 5
+    },
+    {
+      "name": "inconshreveable/mousetrap",
+      "importance": 3
+    },
+    {
+      "name": "mattn/go-colorable",
+      "importance": 4
+    },
+    {
+      "name": "mattn/go-isatty",
+      "importance": 4
+    },
+    {
+      "name": "mitchellh/go-wordwrap",
+      "importance": 3
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 6
+    },
+    {
+      "name": "sanity-io/litter",
+      "importance": 3
+    },
+    {
+      "name": "sourcegraph/jsonrpc2",
+      "importance": 9
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "spf13/pflag",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/exp",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/sys",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/xerrors",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule last9-mcp\n\ngo 1.23.1\n\ntoolchain go1.24.1\n\nrequire (\n\tgithub.com/acrmp/mcp v0.0.0-20241203020558-dd8bd6872080\n\tgithub.com/peterbourgon/ff/v3 v3.4.0\n\tgolang.org/x/time v0.8.0\n)\n\nrequire (\n\tgithub.com/atombender/go-jsonschema v0.17.0 // indirect\n\tgithub.com/fatih/color v1.17.0 // indirect\n\tgithub.com/goccy/go-yaml v1.12.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mitchellh/go-wordwrap v1.0.1 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/sanity-io/litter v1.5.5 // indirect\n\tgithub.com/sourcegraph/jsonrpc2 v0.2.0 // indirect\n\tgithub.com/spf13/cobra v1.8.1 // indirect\n\tgithub.com/spf13/pflag v1.0.5 // indirect\n\tgolang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect\n\tgolang.org/x/sys v0.26.0 // indirect\n\tgolang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect\n)\n\n\n=== package.json ===\n{\n  \"name\": \"@last9/mcp-server\",\n  \"version\": \"0.1.8\",\n  \"description\": \"Last9 MCP Server - Model Context Protocol server implementation for Last9\",\n  \"bin\": {\n    \"last9-mcp\": \"./bin/cli.js\"\n  },\n  \"files\": [\n    \"bin/\",\n    \"dist/\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"postinstall\": \"node bin/download-binary.js\",\n    \"preversion\": \"go run . --version\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/last9/last9-mcp-server.git\"\n  },\n  \"engines\": {\n    \"node\": \">=14\"\n  },\n  \"preferGlobal\": true,\n  \"keywords\": [\n    \"last9\",\n    \"mcp\",\n    \"ai\",\n    \"claude\"\n  ],\n  \"author\": \"Last9\",\n  \"license\": \"MIT\",\n  \"bugs\": {\n    \"url\": \"https://github.com/last9/last9-mcp-server/issues\"\n  },\n  \"homepage\": \"https://last9.io/mcp\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

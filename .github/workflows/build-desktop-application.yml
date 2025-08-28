@@ -76,6 +76,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
+        with:
+          working-directory: desktop_app
 
       # See https://brunoscheufler.com/blog/2023-11-12-setting-up-hosted-macos-github-actions-workflows-for-electron-builds
       # was super helpful for getting macOS signing working on GitHub Actions

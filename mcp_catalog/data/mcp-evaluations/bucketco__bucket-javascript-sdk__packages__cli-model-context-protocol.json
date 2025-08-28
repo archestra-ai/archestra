@@ -1,0 +1,85 @@
+{
+  "dxt_version": "1.0.0",
+  "version": "1.0.0",
+  "name": "bucketco__bucket-javascript-sdk__packages__cli-model-context-protocol",
+  "display_name": "cli#model-context-protocol",
+  "description": "JS/TS SDKs for Bucket.co",
+  "author": {
+    "name": "bucketco"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["-y", "@bucketco/cli"],
+      "env": {}
+    }
+  },
+  "readme": null,
+  "category": "Development",
+  "quality_score": 32,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "bucketco",
+    "repo": "bucket-javascript-sdk",
+    "url": "https://github.com/bucketco/bucket-javascript-sdk/tree/main/packages/cli#model-context-protocol",
+    "name": "bucketco__bucket-javascript-sdk__packages__cli#model-context-protocol",
+    "path": "packages/cli#model-context-protocol",
+    "stars": 12,
+    "contributors": 11,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c84de685346c3c6fe22cc5369bab8081872a0eaf"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "importance": 9,
+      "name": "@bucketco/browser"
+    },
+    {
+      "importance": 9,
+      "name": "@bucketco/node"
+    },
+    {
+      "importance": 8,
+      "name": "@bucketco/react"
+    },
+    {
+      "importance": 8,
+      "name": "@bucketco/vue"
+    },
+    {
+      "importance": 6,
+      "name": "axios"
+    },
+    {
+      "importance": 6,
+      "name": "ws"
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "client_config_permutations": null
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": null,
+  "last_scraped_at": "2025-08-22T11:23:53.281Z"
+}

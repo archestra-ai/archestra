@@ -1,0 +1,92 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ks-gen-ai__jira-mcp-server",
+  "display_name": "jira-mcp-server",
+  "version": "1.0.0",
+  "description": "A test of jira mcp server",
+  "author": {
+    "name": "KS-GEN-AI"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Jira communication server MCP Server\n\nTalk to Jira\n\n<a href=\"https://glama.ai/mcp/servers/v7nmyscj80\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/v7nmyscj80/badge\" alt=\"Jira Server MCP server\" />\n</a>\n\nThis is a TypeScript-based MCP server that provides tools to interact with Jira. It demonstrates core MCP concepts by providing:\n\n- Tools for executing JQL queries\n- Tools for creating, editing, and deleting Jira tickets\n- Tools for listing Jira projects and statuses\n\n## Features\n\n## Jira Tools\n\n### `execute_jql`\n- **Purpose**: Run a JQL query.\n- **Parameters**: `jql`, `number_of_results` (default: 1).\n\n### `get_only_ticket_name_and_description`\n- **Purpose**: Fetch ticket name and description.\n- **Parameters**: `jql`, `number_of_results` (default: 1).\n\n### `create_ticket`\n- **Purpose**: Create a Jira ticket.\n- **Parameters**: `project.key`, `summary`, `description`, `issuetype.name`, `parent` (optional).\n\n### `list_projects`\n- **Purpose**: List Jira projects.\n- **Parameters**: `number_of_results` (default: 1).\n\n### `delete_ticket`\n- **Purpose**: Delete a ticket.\n- **Parameters**: `issueIdOrKey`.\n\n### `edit_ticket`\n- **Purpose**: Modify a ticket.\n- **Parameters**: `issueIdOrKey`, `summary` (optional), `description` (optional), `labels` (optional), `parent` (optional).\n\n### `get_all_statuses`\n- **Purpose**: Retrieve all statuses.\n- **Parameters**: `number_of_results` (default: 1).\n\n### `assign_ticket`\n- **Purpose**: Assign a ticket to a user.\n- **Parameters**: `accountId`, `issueIdOrKey`.\n\n### `query_assignable`\n- **Purpose**: Find assignable users in a project.\n- **Parameters**: `project_key`.\n\n### `add_attachment`\n- **Purpose**: Add an attachment to a ticket.\n- **Parameters**: `issueIdOrKey`, `imageUrl`.\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n## Installation\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"Jira communication server\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/PATH_TO_THE_PROJECT/build/index.js\"\n      ],\n      \"env\": {\n        \"JIRA_URL\": \"https://XXXXXXXX.atlassian.net\",\n        \"JIRA_API_MAIL\": \"Your email\",\n        \"JIRA_API_KEY\": \"KEY_FROM : https://id.atlassian.com/manage-profile/security/api-tokens\"\n      }\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.",
+  "category": "Enterprise",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "Jira communication server": {
+          "command": "node",
+          "args": ["/PATH_TO_THE_PROJECT/build/index.js"],
+          "env": {
+            "JIRA_URL": "https://XXXXXXXX.atlassian.net",
+            "JIRA_API_MAIL": "Your email",
+            "JIRA_API_KEY": "KEY_FROM : https://id.atlassian.com/manage-profile/security/api-tokens"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "KS-GEN-AI",
+    "repo": "jira-mcp-server",
+    "url": "https://github.com/KS-GEN-AI/jira-mcp-server",
+    "name": "jira-mcp-server",
+    "path": null,
+    "stars": 24,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "52428fe0c03830fb5c8b647d3a941d4b4abef93a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T21:20:16.947Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "mcp-framework",
+      "importance": 10
+    },
+    {
+      "name": "okhttp",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"jira_communication_server\",\n  \"version\": \"0.2.0\",\n  \"description\": \"Talk to jira\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"Jira communication server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.9\",\n    \"mcp-framework\": \"^0.1.12\",\n    \"okhttp\": \"^1.1.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

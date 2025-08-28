@@ -1,0 +1,198 @@
+name: Evaluate MCP Servers
+
+on:
+  push:
+    paths:
+      - "mcp_catalog/data/mcp-servers.json"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force re-evaluation of all servers"
+        required: false
+        default: false
+        type: boolean
+      concurrency:
+        description: "Number of parallel requests"
+        required: false
+        default: "1"
+        type: string
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # Allow the workflow to push commits
+      pull-requests: write # Allow the workflow to create PRs
+    defaults:
+      run:
+        working-directory: ./mcp_catalog
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Fetch all history for proper diff comparison
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./mcp_catalog
+
+      - name: Run evaluation script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Determine evaluation mode
+          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+            echo "Running forced evaluation of all servers..."
+            pnpm catalog:evaluate -- --all --force --concurrency ${{ github.event.inputs.concurrency || '5' }}
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "Detecting newly added servers from git diff..."
+
+            # Get the diff of mcp-servers.json
+            git diff HEAD~1 HEAD -- data/mcp-servers.json > diff.txt || true
+
+            # Extract only added URLs (lines starting with +)
+            grep '^+  "https://github.com' diff.txt | sed 's/^+  "//' | sed 's/",$//' | sed 's/"$//' > new_servers.txt || true
+            
+            if [ -s new_servers.txt ]; then
+              echo "Found $(wc -l < new_servers.txt) new servers to evaluate:"
+              cat new_servers.txt
+              
+              # Evaluate each new server
+              while IFS= read -r url; do
+                echo "Evaluating: $url"
+                pnpm catalog:evaluate -- "$url" --all || echo "Failed to evaluate $url"
+              done < new_servers.txt
+            else
+              echo "No new servers found in this commit"
+            fi
+          else
+            echo "Evaluating only missing servers..."
+            pnpm catalog:evaluate -- --missing-only --all --concurrency ${{ github.event.inputs.concurrency || '5' }}
+          fi
+
+      - name: Generate evaluation report
+        if: always()
+        run: |
+          echo "## 📊 MCP Server Evaluation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count statistics
+          TOTAL_SERVERS=$(cat data/mcp-servers.json | jq 'length')
+          TOTAL_EVALS=$(ls data/mcp-evaluations/*.json 2>/dev/null | wc -l || echo "0")
+          MISSING=$((TOTAL_SERVERS - TOTAL_EVALS))
+
+          echo "### Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total servers:** $TOTAL_SERVERS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Evaluated servers:** $TOTAL_EVALS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Missing evaluations:** $MISSING" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # List servers with quality scores
+          echo "### Top Servers by Quality Score" >> $GITHUB_STEP_SUMMARY
+          echo "| Server | Score | Category |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|----------|" >> $GITHUB_STEP_SUMMARY
+
+          for file in data/mcp-evaluations/*.json; do
+            if [ -f "$file" ]; then
+              jq -r '[.display_name // .name, .quality_score // "N/A", .category // "N/A"] | @tsv' "$file"
+            fi
+          done | sort -t$'\t' -k2 -rn | head -10 | while IFS=$'\t' read -r name score category; do
+            echo "| $name | $score | $category |" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Commit and Push or Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Show git status for debugging
+          echo "=== Git status before adding files ==="
+          git status
+
+          # Add evaluation files
+          git add data/mcp-evaluations/*.json
+
+          # Show what will be committed
+          echo "=== Git status after adding files ==="
+          git status
+
+          # Check for changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          # Create commit message
+          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+            COMMIT_MSG="chore: force re-evaluate all MCP servers"
+            PR_TITLE="chore: Force re-evaluate all MCP servers"
+          elif [[ "${{ github.event_name }}" == "push" ]] && [ -f app/new_servers.txt ] && [ -s app/new_servers.txt ]; then
+            NEW_COUNT=$(wc -l < app/new_servers.txt)
+            COMMIT_MSG="chore: evaluate $NEW_COUNT newly added MCP server(s)"
+            PR_TITLE="chore: Evaluate $NEW_COUNT newly added MCP server(s)"
+          else
+            COMMIT_MSG="chore: evaluate missing MCP servers"
+            PR_TITLE="chore: Evaluate missing MCP servers"
+          fi
+
+          # Get current branch
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "Current branch: $CURRENT_BRANCH"
+
+          # Check if we're on main/master branch
+          if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; then
+            echo "On main branch - creating PR instead of direct commit"
+            
+            # Create a new branch for the changes
+            BRANCH_NAME="bot/mcp-evaluation-$(date +%Y%m%d-%H%M%S)"
+            git checkout -b "$BRANCH_NAME"
+            
+            # Commit changes
+            git commit -m "$COMMIT_MSG
+            
+            Triggered by: ${{ github.event_name }}
+            Workflow: ${{ github.workflow }} #${{ github.run_number }}"
+            
+            # Push the new branch
+            git push origin "$BRANCH_NAME"
+            
+            # Create PR using GitHub CLI
+            PR_BODY="## Automated MCP Server Evaluation
+
+            This PR contains automated evaluation results for MCP servers.
+            
+            **Triggered by:** ${{ github.event_name }}  
+            **Workflow run:** ${{ github.workflow }} #${{ github.run_number }}
+            
+            ### Changes
+            - Updated evaluation data for MCP servers
+            - Quality scores and metadata refreshed
+            
+            ---
+            *This PR was automatically created by GitHub Actions*"
+            
+            gh pr create \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --label "automated" \
+              --label "mcp-evaluation" || echo "PR creation failed or already exists"
+              
+          else
+            echo "Not on main branch - committing directly"
+            
+            # Commit changes
+            git commit -m "$COMMIT_MSG
+            
+            Triggered by: ${{ github.event_name }}
+            Workflow: ${{ github.workflow }} #${{ github.run_number }}"
+            
+            # Push to current branch
+            git push
+          fi

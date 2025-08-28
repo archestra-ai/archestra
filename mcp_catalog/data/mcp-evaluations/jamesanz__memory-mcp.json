@@ -1,0 +1,86 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "jamesanz__memory-mcp",
+  "display_name": "memory-mcp",
+  "version": "1.0.0",
+  "description": "A simple MCP server that stores and retrieves memories from multiple LLMs",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Memory MCP\n\nA Model Context Protocol (MCP) server for logging and retrieving memories from LLM conversations.\n\n## Features\n\n- **Save Memories**: Store memories from LLM conversations with timestamps and LLM identification\n- **Retrieve Memories**: Get all stored memories with detailed metadata\n- **Add Memories**: Append new memories without overwriting existing ones\n- **Clear Memories**: Remove all stored memories\n- **MongoDB Storage**: Persistent storage using MongoDB database\n\n## Installation\n\n1. Install dependencies:\n\n```bash\nnpm install\n```\n\n2. Build the project:\n\n```bash\nnpm run build\n```\n\n## Configuration\n\nSet the MongoDB connection string via environment variable:\n\n```bash\nexport MONGODB_URI=\"mongodb://localhost:27017\"\n```\n\nDefault: `mongodb://localhost:27017`\n\n## Usage\n\n### Available Tools\n\n1. **save-memories**: Save all memories to the database, overwriting existing ones\n   - `memories`: Array of memory strings to save\n   - `llm`: Name of the LLM (e.g., 'chatgpt', 'claude')\n   - `userId`: Optional user identifier\n\n2. **get-memories**: Retrieve all memories from the database\n   - No parameters required\n\n3. **add-memories**: Add new memories to the database without overwriting existing ones\n   - `memories`: Array of memory strings to add\n   - `llm`: Name of the LLM (e.g., 'chatgpt', 'claude')\n   - `userId`: Optional user identifier\n\n4. **clear-memories**: Clear all memories from the database\n   - No parameters required\n\n### Example Usage in LLM\n\n1. **Save all memories** (overwrites existing):\n\n   ```\n   User: \"Save all my memories from this conversation to the MCP server\"\n   LLM: [Uses save-memories tool with current conversation memories]\n   ```\n\n2. **Retrieve all memories**:\n\n   ```\n   User: \"Get all my memories from the MCP server\"\n   LLM: [Uses get-memories tool to retrieve stored memories]\n   ```\n\n3. **Add new memories** (preserves existing):\n   ```\n   User: \"Add these new memories to my existing ones\"\n   LLM: [Uses add-memories tool to append new memories]\n   ```\n\n## Database Schema\n\nMemories are stored in MongoDB with the following structure:\n\n```javascript\n{\n  _id: ObjectId,\n  memories: string[],        // Array of memory strings\n  timestamp: Date,          // When memories were saved\n  llm: string,             // LLM identifier (e.g., 'chatgpt', 'claude')\n  userId?: string          // Optional user identifier\n}\n```\n\n## Development\n\nTo run in development mode:\n\n```bash\nnpm run build\nnode build/index.js\n```\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "memory-mcp": {
+          "command": "node",
+          "args": ["build/index.js"],
+          "env": {
+            "MONGODB_URI": "mongodb://localhost:27017"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "memory-mcp",
+    "url": "https://github.com/JamesANZ/memory-mcp",
+    "name": "memory-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "512542d03e95b9f58eefb775e8ac8fa724480bdd"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T10:21:02.449Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mongodb",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"memory-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"memory-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"MCP server for logging and retrieving memories\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"mongodb\": \"^6.3.0\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

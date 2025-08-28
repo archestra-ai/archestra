@@ -1,0 +1,104 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "executeautomation__mcp-playwright",
+  "display_name": "mcp-playwright",
+  "version": "1.0.0",
+  "description": "Playwright Model Context Protocol Server - Tool to automate Browsers and APIs in Claude Desktop, Cline, Cursor IDE and More 🔌",
+  "author": {
+    "name": "executeautomation"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\" markdown=\"1\">\n  <table>\n    <tr>\n      <td align=\"center\" valign=\"middle\">\n        <a href=\"https://mseep.ai/app/executeautomation-mcp-playwright\">\n          <img src=\"https://mseep.net/pr/executeautomation-mcp-playwright-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" height=\"80\"/>\n        </a>\n      </td>\n      <td align=\"center\" valign=\"middle\">\n        <a href=\"https://www.warp.dev/?utm_source=github&utm_medium=referral&utm_campaign=mcp-playwright\">\n          <img alt=\"Warp sponsorship\" width=\"200\" src=\"https://github.com/user-attachments/assets/ab8dd143-b0fd-4904-bdc5-dd7ecac94eae\"/>\n        </a>\n      </td>\n    </tr>\n    <tr>\n      <td align=\"center\"><sub>MseeP.ai Security Assessment</sub></td>\n      <td align=\"center\"><sub>Special thanks to <a href=\"https://www.warp.dev/?utm_source=github&utm_medium=referral&utm_campaign=mcp-playwright\">Warp, the AI terminal for developers</a></sub></td>\n    </tr>\n  </table>\n</div>\n<hr>\n\n# Playwright MCP Server 🎭\n\n[![smithery badge](https://smithery.ai/badge/@executeautomation/playwright-mcp-server)](https://smithery.ai/server/@executeautomation/playwright-mcp-server)\n\nA Model Context Protocol server that provides browser automation capabilities using Playwright. This server enables LLMs to interact with web pages, take screenshots, generate test code, web scraps the page and execute JavaScript in a real browser environment.\n\n<a href=\"https://glama.ai/mcp/servers/yh4lgtwgbe\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/yh4lgtwgbe/badge\" alt=\"mcp-playwright MCP server\" /></a>\n\n## Screenshot\n![Playwright + Claude](image/playwright_claude.png)\n\n## [Documentation](https://executeautomation.github.io/mcp-playwright/) | [API reference](https://executeautomation.github.io/mcp-playwright/docs/playwright-web/Supported-Tools)\n\n## Installation\n\nYou can install the package using either npm, mcp-get, or Smithery:\n\nUsing npm:\n```bash\nnpm install -g @executeautomation/playwright-mcp-server\n```\n\nUsing mcp-get:\n```bash\nnpx @michaellatman/mcp-get@latest install @executeautomation/playwright-mcp-server\n```\nUsing Smithery\n\nTo install Playwright MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@executeautomation/playwright-mcp-server):\n\n```bash\nnpx @smithery/cli install @executeautomation/playwright-mcp-server --client claude\n```\n#### Installation in VS Code\n\nInstall the Playwright MCP server in VS Code using one of these buttons:\n\n<!--\n// Generate using?:\nconst config = JSON.stringify({ name: 'playwright', command: 'npx', args: [\"-y\", \"@executeautomation/playwright-mcp-server\"] });\nconst urlForWebsites = `vscode:mcp/install?${encodeURIComponent(config)}`;\n// Github markdown does not allow linking to `vscode:` directly, so you can use our redirect:\nconst urlForGithub = `https://insiders.vscode.dev/redirect?url=${encodeURIComponent(urlForWebsites)}`;\n-->\n\n[<img src=\"https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF\" alt=\"Install in VS Code\">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540executeautomation%252Fplaywright-mcp-server%2522%255D%257D) \n[<img alt=\"Install in VS Code Insiders\" src=\"https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Server&color=24bfa5\">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540executeautomation%252Fplaywright-mcp-server%2522%255D%257D)\n\nAlternatively, you can install the Playwright MCP server using the VS Code CLI:\n\n```bash\n# For VS Code\ncode --add-mcp '{\"name\":\"playwright\",\"command\":\"npx\",\"args\":[\"@executeautomation/playwright-mcp-server\"]}'\n```\n\n```bash\n# For VS Code Insiders\ncode-insiders --add-mcp '{\"name\":\"playwright\",\"command\":\"npx\",\"args\":[\"@executeautomation/playwright-mcp-server\"]}'\n```\n\nAfter installation, the ExecuteAutomation Playwright MCP server will be available for use with your GitHub Copilot agent in VS Code.\n\n## Configuration to use Playwright Server\nHere's the Claude Desktop configuration to use the Playwright server:\n\n```json\n{\n  \"mcpServers\": {\n    \"playwright\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@executeautomation/playwright-mcp-server\"]\n    }\n  }\n}\n```\n\n## Testing\n\nThis project uses Jest for testing. The tests are located in the `src/__tests__` directory.\n\n### Running Tests\n\nYou can run the tests using one of the following commands:\n\n```bash\n# Run tests using the custom script (with coverage)\nnode run-tests.cjs\n\n# Run tests using npm scripts\nnpm test           # Run tests without coverage\nnpm run test:coverage  # Run tests with coverage\nnpm run test:custom    # Run tests with custom script (same as node run-tests.cjs)\n```\n\nThe test coverage report will be generated in the `coverage` directory.\n\n### Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found [here](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval src/evals/evals.ts src/tools/codegen/index.ts\n```\n\n## Contributing\n\nWhen adding new tools, please be mindful of the tool name length. Some clients, like Cursor, have a 60-character limit for the combined server and tool name (`server_name:tool_name`).\n\nOur server name is `playwright-mcp`. Please ensure your tool names are short enough to not exceed this limit.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=executeautomation/mcp-playwright&type=Date)](https://star-history.com/#executeautomation/mcp-playwright&Date)\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "executeautomation-playwright-mcp-server": {
+          "command": "npx",
+          "args": ["-y", "@executeautomation/playwright-mcp-server"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "executeautomation",
+    "repo": "mcp-playwright",
+    "url": "https://github.com/executeautomation/mcp-playwright",
+    "name": "executeautomation__mcp-playwright",
+    "path": null,
+    "stars": 4579,
+    "contributors": 29,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "51b2725f06f6df703f797f4025cac4c5f3a71f05"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:00.424Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 10
+    },
+    {
+      "name": "@playwright/test",
+      "importance": 10
+    },
+    {
+      "name": "@playwright/browser-chromium",
+      "importance": 9
+    },
+    {
+      "name": "@playwright/browser-firefox",
+      "importance": 9
+    },
+    {
+      "name": "@playwright/browser-webkit",
+      "importance": 9
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 6
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@executeautomation/playwright-mcp-server\",\n  \"version\": \"1.0.6\",\n  \"description\": \"Model Context Protocol servers for Playwright\",\n  \"license\": \"MIT\",\n  \"author\": \"ExecuteAutomation, Ltd (https://executeautomation.com)\",\n  \"homepage\": \"https://executeautomation.github.io/mcp-playwright/\",\n  \"bugs\": \"https://github.com/executeautomation/mcp-playwright/issues\",\n  \"types\": \"dist/index.d.ts\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"playwright-mcp-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"test\": \"jest --testMatch=\\\"<rootDir>/src/__tests__/**/*.test.ts\\\"\",\n    \"test:coverage\": \"jest --coverage --testMatch=\\\"<rootDir>/src/__tests__/**/*.test.ts\\\"\",\n    \"test:custom\": \"node run-tests.cjs\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/executeautomation/mcp-playwright.git\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.11.1\",\n    \"@playwright/browser-chromium\": \"1.53.1\",\n    \"@playwright/browser-firefox\": \"1.53.1\",\n    \"@playwright/browser-webkit\": \"1.53.1\",\n    \"@playwright/test\": \"^1.53.1\",\n    \"mcp-evals\": \"^1.0.18\",\n    \"playwright\": \"1.53.1\",\n    \"uuid\": \"11.1.0\"\n  },\n  \"keywords\": [\n    \"playwright\",\n    \"automation\",\n    \"AI\",\n    \"Claude MCP\"\n  ],\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.10.5\",\n    \"jest\": \"^29.7.0\",\n    \"jest-playwright-preset\": \"4.0.0\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.2.6\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n\n\n=== docs/package.json ===\n{\n  \"name\": \"playwright-mcp-server\",\n  \"version\": \"0.0.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"docusaurus\": \"docusaurus\",\n    \"start\": \"docusaurus start\",\n    \"build\": \"docusaurus build\",\n    \"swizzle\": \"docusaurus swizzle\",\n    \"deploy\": \"docusaurus deploy\",\n    \"clear\": \"docusaurus clear\",\n    \"serve\": \"docusaurus serve\",\n    \"write-translations\": \"docusaurus write-translations\",\n    \"write-heading-ids\": \"docusaurus write-heading-ids\",\n    \"typecheck\": \"tsc\"\n  },\n  \"dependencies\": {\n    \"@docusaurus/core\": \"3.6.3\",\n    \"@docusaurus/preset-classic\": \"3.6.3\",\n    \"@mdx-js/react\": \"^3.0.0\",\n    \"clsx\": \"^2.0.0\",\n    \"gh-pages\": \"^6.2.0\",\n    \"prism-react-renderer\": \"^2.3.0\",\n    \"react\": \"^18.0.0\",\n    \"react-dom\": \"^18.0.0\"\n  },\n  \"devDependencies\": {\n    \"@docusaurus/module-type-aliases\": \"3.6.3\",\n    \"@docusaurus/tsconfig\": \"3.6.3\",\n    \"@docusaurus/types\": \"3.6.3\",\n    \"typescript\": \"~5.6.2\"\n  },\n  \"browserslist\": {\n    \"production\": [\n      \">0.5%\",\n      \"not dead\",\n      \"not op_mini all\"\n    ],\n    \"development\": [\n      \"last 3 chrome version\",\n      \"last 3 firefox version\",\n      \"last 5 safari version\"\n    ]\n  },\n  \"engines\": {\n    \"node\": \">=18.0\"\n  }\n}\n"
+}

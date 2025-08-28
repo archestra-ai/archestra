@@ -1,0 +1,89 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "schemacrawler__schemacrawler-mcp-server-usage",
+  "display_name": "SchemaCrawler-MCP-Server-Usage",
+  "version": "1.0.0",
+  "description": "Find out how to use SchemaCrawler MCP Server",
+  "author": {
+    "name": "schemacrawler"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<!-- markdownlint-disable MD041 -->\n[![Docker Pulls](https://img.shields.io/docker/pulls/schemacrawler/schemacrawler?color=FFDAB9)](https://hub.docker.com/r/schemacrawler/schemacrawler/)\n![GitHub Repo stars](https://img.shields.io/github/stars/schemacrawler/schemacrawler?style=social)\n\n\n# <img src=\"https://raw.githubusercontent.com/schemacrawler/SchemaCrawler/main/schemacrawler-website/src/site/resources/images/schemacrawler_logo.png\" height=\"100px\" width=\"100px\" valign=\"middle\"/> SchemaCrawler - MCP Server Usage\n\n> [!NOTE]  \n> * Please see the [SchemaCrawler website](https://www.schemacrawler.com/) for more details.\n> * Explore the SchemaCrawler command-line with a [live online tutorial](https://killercoda.com/schemacrawler).\n\n## About\n\nSchemaCrawler is a free database schema discovery and comprehension tool. SchemaCrawler has a good mix of useful features for data governance. You can [search for database schema objects](https://www.schemacrawler.com/schemacrawler-grep.html) using regular expressions, and output the schema and data in a readable text format.\n\nThis is a bare project that acts as an MCP client for the [SchemaCrawler MCP Server](https://github.com/schemacrawler/SchemaCrawler-AI) for use in \"Agent\" mode.\n\n## Prerequisites\n\n1. Supporting software\n   - Docker\n   - Docker Compose\n   - Visual Studio Code\n2. Clone this projects, and open it in Visual Studio Code\n\n\n## Start the SchemaCrawler MCP Server\n\n1. Pull the latest image for SchemaCrawler MCP Server\n   ```sh\n   docker pull schemacrawler/schemacrawler-ai:latest\n   ```\n2. Run the SchemaCrawler MCP Server\n   ```sh\n   docker compose -f schemacrawler-mcpserver.yaml up -d\n   ```\n3. Check server health in a browser [http://localhost:9292/health](http://localhost:9292/health)\n\n\n## Use Visual Studio Code MCP Client\n\n1. Read [Use MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)\n2. Connect to the MCP Server in Visual Studio Code (the server is configured in the \".vscode/mcp.json\" file)\n3. Ask questions about your database in \"Agent\" mode - here are some examples:\n   - \"What tables are available in my database?\"\n   - \"Show me the columns in the Books table\"\n   - \"What foreign keys reference the Authors table?\"\n   - \"Are there any design issues with my database schema?\"\n   - \"Write SQL to find books and their authors\"\n\n\n## Connect to Your Database\n\n1. Stop the SchemaCrawler MCP Server\n   ```sh\n   docker compose -f schemacrawler-mcpserver.yaml down -t0\n   ```\n2. Edit the \"schemacrawler-mcpserver.yaml\" file to add [your database connection details](https://www.schemacrawler.com/database-support.html)\n3. Restart the SchemaCrawler MCP Server\n",
+  "category": "Development",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "schemacrawler-schemacrawler-ai-docker": {
+          "command": "docker",
+          "args": ["compose", "-f", "schemacrawler-mcpserver.yaml", "up", "-d"],
+          "env": {}
+        },
+        "schemacrawler-schemacrawler-ai-docker-configured": {
+          "command": "docker",
+          "args": ["compose", "-f", "schemacrawler-mcpserver.yaml", "up", "-d"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "schemacrawler",
+    "repo": "SchemaCrawler-MCP-Server-Usage",
+    "url": "https://github.com/schemacrawler/SchemaCrawler-MCP-Server-Usage",
+    "name": "SchemaCrawler-MCP-Server-Usage",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "7ecbaa547299745def70be33942f68009cbf9bd3"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:34:33.769Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "modelcontextprotocol",
+      "importance": 10
+    },
+    {
+      "name": "schemacrawler",
+      "importance": 9
+    },
+    {
+      "name": "jdbc-drivers",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

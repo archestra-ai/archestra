@@ -1,0 +1,106 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ryan0204__github-repo-mcp",
+  "display_name": "github-repo-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Github Repo // Reading Github Repo",
+  "author": {
+    "name": "Ryan0204"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GitHub Repo MCP\n\n[![smithery badge](https://smithery.ai/badge/@Ryan0204/github-repo-mcp)](https://smithery.ai/server/@Ryan0204/github-repo-mcp)\n\n<p class=\"center-text\">\n  <strong>GitHub Repo MCP is an open-source MCP server that lets your AI assistants browse GitHub repositories, explore directories, and view file contents.</strong>\n</p>\n\n<a href=\"https://glama.ai/mcp/servers/@Ryan0204/github-repo-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@Ryan0204/github-repo-mcp/badge\" alt=\"github-repo-mcp MCP server\" />\n</a>\n\n## Table of contents\n\n<p class=\"center-text\">\n  <a href=\"#getting-started\">Getting started</a> •\n  <a href=\"#feature-overview\">Feature overview</a>\n</p>\n\n## ✨ Key features\n\n- 💻 Compatible with Cursor, Windsurf, Claude Desktop, and other MCP clients supporting `stdio` protocol\n- 🔎 Browse the contents of any public GitHub repository\n- 📂 Navigate through repository directories and subdirectories\n- 📝 View the content of code and text files\n- 📦 Easy installation via package manager\n\n## Getting Started\n\n### Prerequisites\n\nInstalling the server requires the following on your system:\n- Node.js 18+\n- npm or yarn\n\n### Step 1. Installation\n\nYou can install and run GitHub Repo MCP using Smithery, NPX, or setting in mcp.json of your IDE:\n\n#### MacOS\n\n```bash\nnpx github-repo-mcp\n```\n\n#### Windows NPX\n\n```bash\ncmd /c npx -y github-repo-mcp\n```\n\n#### Windows NPX via .cursor/mcp.json\n\n```json\n{\n  \"mcpServers\": {\n    \"github-repo-mcp\": {\n      \"command\": \"wsl\",\n      \"args\": [\n        \"bash\",\n        \"-c\",\n        \"cmd /c npx -y github-repo-mcp\"\n      ],\n      \"enabled\": true\n    }\n  }\n}\n```\n\n#### Windows NPX via .cursor/mcp.json (if path not set)\n\n```bash\n# Find the full path to npx first\nwhich npx\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"github-repo-mcp\": {\n      \"command\": \"wsl\",\n      \"args\": [\n        \"bash\",\n        \"-c\",\n        \"'/home/[username]/.nvm/versions/node/v20.18.0/bin/npx github-repo-mcp'\"\n      ],\n      \"enabled\": true\n    }\n  }\n}\n```\n\n#### Installing via Smithery\n\nTo install GitHub Repo MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Ryan0204/github-repo-mcp):\n\n```bash\nnpx -y @smithery/cli install @Ryan0204/github-repo-mcp --client claude\n```\n\n\nWait a few seconds or click on the refresh button a few times if it does not register. If it still won't register, make sure you entered the right command.\n\n### Step 2. Configuration\n\nThe GitHub Repo MCP server can use a GitHub token for higher rate limits when accessing the GitHub API.\n\n#### Environment Variables\n\n| Variable | Required | Default | Description |\n|----------|----------|---------|-------------|\n| `GITHUB_TOKEN` | No | None | Your GitHub personal access token for higher rate limits |\n\n#### Setting Up a GitHub Token (Optional)\n\nWhile the server works without authentication, GitHub API has rate limits that are much lower for unauthenticated requests. To increase your rate limit:\n\n1. Create a personal access token at https://github.com/settings/tokens\n2. Set the token as an environment variable in mcp.json:\n\n```json\n{\n  \"mcpServers\": {\n    \"github-repo-mcp\": {\n      \"command\": \"...\",\n      \"args\": [\n        ...\n      ],\n      \"env\": {\n        \"GITHUB_TOKEN\": \"Your_Github_Token\"\n      }\n      \"enabled\": true,\n    }\n  }\n}\n```\n\n## Feature Overview\n\n### Repository Browsing Tools\n\nThe server provides three main tools for interacting with GitHub repositories:\n\n#### 1. `getRepoAllDirectories`\n\nLists all files and directories at the root of a GitHub repository.\n\n- **Parameters**:\n  - `repoUrl`: The URL of the GitHub repository (e.g., \"https://github.com/owner/repo\")\n\n#### 2. `getRepoDirectories`\n\nLists contents of a specific directory in a GitHub repository.\n\n- **Parameters**:\n  - `repoUrl`: The URL of the GitHub repository\n  - `path`: The directory path to fetch (e.g., \"src\")\n\n#### 3. `getRepoFile`\n\nRetrieves and displays the content of a specific file from a GitHub repository.\n\n- **Parameters**:\n  - `repoUrl`: The URL of the GitHub repository\n  - `path`: The file path to fetch (e.g., \"src/index.js\")\n\n### Usage Examples\n\nHere are some examples of how to use these tools with an AI assistant:\n\n1. **Browsing a repository root**:\n   Ask your AI assistant to \"Show me the contents of the repository at https://github.com/Ryan0204/github-repo-mcp\"\n\n2. **Exploring a specific directory**:\n   Ask \"What files are in the src directory of https://github.com/Ryan0204/github-repo-mcp?\"\n\n3. **Viewing a file**:\n   Ask \"Show me the README.md file from https://github.com/Ryan0204/github-repo-mcp\"\n\n### Limitations\n\n- **Rate Limiting**: Without authentication, GitHub API has strict rate limits (60 requests per hour)\n- **Private Repositories**: Can only access public repositories unless a token with appropriate permissions is provided\n- **Binary Files**: The server detects common binary file extensions and won't display their contents\n- **Large Files**: GitHub API has limitations on the size of files that can be retrieved\n\n## Troubleshooting\n\nHere are some common issues and their solutions:\n\n- **Rate limit exceeded**: Set up a GitHub token as described in the Configuration section\n- **Command not found**: Ensure the package is installed globally\n- **Connection errors**: Check your internet connection and GitHub API status\n\nIf you encounter any issues, please check the output for error messages or create an issue in the GitHub repository.\n\n---\n\nEnjoy! ☺️ \n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "github-repo-mcp": {
+          "command": "npx",
+          "args": ["github-repo-mcp"],
+          "env": {}
+        },
+        "github-repo-mcp-windows-cmd": {
+          "command": "cmd",
+          "args": ["/c", "npx", "-y", "github-repo-mcp"],
+          "env": {}
+        },
+        "github-repo-mcp-wsl-cursor": {
+          "command": "wsl",
+          "args": ["bash", "-c", "cmd /c npx -y github-repo-mcp"],
+          "env": {}
+        },
+        "github-repo-mcp-wsl-cursor-full-path": {
+          "command": "wsl",
+          "args": ["bash", "-c", "'/home/[username]/.nvm/versions/node/v20.18.0/bin/npx github-repo-mcp'"],
+          "env": {}
+        },
+        "github-repo-mcp-wsl-cursor-with-token": {
+          "command": "wsl",
+          "args": ["bash", "-c", "cmd /c npx -y github-repo-mcp"],
+          "env": {
+            "GITHUB_TOKEN": "Your_Github_Token"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Ryan0204",
+    "repo": "github-repo-mcp",
+    "url": "https://github.com/Ryan0204/github-repo-mcp",
+    "name": "github-repo-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f90c9185f16a90e8fb34ff36befa2a27ab1ee808"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:21.955Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "octokit",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"github-repo-mcp\",\n  \"version\": \"1.0.1\",\n  \"description\": \"MCP server for fetching GitHub repository code\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"inspect\": \"tsc && npx @modelcontextprotocol/inspector node -- dist/index.js\",\n    \"inspect-live\": \"npx @modelcontextprotocol/inspector npx -- github-repo-mcp\",\n    \"build\": \"tsc\",\n    \"start\": \"tsc && node dist/index.js\",\n    \"dev\": \"nodemon --exec ts-node-esm index.ts\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Ryan0204/github-repo-mcp\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"github\",\n    \"modelcontextprotocol\",\n    \"repository\",\n    \"code\",\n    \"fetch\",\n    \"ai\",\n    \"agent\",\n    \"mcp-server\"\n  ],\n  \"author\": \"Ryan Chan\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"octokit\": \"^3.1.2\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.10.5\",\n    \"nodemon\": \"^3.0.2\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"bin\": {\n    \"github-repo-mcp\": \"./dist/index.js\",\n    \"mcp-github\": \"./dist/index.js\"\n  }\n}\n"
+}

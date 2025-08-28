@@ -1,0 +1,107 @@
+name: Deploy Service to Cloud Run
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "The name of the service to deploy"
+        required: true
+        type: string
+      dockerfile_path:
+        description: "The path to the Dockerfile"
+        required: true
+        type: string
+      version:
+        description: "The version to deploy (commit SHA for development, release version for production)"
+        required: true
+        type: string
+      env_vars:
+        description: "The environment variables to set for the service"
+        required: false
+        type: string
+      secrets:
+        description: "The secrets to set for the service"
+        required: false
+        type: string
+    secrets:
+      GCP_PROJECT_ID:
+        required: true
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: true
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run (${{ inputs.service_name }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # https://github.com/google-github-actions/auth
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462 # v2.1.11
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@f0990588f1e5b5af6827153b93673613abdc6ec7 # v2.1.1
+
+      - name: Configure Docker authentication
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+      - name: Set Docker image name
+        id: docker-image-name
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE_NAME: ${{ inputs.service_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          IMAGE_NAME="europe-west1-docker.pkg.dev/${GCP_PROJECT_ID}/archestra/${SERVICE_NAME}:${VERSION}"
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        env:
+          IMAGE_NAME: ${{ steps.docker-image-name.outputs.IMAGE_NAME }}
+          DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
+        run: |
+          docker build -f ${DOCKERFILE_PATH} -t "${IMAGE_NAME}" .
+          docker push "${IMAGE_NAME}"
+
+      - name: Deploy to Cloud Run
+        # https://github.com/google-github-actions/deploy-cloudrun
+        id: cloud-run
+        uses: google-github-actions/deploy-cloudrun@147732842f8a61ce9bd3b3f8e9f6597fe991ad65 # v2.7.4
+        with:
+          service: ${{ inputs.service_name }}
+          image: ${{ steps.docker-image-name.outputs.IMAGE_NAME }}
+          region: europe-west1
+          env_vars_update_strategy: overwrite
+          # https://cloud.google.com/sdk/gcloud/reference/run/deploy#FLAGS
+          # https://cloud.google.com/sdk/gcloud/reference/run/deploy#--startup-probe
+          # https://cloud.google.com/run/docs/reference/rest/v1/Container#Probe
+          # https://cloud.google.com/run/docs/reference/rest/v1/Container#HTTPGetAction
+          flags: |
+            --allow-unauthenticated
+            --memory=512Mi
+            --cpu=1
+            --concurrency=80
+            --min-instances=1
+            --max-instances=1
+            --timeout=300
+            --port=3000
+            --cpu-boost
+            --startup-probe=tcpSocket.port=3000,timeoutSeconds=240,periodSeconds=240,initialDelaySeconds=0,failureThreshold=1
+          # don't set PORT env var as it is a reserved env var and will be automatically set by cloud run
+          env_vars: |
+            ${{ inputs.env_vars }}
+          # https://github.com/google-github-actions/deploy-cloudrun?tab=readme-ov-file#user-content-secrets
+          secrets: |
+            ${{ inputs.secrets }}

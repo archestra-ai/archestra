@@ -1,0 +1,108 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "apify__mcp-server-rag-web-browser",
+  "display_name": "mcp-server-rag-web-browser",
+  "version": "1.0.0",
+  "description": "A MCP Server for the RAG Web Browser Actor",
+  "author": {
+    "name": "apify"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Model Context Protocol (MCP) Server for the RAG Web Browser Actor 🌐\n\nImplementation of an MCP server for the [RAG Web Browser Actor](https://apify.com/apify/rag-web-browser).\nThis Actor serves as a web browser for large language models (LLMs) and RAG pipelines, similar to a web search in ChatGPT.\n\n<a href=\"https://glama.ai/mcp/servers/sr8xzdi3yv\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/sr8xzdi3yv/badge\" alt=\"mcp-server-rag-web-browser MCP server\" /></a>\n\n## 🎯 What does this MCP server do?\n\nThis server is specifically designed to provide fast responses to AI agents and LLMs, allowing them to interact with the web and extract information from web pages.\nIt runs locally and communicates with the [RAG Web Browser Actor](https://apify.com/apify/rag-web-browser) in [**Standby mode**](https://docs.apify.com/platform/actors/running/standby),\nsending search queries and receiving extracted web content in response.\n\nThe RAG Web Browser Actor allows an AI assistant to:\n- Perform web search, scrape the top N URLs from the results, and return their cleaned content as Markdown\n- Fetch a single URL and return its content as Markdown\n\n## 🧱 Components\n\n### Tools\n\n- **search**: Query Google Search, scrape the top N URLs from the results, and returns their cleaned content as Markdown. Arguments:\n  - `query` (string, required): Search term or URL\n  - `maxResults` (number, optional): Maximum number of search results to scrape (default: 1)\n  - `scrapingTool` (string, optional): Select a scraping tool for extracting web pages. Options: 'browser-playwright' or 'raw-http' (default: 'raw-http')\n  - `outputFormats` (array, optional): Select one or more formats for the output. Options: 'text', 'markdown', 'html' (default: ['markdown'])\n  - `requestTimeoutSecs` (number, optional): Maximum time in seconds for the request (default: 40)\n\n## 🔄 What is the Model Context Protocol?\n\nThe Model Context Protocol (MCP) is a framework that enables AI applications, such as Claude Desktop, to connect seamlessly with external tools and data sources.\nFor more details, visit the [Model Context Protocol website](https://modelcontextprotocol.org/) or read the blog post [What is MCP and why does it matter?](https://blog.apify.com/what-is-model-context-protocol/).\n\n## 🤖 How does the MCP Server integrate with AI Agents?\n\nThe MCP Server empowers AI Agents to perform web searches and browsing using the [RAG Web Browser Actor](https://apify.com/apify/rag-web-browser).\nFor a comprehensive understanding of AI Agents, check out our blog post: [What are AI Agents?](https://blog.apify.com/what-are-ai-agents/) and explore Apify's [Agents](https://apify.com/store/categories/agents).\n\nInterested in building and monetizing your own AI agent on Apify? Check out our [step-by-step guide](https://blog.apify.com/how-to-build-an-ai-agent/) for creating, publishing, and monetizing AI agents on the Apify platform.\n\n## 🔌 Related MCP servers and clients by Apify\n\nThis server operates over standard input/output (stdio), providing a straightforward connection to AI Agents. Apify offers several other MCP-related tools:\n\n### Server Options\n- **🖥️ This MCP Server** – A local stdio-based server for direct integration with Claude Desktop\n- **🌐 [RAG Web Browser Actor via SSE](https://apify.com/apify/rag-web-browser#anthropic-model-context-protocol-mcp-server)** – Access the RAG Web Browser directly via Server-Sent Events without running a local server\n- **🇦 [MCP Server Actor](https://apify.com/apify/actors-mcp-server)** – MCP Server that provides AI agents with access to over 4,000 specialized [Apify Actors](https://apify.com/store)\n\n### Client Options\n- **💬 [Tester MCP Client](https://apify.com/jiri.spilka/tester-mcp-client)** – A user-friendly UI for interacting with any SSE-based MCP server\n\n## 🛠️ Configuration\n\n### Prerequisites\n\n- MacOS or Windows\n- The latest version of Claude Desktop must be installed (or another MCP client)\n- [Node.js](https://nodejs.org/en) (v18 or higher)\n- [Apify API Token](https://docs.apify.com/platform/integrations/api#api-token) (`APIFY_TOKEN`)\n\n### Install\n\nFollow the steps below to set up and run the server on your local machine:\nFirst, clone the repository using the following command:\n\n```bash\ngit clone git@github.com:apify/mcp-server-rag-web-browser.git\n```\n\nNavigate to the project directory and install the required dependencies:\n\n```bash\ncd mcp-server-rag-web-browser\nnpm install\n```\n\nBefore running the server, you need to build the project:\n\n```bash\nnpm run build\n```\n\n#### Claude Desktop\n\nConfigure Claude Desktop to recognize the MCP server.\n\n1. Open your Claude Desktop configuration and edit the following file:\n\n   - On macOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n   - On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n    ```text\n    \"mcpServers\": {\n      \"rag-web-browser\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"@apify/mcp-server-rag-web-browser\"\n        ],\n        \"env\": {\n           \"APIFY_TOKEN\": \"your-apify-api-token\"\n        }\n      }\n    }\n    ```\n\n2. Restart Claude Desktop\n\n    - Fully quit Claude Desktop (ensure it's not just minimized or closed).\n    - Restart Claude Desktop.\n    - Look for the 🔌 icon to confirm that the server is connected.\n\n3. Examples\n\n    You can ask Claude to perform web searches, such as:\n    ```text\n    What is an MCP server and how can it be used?\n    What is an LLM, and what are the recent news updates?\n    Find and analyze recent research papers about LLMs.\n    ```\n\nDebug the server using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector)\n```bash\nexport APIFY_TOKEN=your-apify-api-token\nnpx @modelcontextprotocol/inspector npx -y @apify/mcp-server-rag-web-browser\n```\n\n## 👷🏼 Development\n\n### Local client (stdio)\n\nTo test the server locally, you can use `example_client_stdio.ts`:\n\n```bash\nexport APIFY_TOKEN=your-apify-api-token\nnode dist/example_client_stdio.js\n```\n\nThe script will start the MCP server, fetch available tools, and then call the `search` tool with a query.\n\n### Direct API Call\n\nTo test calling the RAG Web Browser Actor directly:\n\n```bash\nexport APIFY_TOKEN=your-apify-api-token\nnode dist/example_call_web_browser.js\n```\n\n### Debugging\n\nSince MCP servers operate over standard input/output (stdio), debugging can be challenging.\nFor the best debugging experience, use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nBuild the mcp-server-rag-web-browser package:\n\n```bash\nnpm run build\n```\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nexport APIFY_TOKEN=your-apify-api-token\nnpx @modelcontextprotocol/inspector node dist/index.js\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "apify-mcp-server-rag-web-browser-configured": {
+          "command": "npx",
+          "args": ["@apify/mcp-server-rag-web-browser"],
+          "env": {
+            "APIFY_TOKEN": "your-apify-api-token"
+          }
+        },
+        "apify-mcp-server-rag-web-browser-npx": {
+          "command": "npx",
+          "args": ["-y", "@apify/mcp-server-rag-web-browser"],
+          "env": {
+            "APIFY_TOKEN": "your-apify-api-token"
+          }
+        },
+        "apify-mcp-server-rag-web-browser-stdio": {
+          "command": "node",
+          "args": ["dist/index.js"],
+          "env": {
+            "APIFY_TOKEN": "your-apify-api-token"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "apify",
+    "repo": "mcp-server-rag-web-browser",
+    "url": "https://github.com/apify/mcp-server-rag-web-browser",
+    "name": "mcp-server-rag-web-browser",
+    "path": null,
+    "stars": 176,
+    "contributors": 3,
+    "issues": 7,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "da3fe27d8e19e192a71d8a913112cfac7f0ed942"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:24:23.332Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@apify/mcp-server-rag-web-browser\",\n  \"version\": \"0.1.3\",\n  \"type\": \"module\",\n  \"description\": \"An MCP Server for RAG Web Browser Actor\",\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-rag-web-browser\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"LICENSE\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/apify/mcp-server-rag-web-browser\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/apify/mcp-server-rag-web-browser/issues\"\n  },\n  \"homepage\": \"https://github.com/apify/mcp-server-rag-web-browser\",\n  \"keywords\": [\n    \"apify\",\n    \"mcp\",\n    \"server\",\n    \"actors\",\n    \"model context protocol\",\n    \"rag\",\n    \"web browser\"\n  ],\n  \"scripts\": {\n    \"start\": \"npm run start:dev\",\n    \"start:prod\": \"node dist/index.js\",\n    \"start:dev\": \"tsx src/index.ts\",\n    \"lint\": \"eslint .\",\n    \"lint:fix\": \"eslint . --fix\",\n    \"build\": \"tsc\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.4\",\n    \"express\": \"^4.21.2\",\n    \"node-fetch\": \"^3.3.2\",\n    \"zod\": \"^3.24.1\",\n    \"zod-to-json-schema\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@apify/eslint-config\": \"^0.5.0-beta.7\",\n    \"@apify/eslint-config-ts\": \"^0.4.1\",\n    \"@apify/tsconfig\": \"^0.1.0\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^20.11.24\",\n    \"dotenv\": \"^16.4.7\",\n    \"eslint\": \"^9.22.0\",\n    \"tsx\": \"^4.6.2\",\n    \"typescript\": \"^5.3.3\",\n    \"typescript-eslint\": \"^8.18.2\"\n  }\n}\n"
+}

@@ -25,6 +25,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./desktop_app
 
       - name: Run Claude Code
         id: claude

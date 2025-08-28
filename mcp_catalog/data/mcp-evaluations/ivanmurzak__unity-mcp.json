@@ -1,0 +1,65 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ivanmurzak__unity-mcp",
+  "display_name": "Unity-MCP",
+  "version": "1.0.0",
+  "description": "MCP Server + Plugin for Unity Editor and Unity game. The Plugin allows to connect to MCP clients like Claude Desktop or others.",
+  "author": {
+    "name": "IvanMurzak"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Unity MCP (AI Connector)\n\n[![openupm](https://img.shields.io/npm/v/com.ivanmurzak.unity.mcp?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.ivanmurzak.unity.mcp/) ![License](https://img.shields.io/github/license/IvanMurzak/Unity-MCP) [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)\n\n![image](https://github.com/user-attachments/assets/8f595879-a578-421a-a06d-8c194af874f7)\n\n| Unity Version | Editmode | Playmode | Standalone |\n|---------------|----------|----------|------------|\n| 2022.3.61f1   | ![2022.3.61f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2022.3.61f1_editmode.yml?label=2022.3.61f1-editmode&branch=main) | ![2022.3.61f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2022.3.61f1_playmode.yml?label=2022.3.61f1-playmode&branch=main) | ![2022.3.61f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2022.3.61f1_standalone.yml?label=2022.3.61f1-standalone&branch=main) |\n| 2023.2.20f1   | ![2023.2.20f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2023.2.20f1_editmode.yml?label=2023.2.20f1-editmode&branch=main) | ![2023.2.20f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2023.2.20f1_playmode.yml?label=2023.2.20f1-playmode&branch=main) | ![2023.2.20f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/2023.2.20f1_standalone.yml?label=2023.2.20f1-standalone&branch=main) |\n| 6000.0.46f1   | ![6000.0.46f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/6000.0.46f1_editmode.yml?label=6000.0.46f1-editmode&branch=main) | ![6000.0.46f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/6000.0.46f1_playmode.yml?label=6000.0.46f1-playmode&branch=main) | ![6000.0.46f1](https://img.shields.io/github/actions/workflow/status/IvanMurzak/Unity-MCP/6000.0.46f1_standalone.yml?label=6000.0.46f1-standalone&branch=main) |\n\n**[Unity-MCP](https://github.com/IvanMurzak/Unity-MCP)** is a bridge between LLM and Unity. It exposes and explains to LLM Unity's tools. LLM understands the interface and utilizes the tools in the way a user asks.\n\nConnect **[Unity-MCP](https://github.com/IvanMurzak/Unity-MCP)** to LLM client such as [Claude](https://claude.ai/download) or [Cursor](https://www.cursor.com/) using integrated `AI Connector` window. Custom clients are supported as well.\n\nThe project is designed to let developers to add custom tools soon. After that the next goal is to enable the same features in player's build. For not it works only in Unity Editor.\n\nThe system is extensible: you can define custom `tool`s directly in your Unity project codebase, exposing new capabilities to the AI or automation clients. This makes Unity-MCP a flexible foundation for building advanced workflows, rapid prototyping, or integrating AI-driven features into your development process.\n\n## AI Tools\n\nUnity-MCP supports a wide range of tools. Each tool is a small connector between LLM and Unity Engine. You may create your own `tools` by using API, take a look at [add custom tool](#add-custom-tool).\n\nHere is the list of default AI tools. All of them are available after installation Unity-MCP into your project.\n\n> **Legend:**\n> ✅ = Implemented & available, 🔲 = Planned / Not yet implemented\n\n<table>\n<tr>\n<td valign=\"top\">\n\n### GameObject\n\n- ✅ Create\n- ✅ Destroy\n- ✅ Find\n- ✅ Modify (tag, layer, name, static)\n- ✅ Set parent\n- ✅ Duplicate\n\n##### GameObject.Components\n\n- ✅ Add Component\n- ✅ Get Components\n- ✅ Modify Component\n- - ✅ `Field` set value\n- - ✅ `Property` set value\n- - ✅ `Reference` link set\n- ✅ Destroy Component\n- 🔲 Remove missing components\n\n### Editor\n\n- ✅ State (Playmode)\n  - ✅ Get\n  - ✅ Set\n- ✅ Get Windows\n- ✅ Layer\n  - ✅ Get All\n  - ✅ Add\n  - ✅ Remove\n- ✅ Tag\n  - ✅ Get All\n  - ✅ Add\n  - ✅ Remove\n- ✅ Execute `MenuItem`\n- ✅ Run Tests (see note in [running play mode tests](#running-playmode-tests))\n\n#### Editor.Selection\n\n- ✅ Get selection\n- ✅ Set selection\n\n### Prefabs\n\n- ✅ Instantiate\n- 🔲 Create\n- ✅ Open\n- ✅ Modify (GameObject.Modify)\n- ✅ Save\n- ✅ Close\n\n### Package\n\n- 🔲 Get installed\n- 🔲 Install\n- 🔲 Remove\n- 🔲 Update\n\n</td>\n<td valign=\"top\">\n\n### Assets\n\n- ✅ Create\n- ✅ Find\n- ✅ Refresh\n- ✅ Read\n- ✅ Modify\n- ✅ Rename\n- ✅ Delete\n- ✅ Move\n- ✅ Create folder\n\n### Scene\n\n- ✅ Create\n- ✅ Save\n- ✅ Load\n- ✅ Unload\n- ✅ Get Loaded\n- ✅ Get hierarchy\n- 🔲 Search (editor)\n- 🔲 Raycast (understand volume)\n\n### Materials\n\n- ✅ Create\n- ✅ Modify (Assets.Modify)\n- ✅ Read (Assets.Read)\n- ✅ Assign to a Component on a GameObject\n\n### Shader\n\n- ✅ List All\n\n### Scripts\n\n- ✅ Read\n- ✅ Update or Create\n- ✅ Delete\n\n### Scriptable Object\n\n- ✅ Create\n- ✅ Read\n- ✅ Modify\n- ✅ Remove\n\n### Debug\n\n- ✅ Read logs (console)\n\n### Component\n\n- ✅ Get All\n\n</td>\n</tr>\n</table>\n\n# Installation\n\n1. [Install .NET 9.0](https://dotnet.microsoft.com/en-us/download)\n2. [Install OpenUPM-CLI](https://github.com/openupm/openupm-cli#installation)\n\n- Open command line in Unity project folder\n- Run the command\n\n```bash\nopenupm add com.ivanmurzak.unity.mcp\n```\n\n# Usage\n\n1. Make sure your project path doesn't have a space symbol \" \".\n> - ✅ `C:/MyProjects/Project`\n> - ❌ `C:/My Projects/Project`\n\n2. Open Unity project, go 👉 `Window/AI Connector (Unity-MCP)`.\n\n![Unity_WaSRb5FIAR](https://github.com/user-attachments/assets/e8049620-6614-45f1-92d7-cc5d00a6b074)\n\n3. Install MCP client\n> - [Install Cursor](https://www.cursor.com/) (recommended)\n> - [Install Claude](https://claude.ai/download)\n\n4. Sign-in into MCP client\n5. Click `Configure` at your MCP client.\n\n![image](https://github.com/user-attachments/assets/19f80179-c5b3-4e9c-bdf6-07edfb773018)\n\n6. Restart your MCP client.\n7. Make sure `AI Connector` is \"Connected\" or \"Connecting...\" after restart.\n8. Test AI connection in your Client (Cursor, Claude Desktop). Type any question or task into the chat. Something like:\n\n  ```text\n  Explain my scene hierarchy\n  ```\n\n# Add custom `tool`\n\n> ⚠️ It only works with MCP client that supports dynamic tool list update.\n\nUnity-MCP is designed to support custom `tool` development by project owner. MCP server takes data from Unity plugin and exposes it to a Client. So anyone in the MCP communication chain would receive the information about a new `tool`. Which LLM may decide to call at some point.\n\nTo add a custom `tool` you need:\n\n1. To have a class with attribute `McpPluginToolType`.\n2. To have a method in the class with attribute `McpPluginTool`.\n3. [optional] Add `Description` attribute to each method argument to let LLM to understand it.\n4. [optional] Use `string? optional = null` properties with `?` and default value to mark them as `optional` for LLM.\n\n> Take a look that the line `MainThread.Instance.Run(() =>` it allows to run the code in Main thread which is needed to interact with Unity API. If you don't need it and running the tool in background thread is fine for the tool, don't use Main thread for efficiency purpose.\n\n```csharp\n[McpPluginToolType]\npublic class Tool_GameObject\n{\n    [McpPluginTool\n    (\n        \"MyCustomTask\",\n        Title = \"Create a new GameObject\"\n    )]\n    [Description(\"Explain here to LLM what is this, when it should be called.\")]\n    public string CustomTask\n    (\n        [Description(\"Explain to LLM what is this.\")]\n        string inputData\n    )\n    {\n        // do anything in background thread\n\n        return MainThread.Instance.Run(() =>\n        {\n            // do something in main thread if needed\n\n            return $\"[Success] Operation completed.\";\n        });\n    }\n}\n```\n\n# Add custom in-game `tool`\n\n> ⚠️ Not yet supported. The work is in progress\n\n# Running PlayMode tests\n\nTo be able to run Play Mode tests via the TestRunner MCP tool, you should consider configuring Unity to **not** perform a domain reload when entering Play Mode (`Edit -> Project Settings -> Editor -> Enter Play Mode Settings` - set to `Reload Scene only` or `Do not reload Domain or Scene`). Otherwise, starting the Play Mode tests will interrupt the TestRunner MCP tool, leading to a cycle of tests restarting.\n\n\n# Contribution\n\nFeel free to add a new `tool` into the project.\n\n1. Fork the project.\n2. Clone the fork and open the resulting folder in Unity.\n3. Implement the new `tool` in your forked repository.\n4. Create Pull Request into original [Unity-MCP](https://github.com/IvanMurzak/Unity-MCP) repository.\n",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {}
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "IvanMurzak",
+    "repo": "Unity-MCP",
+    "url": "https://github.com/IvanMurzak/Unity-MCP",
+    "name": "Unity-MCP",
+    "path": null,
+    "stars": 306,
+    "contributors": 2,
+    "issues": 15,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "7e5f72e6069c80690ff45f71ff406d4416c33313"
+  },
+  "programming_language": "C#",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:15:47.971Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": null
+}

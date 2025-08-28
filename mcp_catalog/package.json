@@ -1,0 +1,41 @@
+{
+  "name": "mcp-catalog",
+  "version": "0.0.0-alpha",
+  "private": true,
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "catalog:evaluate": "npx tsx src/scripts/evaluate-catalog.ts",
+    "catalog:validate": "npx tsx src/scripts/validate-catalog.ts",
+    "openapi:generate": "npx tsx src/scripts/generate-openapi-schema.ts && pnpm prettier --write src/api/docs/openapi.json"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^7.3.4",
+    "@fastify/cors": "^11.1.0",
+    "dotenv": "^17.2.1",
+    "fastify": "^5.5.0",
+    "swagger-ui-react": "^5.27.1",
+    "zod": "^3.25.67",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@anthropic-ai/dxt": "^0.2.6",
+    "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@types/node": "^24.2.0",
+    "@types/swagger-ui-react": "^5.18.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.4",
+    "prettier": "^3.6.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5",
+    "vite": "^7.0.6",
+    "vitest": "^3.2.4"
+  },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  }
+}

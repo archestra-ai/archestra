@@ -1,0 +1,147 @@
+{
+  "dxt_version": "1.0.0",
+  "version": "1.0.0",
+  "name": "bucketco__bucket-javascript-sdk__packages__cli",
+  "display_name": "cli",
+  "description": "JS/TS SDKs for Bucket.co",
+  "author": {
+    "name": "bucketco"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bucketco/cli",
+        "--app-id",
+        "${user_config.app_id}",
+        "--base-url",
+        "${user_config.base_url}",
+        "--api-url",
+        "${user_config.api_url}"
+      ],
+      "env": {}
+    }
+  },
+  "readme": "# Bucket CLI\n\nCommand-line interface for interacting with Bucket services. The CLI allows you to manage apps,\nfeatures, authentication, and generate TypeScript types for your Bucket features. With this tool,\nyou can streamline your feature flagging workflow directly from your terminal.\n\n## Usage\n\nGet started by installing the CLI locally in your project:\n\n```bash\n# npm\nnpm install --save-dev @bucketco/cli\n\n# yarn\nyarn add --dev @bucketco/cli\n```\n\nThen running the `new` command from your project's root directory,\ninitializing the CLI, creating a feature, and generating the types all at once:\n\n```bash\n# npm\nnpx bucket new\n\n# yarn\nyarn bucket new\n```\n\n### Individual commands\n\nInstead of running `new` you can call each step individually.\n\n```bash\n# Initialize Bucket in your project (if not already setup)\nnpx bucket init\n\n# Create a new feature\nnpx bucket features create \"My Feature\"\n\n# Generate TypeScript types for your features\nnpx bucket features types\n```\n\n## Configuration\n\nThe CLI creates a `bucket.config.json` file in your project directory when you run `bucket init`.\nThis file contains all the necessary settings for your Bucket integration.\n\n### Configuration File Structure\n\nHere's a comprehensive list of configuration options available in the `bucket.config.json` file:\n\n```json\n{\n  \"$schema\": \"https://unpkg.com/@bucketco/cli@latest/schema.json\",\n  \"baseUrl\": \"https://app.bucket.co\",\n  \"apiUrl\": \"https://app.bucket.co/api\",\n  \"appId\": \"ap123456789\",\n  \"typesOutput\": [\n    {\n      \"path\": \"gen/features.d.ts\",\n      \"format\": \"react\"\n    }\n  ]\n}\n```\n\n| Option        | Description                                                                                                                                                          | Default                                              |\n| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |\n| `$schema`     | Autocompletion for the config. `latest` can be replaced with a specific version.                                                                                     | \"https://unpkg.com/@bucketco/cli@latest/schema.json\" |\n| `baseUrl`     | Base URL for Bucket services.                                                                                                                                        | \"https://app.bucket.co\"                              |\n| `apiUrl`      | API URL for Bucket services (overrides baseUrl for API calls).                                                                                                       | \"https://app.bucket.co/api\"                          |\n| `appId`       | Your Bucket application ID.                                                                                                                                          | Required                                             |\n| `typesOutput` | Path(s) where TypeScript types will be generated. Can be a string or an array of objects with `path` and `format` properties. Available formats: `react` and `node`. | \"gen/features.ts\" with format \"react\"                |\n\nYou can override these settings using command-line options for individual commands.\n\n## Commands\n\n### `bucket init`\n\nInitialize a new Bucket configuration in your project.\nThis creates a `bucket.config.json` file with your settings and prompts for any required information not provided via options.\n\n```bash\nnpx bucket init [--overwrite]\n```\n\nOptions:\n\n- `--overwrite`: Overwrite existing configuration file if one exists.\n- `--app-id <id>`: Set the application ID.\n- `--key-format <format>`: Set the key format for features.\n\n### `bucket new [featureName]`\n\nAll-in-one command to get started quickly. This command combines `init`, feature creation,\nand type generation in a single step. Use this for the fastest way to get up and running with Bucket.\n\n```bash\nnpx bucket new \"My Feature\" [--app-id ap123456789] [--key my-feature]  [--key-format custom] [--out gen/features.ts] [--format react]\n```\n\nOptions:\n\n- `--key`: Specific key for the feature.\n- `--app-id`: App ID to use.\n- `--key-format`: Format for feature keys (custom, snake, camel, etc.).\n- `--out`: Path to generate TypeScript types.\n- `--format`: Format of the generated types (react or node).\n\nIf you prefer more control over each step, you can use the individual commands (`init`, `features create`, `features types`) instead.\n\n### `bucket login`\n\nLog in to your Bucket account. This will authenticate your CLI for subsequent operations and store credentials securely.\n\n```bash\nnpx bucket login\n```\n\n### `bucket logout`\n\nLog out from your Bucket account, removing stored credentials.\n\n```bash\nnpx bucket logout\n```\n\n### `bucket features`\n\nManage your Bucket features with the following subcommands.\n\n#### `bucket features create [featureName]`\n\nCreate a new feature in your Bucket app.\nThe command guides you through the feature creation process with interactive prompts if options are not provided.\n\n```bash\nnpx bucket features create \"My Feature\" [--app-id ap123456789] [--key my-feature] [--key-format custom]\n```\n\nOptions:\n\n- `--key`: Specific key for the feature.\n- `--app-id`: App ID to use.\n- `--key-format`: Format for feature keys.\n\n#### `bucket features list`\n\nList all features for the current app.\nThis helps you visualize what features are available and their current configurations.\n\n```bash\nnpx bucket features list [--app-id ap123456789]\n```\n\nOptions:\n\n- `--app-id`: App ID to use.\n\n#### `bucket features types`\n\nGenerate TypeScript types for your features.\nThis ensures type safety when using Bucket features in your TypeScript/JavaScript applications.\n\n```bash\nnpx bucket features types [--app-id ap123456789] [--out gen/features.ts] [--format react]\n```\n\nOptions:\n\n- `--app-id`: App ID to use.\n- `--out`: Path to generate TypeScript types.\n- `--format`: Format of the generated types (react or node).\n\n### `bucket companies`\n\nCommands for managing companies.\n\n#### `bucket companies list`\n\nList all companies in your app.\n\n```bash\nnpx bucket companies list [--filter <text>] [--app-id ap123456789]\n```\n\nOptions:\n\n- `--filter`: Filter companies by name or ID.\n- `--app-id`: App ID to use.\n\nThe command outputs a table with the following columns:\n\n- `id`: Company ID.\n- `name`: Company name (shows \"(unnamed)\" if not set).\n- `users`: Number of users in the company.\n- `lastSeen`: Date when the company was last active.\n\n### `bucket companies features access`\n\nGrant or revoke access to specific features for companies, segments, and users.\nIf no feature key is provided, you'll be prompted to select one from a list.\n\n```bash\nnpx bucket companies features access [--app-id ap123456789] [featureKey] [--enable|--disable] [--companies <id...>] [--segments <id...>] [--users <id...>]\n```\n\nArguments:\n\n- `featureKey`: Key of the feature to grant/revoke access to (optional, interactive selection if omitted).\n\nOptions:\n\n- `--enable`: Enable the feature for the specified targets.\n- `--disable`: Disable the feature for the specified targets.\n- `--users`: User IDs to target. Can be specified multiple times.\n- `--companies`: Company IDs to target. Can be specified multiple times.\n- `--segments`: Segment IDs to target. Can be specified multiple times.\n- `--app-id`: App ID to use.\n\nAt least one target (companies, segments, or users) must be specified. You must also specify either `--enable` or `--disable`, but not both.\n\nExample:\n\n```bash\n# Enable feature for multiple companies and users\nnpx bucket companies features access my-feature --enable --companies comp_123 --companies comp_456 --users user_789\n```\n\n### `bucket apps`\n\nCommands for managing Bucket apps.\n\n## Global Options\n\nThese options can be used with any command:\n\n- `--debug`: Enable debug mode for verbose output.\n- `--base-url <url>`: Set the base URL for Bucket API.\n- `--api-url <url>`: Set the API URL directly (overrides base URL).\n- `--api-key <key>`: Bucket API key for non-interactive authentication.\n- `--help`: Display help information for a command.\n\n## AI-Assisted Development\n\nBucket provides powerful AI-assisted development capabilities through rules and Model Context Protocol (MCP). These features help your AI development tools better understand your features and provide more accurate assistance.\n\n### Bucket Rules (Recommended)\n\nThe `rules` command helps you set up AI-specific rules for your project. These rules enable AI tools to better understand how to work with Bucket and feature flags and how they should be used in your codebase.\n\n```bash\nnpx bucket rules [--format <cursor|copilot>] [--yes]\n```\n\nOptions:\n\n- `--format`: Format to add rules in:\n  - `cursor`: Adds rules to `.cursor/rules/bucket.mdc` for Cursor IDE integration.\n  - `copilot`: Adds rules to `.github/copilot-instructions.md` for GitHub Copilot integration.\n- `--yes`: Skip confirmation prompts and overwrite existing files without asking.\n\nThis command will add rules to your project that provide AI tools with context about how to setup and use Bucket feature flags. For the copilot format, the rules will be added to a dedicated section in the file, allowing you to maintain other copilot instructions alongside Bucket's rules.\n\n## Model Context Protocol\n\nThe Model Context Protocol (MCP) is an open protocol that provides a standardized way to connect AI models to different data sources and tools. In the context of Bucket, MCP enables your code editor to understand your feature flags, their states, and their relationships within your codebase. This creates a seamless bridge between your feature management workflow and AI-powered development tools. The MCP server is hosted by Bucket, so it's very easy to get started.\n\n_\\*\\*Note: The Bucket `mcp` CLI command was previously used for a \\_local_ server. However, in recent versions of the Bucket CLI, the `mcp` command has been repurposed to help you connect to the new remote MCP server.\\*\\*\\_\n\n### Setting up MCP\n\nThe `mcp` command helps you configure your editor or AI client to connect with Bucket's remote MCP server. This allows your AI tools to understand your feature flags and provide more contextual assistance.\n\n```bash\nnpx bucket mcp [--app-id <id>] [--editor <editor>] [--scope <local|global>]\n```\n\nOptions:\n\n- `--app-id`: App ID to use for the MCP connection.\n- `--editor`: The editor/client to configure:\n  - `cursor`: [Cursor IDE](https://www.cursor.com/)\n  - `vscode`: [Visual Studio Code](https://code.visualstudio.com/)\n  - `claude`: [Claude Desktop](https://claude.ai/download)\n  - `windsurf`: [Windsurf](https://windsurf.com/editor)\n- `--scope`: Whether to configure settings globally or locally for the project.\n\nThe command will guide you through:\n\n1. Selecting which editor/client to configure.\n2. Choosing which Bucket app to connect to.\n3. Deciding between global or project-local configuration.\n4. Setting up the appropriate configuration file for your chosen editor .\n\n_**Note: The setup uses [mcp-remote](https://github.com/geelen/mcp-remote) as a compatibility layer allowing the remote hosted Bucket MCP server to work with all editors/clients that support MCP STDIO servers. If your editor/client supports HTTP Streaming with OAuth you can connect to the Bucket MCP server directly.**_\n\n## Using in CI/CD Pipelines (Beta)\n\nThe Bucket CLI is designed to work seamlessly in CI/CD pipelines. For automated environments where interactive login is not possible, use the `--api-key` option,\nor specify the API key in `BUCKET_API_KEY` environment variable.\n\n```bash\n# Generate types in CI/CD\nnpx bucket apps list --api-key $BUCKET_API_KEY\n```\n\n**Important restrictions:**\n\n- When using `--api-key`, the `login` and `logout` commands are disabled.\n- API keys bypass all interactive authentication flows.\n- Only _read-only_ access to Bucket API is granted at the moment.\n- API keys are bound to one app only. Commands such as `apps list` will only return the bound app.\n- Store API keys securely using your CI/CD platform's secret management.\n\nExample CI workflow:\n\n```yaml\n# GitHub Actions example\n- name: Generate types\n  run: npx bucket features types --api-key ${{ secrets.BUCKET_API_KEY }}\n\n# GitHub Actions example (using environment):\n- name: Generate types (environment)\n  run: npx bucket features types\n  env:\n    BUCKET_API_KEY: ${{ secrets.BUCKET_CI_API_KEY }}\n```\n\n## Development\n\n```bash\n# Build the CLI\nyarn build\n\n# Run the CLI locally\nyarn bucket [command]\n\n# Lint and format code\nyarn lint\nyarn format\n```\n\n## Requirements\n\n- Node.js >=18.0.0\n\n## License\n\n> MIT License\n> Copyright (c) 2025 Bucket ApS\n",
+  "category": "Development",
+  "quality_score": 68,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "bucketco",
+    "repo": "bucket-javascript-sdk",
+    "url": "https://github.com/bucketco/bucket-javascript-sdk/tree/main/packages/cli",
+    "name": "bucketco__bucket-javascript-sdk__packages__cli",
+    "path": "packages/cli",
+    "stars": 12,
+    "contributors": 11,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c84de685346c3c6fe22cc5369bab8081872a0eaf"
+  },
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "commander"
+    },
+    {
+      "importance": 8,
+      "name": "zod"
+    },
+    {
+      "importance": 7,
+      "name": "@inquirer/prompts"
+    },
+    {
+      "importance": 6,
+      "name": "express"
+    },
+    {
+      "importance": 6,
+      "name": "open"
+    },
+    {
+      "importance": 5,
+      "name": "ajv"
+    },
+    {
+      "importance": 5,
+      "name": "find-up"
+    },
+    {
+      "importance": 4,
+      "name": "chalk"
+    },
+    {
+      "importance": 4,
+      "name": "change-case"
+    },
+    {
+      "importance": 4,
+      "name": "comment-json"
+    },
+    {
+      "importance": 4,
+      "name": "ora"
+    },
+    {
+      "importance": 4,
+      "name": "semver"
+    },
+    {
+      "importance": 4,
+      "name": "slug"
+    },
+    {
+      "importance": 3,
+      "name": "fast-deep-equal"
+    }
+  ],
+  "user_config": {
+    "app_id": {
+      "type": "string",
+      "title": "Bucket Application ID",
+      "description": "Your Bucket application ID, found in your app settings.",
+      "required": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "Base URL",
+      "description": "Base URL for Bucket services.",
+      "required": false,
+      "default": "https://app.bucket.co"
+    },
+    "api_url": {
+      "type": "string",
+      "title": "API URL",
+      "description": "API URL for Bucket services (overrides baseUrl for API calls).",
+      "required": false,
+      "default": "https://app.bucket.co/api"
+    }
+  },
+  "archestra_config": {
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "client_config_permutations": null
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@bucketco/cli\",\n  \"version\": \"2.0.1\",\n  \"packageManager\": \"yarn@4.1.1\",\n  \"description\": \"CLI for Bucket service\",\n  \"main\": \"./dist/index.js\",\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"author\": \"Bucket.\",\n  \"homepage\": \"https://docs.bucket.co/\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/bucketco/bucket-javascript-sdk.git\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"bin\": {\n    \"bucket\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"schema.json\"\n  ],\n  \"exports\": {\n    \".\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/index.js\",\n    \"bucket\": \"yarn build && ./dist/index.js\",\n    \"test\": \"vitest -c vite.config.js\",\n    \"test:ci\": \"vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml\",\n    \"coverage\": \"vitest run --coverage\",\n    \"lint\": \"eslint .\",\n    \"lint:ci\": \"eslint --output-file eslint-report.json --format json .\",\n    \"prettier\": \"prettier --check .\",\n    \"format\": \"yarn lint --fix && yarn prettier --write\",\n    \"preversion\": \"yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build\"\n  },\n  \"dependencies\": {\n    \"@inquirer/prompts\": \"^5.3.8\",\n    \"ajv\": \"^8.17.1\",\n    \"chalk\": \"^5.3.0\",\n    \"change-case\": \"^5.4.4\",\n    \"commander\": \"^12.1.0\",\n    \"comment-json\": \"^4.2.5\",\n    \"express\": \"^4.21.2\",\n    \"fast-deep-equal\": \"^3.1.3\",\n    \"find-up\": \"^7.0.0\",\n    \"open\": \"^10.1.0\",\n    \"ora\": \"^8.1.0\",\n    \"semver\": \"^7.7.2\",\n    \"slug\": \"^10.0.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@bucketco/eslint-config\": \"workspace:^\",\n    \"@bucketco/tsconfig\": \"workspace:^\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.5.1\",\n    \"@types/semver\": \"^7.7.0\",\n    \"@types/slug\": \"^5.0.9\",\n    \"eslint\": \"^9.21.0\",\n    \"prettier\": \"^3.5.2\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.5.4\",\n    \"vitest\": \"^3.0.8\"\n  }\n}\n",
+  "last_scraped_at": "2025-08-22T13:21:52.669Z"
+}

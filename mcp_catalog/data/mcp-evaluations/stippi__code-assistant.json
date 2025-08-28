@@ -1,0 +1,79 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "stippi__code-assistant",
+  "display_name": "code-assistant",
+  "version": "1.0.0",
+  "description": "An LLM-powered, autonomous coding assistant. Also offers an MCP mode.",
+  "author": {
+    "name": "stippi"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Code Assistant\n\n[![CI](https://github.com/stippi/code-assistant/actions/workflows/build.yml/badge.svg)](https://github.com/stippi/code-assistant/actions/workflows/build.yml)\n\nA CLI tool built in Rust for assisting with code-related tasks.\n\n## Features\n\n- **Autonomous Exploration**: The agent can intelligently explore codebases and build up working memory of the project structure.\n- **Reading/Writing Files**: The agent can read file contents and make changes to files as needed.\n- **User Interface**: The agent can run with a UI based on [Zed](https://zed.dev)'s [gpui](https://github.com/zed-industries/zed/tree/main/crates/gpui).\n- **Interactive Communication**: Ability to ask users questions and get responses for better decision-making.\n- **MCP Server Mode**: Can run as a Model Context Protocol server, providing tools and resources to LLMs running in an MCP client.\n\n## Installation\n\nEnsure you have [Rust installed](https://www.rust-lang.org/tools/install) on your system. Then:\n\n```bash\n# Clone the repository\ngit clone https://github.com/stippi/code-assistant\n\n# Navigate to the project directory\ncd code-assistant\n\n# Build the project\ncargo build --release\n\n# The binary will be available in target/release/code-assistant\n```\n\n## Configuration in Claude Desktop\n\nThe `code-assistant` implements the [Model Context Protocol](https://modelcontextprotocol.io/introduction) by Anthropic.\nThis means it can be added as a plugin to MCP client applications such as **Claude Desktop**.\n\n### Configure Your Projects\n\nCreate a file `~/.config/code-assistant/projects.json`.\nThis file adds available projects in MCP server mode (`list_projects` and file operation tools).\nIt has the following structure:\n\n```json\n{\n  \"code-assistant\": {\n    \"path\": \"/Users/<username>/workspace/code-assistant\"\n  },\n  \"asteroids\": {\n    \"path\": \"/Users/<username>/workspace/asteroids\"\n  },\n  \"zed\": {\n    \"path\": \"Users/<username>/workspace/zed\"\n  }\n}\n```\n\nNotes:\n- The absolute paths are not provided by the tool, to avoid leaking such information to LLM cloud providers.\n- This file can be edited without restarting Claude Desktop, respectively the MCP server.\n\n### Configure MCP Servers\n\n- Open the Claude Desktop application settings (**Claude** -> Settings)\n- Switch to the **Developer** tab.\n- Click the **Edit Config** button.\n\nA Finder window opens highlighting the file `claude_desktop_config.json`.\nOpen that file in your favorite text editor.\n\nAn example configuration is given below:\n\n```jsonc\n{\n  \"mcpServers\": {\n    \"code-assistant\": {\n      \"command\": \"/Users/<username>/workspace/code-assistant/target/release/code-assistant\",\n      \"args\": [\n        \"server\"\n      ],\n      \"env\": {\n        \"PERPLEXITY_API_KEY\": \"pplx-...\", // optional, enables perplexity_ask tool\n        \"SHELL\": \"/bin/zsh\" // your login shell, required when configuring \"env\" here\n      }\n    }\n  }\n}\n```\n\n## Usage\n\nCode Assistant can run in two modes:\n\n### Agent Mode (Default)\n\n```bash\ncode-assistant --task <TASK> [OPTIONS]\n```\n\nAvailable options:\n- `--path <PATH>`: Path to the code directory to analyze (default: current directory)\n- `-t, --task <TASK>`: Task to perform on the codebase (required in terminal mode, optional with `--ui`)\n- `--ui`: Start with GUI interface\n- `--continue-task`: Continue from previous state\n- `-v, --verbose`: Enable verbose logging\n- `-p, --provider <PROVIDER>`: LLM provider to use [ai-core, anthropic, open-ai, ollama, vertex, open-router] (default: anthropic)\n- `-m, --model <MODEL>`: Model name to use (provider-specific defaults: anthropic=\"claude-sonnet-4-20250514\", open-ai=\"gpt-4o\", vertex=\"gemini-2.5-pro-preview-06-05\", open-router=\"anthropic/claude-3-7-sonnet\", ollama=required)\n- `--base-url <BASE_URL>`: API base URL for the LLM provider to use\n- `--tool-syntax <TOOL_SYNTAX>`: Tool invocation syntax [native, xml, caret] (default: xml) - `native` = tools via API, `xml` = custom system message with XML tags, `caret` = custom system message with triple-caret blocks\n- `--num-ctx <NUM_CTX>`: Context window size in tokens (default: 8192, only relevant for Ollama)\n- `--record <RECORD>`: Record API responses to a file (only supported for Anthropic provider currently)\n- `--playback <PLAYBACK>`: Play back a recorded session from a file\n- `--fast-playback`: Fast playback mode - ignore chunk timing when playing recordings\n\nEnvironment variables:\n- `ANTHROPIC_API_KEY`: Required when using the Anthropic provider\n- `OPENAI_API_KEY`: Required when using the OpenAI provider\n- `GOOGLE_API_KEY`: Required when using the Vertex provider\n- `OPENROUTER_API_KEY`: Required when using the OpenRouter provider\n- `PERPLEXITY_API_KEY`: Required to use the Perplexity search API tools\n\n### AI Core Configuration\n\nWhen using the AI Core provider (`--provider ai-core`), you need to create a configuration file containing your service key credentials and model deployments.\n\n**Default config file location**: `~/.config/code-assistant/ai-core.json`\n\n**Sample configuration**:\n```json\n{\n  \"auth\": {\n    \"client_id\": \"<your service key client id>\",\n    \"client_secret\": \"<your service key client secret>\",\n    \"token_url\": \"https://<your service key url>/oauth/token\",\n    \"api_base_url\": \"https://<your service key api URL>/v2/inference\"\n  },\n  \"models\": {\n    \"claude-sonnet-4\": \"<your deployment id for the model>\"\n  }\n}\n```\n\nYou can specify a custom config file path using the `--aicore-config` option:\n```bash\ncode-assistant --provider ai-core --aicore-config /path/to/your/ai-core-config.json --task \"Your task\"\n```\n\n**Configuration steps**:\n1. Create the directory: `mkdir -p ~/.config/code-assistant/`\n2. Create the config file: `~/.config/code-assistant/ai-core.json`\n3. Fill in your service key details and deployment IDs\n4. The tool will automatically use this configuration when `--provider ai-core` is specified\n\nExamples:\n```bash\n# Analyze code in current directory using Anthropic's Claude\ncode-assistant --task \"Explain the purpose of this codebase\"\n\n# Use a different provider and model\ncode-assistant --task \"Review this code for security issues\" --provider open-ai --model gpt-4o\n\n# Analyze a specific directory with verbose logging\ncode-assistant --path /path/to/project --task \"Add error handling\" --verbose\n\n# Start with GUI interface\ncode-assistant --ui\n\n# Start GUI with an initial task\ncode-assistant --ui --task \"Refactor the authentication module\"\n\n# Use Ollama with a local model\ncode-assistant --task \"Document this API\" --provider ollama --model llama2 --num-ctx 4096\n\n# Record a session for later playback (Anthropic only)\ncode-assistant --task \"Optimize database queries\" --record ./recordings/db-optimization.json\n\n# Play back a recorded session with fast-forward (no timing delays)\ncode-assistant --playback ./recordings/db-optimization.json --fast-playback\n```\n\n### Server Mode\n\nRuns as a Model Context Protocol server:\n\n```bash\ncode-assistant server [OPTIONS]\n```\n\nAvailable options:\n- `-v, --verbose`: Enable verbose logging\n\n## Roadmap\n\nThis section is not really a roadmap, as the items are in no particular order.\nBelow are some topics that are likely the next focus.\n\n- **Block Replacing in Changed Files**: When streaming a tool use block, we already know the LLM attempts to use `replace_in_file` and we know in which file quite early.\n  If we also know this file has changed since the LLM last read it, we can block the attempt with an appropriate error message.\n- **Compact Tool Use Failures**: When the LLM produces an invalid tool call, or a mismatching search block, we should be able to strip the failed attempt from the message history, saving tokens.\n- **Improve UI**: There are various ways in which the UI can be improved.\n- **Add Memory Tools**: Add tools that facilitate building up a knowledge base useful work working in a given project.\n- **Security**: Ideally, the execution for all tools would run in some sort of sandbox that restricts access to the files in the project tracked by git.\n  Currently, the tools reject absolute paths, but do not check whether the relative paths point outside the project or try to access git-ignored files.\n  The `execute_command` tool runs a shell with the provided command line, which at the moment is completely unchecked.\n- **Fuzzy matching search blocks**: Investigate the benefit of fuzzy matching search blocks.\n  Currently, files are normalized (always `\\n` line endings, no trailing white space).\n  This increases the success rate of matching search blocks quite a bit, but certain ways of fuzzy matching might increase the success even more.\n  Failed matches introduce quite a bit of inefficiency, since they almost always trigger the LLM to re-read a file.\n  Even when the error output of the `replace_in_file` tool includes the complete file and tells the LLM *not* to re-read the file.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n",
+  "category": "Development",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "code-assistant": {
+          "command": "/Users/<username>/workspace/code-assistant/target/release/code-assistant",
+          "args": ["server"],
+          "env": {
+            "PERPLEXITY_API_KEY": "pplx-...",
+            "SHELL": "/bin/zsh"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "stippi",
+    "repo": "code-assistant",
+    "url": "https://github.com/stippi/code-assistant",
+    "name": "code-assistant",
+    "path": null,
+    "stars": 84,
+    "contributors": 7,
+    "issues": 8,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8c963bd629c8fcc4c1f066b454528addeb2ea4ce"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:17.421Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gpui",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\"crates/code_assistant\", \"crates/llm\", \"crates/web\"]\n\nresolver = \"2\"\n"
+}

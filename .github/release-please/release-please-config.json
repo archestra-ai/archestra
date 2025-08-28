@@ -66,9 +66,17 @@
       "include-component-in-tag": false,
       "release-type": "node"
     },
+    "mcp_catalog": {
+      "component": "mcp_catalog",
+      "release-type": "node"
+    },
     "mcp_server_docker_image": {
       "component": "mcp_server_docker_image",
       "release-type": "simple"
+    },
+    "oauth_proxy": {
+      "component": "oauth_proxy",
+      "release-type": "node"
     }
   },
   "plugins": [],

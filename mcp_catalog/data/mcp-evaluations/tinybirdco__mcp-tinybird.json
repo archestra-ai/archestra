@@ -1,0 +1,126 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "tinybirdco__mcp-tinybird",
+  "display_name": "mcp-tinybird",
+  "version": "1.0.0",
+  "description": "MCP server from tinybirdco/mcp-tinybird",
+  "author": {
+    "name": "tinybirdco"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Tinybird MCP server\n\n[![smithery badge](https://smithery.ai/badge/mcp-tinybird)](https://smithery.ai/server/@tinybirdco/mcp-tinybird)\n\nAn MCP server to interact with a Tinybird Workspace from any MCP client.\n\n<a href=\"https://glama.ai/mcp/servers/53l5ojnx30\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/53l5ojnx30/badge\" alt=\"Tinybird server MCP server\" /></a>\n\n## Features\n\n- Query Tinybird Data Sources using the Tinybird Query API\n- Get the result of existing Tinybird API Endpoints with HTTP requests\n- Push Datafiles\n\nIt supports both SSE and STDIO modes.\n\n## Usage examples\n\n- [Bluesky metrics](https://bsky.app/profile/alasdairb.com/post/3lbx2mq5urk22) ([Claude transcript](https://www.tinybird.co/blog-posts/claude-analyze-bluesky-data-tinybird-mcp-server))\n- [Web analytics starter kit metrics](https://github.com/tinybirdco/web-analytics-starter-kit) ([video](https://x.com/alrocar/status/1861849648882688341)]\n\n## Setup\n\n### Installation\n\n#### Using MCP package managers\n\n**Smithery**\n\nTo install Tinybird MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/mcp-tinybird):\n\n```bash\nnpx @smithery/cli install @tinybirdco/mcp-tinybird --client claude\n```\n\n**mcp-get**\n\nYou can install the Tinybird MCP server using [mcp-get](https://github.com/michaellatman/mcp-get):\n\n```bash\nnpx @michaellatman/mcp-get@latest install mcp-tinybird\n```\n\n### Prerequisites\n\nMCP is still very new and evolving, we recommend following the [MCP documentation](https://modelcontextprotocol.io/quickstart#prerequisites) to get the MCP basics up and running.\n\nYou'll need:\n- [Tinybird Account & Workspace](https://www.tinybird.co/)\n- [Claude Desktop](https://claude.ai/)\n- [uv](https://docs.astral.sh/uv/getting-started/installation/)\n\n### Configuration\n\n#### 1. Configure Claude Desktop\n\nCreate the following file depending on your OS:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\nPaste this template in the file and replace `<TINYBIRD_API_URL>` and `<TINYBIRD_ADMIN_TOKEN>` with your Tinybird API URL and Admin Token:\n\n```json\n{\n    \"mcpServers\": {\n        \"mcp-tinybird\": {\n            \"command\": \"uvx\",\n            \"args\": [\n                \"mcp-tinybird\",\n                \"stdio\"\n            ],\n            \"env\": {\n                \"TB_API_URL\": \"<TINYBIRD_API_URL>\",\n                \"TB_ADMIN_TOKEN\": \"<TINYBIRD_ADMIN_TOKEN>\"\n            }\n        }\n    }\n}\n```\n\n#### 2. Restart Claude Desktop\n\n\n#### SSE mode\n\nAlternatively, you can run the MCP server in SSE mode by running the following command:\n\n```bash\nuvx mcp-tinybird sse\n```\n\nThis mode is useful to integrate with an MCP client that supports SSE (like a web app).\n\n## Prompts\n\nThe server provides a single prompt:\n- [tinybird-default](https://github.com/tinybirdco/mcp-tinybird/blob/93dd9e1d3c0e33f408fe88297151a44c1dfc049c/src/mcp-tinybird/server.py#L20): Assumes you have loaded some data in Tinybird and want help exploring it.\n  - Requires a \"topic\" argument which defines the topic of the data you want to explore, for example, \"Bluesky data\" or \"retail sales\".\n\nYou can configure additional prompt workflows:\n  - Create a prompts Data Source in your workspace with this schema and append your prompts. The MCP loads `prompts` on initialization so you can configure it to your needs:\n```bash\nSCHEMA >\n    `name` String `json:$.name`,\n    `description` String `json:$.description`,\n    `timestamp` DateTime `json:$.timestamp`,\n    `arguments` Array(String) `json:$.arguments[:]`,\n    `prompt` String `json:$.prompt`\n```\n\n## Tools\n\nThe server implements several tools to interact with the Tinybird Workspace:\n- `list-data-sources`: Lists all Data Sources in the Tinybird Workspace\n- `list-pipes`: Lists all Pipe Endpoints in the Tinybird Workspace\n- `get-data-source`: Gets the information of a Data Source given its name, including the schema.\n- `get-pipe`: Gets the information of a Pipe Endpoint given its name, including its nodes and SQL transformation to understand what insights it provides.\n- `request-pipe-data`: Requests data from a Pipe Endpoints via an HTTP request. Pipe endpoints can have parameters to filter the analytical data.\n- `run-select-query`: Allows to run a select query over a Data Source to extract insights.\n- `append-insight`: Adds a new business insight to the memo resource\n- `llms-tinybird-docs`: Contains the whole Tinybird product documentation, so you can use it to get context about what Tinybird is, what it does, API reference and more.\n- `save-event`: This allows to send an event to a Tinybird Data Source. Use it to save a user generated prompt to the prompts Data Source. The MCP server feeds from the prompts Data Source on initialization so the user can instruct the LLM the workflow to follow.\n- `analyze-pipe`: Uses the Tinybird analyze API to run a ClickHouse explain on the Pipe Endpoint query and check if indexes, sorting key, and partition key are being used and propose optimizations suggestions\n- `push-datafile`: Creates a remote Data Source or Pipe in the Tinybird Workspace from a local datafile. Use the [Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) to save files generated by this MCP server.\n\n\n## Development\n\n### Config\nIf you are working locally add two environment variables to a `.env` file in the root of the repository:\n\n```sh\nTB_API_URL=\nTB_ADMIN_TOKEN=\n```\n\nFor local development, update your Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-tinybird_local\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/your/mcp-tinybird\",\n        \"run\",\n        \"mcp-tinybird\",\n        \"stdio\"\n      ]\n    }\n  }\n}\n```\n\n<details>\n  <summary>Published Servers Configuration</summary>\n\n  ```json\n  \"mcpServers\": {\n    \"mcp-tinybird\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-tinybird\"\n      ]\n    }\n  }\n  ```\n</details>\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /Users/alrocar/gr/mcp-tinybird run mcp-tinybird\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n### Monitoring\n\nTo monitor the MCP server, you can use any compatible Prometheus client such as [Grafana](https://grafana.com/). Learn how to monitor your MCP server [here](./mcp-analytics/README.md).\n\n",
+  "category": "Development",
+  "quality_score": 73,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-tinybird-stdio-configured": {
+          "command": "uvx",
+          "args": ["mcp-tinybird", "stdio"],
+          "env": {
+            "TB_API_URL": "<TINYBIRD_API_URL>",
+            "TB_ADMIN_TOKEN": "<TINYBIRD_ADMIN_TOKEN>"
+          }
+        },
+        "mcp-tinybird-sse": {
+          "command": "uvx",
+          "args": ["mcp-tinybird", "sse"],
+          "env": {}
+        },
+        "mcp-tinybird_local": {
+          "command": "uv",
+          "args": ["--directory", "/path/to/your/mcp-tinybird", "run", "mcp-tinybird", "stdio"],
+          "env": {}
+        },
+        "mcp-tinybird": {
+          "command": "uvx",
+          "args": ["mcp-tinybird"],
+          "env": {}
+        },
+        "modelcontextprotocol-inspector": {
+          "command": "npx",
+          "args": [
+            "@modelcontextprotocol/inspector",
+            "uv",
+            "--directory",
+            "/Users/alrocar/gr/mcp-tinybird",
+            "run",
+            "mcp-tinybird"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "tinybirdco",
+    "repo": "mcp-tinybird",
+    "url": "https://github.com/tinybirdco/mcp-tinybird",
+    "name": "mcp-tinybird",
+    "path": null,
+    "stars": 69,
+    "contributors": 8,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "baf218b83ef6e02310093cdbc700ecd997d32e0b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:44.185Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "tinybird-python-sdk",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-tinybird\"\nversion = \"1.0.2\"\ndescription = \"An MCP server to interact with a Tinybird Workspace from any MCP client.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"httpx>=0.27.2\",\n \"mcp>=1.0.0\",\n \"python-dotenv>=1.0.1\",\n \"tinybird-python-sdk>=0.1.6\",\n \"uvicorn>=0.27.0\",\n \"starlette>=0.36.0\",\n]\n[[project.authors]]\nname = \"alrocar\"\nemail = \"alrocar@tinybird.co\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-tinybird = \"mcp_tinybird.__main__:main\"\n\n[project.urls]\nhomepage = \"https://github.com/tinybirdco/mcp-tinybird\"\n\n[project.optional-dependencies]\ndev = [\n    \"black>=23.12.1\",\n    \"pyproject-toml>=0.0.10\",\n]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py37']\ninclude = '\\.pyi?$'\n\n\n=== bluesky-demo/package.json ===\n{\n  \"name\": \"bluesky-demo\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev --turbopack\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"next lint\"\n  },\n  \"dependencies\": {\n    \"@radix-ui/react-slot\": \"^1.1.0\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"jose\": \"^5.9.6\",\n    \"lucide-react\": \"^0.464.0\",\n    \"next\": \"^15.2.4\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"tailwind-merge\": \"^2.5.5\",\n    \"tailwindcss-animate\": \"^1.0.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20\",\n    \"@types/react\": \"^18\",\n    \"@types/react-dom\": \"^18\",\n    \"eslint\": \"^8\",\n    \"eslint-config-next\": \"15.0.3\",\n    \"postcss\": \"^8\",\n    \"tailwindcss\": \"^3.4.1\",\n    \"typescript\": \"^5\"\n  }\n}\n"
+}

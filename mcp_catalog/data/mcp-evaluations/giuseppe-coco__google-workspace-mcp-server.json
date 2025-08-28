@@ -1,0 +1,84 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "giuseppe-coco__google-workspace-mcp-server",
+  "display_name": "Google-Workspace-MCP-Server",
+  "version": "1.0.0",
+  "description": "MCP server from giuseppe-coco/Google-Workspace-MCP-Server",
+  "author": {
+    "name": "giuseppe-coco"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Google Workspace MCP Server\n\nA Model Context Protocol (MCP) server that acts as a secure bridge between your personal Google Workspace account (Gmail, Calendar, etc.) and any MCP-compatible AI client, such as Claude Desktop.\n\n## Features\n\n*   **Google Calendar**:\n    *   Effortlessly list and search for events on your primary calendar within a specific date range.\n    *   Create new events with detailed information like title, description, start, and end times.\n    *   Update existing events, allowing for partial modifications such as changing the title or time.\n    *   Delete events directly from your calendar.\n*   **Gmail**:\n    *   Read the content of your most recent email to stay up-to-date.\n    *   Search for specific emails by their subject line to find important conversations.\n    *   Compose and send new emails directly from your account.\n*   **Google Drive**:\n    *   Search for files and folders using powerful query strings.\n    *   Create new Google Docs with a specified title and initial content.\n    *   Update the entire content of an existing Google Doc.\n    *   Manage your files by moving them to the bin or deleting them permanently.\n\n## Getting Started\n\nFollow these steps to set up the server and run the example AI agent.\n\n### Prerequisites\n\n*   Python 3.9+ and `uv` (or `pip`).\n*   A Google Cloud project with the necessary APIs enabled.\n*   Claude Desktop.\n\n### Step 1: Configure your Google Cloud Project\n\nYou need to authorize this application to access your Google data. This is a one-time setup.\n\n1.  **Go to the Google Cloud Console**: [https://console.cloud.google.com/](https://console.cloud.google.com/)\n2.  **Create a new project** (or use an existing one).\n3.  **Enable APIs**:\n    *   Go to \"APIs & Services\" -> \"Library\".\n    *   Search for and **Enable** the **Gmail API**.\n    *   Search for and **Enable** the **Google Calendar API**.\n    *   Search for and **Enable** the **Google Drive API**.\n4.  **Create OAuth Credentials**:\n    *   Go to \"APIs & Services\" -> \"Credentials\".\n    *   Click \"Create Credentials\" -> \"OAuth client ID\".\n    *   If prompted, configure the \"OAuth consent screen\". Choose **External** and provide a name for the app. You can skip most other fields for personal use. Add your Google account email as a Test User.\n    *   For \"Application type\", select **Desktop app**.\n    *   Give it a name (e.g., \"GSuite MCP Client\").\n5.  **Download Credentials**:\n    *   After creating the client ID, click the \"Download JSON\" icon.\n    *   Rename the downloaded file to `client_secrets.json` and place it in the **root directory of this project**.\n\n### Step 2: Install Dependencies\n\nClone this repository and install the required Python packages for both the server and the client.\n\n```bash\ngit clone <your-repo-url>\ncd <your-repo-name>\nuv venv # Create a virtual environment\nsource .venv/bin/activate # On Windows: .venv\\Scripts\\activate\n# Install server dependencies\nuv install -r requirements.txt\n```\n\n### Step 3: Run the One-Time Authorization\n\nBefore you can run the server, you need to authorize it with your Google account. Run the `get_credentials.py` script from your terminal:\n\n```bash\npython get_credentials.py\n```\n\n*   This will open a browser window.\n*   Log in with your Google account and grant the requested permissions.\n*   After you approve, the script will automatically create a `token.json` file in the project directory. This file stores your authorization tokens so you don't have to log in every time.\n\n### Step 4: Set Up and Run the AI Agent Client\n\nAs an example, I'll show you how to configure Claude Desktop as an MCP Client. However, you can use whatever MCP Client available on Internet.\n\n1.  **Configure Claude Desktop**:\n    \n    (Windows) Open `C:\\Users\\<user>\\AppData\\Roaming\\Claude\\claude_desktop_config.json` and add \n    ```json\n    {\n        \"mcpServers\": {\n            \"GsuiteMCPServer\": {\n                \"command\": \"absolute-path-to-your-python-executable-in-virtual-environment\",\n                \"args\": [\n                    \"<mcp_server.py-abs-path>\"\n                ]\n            }\n        }\n    }   \n    ```\n\n2.  **Use the available tools**:\n    Ask Claude something like:\n    \n    - Create a Google Calendar Event based on the content of the last mail being sent to my inbox.\n      If you cannot create an event, create a sort of 'reminder event' in order to remind me to check that email.\n    \n    - Create a Google Docs drafting a trip plan in San Francisco.\n    \n    - Check what are my availabilities next week for a two-hours call with a customer.\n\n    - Edit the start time of the meeting with the VCs to 10 A.M.\n\n    - Search for new e-mails in my inbox talking about AI news.\n\n    - Send an email to my supplier telling him he's late and I need the next lot as soon as possible.\n\n    - Much more.\n\n\n## Roadmap & Future Plans\n\nThis server is the foundation for a much larger vision. The goal is to provide a comprehensive MCP server for the entire Google Workspace suite. Future additions will include tools for:\n\n*   📝 **Google Docs**: More granular document manipulation, such as appending text or reading specific sections instead of overwriting the whole file.\n*   📊 **Google Sheets**: Read data from sheets, append new rows, update cells, and even perform calculations.\n*   📨 New functionalities for **Gmail**.\n*   📅 New functionalities for **Google Calendar**.\n*   🗂️ New functionalities for **Google Drive**.\n\nContributions are welcome!\n\n## Contributing\n\nIf you'd like to contribute, please feel free to fork the repository and submit a pull request. For major changes, please open an issue first to discuss what you would like to change.\n\n## License\n\nThis project is licensed under the MIT License. See the `LICENSE` file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "GsuiteMCPServer": {
+          "command": "absolute-path-to-your-python-executable-in-virtual-environment",
+          "args": ["<mcp_server.py-abs-path>"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    }
+  },
+  "github_info": {
+    "owner": "giuseppe-coco",
+    "repo": "Google-Workspace-MCP-Server",
+    "url": "https://github.com/giuseppe-coco/Google-Workspace-MCP-Server",
+    "name": "Google-Workspace-MCP-Server",
+    "path": null,
+    "stars": 8,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "385d714707afc16c157864986cb745f34e6cc97a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:54:54.748Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "google-api-python-client",
+      "importance": 9
+    },
+    {
+      "name": "google-auth-oauthlib",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp[cli]\ngoogle-api-python-client\ngoogle-auth-oauthlib"
+}

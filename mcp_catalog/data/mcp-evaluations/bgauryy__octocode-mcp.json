@@ -1,0 +1,108 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "bgauryy__octocode-mcp",
+  "display_name": "octocode-mcp",
+  "version": "1.0.0",
+  "description": "Code search analysys MCP",
+  "author": {
+    "name": "bgauryy"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Octocode MCP\n\n**The Perfect AI Code Assistant - Advanced Search & Discovery Across GitHub**\n\n<div>\n  <img src=\"./assets/logo.png\" width=\"400px\">\n  \n  [![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](./package.json)\n  [![License](https://img.shields.io/badge/license-MIT-green.svg)](./package.json)\n  [![MCP](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io/)\n  [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/beTNk8at)\n    [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕-orange.svg)](https://buymeacoffee.com/bgauryy)\n\n</div>\n\n## 🌐 For More Details - [octocode.ai](https://octocode.ai)\n## 📚 For Technical Details - [Technical Summary](./docs/summary.md)\n## 🐳 For Docker Setup - [Docker Guide](./docker/README.Docker.md)\n## 💬 Join Our Community - [Discord](https://discord.gg/beTNk8at) - Follow this for useful updates and discussions\n\n**The perfect code assistant that can help understand anything.** Transform your AI assistant into an expert code researcher with instant access to millions of repositories and packages across GitHub and npm ecosystems.\n\nInstead of manually browsing repositories, ask questions like:\n- *\"How did React implement concurrent rendering?\"*\n- *\"Show me authentication patterns in Next.js applications\"*\n- *\"Find examples of how to use this specific API\"*\n- *\"What's the architecture of this library?\"*\n- *\"How do I use this MCP tool effectively?\"*\n\n## 🌟 Featured On\n\n### modelcontextprotocol/servers - Official Community MCP Server \n[![GitHub stars](https://img.shields.io/github/stars/modelcontextprotocol/servers?style=social)](https://github.com/modelcontextprotocol/servers)\n\n### Community Collections\n#### punkpeye/awesome-mcp-servers\n[![GitHub stars](https://img.shields.io/github/stars/punkpeye/awesome-mcp-servers?style=social)](https://github.com/punkpeye/awesome-mcp-servers)\n\n#### appcypher/awesome-mcp-servers\n[![GitHub stars](https://img.shields.io/github/stars/appcypher/awesome-mcp-servers?style=social)](https://github.com/appcypher/awesome-mcp-servers)\n\n#### Puliczek/awesome-mcp-security\n[![GitHub stars](https://img.shields.io/github/stars/Puliczek/awesome-mcp-security?style=social)](https://github.com/Puliczek/awesome-mcp-security)\n\n### MCP Directories & Tools\n[![MCP.so](https://img.shields.io/badge/MCP.so-Server%20Directory-green.svg?logo=web)](https://mcp.so/server/octocode/bgauryy)\n[![PulseMCP](https://img.shields.io/badge/PulseMCP-Server%20Registry-red.svg?logo=pulse)](https://www.pulsemcp.com/servers/bgauryy-octocode)\n[![DevTool.io](https://img.shields.io/badge/DevTool.io-Development%20Tool-teal.svg?logo=tools)](https://devtool.io/tool/octocode-mcp)\n\n## 🎯 Who Is This For?\n\n### For Developers\nNavigate complex multi-repo architectures, understand organizational issues at scale, and generate custom documentation on-demand from real code examples. Create contextual documentation directly in your IDE, or ask OctoCode to learn from any repository and implement similar patterns in your current project.\n\n### For Product & Engineering Managers\nGain unprecedented visibility into application behavior through semantic code search, track development progress across teams, and understand the real implementation behind product features.\n\n### For Security Researchers\nDiscover security patterns, vulnerabilities, and compliance issues across both public and private repositories with advanced pattern matching and cross-codebase analysis.\n\n### For Large Organizations\nDramatically increase development velocity by enabling teams to instantly learn from existing codebases, understand cross-team implementations, and replicate proven patterns—transforming institutional knowledge into actionable development acceleration.\n\n## 🚀 Key Benefits\n\n**Zero-Configuration Setup** - Works with existing GitHub CLI authentication, no personal access tokens needed\n\n**Enterprise-Ready Security** - Respects organizational permissions with content sanitization\n\n**AI Token Optimization** - Reduces AI costs by through intelligent content processing\n\n**Cross-Platform Excellence** - Native Windows PowerShell support with automatic path detection\n\n**Universal Access** - Works seamlessly with public, private, and organization repositories\n\n## Quick Start 🚀\n\n### 1. Install Prerequisites\n\n**macOS/Linux:**\n```bash\n# Install Node.js 18.12+\nbrew install node\n\n# Install GitHub CLI\nbrew install gh\n```\n\n**Windows:**\n```powershell\n# Install using WinGet (recommended)\nwinget install Microsoft.PowerShell  # PowerShell 7+ for better security\nwinget install GitHub.cli\nwinget install OpenJS.NodeJS\n\n# Or using Chocolatey\nchoco install powershell-core nodejs github-cli\n\n# Or using Scoop\nscoop install gh nodejs\n```\n\n### 2. Authenticate\n```bash\n# Login to GitHub (opens browser)\ngh auth login\n\n# Login to NPM (for package research)\nnpm login\n```\n\n### 3. Add to Claude Desktop\n```bash\n# For Claude Desktop users\nclaude mcp add octocode npx 'octocode-mcp@latest'\n```\n\n### Or Add to MCP Configuration Manually\n```json\n{\n  \"octocode-mcp\": {\n    \"command\": \"npx\",\n    \"args\": [\"octocode-mcp\"]\n  }\n}\n```\n\n**That's it!** Octocode automatically works with your organization's private repositories.\n\n## 🐳 Docker Support\n\nRun Octocode MCP in a Docker container while maintaining full GitHub CLI authentication. Perfect for consistent environments and deployment.\n\n[**See Docker Setup Guide →**](./docker/README.Docker.md)\n\n## 🛠️ What You Can Do\n\n### Deep Project Research & Analysis\n- **Issue Search & Analysis**: Understand project challenges, feature requests, and bug patterns\n- **Commit History Research**: Trace feature implementations and bug fixes across time\n- **Pull Request & Code Review Analysis**: Access actual code diffs and understand development workflows\n- **Project Progress Tracking**: Monitor development velocity and team collaboration patterns\n\n### Core GitHub Research\n- **Repository Discovery**: Find repositories by topic, language, and activity\n- **Code Search**: Find exact patterns and implementations across millions of repositories\n- **Cross-Repository Flow Understanding**: Connect related changes across multiple repositories\n- **Repository Architecture**: Navigate and understand project structures\n\n### Package Ecosystem Tools\n- **NPM Package Discovery**: Analyze Node.js packages with comprehensive metadata\n- **Python Package Integration**: Explore PyPI packages with cross-ecosystem comparison\n- **Package Analysis**: Deep-dive into versions, dependencies, and repository connections\n\n### Advanced Research Capabilities\n- **Code Pattern Discovery**: Identify implementation patterns and best practices\n- **Security & Compliance Research**: Search for security patterns across codebases\n- **Team Collaboration Analysis**: Understand code review processes and team dynamics\n- **Real-time Documentation**: Generate custom docs from live code for any topic\n\n> **📚 For detailed technical architecture, tool specifications, and implementation details, see [Technical Summary](./docs/summary.md)**\n\n## DXT Extension 📦\n\nThis project is available as a **Desktop Extension (DXT)** for easy installation in AI applications like Claude Desktop.\n\n### Quick DXT Setup\n\n```bash\n# Install dependencies\nyarn install\n\n# Build the DXT package\nyarn dxt:pack\n```\n\nThe generated `octocode-mcp.dxt` file can be installed in Claude Desktop by simply clicking on it.\n\n**DXT Scripts:**\n- `yarn dxt:validate` - Validate the manifest.json file\n- `yarn dxt:pack` - Build and package the extension\n- `yarn dxt:release` - Full release pipeline (build → pack → sign → verify)\n\n## Best Practices 💡\n\n**Ask Natural Questions:**\n- \"How does authentication work in this project?\"\n- \"What libraries implement this pattern?\"\n- \"Show me NPM packages that solve X problem\"\n- \"How has this approach evolved over time?\"\n\n**Let AI Guide Discovery:**\n- Start with broad queries - the system will intelligently narrow down\n- Trust the smart fallbacks - automatic retry with alternatives\n- Build on previous searches - maintain context for deeper exploration\n- Works everywhere - public, private, and organization repositories\n\n## Troubleshooting 🔧\n\n**Cross-Platform Commands:**\n```bash\n# Check GitHub CLI status\ngh auth status\n\n# Re-authenticate if needed\ngh auth logout && gh auth login\n\n# Check NPM access\nnpm whoami\n```\n\n**Windows-Specific:**\n```powershell\n# Check PowerShell version (7+ recommended)\n$PSVersionTable.PSVersion\n\n# Test executable detection\nwhere.exe gh\nwhere.exe npm\n```\n\n**Common Solutions:**\n- No results? Try broader search terms\n- Private repos not found? Check `gh auth status` for organization membership\n- Windows issues? Install PowerShell 7+ for better security\n- Permission errors? Check executable permissions and PATH configuration\n\n## Security & Privacy 🛡️\n\n### Local-First Architecture\n- **🏠 100% Local** - Runs entirely on your machine\n- **🚫 Zero Data Collection** - No telemetry or data transmission\n- **🔑 Safe Authentication** - Uses GitHub CLI OAuth, no personal tokens needed\n\n### Enterprise Security\n- **🛡️ Content Protection** - Input validation and content sanitization\n- **🔐 Secret Detection** - Automatic detection and redaction of sensitive data patterns\n- **⚪ Safe Commands Only** - Pre-approved GitHub CLI and NPM commands only\n\n> **📚 For comprehensive security architecture details, see [Technical Summary](./docs/summary.md)**\n\n## Background 💭\n\nThis project started as a personal tool while working at Wix, born from the challenge of navigating large codebases and keeping up with rapidly evolving technology landscapes. What began as a side project evolved into **the perfect code assistant that can help understand anything**.\n\nThe goal: **make code exploration as intelligent as having a senior developer guide you through any codebase.**\n\n## License 📄\n\nMIT License - See [LICENSE](./LICENSE.md) for details.\n\n---",
+  "category": "Development",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "octocode-mcp": {
+          "command": "npx",
+          "args": ["octocode-mcp"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "bgauryy",
+    "repo": "octocode-mcp",
+    "url": "https://github.com/bgauryy/octocode-mcp",
+    "name": "octocode-mcp",
+    "path": null,
+    "stars": 309,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "2060aa5deb0f00bcde39e71c67395745bda591ac"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:19.992Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "async-mutex",
+      "importance": 4
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "clean-css",
+      "importance": 5
+    },
+    {
+      "name": "html-minifier-terser",
+      "importance": 5
+    },
+    {
+      "name": "node-cache",
+      "importance": 6
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "terser",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"octocode-mcp\",\n  \"version\": \"3.0.1\",\n  \"description\": \"Model Context Protocol (MCP) server for advanced GitHub repository analysis, code discovery, and npm package exploration. Provides AI assistants with powerful tools to search, analyze, and understand codebases across GitHub and npm ecosystems.\",\n  \"author\": \"Guy Bary <bgauryy@gmail.com>\",\n  \"homepage\": \"https://octocode.ai\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/bgauryy/octocode-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/bgauryy/octocode-mcp/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.12.0\"\n  },\n  \"main\": \"dist/index.js\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"bin\": \"./dist/index.js\",\n  \"scripts\": {\n    \"build\": \"yarn lint && rollup -c\",\n    \"build:dev\": \"rollup -c\",\n    \"build:watch\": \"rollup -c --watch\",\n    \"prepublishOnly\": \"yarn lint && yarn test && rollup -c\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest --watch\",\n    \"test:coverage\": \"vitest run --coverage --coverage.include=\\\"src/**\\\"\",\n    \"test:ui\": \"vitest --ui\",\n    \"debug\": \"npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"lint\": \"eslint src/**/*.ts tests/**/*.ts\",\n    \"lint:fix\": \"eslint src/**/*.ts tests/**/*.ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.{ts,js,json}\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.{ts,js,json}\\\"\",\n    \"dxt:validate\": \"dxt validate manifest.json\",\n    \"dxt:pack\": \"yarn build && dxt pack . octocode-mcp.dxt\",\n    \"dxt:release\": \"yarn build && dxt pack . octocode-mcp.dxt && dxt sign octocode-mcp.dxt --self-signed && dxt verify octocode-mcp.dxt\"\n  },\n  \"files\": [\n    \"dist/index.js\",\n    \"dist/src/**/*.js\",\n    \"manifest.json\",\n    \"assets/logo.png\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"async-mutex\": \"^0.5.0\",\n    \"axios\": \"^1.10.0\",\n    \"clean-css\": \"^5.3.3\",\n    \"html-minifier-terser\": \"^7.2.0\",\n    \"node-cache\": \"^5.1.2\",\n    \"node-fetch\": \"^3.3.2\",\n    \"terser\": \"^5.43.1\",\n    \"zod\": \"^3.25.26\"\n  },\n  \"devDependencies\": {\n    \"@anthropic-ai/dxt\": \"^0.2.1\",\n    \"@rollup/plugin-commonjs\": \"^28.0.3\",\n    \"@rollup/plugin-json\": \"^6.1.0\",\n    \"@rollup/plugin-node-resolve\": \"^16.0.1\",\n    \"@rollup/plugin-typescript\": \"^12.1.2\",\n    \"@types/clean-css\": \"^4.2.11\",\n    \"@types/html-minifier-terser\": \"^7.0.2\",\n    \"@types/node\": \"^22.15.29\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.21.0\",\n    \"@typescript-eslint/parser\": \"^6.21.0\",\n    \"@vitest/coverage-v8\": \"^2.1.5\",\n    \"@vitest/ui\": \"^2.1.5\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.4.1\",\n    \"prettier\": \"^3.5.3\",\n    \"rollup\": \"^4.41.1\",\n    \"rollup-plugin-terser\": \"^7.0.2\",\n    \"tslib\": \"^2.8.1\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^2.1.5\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"github\",\n    \"github-api\",\n    \"code-analysis\",\n    \"code-search\",\n    \"repository-analysis\",\n    \"npm\",\n    \"npm-search\",\n    \"developer-tools\",\n    \"ai-tools\",\n    \"claude\",\n    \"openai\",\n    \"anthropic\",\n    \"code-discovery\",\n    \"codebase-exploration\",\n    \"github-search\",\n    \"semantic-search\",\n    \"typescript\",\n    \"nodejs\",\n    \"cli-tool\",\n    \"dxt\",\n    \"desktop-extension\"\n  ]\n}\n"
+}

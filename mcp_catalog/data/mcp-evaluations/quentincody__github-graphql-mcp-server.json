@@ -1,0 +1,93 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "quentincody__github-graphql-mcp-server",
+  "display_name": "github-graphql-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server from QuentinCody/github-graphql-mcp-server",
+  "author": {
+    "name": "QuentinCody"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GitHub GraphQL MCP Server\n\nA Model Context Protocol (MCP) server that provides access to GitHub's GraphQL API. This server exposes a single tool that allows executing arbitrary GraphQL queries and mutations against GitHub's API.\n\n## Features\n\n- Execute any GraphQL query against GitHub's API\n- Comprehensive error handling and reporting\n- Detailed documentation with example queries\n- Support for variables in GraphQL operations\n\n## Prerequisites\n\n- Python 3.10 or higher\n- A GitHub Personal Access Token (PAT)\n\n## Installation\n\n1. Clone this repository\n2. Set up a virtual environment (recommended):\n   ```bash\n   # On macOS/Linux\n   python3 -m venv .venv\n   source .venv/bin/activate\n   \n   # On Windows\n   python -m venv .venv\n   .venv\\Scripts\\activate\n   ```\n3. Install dependencies:\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n## Usage\n\n### Running the Server\n\n```bash\n# If using a virtual environment, make sure it's activated\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n\n# Run the server with your GitHub token\nGITHUB_TOKEN=your_github_token_here python github_graphql_mcp_server.py\n```\n\n### Configuring with Claude for Desktop\n\nAdd the following to your Claude Desktop configuration file:\n\n```json\n{\n  \"github-graphql\": {\n    \"command\": \"/absolute/path/to/your/.venv/bin/python\",\n    \"args\": [\n        \"/absolute/path/to/github_graphql_mcp_server.py\"\n    ],\n    \"options\": {\n        \"cwd\": \"/absolute/path/to/repository\"\n    },\n    \"env\": {\n        \"GITHUB_TOKEN\": \"your_github_token_here\"\n    }\n  }\n}\n```\n\nReplace `/absolute/path/to/` with the actual path to your server file and add your GitHub token.\n\n### Example Queries\n\n#### Get Repository Information\n\n```graphql\nquery GetRepo($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    name\n    description\n    stargazerCount\n    url\n    createdAt\n    owner {\n      login\n      avatarUrl\n    }\n  }\n}\n```\n\nVariables:\n```json\n{\n  \"owner\": \"octocat\",\n  \"name\": \"Hello-World\"\n}\n```\n\n#### Search Repositories\n\n```graphql\nquery SearchRepos($query: String!, $first: Int!) {\n  search(query: $query, type: REPOSITORY, first: $first) {\n    repositoryCount\n    edges {\n      node {\n        ... on Repository {\n          name\n          owner { login }\n          description\n          stargazerCount\n          url\n        }\n      }\n    }\n  }\n}\n```\n\nVariables:\n```json\n{\n  \"query\": \"language:python stars:1000\",\n  \"first\": 5\n}\n```\n\n#### Get User Information\n\n```graphql\nquery GetUserInfo($login: String!) {\n  user(login: $login) {\n    name\n    login\n    bio\n    avatarUrl\n    followers {\n      totalCount\n    }\n    repositories(first: 5, orderBy: {field: STARGAZERS, direction: DESC}) {\n      nodes {\n        name\n        description\n        stargazerCount\n      }\n    }\n  }\n}\n```\n\nVariables:\n```json\n{\n  \"login\": \"octocat\"\n}\n```\n\n## GitHub API Rate Limits\n\nBe aware of GitHub's API rate limits:\n- Authenticated requests: 5,000 requests per hour\n- Unauthenticated requests: 60 requests per hour\n\n## Troubleshooting\n\nIf you encounter issues:\n\n1. Check your GitHub token has the correct permissions\n2. Verify your virtual environment is properly set up and activated\n3. Ensure your token is correctly set in the environment variables\n4. If using Claude Desktop, ensure the path to Python is correct (use absolute path to the virtual environment Python)\n5. Look at the server logs for error messages\n6. Ensure your GraphQL query is valid for GitHub's schema\n7. Restart Claude for Desktop after making config changes\n\n### Common Errors\n\n**`spawn python ENOENT`**\n- This error means the Python executable wasn't found\n- Solution: Use the full path to your Python executable in the virtual environment (e.g., `/path/to/your/.venv/bin/python`)\n\n**`ModuleNotFoundError: No module named 'httpx'` (or other packages)**\n- The Python environment doesn't have the required dependencies installed\n- Solution: Make sure you've activated the virtual environment and run `pip install -r requirements.txt`\n\n**`Error: GitHub token not found in environment variables`**\n- The server couldn't find your GitHub token\n- Solution: Make sure you've set the GITHUB_TOKEN environment variable",
+  "category": "Development",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "github-graphql-direct": {
+          "command": "python",
+          "args": ["github_graphql_mcp_server.py"],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token_here"
+          }
+        },
+        "github-graphql-configured": {
+          "command": "/absolute/path/to/your/.venv/bin/python",
+          "args": ["/absolute/path/to/github_graphql_mcp_server.py"],
+          "env": {
+            "GITHUB_TOKEN": "your_github_token_here"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "QuentinCody",
+    "repo": "github-graphql-mcp-server",
+    "url": "https://github.com/QuentinCody/github-graphql-mcp-server",
+    "name": "github-graphql-mcp-server",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "36031bd0daa26acbe8d513e571fc65ee296bb03e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:54:54.064Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nhttpx>=0.25.0\nmcp>=1.2.0\npython-dotenv>=1.0.0 "
+}

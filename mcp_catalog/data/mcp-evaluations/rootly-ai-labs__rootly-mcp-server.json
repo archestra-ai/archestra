@@ -1,0 +1,111 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "rootly-ai-labs__rootly-mcp-server",
+  "display_name": "Rootly-MCP-server",
+  "version": "1.0.0",
+  "description": "Rootly MCP server",
+  "author": {
+    "name": "Rootly-AI-Labs"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Rootly MCP Server\n\nAn MCP server for the [Rootly API](https://docs.rootly.com/api-reference/overview) that integrates seamlessly with MCP-compatible editors like Cursor, Windsurf, and Claude. Resolve production incidents in under a minute without leaving your IDE.\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=rootly&config=eyJjb21tYW5kIjoibnB4IC15IG1jcC1yZW1vdGUgaHR0cHM6Ly9tY3Aucm9vdGx5LmNvbS9zc2UgLS1oZWFkZXIgQXV0aG9yaXphdGlvbjoke1JPT1RMWV9BVVRIX0hFQURFUn0iLCJlbnYiOnsiUk9PVExZX0FVVEhfSEVBREVSIjoiQmVhcmVyIDxZT1VSX1JPT1RMWV9BUElfVE9LRU4%2BIn19)\n\n![Demo GIF](rootly-mcp-server-demo.gif)\n\n## Prerequisites\n\n- Python 3.12 or higher\n- `uv` package manager\n  ```bash\n  curl -LsSf https://astral.sh/uv/install.sh | sh\n  ```\n- [Rootly API token](https://docs.rootly.com/api-reference/overview#how-to-generate-an-api-key%3F)\n\n## Installation\n\nInstall via our [PyPi package](https://pypi.org/project/rootly-mcp-server/) or by cloning this repository.\n\nConfigure your MCP-compatible editor (tested with Cursor and Windsurf) with the following:\n\n### With uv\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"tool\",\n        \"run\",\n        \"--from\",\n        \"rootly-mcp-server\",\n        \"rootly-mcp-server\",\n      ],      \n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n### With uv-tool-uvx\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"rootly-mcp-server\",\n        \"rootly-mcp-server\",\n      ],      \n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\nTo customize `allowed_paths` and access additional Rootly API paths, clone the repository and use this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--directory\",\n        \"/path/to/rootly-mcp-server\",\n        \"rootly-mcp-server\"\n      ],\n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n## Features\n\n- **Dynamic Tool Generation**: Automatically creates MCP resources from Rootly's OpenAPI (Swagger) specification\n- **Smart Pagination**: Defaults to 10 items per request for incident endpoints to prevent context window overflow\n- **API Filtering**: Limits exposed API endpoints for security and performance\n\n### Whitelisted Endpoints\n\nBy default, the following Rootly API endpoints are exposed to the AI agent (see `allowed_paths` in `src/rootly_mcp_server/server.py`):\n\n```\n/v1/incidents\n/v1/incidents/{incident_id}/alerts\n/v1/alerts\n/v1/alerts/{alert_id}\n/v1/severities\n/v1/severities/{severity_id}\n/v1/teams\n/v1/teams/{team_id}\n/v1/services\n/v1/services/{service_id}\n/v1/functionalities\n/v1/functionalities/{functionality_id}\n/v1/incident_types\n/v1/incident_types/{incident_type_id}\n/v1/incident_action_items\n/v1/incident_action_items/{incident_action_item_id}\n/v1/incidents/{incident_id}/action_items\n/v1/workflows\n/v1/workflows/{workflow_id}\n/v1/workflow_runs\n/v1/workflow_runs/{workflow_run_id}\n/v1/environments\n/v1/environments/{environment_id}\n/v1/users\n/v1/users/{user_id}\n/v1/users/me\n/v1/status_pages\n/v1/status_pages/{status_page_id}\n```\n\n### Why Path Limiting?\n\nWe limit exposed API paths for two key reasons:\n\n1. **Context Management**: Rootly's comprehensive API can overwhelm AI agents, affecting their ability to perform simple tasks effectively\n2. **Security**: Control which information and actions are accessible through the MCP server\n\nTo expose additional paths, modify the `allowed_paths` variable in `src/rootly_mcp_server/server.py`.\n\n## About Rootly AI Labs\n\nThis project was developed by [Rootly AI Labs](https://labs.rootly.ai/), where we're building the future of system reliability and operational excellence. As an open-source incubator, we share ideas, experiment, and rapidly prototype solutions that benefit the entire community.\n![Rootly AI logo](https://github.com/Rootly-AI-Labs/EventOrOutage/raw/main/rootly-ai.png)\n\n## Developer Setup & Troubleshooting\n\n### Prerequisites\n- Python 3.12 or higher\n- [`uv`](https://github.com/astral-sh/uv) for dependency management\n\n### 1. Set Up Virtual Environment\n\nCreate and activate a virtual environment:\n\n```bash\nuv venv .venv\nsource .venv/bin/activate  # Always activate before running scripts\n```\n\n### 2. Install Dependencies\n\nInstall all project dependencies:\n\n```bash\nuv pip install .\n```\n\nTo add new dependencies during development:\n```bash\nuv pip install <package>\n```\n\n### 3. Verify Installation\n\nRun the test client to ensure everything is configured correctly:\n\n```bash\npython src/rootly_mcp_server/test_client.py\n```\n\n### Connect to Hosted MCP Server\n\nAlternatively, connect directly to our hosted MCP server:\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://mcp.rootly.com/sse\",\n        \"--header\",\n        \"Authorization:${ROOTLY_AUTH_HEADER}\"\n      ],\n      \"env\": {\n        \"ROOTLY_AUTH_HEADER\": \"Bearer <YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n",
+  "category": "Development",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "rootly-mcp-server-uv-tool-run": {
+          "command": "uv",
+          "args": ["tool", "run", "--from", "rootly-mcp-server", "rootly-mcp-server"],
+          "env": {
+            "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+          }
+        },
+        "rootly-mcp-server-uvx": {
+          "command": "uvx",
+          "args": ["--from", "rootly-mcp-server", "rootly-mcp-server"],
+          "env": {
+            "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+          }
+        },
+        "rootly-mcp-server-local-clone": {
+          "command": "uv",
+          "args": ["run", "--directory", "/path/to/rootly-mcp-server", "rootly-mcp-server"],
+          "env": {
+            "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+          }
+        },
+        "mcp-remote-hosted": {
+          "command": "npx",
+          "args": ["-y", "mcp-remote", "https://mcp.rootly.com/sse", "--header", "Authorization:${ROOTLY_AUTH_HEADER}"],
+          "env": {
+            "ROOTLY_AUTH_HEADER": "Bearer <YOUR_ROOTLY_API_TOKEN>"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Rootly-AI-Labs",
+    "repo": "Rootly-MCP-server",
+    "url": "https://github.com/Rootly-AI-Labs/Rootly-MCP-server",
+    "name": "Rootly-MCP-server",
+    "path": null,
+    "stars": 29,
+    "contributors": 7,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "2d040cd2c73ecdb0da2c6d93da967e7cfb859794"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:22.855Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"rootly-mcp-server\"\nversion = \"2.0.1\"\ndescription = \"A Model Context Protocol server for Rootly APIs using OpenAPI spec\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nauthors = [{ name = \"Rootly AI Labs\", email = \"support@rootly.com\" }]\nkeywords = [\"rootly\", \"mcp\", \"llm\", \"automation\", \"incidents\"]\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICEN[CS]E*\"]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Intended Audience :: Developers\",\n    \"Topic :: Software Development :: Build Tools\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n]\ndependencies = [\n    # Pinned to 2.4.0 to avoid unexpected breaking changes - to upgrade, just bump the pinned version here\n    # and run `uv sync` to update the lockfile.\n    \"fastmcp==2.4.0\",\n    \"requests>=2.28.0\", # For API calls\n    \"httpx>=0.24.0\",    # For async HTTP client\n    \"pydantic>=2.0.0\",  # For data validation\n]\n\n[project.urls]\nHomepage = \"https://github.com/Rootly-AI-Labs/Rootly-MCP-server\"\nIssues = \"https://github.com/Rootly-AI-Labs/Rootly-MCP-server/issues\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/rootly_mcp_server\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.hatch.build.targets.wheel.sources]\n\"src\" = \"\"\n\n[tool.hatch.build.targets.wheel.include]\n\"src/rootly_mcp_server/data\" = \"rootly_mcp_server/data\"\n\n[project.scripts]\nrootly-mcp-server = \"rootly_mcp_server.__main__:main\"\n\n[project.optional-dependencies]\ndev = [\"black>=23.0.0\", \"isort>=5.0.0\"]\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"ruff>=0.7.3\", \"pytest>=8.0.0\"]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\n"
+}

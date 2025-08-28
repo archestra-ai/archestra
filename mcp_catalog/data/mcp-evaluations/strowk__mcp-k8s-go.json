@@ -1,0 +1,124 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "strowk__mcp-k8s-go",
+  "display_name": "mcp-k8s-go",
+  "version": "1.0.0",
+  "description": "MCP server connecting to Kubernetes",
+  "author": {
+    "name": "strowk"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<h4 align=\"center\">Golang-based MCP server connecting to Kubernetes</h4>\r\n\r\n<h1 align=\"center\">\r\n   <img src=\"docs/images/logo.png\" width=\"180\"/>\r\n   <br/>\r\n   MCP K8S Go\r\n</h1>\r\n\r\n<p align=\"center\">\r\n  <a href=\"#features\">Features</a> ⚙\r\n  <a href=\"#browse-with-inspector\">Browse With Inspector</a> ⚙\r\n  <a href=\"#use-with-claude\">Use With Claude</a> ⚙\r\n  <a href=\"https://github.com/strowk/mcp-k8s-go/blob/main/CONTRIBUTING.md\">Contributing ↗</a> ⚙\r\n  <a href=\"https://modelcontextprotocol.io\">About MCP ↗</a>\r\n</p>\r\n\r\n<p align=\"center\">\r\n    <a href=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/dependabot/dependabot-updates\"><img src=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/dependabot/dependabot-updates/badge.svg\"></a>\r\n    <a href=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/test.yaml\"><img src=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/test.yaml/badge.svg\"></a>\r\n\t  <a href=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/golangci-lint.yaml\"><img src=\"https://github.com/strowk/mcp-k8s-go/actions/workflows/golangci-lint.yaml/badge.svg\"/></a>\r\n    <br/>\r\n    <a href=\"https://github.com/strowk/mcp-k8s-go/releases/latest\"><img src=\"https://img.shields.io/github/v/release/strowk/mcp-k8s-go?logo=github&color=22ff22\" alt=\"latest release badge\"></a>\r\n    <a href=\"https://goreportcard.com/report/github.com/strowk/mcp-k8s-go\"><img src=\"https://goreportcard.com/badge/github.com/strowk/mcp-k8s-go\" alt=\"Go Reference\"></a>\r\n    <a href=\"https://github.com/strowk/mcp-k8s-go/blob/main/LICENSE\"><img src=\"https://img.shields.io/github/license/strowk/mcp-k8s-go\" alt=\"license badge\"></a>\r\n</p>\r\n\r\n## Features\r\n\r\nMCP 💬 prompt 🗂️ resource 🤖 tool \r\n\r\n- 🗂️🤖 List Kubernetes contexts\r\n- 💬🤖 List Kubernetes namespaces\r\n- 🤖 List, get, create and modify any Kubernetes resources\r\n  - includes custom mappings for resources like pods, services, deployments\r\n- 🤖 List Kubernetes nodes\r\n- 💬 List Kubernetes pods\r\n- 🤖 Get Kubernetes events\r\n- 🤖 Get Kubernetes pod logs\r\n- 🤖 Run command in Kubernetes pod\r\n\r\n## Browse With Inspector\r\n\r\nTo use latest published version with Inspector you can run this:\r\n\r\n```bash\r\nnpx @modelcontextprotocol/inspector npx @strowk/mcp-k8s\r\n```\r\n\r\n## Use With Claude\r\n\r\n<details><summary><b>\r\nDemo Usage\r\n</b></summary>\r\n\r\nFollowing chat with Claude Desktop demonstrates how it looks when selected particular context as a resource and then asked to check pod logs for errors in kube-system namespace:\r\n\r\n![Claude Desktop](docs/images/claude-desktop-logs.png)\r\n\r\n</details>\r\n\r\nTo use this MCP server with Claude Desktop (or any other client) you might need to choose which way of installation to use.\r\n\r\nYou have multiple options:\r\n\r\n|              | <a href=\"#using-smithery\">Smithery</a> | <a href=\"#using-mcp-get\">mcp-get</a> | <a href=\"#prebuilt-from-npm\">Pre-built NPM</a> | <a href=\"#from-github-releases\">Pre-built in Github</a> | <a href=\"#building-from-source\">From sources</a> | <a href=\"#using-docker\">Using Docker</a> |\r\n| ------------ | -------------------------------------- | ------------------------------------ | ---------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- |\r\n| Claude Setup | Auto                                   | Auto                                 | Manual                                         | Manual                                                  | Manual                                           | Manual                                   |\r\n| Prerequisite | Node.js                                | Node.js                              | Node.js                                        | None                                                    | Golang                                           | Docker                                   |\r\n\r\n### Using Smithery\r\n\r\nTo install MCP K8S Go for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@strowk/mcp-k8s):\r\n\r\n```bash\r\nnpx -y @smithery/cli install @strowk/mcp-k8s --client claude\r\n```\r\n\r\n### Using mcp-get\r\n\r\nTo install MCP K8S Go for Claude Desktop automatically via [mcp-get](https://mcp-get.com/packages/%40strowk%2Fmcp-k8s):\r\n\r\n```bash\r\nnpx @michaellatman/mcp-get@latest install @strowk/mcp-k8s\r\n```\r\n\r\n### Manually with prebuilt binaries\r\n\r\n#### Prebuilt from npm\r\n\r\nUse this if you have npm installed and want to use pre-built binaries:\r\n\r\n```bash\r\nnpm install -g @strowk/mcp-k8s\r\n```\r\n\r\nThen check version by running `mcp-k8s --version` and if this printed installed version, you can proceed to add configuration to `claude_desktop_config.json` file:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"mcp_k8s\": {\r\n      \"command\": \"mcp-k8s\",\r\n      \"args\": []\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n, or using `npx` with any client:\r\n\r\n```bash\r\nnpx @strowk/mcp-k8s\r\n```\r\n\r\nFor example for Claude:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"mcp_k8s\": {\r\n      \"command\": \"npx\",\r\n      \"args\": [\r\n        \"@strowk/mcp-k8s\"\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n#### From GitHub releases\r\n\r\nHead to [GitHub releases](https://github.com/strowk/mcp-k8s-go/releases) and download the latest release for your platform.\r\n\r\nUnpack the archive, which would contain binary named `mcp-k8s-go`, put that binary somewhere in your PATH and then add the following configuration to the `claude_desktop_config.json` file:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"mcp_k8s\": {\r\n      \"command\": \"mcp-k8s-go\",\r\n      \"args\": []\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Building from source\r\n\r\nYou would need Golang installed to build this project:\r\n\r\n```bash\r\ngo get github.com/strowk/mcp-k8s-go\r\ngo install github.com/strowk/mcp-k8s-go\r\n```\r\n\r\n, and then add the following configuration to the `claude_desktop_config.json` file:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"mcp_k8s_go\": {\r\n      \"command\": \"mcp-k8s-go\",\r\n      \"args\": []\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Using Docker\r\n\r\nThis server is built and published to Docker Hub since 0.3.1-beta.2 release with multi-arch images available for linux/amd64 and linux/arm64 architectures.\r\n\r\nYou can use latest tag f.e like this:\r\n\r\n```bash\r\ndocker run -i -v ~/.kube/config:/home/nonroot/.kube/config --rm mcpk8s/server:latest\r\n```\r\n\r\nWindows users might need to replace `~/.kube/config` with `//c/Users/<username>/.kube/config` at least in Git Bash.\r\n\r\nFor Claude:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"mcp_k8s_go\": {\r\n      \"command\": \"docker\",\r\n      \"args\": [\r\n        \"run\",\r\n        \"-i\",\r\n        \"-v\",\r\n        \"~/.kube/config:/home/nonroot/.kube/config\",\r\n        \"--rm\",\r\n        \"mcpk8s/server:latest\"\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Environment Variables and Command-line Options\r\n\r\nThe following environment variables are used by the MCP server:\r\n\r\n- `KUBECONFIG`: Path to your Kubernetes configuration file (optional, defaults to ~/.kube/config)\r\n\r\nThe following command-line options are supported:\r\n\r\n- `--allowed-contexts=<ctx1,ctx2,...>`: Comma-separated list of allowed Kubernetes contexts that users can access. If not specified, all contexts are allowed.\r\n- `--readonly`: Disables any tool which can write changes to the cluster\r\n- `--help`: Display help information\r\n- `--version`: Display version information\r\n\r\nFor example if you are configuring Claude Desktop, you can add the following configuration to `claude_desktop_config.json` file:\r\n\r\n```json\r\n{\r\n    \"mcpServers\": {\r\n        \"mcp_k8s\": {\r\n            \"command\": \"mcp-k8s\",\r\n            \"args\": [\r\n                \"--allowed-contexts=dev,prod\",\r\n                \"--readonly\"\r\n            ]\r\n        }\r\n    }\r\n}\r\n```\r\n\r\n, which would allow only `dev` and `prod` contexts to be used and would disable any tool which can write changes to the cluster.\r\n\r\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "strowk-mcp-k8s": {
+          "command": "npx",
+          "args": ["@strowk/mcp-k8s"],
+          "env": {}
+        },
+        "mcp-k8s": {
+          "command": "mcp-k8s",
+          "args": [],
+          "env": {}
+        },
+        "mcp-k8s-configured": {
+          "command": "mcp-k8s",
+          "args": ["--allowed-contexts=dev,prod", "--readonly"],
+          "env": {}
+        },
+        "mcp-k8s-go": {
+          "command": "mcp-k8s-go",
+          "args": [],
+          "env": {}
+        },
+        "mcpk8s-server-docker": {
+          "command": "docker",
+          "args": ["run", "-i", "-v", "~/.kube/config:/home/nonroot/.kube/config", "--rm", "mcpk8s/server:latest"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "strowk",
+    "repo": "mcp-k8s-go",
+    "url": "https://github.com/strowk/mcp-k8s-go",
+    "name": "mcp-k8s-go",
+    "path": null,
+    "stars": 332,
+    "contributors": 11,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2be86219157598f771b0db702dd09d97fb680a38"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:06.011Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "stretchr/testify",
+      "importance": 2
+    },
+    {
+      "name": "strowk/foxy-contexts",
+      "importance": 8
+    },
+    {
+      "name": "go.uber.org/fx",
+      "importance": 10
+    },
+    {
+      "name": "go.uber.org/mock",
+      "importance": 2
+    },
+    {
+      "name": "go.uber.org/zap",
+      "importance": 6
+    },
+    {
+      "name": "k8s.io/api",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/client-go",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/strowk/mcp-k8s-go\n\ngo 1.24.0\n\nrequire (\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/strowk/foxy-contexts v0.1.0-beta.6\n\tgo.uber.org/fx v1.24.0\n\tgo.uber.org/mock v0.5.2\n\tgo.uber.org/zap v1.27.0\n\tk8s.io/api v0.33.2\n\tk8s.io/apimachinery v0.33.2\n\tk8s.io/client-go v0.33.2\n)\n\n// Can use this to develop a bit faster when changing the library:\n// replace github.com/strowk/foxy-contexts => ../foxy-contexts\n\nrequire (\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.11.0 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.20.2 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/google/gnostic-models v0.6.9 // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/labstack/echo/v4 v4.12.0 // indirect\n\tgithub.com/labstack/gommon v0.4.2 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect\n\tgithub.com/spf13/pflag v1.0.5 // indirect\n\tgithub.com/valyala/bytebufferpool v1.0.0 // indirect\n\tgithub.com/valyala/fasttemplate v1.2.2 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgo.uber.org/dig v1.19.0 // indirect\n\tgo.uber.org/multierr v1.10.0 // indirect\n\tgolang.org/x/crypto v0.36.0 // indirect\n\tgolang.org/x/net v0.38.0 // indirect\n\tgolang.org/x/oauth2 v0.27.0 // indirect\n\tgolang.org/x/sys v0.31.0 // indirect\n\tgolang.org/x/term v0.30.0 // indirect\n\tgolang.org/x/text v0.23.0 // indirect\n\tgolang.org/x/time v0.9.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.5 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/randfill v1.0.0 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect\n\tsigs.k8s.io/yaml v1.4.0 // indirect\n)\n"
+}

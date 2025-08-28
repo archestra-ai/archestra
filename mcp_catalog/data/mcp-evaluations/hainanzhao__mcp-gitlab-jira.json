@@ -1,0 +1,120 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "hainanzhao__mcp-gitlab-jira",
+  "display_name": "mcp-gitlab-jira",
+  "version": "1.0.0",
+  "description": "MCP server from HainanZhao/mcp-gitlab-jira",
+  "author": {
+    "name": "HainanZhao"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP GitLab Jira Server\n\nA Model Context Protocol (MCP) server for GitLab and Jira integration. This server allows AI agents like gemini-cli to interact with your GitLab and Jira instances.\n\n## Features\n\n### GitLab\n- **Projects**: List all accessible projects or filter them by name.\n- **Merge Requests**: List merge requests for a project, get detailed information (including diffs), add comments, and assign reviewers.\n- **Files**: Get the content of a specific file at a given SHA.\n- **Releases**: List all releases for a project or filter them since a specific version.\n- **Users**: List project members, get a user's ID by username, and get user activities.\n\n### Jira\n- **Tickets**: Get detailed information about a ticket, get comments, add comments, search for tickets using JQL, create new tickets, get available transitions, update tickets, and transition tickets to a new status.\n\n## Setup\n\n### Prerequisites\n\n- Node.js 18+\n- GitLab Personal Access Token with API access\n- Jira API Token\n- Access to a GitLab instance (on-premise or GitLab.com)\n- Access to a Jira instance\n\n### Installation\n\n1. **Install the package globally:**\n   ```bash\n   npm i -g mcp-gitlab-jira\n   ```\n\n2. **Set up environment variables:**\n   ```bash\n   # GitLab\n   export GITLAB_URL=\"https://your-gitlab-instance.com\"\n   export GITLAB_ACCESS_TOKEN=\"your-personal-access-token\"\n\n   # Jira\n   export ATLASSIAN_SITE_NAME=\"your-atlassian-site-name\"\n   export ATLASSIAN_USER_EMAIL=\"your-email@example.com\"\n   export ATLASSIAN_API_TOKEN=\"your-jira-api-token\"\n   ```\n\n3. **Test the server manually**:\n   ```bash\n   # Test that the server starts without errors\n   echo '{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/list\", \"params\": {}}' | mcp-gitlab-jira\n   ```\n   The server should start and log \"GitLab/Jira MCP server started\" to stderr.\n\n### Using with MCP Clients\n\n#### Configuration for gemini-cli or other MCP clients\n\nCreate or update your MCP configuration file (usually `~/.mcp/config.json` or similar):\n\n```json\n{\n  \"mcpServers\": {\n    \"gitlab-jira-mcp\": {\n      \"command\": \"mcp-gitlab-jira\",\n      \"env\": {\n        \"GITLAB_URL\": \"https://your-gitlab-instance.com\",\n        \"GITLAB_ACCESS_TOKEN\": \"your-personal-access-token\",\n        \"ATLASSIAN_SITE_NAME\": \"your-atlassian-site-name\",\n        \"ATLASSIAN_USER_EMAIL\": \"your-email@example.com\",\n        \"ATLASSIAN_API_TOKEN\": \"your-jira-api-token\"\n      }\n    }\n  }\n}\n```\n\n## Running with Docker\n\nYou can also run this MCP server in a Docker container using the pre-built image from Docker Hub.\n\n### Available Docker Images\n\nThe Docker images are automatically built and published to Docker Hub for each release:\n- **Latest release**: `hainanzhao/mcp-gitlab-jira:latest`\n- **Specific versions**: `hainanzhao/mcp-gitlab-jira:v0.1.2`, `hainanzhao/mcp-gitlab-jira:v0.1.1`, etc.\n- **View all available tags**: [Docker Hub - mcp-gitlab-jira](https://hub.docker.com/r/hainanzhao/mcp-gitlab-jira/tags)\n\nThe images are built for multiple architectures: `linux/amd64` and `linux/arm64` (Apple Silicon compatible).\n\n### Usage\n\n1.  **Pull and run the Docker container:**\n    ```bash\n    docker run -d --name mcp-gitlab-jira-container \\\n      -e GITLAB_URL=\"https://your-gitlab-instance.com\" \\\n      -e GITLAB_ACCESS_TOKEN=\"your-personal-access-token\" \\\n      -e ATLASSIAN_SITE_NAME=\"your-atlassian-site-name\" \\\n      -e ATLASSIAN_USER_EMAIL=\"your-email@example.com\" \\\n      -e ATLASSIAN_API_TOKEN=\"your-jira-api-token\" \\\n      hainanzhao/mcp-gitlab-jira:latest\n    ```\n\n2.  **Alternative: Run without persistent container (one-time execution):**\n    ```bash\n    docker run --rm -i \\\n      -e GITLAB_URL=\"https://your-gitlab-instance.com\" \\\n      -e GITLAB_ACCESS_TOKEN=\"your-personal-access-token\" \\\n      -e ATLASSIAN_SITE_NAME=\"your-atlassian-site-name\" \\\n      -e ATLASSIAN_USER_EMAIL=\"your-email@example.com\" \\\n      -e ATLASSIAN_API_TOKEN=\"your-jira-api-token\" \\\n      hainanzhao/mcp-gitlab-jira:latest\n    ```\n\n### Using with MCP Clients (Docker)\n\nYou have two options for using the Docker container with MCP clients:\n\n#### Option 1: Using a persistent container (recommended)\n\nFirst, start the container as shown above, then update your MCP configuration file. The `env` block is empty because the necessary environment variables are passed directly to the container using the `-e` flag in the `docker run` command.\n\n```json\n{\n  \"mcpServers\": {\n    \"gitlab-jira-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\"exec\", \"-i\", \"mcp-gitlab-jira-container\", \"npm\", \"start\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n#### Option 2: Using one-time execution\n\nThis runs a new container for each MCP session:\n\n```json\n{\n  \"mcpServers\": {\n    \"gitlab-jira-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"--rm\", \"-i\",\n        \"-e\", \"GITLAB_URL=https://your-gitlab-instance.com\",\n        \"-e\", \"GITLAB_ACCESS_TOKEN=your-personal-access-token\",\n        \"-e\", \"ATLASSIAN_SITE_NAME=your-atlassian-site-name\",\n        \"-e\", \"ATLASSIAN_USER_EMAIL=your-email@example.com\",\n        \"-e\", \"ATLASSIAN_API_TOKEN=your-jira-api-token\",\n        \"hainanzhao/mcp-gitlab-jira:latest\"\n      ],\n      \"env\": {}\n    }\n  }\n}\n```\n\n\n## Available Tools\n\n### GitLab Tools\n\n- `gitlab_get_merge_request_details`: Fetches detailed information about a GitLab Merge Request, including file diffs.\n- `gitlab_get_file_content`: Fetches the content of a specific file at a given SHA in a GitLab project.\n- `gitlab_add_comment_to_merge_request`: Adds a comment to a GitLab Merge Request. Can be a general comment, a reply to an existing discussion, or an inline comment on a specific line.\n- `gitlab_list_merge_requests`: Lists merge requests for a given GitLab project.\n- `gitlab_assign_reviewers_to_merge_request`: Assigns reviewers to a GitLab Merge Request.\n- `gitlab_list_project_members`: Lists all members (contributors) of a given GitLab project.\n- `gitlab_list_project_members_by_project_name`: Lists all members (contributors) of a given GitLab project by project name.\n- `gitlab_list_projects_by_name`: Filters GitLab projects by name using a fuzzy, case-insensitive match.\n- `gitlab_list_all_projects`: Lists all accessible GitLab projects.\n- `gitlab_list_all_releases`: Fetches releases for a given GitLab project.\n- `gitlab_list_releases_since_version`: Filters releases for a given GitLab project since a specific version.\n- `gitlab_get_user_id_by_username`: Retrieves the GitLab user ID for a given username.\n- `gitlab_get_user_activities`: Fetches activities for a given GitLab user by their username, optionally filtered by date.\n\n### Jira Tools\n\n- `jira_get_jira_ticket_details`: Fetches detailed information about a Jira ticket.\n- `jira_get_jira_ticket_comments`: Fetches comments for a Jira ticket.\n- `jira_add_comment_to_ticket`: Adds a comment to a Jira ticket.\n- `jira_search_tickets_by_jql`: Searches for Jira tickets using a JQL (Jira Query Language) string.\n- `jira_create_ticket`: Creates a new Jira ticket with given fields.\n- `jira_get_available_transitions`: Fetches available transitions for a Jira ticket.\n- `jira_update_ticket`: Updates a Jira ticket summary, description, labels.\n- `jira_update_custom_fields`: Updates custom fields on a Jira ticket.\n- `jira_transition_ticket`: Transitions a Jira ticket to a new status.\n\n## Troubleshooting\n\n### Common Issues\n\n1. **\"Cannot find module\" errors**: If you are developing locally, make sure you've run `npm install` and `npm run build`.\n2. **Authentication errors**: Verify your `GITLAB_ACCESS_TOKEN`, `ATLASSIAN_USER_EMAIL`, and `ATLASSIAN_API_TOKEN` have the necessary permissions.\n3. **Connection errors**: Ensure your `GITLAB_URL` and `ATLASSIAN_SITE_NAME` are correct and accessible.\n4. **Server not responding**: Check that the MCP server process is running and the path in your config is correct.\n\n### Debug Mode\n\nTo see detailed logs, you can run the server directly:\n\n```bash\nexport GITLAB_URL=\"your-url\"\nexport GITLAB_ACCESS_TOKEN=\"your-token\"\nexport ATLASSIAN_SITE_NAME=\"your-atlassian-site-name\"\nexport ATLASSIAN_USER_EMAIL=\"your-email@example.com\"\nexport ATLASSIAN_API_TOKEN=\"your-jira-api-token\"\nmcp-gitlab-jira\n```\n\n## Development\n\nFor development, clone the repository and install the dependencies.\n\n```bash\nnpm install\nnpm run build\n```\n\n### Local Docker Development\n\nTo test the Docker build locally before pushing:\n\n```bash\n# Build and test the Docker image locally\n./scripts/build-docker-local.sh\n```\n\nThis script will build the Docker image and run basic tests to ensure it works correctly.\n\n> **For maintainers**: See [Docker Setup Guide](docs/DOCKER_SETUP.md) for information about setting up automated Docker Hub publishing.\n\n### Project Structure\n\n- `src/index.ts`: Main MCP server implementation\n- `src/gitlab.service.ts`: GitLab API client\n- `src/gitlab.ts`: GitLab type definitions\n- `src/jira.service.ts`: Jira API client\n- `src/jira.ts`: Jira type definitions\n- `dist/`: Compiled JavaScript output\n\n### Adding New Features\n\n1. Add new methods to the `GitLabService` or `JiraService` class.\n2. Define new tools in the `allTools` array in `index.ts`.\n3. Add a corresponding case in the tool handler in `index.ts`.\n4. Rebuild with `npm run build`.\n\n## License\n\nISC\n",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-gitlab-jira-stdio": {
+          "command": "mcp-gitlab-jira",
+          "args": [],
+          "env": {}
+        },
+        "mcp-gitlab-jira-configured": {
+          "command": "mcp-gitlab-jira",
+          "args": [],
+          "env": {
+            "GITLAB_URL": "https://your-gitlab-instance.com",
+            "GITLAB_ACCESS_TOKEN": "your-personal-access-token",
+            "ATLASSIAN_SITE_NAME": "your-atlassian-site-name",
+            "ATLASSIAN_USER_EMAIL": "your-email@example.com",
+            "ATLASSIAN_API_TOKEN": "your-jira-api-token"
+          }
+        },
+        "hainanzhao-mcp-gitlab-jira-docker-persistent": {
+          "command": "docker",
+          "args": ["exec", "-i", "mcp-gitlab-jira-container", "npm", "start"],
+          "env": {}
+        },
+        "hainanzhao-mcp-gitlab-jira-docker-onetime": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--rm",
+            "-i",
+            "-e",
+            "GITLAB_URL=https://your-gitlab-instance.com",
+            "-e",
+            "GITLAB_ACCESS_TOKEN=your-personal-access-token",
+            "-e",
+            "ATLASSIAN_SITE_NAME=your-atlassian-site-name",
+            "-e",
+            "ATLASSIAN_USER_EMAIL=your-email@example.com",
+            "-e",
+            "ATLASSIAN_API_TOKEN=your-jira-api-token",
+            "hainanzhao/mcp-gitlab-jira:latest"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "HainanZhao",
+    "repo": "mcp-gitlab-jira",
+    "url": "https://github.com/HainanZhao/mcp-gitlab-jira",
+    "name": "mcp-gitlab-jira",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "ed0804f58cc56ebd7108da4bbc7d7d769a1cd9c6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T10:10:42.833Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "jira.js",
+      "importance": 9
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-gitlab-jira\",\n  \"version\": \"0.1.2\",\n  \"type\": \"module\",\n  \"description\": \"GitLab MCP Server based on REST API\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-gitlab-jira\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc -p src\",\n    \"test\": \"jest\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"gitlab\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"jira.js\": \"^5.2.2\",\n    \"node-fetch\": \"^3.3.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.32.0\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/semver\": \"^7.7.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.38.0\",\n    \"@typescript-eslint/parser\": \"^8.38.0\",\n    \"eslint\": \"^9.32.0\",\n    \"globals\": \"^16.3.0\",\n    \"jest\": \"^30.0.5\",\n    \"prettier\": \"^3.6.2\",\n    \"semver\": \"^7.7.2\",\n    \"ts-jest\": \"^29.4.0\",\n    \"typescript\": \"^5.0.0\",\n    \"typescript-eslint\": \"^8.38.0\"\n  }\n}\n"
+}

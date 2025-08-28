@@ -1,0 +1,437 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "weibaohui__k8m",
+  "display_name": "k8m",
+  "version": "1.0.0",
+  "description": "一款轻量级、跨平台的 Mini Kubernetes AI Dashboard，支持大模型+智能体+MCP(支持设置操作权限)，集成多集群管理、智能分析、实时异常检测等功能，支持多架构并可单文件部署，助力高效集群管理与运维优化。",
+  "author": {
+    "name": "weibaohui"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n<h1>K8M</h1>\n</div>\n\n\n[English](README_en.md) | [中文](README.md)\n\n[![k8m](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](https://github.com/weibaohui/k8m/blob/master/LICENSE)\n\n![Alt](https://repobeats.axiom.co/api/embed/9fde094e5c9a1d4c530e875864ee7919b17d0690.svg \"Repobeats analytics image\")\n\n**k8m** 是一款AI驱动的 Mini Kubernetes AI Dashboard 轻量级控制台工具，专为简化集群管理设计。它基于 AMIS 构建，并通过  [\n`kom`](https://github.com/weibaohui/kom)  作为 Kubernetes API 客户端，**k8m** 内置了\nQwen2.5-Coder-7B，支持deepseek-ai/DeepSeek-R1-Distill-Qwen-7B模型\n模型交互能力，同时支持接入您自己的私有化大模型（包括ollama）。\n\n### 演示DEMO\n\n[DEMO](http://107.150.119.151:3618)\n[DEMO-InCluster模式](http://107.150.119.151:31999)\n用户名密码 demo/demo\n\n### 文档\n\n- 详细的配置和使用说明请参考[文档](docs/README.md)。\n- 更新日志请参考[更新日志](CHANGELOG.md)。\n- 如需自定义大模型参数、配置私有化大模型，请参考[自托管/自定义大模型支持](docs/use-self-hosted-ai.md)\n  和 [Ollama配置](docs/ollama.md)。\n- 详细的配置选项说明请参考[配置选项说明](docs/config.md)。\n- 数据库配置请参考[数据库配置说明](docs/database.md)。\n- DeepWiki 文档：[开发设计文档](https://deepwiki.com/weibaohui/k8m)\n\n### 主要特点\n\n- **迷你化设计**：所有功能整合在一个单一的可执行文件中，部署便捷，使用简单。\n- **简便易用**：友好的用户界面和直观的操作流程，让 Kubernetes 管理更加轻松。\n- **高效性能**：后端采用 Golang 构建，前端基于百度 AMIS，保证资源利用率高、响应速度快。\n- **AI驱动融合**\n  ：基于ChatGPT实现划词解释、资源指南、YAML属性自动翻译、Describe信息解读、日志AI问诊、运行命令推荐,并集成了[k8s-gpt](https://github.com/k8sgpt-ai/k8sgpt)\n  功能，实现中文展现，为管理k8s提供智能化支持。\n- **MCP集成**:可视化管理MCP，实现大模型调用Tools，内置k8s多集群MCP工具49种，可组合实现超百种集群操作，可作为MCP Server\n  供其他大模型软件使用。轻松实现大模型管理k8s。可详细记录每一次MCP调用。支持mcp.so主流服务。\n- **MCP权限打通**:多集群管理权限与MCP大模型调用权限打通，一句话概述：谁使用大模型，就用谁的权限执行MCP。安全使用，无后顾之忧，避免操作越权。\n- **多集群管理**：自动识别集群内部使用InCluster模式，配置kubeconfig路径后自动扫描同级目录下的配置文件，同时注册管理多个集群。\n- **多集群权限管理**：支持对用户、用户组进行授权，可按集群授权，包括集群只读、Exec命令、集群管理员三种权限。对用户组授权后，组内用户均获得相应授权。支持设置命名空间黑白名单。\n- **支持k8s最新特性**:支持APIGateway、OpenKruise等功能特性。\n- **Pod 文件管理**：支持 Pod 内文件的浏览、编辑、上传、下载、删除，简化日常操作。\n- **Pod 运行管理**：支持实时查看 Pod 日志，下载日志，并在 Pod 内直接执行 Shell 命令。支持grep -A -B高亮搜索\n- **API开放**:支持创建API KEY，从第三方外部访问，提供swagger接口管理页面。\n- **集群巡检支持**：支持定时巡检、自定义巡检规则，支持lua脚本规则。\n- **CRD 管理**：可自动发现并管理 CRD 资源，提高工作效率。\n- **Helm 市场**：支持Helm自由添加仓库，一键安装、卸载、升级 Helm 应用，支持自动更新。\n- **跨平台支持**：兼容 Linux、macOS 和 Windows，并支持 x86、ARM 等多种架构，确保多平台无缝运行。\n- **多数据库支持**：支持SQLite、MySql、PostgreSql等多种数据库。\n- **完全开源**：开放所有源码，无任何限制，可自由定制和扩展，可商业使用。\n\n**k8m** 的设计理念是“AI驱动，轻便高效，化繁为简”，它帮助开发者和运维人员快速上手，轻松管理 Kubernetes 集群。\n\n![](https://github.com/user-attachments/assets/0951d6c1-389c-49cb-b247-84de15b6ec0e)\n\n## **运行**\n\n1. **下载**：从 [GitHub release](https://github.com/weibaohui/k8m/releases) 下载最新版本。\n2. **运行**：使用 `./k8m` 命令启动,访问[http://127.0.0.1:3618](http://127.0.0.1:3618)。\n3. **登录用户名密码**：\n    - 用户名：`k8m`\n    - 密码：`k8m`\n    - 请注意上线后修改用户名密码、启用两步验证。\n4. **参数**：\n\n```shell\nUsage of ./k8m:\n      --enable-temp-admin                是否启用临时管理员账户配置，默认关闭\n      --admin-password string            管理员密码，启用临时管理员账户配置后生效 \n      --admin-username string            管理员用户名，启用临时管理员账户配置后生效\n      --print-config                     是否打印配置信息 (default false)\n      --connect-cluster                  启动集群是是否自动连接现有集群，默认关闭\n  -d, --debug                            调试模式\n      --in-cluster                       是否自动注册纳管宿主集群，默认启用\n      --jwt-token-secret string          登录后生成JWT token 使用的Secret (default \"your-secret-key\")\n  -c, --kubeconfig string                kubeconfig文件路径 (default \"/root/.kube/config\")\n      --kubectl-shell-image string       Kubectl Shell 镜像。默认为 bitnami/kubectl:latest，必须包含kubectl命令 (default \"bitnami/kubectl:latest\")\n      --log-v int                        klog的日志级别klog.V(2) (default 2)\n      --login-type string                登录方式，password, oauth, token等,default is password (default \"password\")\n      --image-pull-timeout               Node Shell、Kubectl Shell 镜像拉取超时时间。默认为 30 秒\n      --node-shell-image string          NodeShell 镜像。 默认为 alpine:latest，必须包含`nsenter`命令 (default \"alpine:latest\")\n  -p, --port int                         监听端口 (default 3618)\n  -v, --v Level                          klog的日志级别 (default 2)\n```\n\n也可以直接通过docker-compose(推荐)启动：\n\n```yaml\nservices:\n  k8m:\n    container_name: k8m\n    image: registry.cn-hangzhou.aliyuncs.com/minik8m/k8m\n    restart: always\n    ports:\n      - \"3618:3618\"\n    environment:\n      TZ: Asia/Shanghai\n    volumes:\n      - ./data:/app/data\n```\n\n启动之后，访问`3618`端口，默认用户：`k8m`，默认密码`k8m`。\n如果你想通过在线环境快速拉起体验，可以访问：[k8m](https://cnb.cool/znb/qifei/-/tree/main/letsfly/justforfun/k8m)\n\n## **ChatGPT 配置指南**\n\n### 内置GPT\n\n从v0.0.8版本开始，将内置GPT，无需配置。\n如果您需要使用自己的GPT，请参考以下文档。\n\n- [自托管/自定义大模型支持](use-self-hosted-ai.md) - 如何使用自托管的\n- [Ollama配置](ollama.md) - 如何配置使用Ollama大模型。\n\n### **ChatGPT 状态调试**\n\n如果设置参数后，依然没有效果，请尝试使用`./k8m -v 6`获取更多的调试信息。\n会输出以下信息，通过查看日志，确认是否启用ChatGPT。\n\n```go\nChatGPT 开启状态:true\nChatGPT 启用 key:sk-hl**********************************************, url:https: // api.siliconflow.cn/v1\nChatGPT 使用环境变量中设置的模型:Qwen/Qwen2.5-7B-Instruc\n```\n\n### **ChatGPT 账户**\n\n本项目集成了[github.com/sashabaranov/go-openai](https://github.com/sashabaranov/go-openai)SDK。\n国内访问推荐使用[硅基流动](https://cloud.siliconflow.cn/)的服务。\n登录后，在[https://cloud.siliconflow.cn/account/ak](https://cloud.siliconflow.cn/account/ak)创建API_KEY\n\n## **k8m 支持环境变量设置**\n\nk8m 支持通过环境变量和命令行参数灵活配置，主要参数如下：\n\n| 环境变量                  | 默认值                      | 说明                                    |\n|-----------------------|--------------------------|---------------------------------------|\n| `PORT`                | `3618`                   | 监听的端口号                                |\n| `KUBECONFIG`          | `~/.kube/config`         | `kubeconfig` 文件路径，会自动扫描识别同级目录下所有的配置文件 |\n| `ANY_SELECT`          | `\"true\"`                 | 是否开启任意选择划词解释，默认开启 (default true)      |\n| `LOGIN_TYPE`          | `\"password\"`             | 登录方式（如 `password`, `oauth`, `token`）  |\n| `ENABLE_TEMP_ADMIN`   | `\"false\"`                | 是否启用临时管理员账户配置，默认关闭。初次登录、忘记密码时使用       |\n| `ADMIN_USERNAME`      |                          | 管理员用户名，启用临时管理员账户配置后生效                 |\n| `ADMIN_PASSWORD`      |                          | 管理员密码，启用临时管理员账户配置后生效                  |\n| `DEBUG`               | `\"false\"`                | 是否开启 `debug` 模式                       |\n| `LOG_V`               | `\"2\"`                    | log输出日志，同klog用法                       |\n| `JWT_TOKEN_SECRET`    | `\"your-secret-key\"`      | 用于 JWT Token 生成的密钥                    |\n| `KUBECTL_SHELL_IMAGE` | `bitnami/kubectl:latest` | kubectl shell 镜像地址                    |\n| `NODE_SHELL_IMAGE`    | `alpine:latest`          | Node shell 镜像地址                       |\n| `IMAGE_PULL_TIMEOUT`  | `30`                     | Node shell、kubectl shell 镜像拉取超时时间（秒）  |\n| `CONNECT_CLUSTER`     | `\"false\"`                | 启动程序后，是否自动连接发现的集群，默认关闭                |\n| `PRINT_CONFIG`        | `\"false\"`                | 是否打印配置信息                              |\n\n详细参数说明和更多配置方式请参考 [docs/readme.md](docs/README.md)。\n\n这些环境变量可以通过在运行应用程序时设置，例如：\n\n```sh\nexport PORT=8080\nexport GIN_MODE=\"release\"\n./k8m\n```\n\n其他参数请参考 [docs/readme.md](docs/README.md)。\n\n## 容器化k8s集群方式运行\n\n使用[KinD](https://kind.sigs.k8s.io/docs/user/quick-start/)、[MiniKube](https://minikube.sigs.k8s.io/docs/start/)\n安装一个小型k8s集群\n\n## KinD方式\n\n* 创建 KinD Kubernetes 集群\n\n```\nbrew install kind\n```\n\n* 创建新的 Kubernetes 集群：\n\n```\nkind create cluster --name k8sgpt-demo\n```\n\n## 将k8m部署到集群中体验\n\n### 安装脚本\n\n```docker\nkubectl apply -f https://raw.githubusercontent.com/weibaohui/k8m/refs/heads/main/deploy/k8m.yaml\n```\n\n* 访问：\n  默认使用了nodePort开放，请访问31999端口。或自行配置Ingress\n  http://NodePortIP:31999\n\n### 修改配置\n\n首选建议通过修改环境变量方式进行修改。 例如增加deploy.yaml中的env参数\n\n## 开发调试\n\n如果你想在本地开发调试，请先执行一次本地前端构建，自动生成dist目录。因为本项目采用了二进制嵌入，没有dist前端会报错。\n\n#### 第一步编译前端\n\n```bash \ncd ui\npnpm run build\n```\n\n#### 编译调试后端\n\n```bash\n#下载依赖\ngo mod tidy\n#运行\nair\n#或者\ngo run main.go \n# 监听localhost:3618端口\n```\n\n#### 前端热加载\n\n```bash\ncd ui\npnpm run dev\n#Vite服务会监听在localhost:3000端口\n#Vite转发后端访问到3618端口\n```\n\n访问http://localhost:3000\n\n### HELP & SUPPORT\n\n如果你有任何进一步的问题或需要额外的帮助，请随时与我联系！\n\n### 特别鸣谢\n\n[zhaomingcheng01](https://github.com/zhaomingcheng01)：提出了诸多非常高质量的建议，为k8m的易用好用做出了卓越贡献~\n\n[La0jin](https://github.com/La0jin):提供在线资源及维护，极大提升了k8m的展示效果\n\n[eryajf](https://github.com/eryajf):为我们提供了非常好用的github actions，为k8m增加了自动化的发版、构建、发布等功能\n\n## 联系我\n\n微信（大罗马的太阳） 搜索ID：daluomadetaiyang,备注k8m。\n<br><img width=\"214\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/166db141-42c5-42c4-9964-8e25cf12d04c\" />\n\n## 微信群\n![输入图片说明](https://foruda.gitee.com/images/1753455031254775761/148f6887_77493.png \"屏幕截图\")\n## QQ群\n![输入图片说明](https://foruda.gitee.com/images/1753099785542398999/184a765a_77493.png \"屏幕截图\")\n\n",
+  "category": "AI Tools",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "k8m": {
+          "command": "./k8m",
+          "args": [],
+          "env": {}
+        },
+        "k8m-configured": {
+          "command": "./k8m",
+          "args": [
+            "--in-cluster",
+            "--jwt-token-secret",
+            "your-secret-key",
+            "--kubeconfig",
+            "/root/.kube/config",
+            "--kubectl-shell-image",
+            "bitnami/kubectl:latest",
+            "--log-v",
+            "2",
+            "--login-type",
+            "password",
+            "--image-pull-timeout",
+            "30",
+            "--node-shell-image",
+            "alpine:latest",
+            "--port",
+            "3618",
+            "--v",
+            "2"
+          ],
+          "env": {}
+        },
+        "k8m-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--name",
+            "k8m",
+            "--restart",
+            "always",
+            "-p",
+            "3618:3618",
+            "-e",
+            "TZ=Asia/Shanghai",
+            "-v",
+            "./data:/app/data",
+            "registry.cn-hangzhou.aliyuncs.com/minik8m/k8m"
+          ],
+          "env": {
+            "TZ": "Asia/Shanghai"
+          }
+        },
+        "k8m-env-defaults": {
+          "command": "./k8m",
+          "args": [],
+          "env": {
+            "PORT": "3618",
+            "KUBECONFIG": "~/.kube/config",
+            "ANY_SELECT": "true",
+            "LOGIN_TYPE": "password",
+            "ENABLE_TEMP_ADMIN": "false",
+            "DEBUG": "false",
+            "LOG_V": "2",
+            "JWT_TOKEN_SECRET": "your-secret-key",
+            "KUBECTL_SHELL_IMAGE": "bitnami/kubectl:latest",
+            "NODE_SHELL_IMAGE": "alpine:latest",
+            "IMAGE_PULL_TIMEOUT": "30",
+            "CONNECT_CLUSTER": "false",
+            "PRINT_CONFIG": "false"
+          }
+        },
+        "k8m-go": {
+          "command": "go",
+          "args": ["run", "main.go"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "weibaohui",
+    "repo": "k8m",
+    "url": "https://github.com/weibaohui/k8m",
+    "name": "k8m",
+    "path": null,
+    "stars": 600,
+    "contributors": 13,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "11217324da9cf065d04c0e62cec7290fff5e0d1b"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:07.124Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "alecthomas/template",
+      "importance": 4
+    },
+    {
+      "name": "coreos/go-oidc/v3",
+      "importance": 7
+    },
+    {
+      "name": "dgraph-io/ristretto/v2",
+      "importance": 5
+    },
+    {
+      "name": "duke-git/lancet/v2",
+      "importance": 4
+    },
+    {
+      "name": "fatih/color",
+      "importance": 3
+    },
+    {
+      "name": "gin-contrib/cors",
+      "importance": 6
+    },
+    {
+      "name": "gin-contrib/gzip",
+      "importance": 6
+    },
+    {
+      "name": "gin-contrib/pprof",
+      "importance": 5
+    },
+    {
+      "name": "gin-gonic/gin",
+      "importance": 10
+    },
+    {
+      "name": "glebarez/sqlite",
+      "importance": 8
+    },
+    {
+      "name": "go-ldap/ldap/v3",
+      "importance": 7
+    },
+    {
+      "name": "golang-jwt/jwt/v4",
+      "importance": 7
+    },
+    {
+      "name": "google/gnostic",
+      "importance": 7
+    },
+    {
+      "name": "google/gnostic-models",
+      "importance": 7
+    },
+    {
+      "name": "gorilla/websocket",
+      "importance": 6
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 4
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "pquerna/otp",
+      "importance": 6
+    },
+    {
+      "name": "prometheus/client_golang",
+      "importance": 7
+    },
+    {
+      "name": "robfig/cron/v3",
+      "importance": 5
+    },
+    {
+      "name": "sashabaranov/go-openai",
+      "importance": 8
+    },
+    {
+      "name": "spf13/pflag",
+      "importance": 4
+    },
+    {
+      "name": "swaggo/files",
+      "importance": 5
+    },
+    {
+      "name": "swaggo/gin-swagger",
+      "importance": 5
+    },
+    {
+      "name": "swaggo/swag",
+      "importance": 5
+    },
+    {
+      "name": "weibaohui/kom",
+      "importance": 9
+    },
+    {
+      "name": "yuin/gopher-lua",
+      "importance": 7
+    },
+    {
+      "name": "golang.org/x/net",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/oauth2",
+      "importance": 7
+    },
+    {
+      "name": "gorm.io/driver/mysql",
+      "importance": 8
+    },
+    {
+      "name": "gorm.io/driver/postgres",
+      "importance": 8
+    },
+    {
+      "name": "gorm.io/gorm",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/api",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/client-go",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/klog/v2",
+      "importance": 5
+    },
+    {
+      "name": "k8s.io/kubectl",
+      "importance": 9
+    },
+    {
+      "name": "sigs.k8s.io/gateway-api",
+      "importance": 8
+    },
+    {
+      "name": "sigs.k8s.io/yaml",
+      "importance": 5
+    },
+    {
+      "name": "@ant-design/icons",
+      "importance": 6
+    },
+    {
+      "name": "@ant-design/x",
+      "importance": 6
+    },
+    {
+      "name": "@fortawesome/fontawesome-free",
+      "importance": 4
+    },
+    {
+      "name": "@monaco-editor/react",
+      "importance": 7
+    },
+    {
+      "name": "@xterm/addon-attach",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-clipboard",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-fit",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-search",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-serialize",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-unicode11",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-web-links",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/addon-webgl",
+      "importance": 6
+    },
+    {
+      "name": "@xterm/xterm",
+      "importance": 7
+    },
+    {
+      "name": "amis",
+      "importance": 10
+    },
+    {
+      "name": "amis-core",
+      "importance": 9
+    },
+    {
+      "name": "amis-formula",
+      "importance": 7
+    },
+    {
+      "name": "amis-ui",
+      "importance": 9
+    },
+    {
+      "name": "ansi-to-html",
+      "importance": 4
+    },
+    {
+      "name": "antd",
+      "importance": 8
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "copy-to-clipboard",
+      "importance": 3
+    },
+    {
+      "name": "crypto-js",
+      "importance": 5
+    },
+    {
+      "name": "dayjs",
+      "importance": 4
+    },
+    {
+      "name": "file-saver",
+      "importance": 4
+    },
+    {
+      "name": "i18n-jsautotranslate",
+      "importance": 5
+    },
+    {
+      "name": "js-yaml",
+      "importance": 5
+    },
+    {
+      "name": "jszip",
+      "importance": 4
+    },
+    {
+      "name": "jwt-decode",
+      "importance": 6
+    },
+    {
+      "name": "monaco-editor",
+      "importance": 7
+    },
+    {
+      "name": "react",
+      "importance": 9
+    },
+    {
+      "name": "react-countup",
+      "importance": 4
+    },
+    {
+      "name": "react-dom",
+      "importance": 9
+    },
+    {
+      "name": "react-draggable",
+      "importance": 5
+    },
+    {
+      "name": "react-router-dom",
+      "importance": 7
+    },
+    {
+      "name": "zustand",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/weibaohui/k8m\n\ngo 1.24.0\n\nrequire (\n\tgithub.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751\n\tgithub.com/coreos/go-oidc/v3 v3.14.1\n\tgithub.com/dgraph-io/ristretto/v2 v2.2.0\n\tgithub.com/duke-git/lancet/v2 v2.3.7\n\tgithub.com/fatih/color v1.18.0\n\tgithub.com/gin-contrib/cors v1.7.6\n\tgithub.com/gin-contrib/gzip v1.2.3\n\tgithub.com/gin-contrib/pprof v1.5.3\n\tgithub.com/gin-gonic/gin v1.10.1\n\tgithub.com/glebarez/sqlite v1.11.0\n\tgithub.com/go-ldap/ldap/v3 v3.4.11\n\tgithub.com/golang-jwt/jwt/v4 v4.5.2\n\tgithub.com/google/gnostic v0.7.0\n\tgithub.com/google/gnostic-models v0.6.9\n\tgithub.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/mark3labs/mcp-go v0.35.0\n\tgithub.com/pquerna/otp v1.5.0\n\tgithub.com/prometheus/client_golang v1.22.0\n\tgithub.com/robfig/cron/v3 v3.0.1\n\tgithub.com/sashabaranov/go-openai v1.40.5\n\tgithub.com/spf13/pflag v1.0.7\n\tgithub.com/swaggo/files v1.0.1\n\tgithub.com/swaggo/gin-swagger v1.6.0\n\tgithub.com/swaggo/swag v1.16.5\n\tgithub.com/weibaohui/kom v0.2.56\n\tgithub.com/yuin/gopher-lua v1.1.1\n\tgolang.org/x/net v0.41.0\n\tgolang.org/x/oauth2 v0.30.0\n\tgorm.io/driver/mysql v1.6.0\n\tgorm.io/driver/postgres v1.6.0\n\tgorm.io/gorm v1.30.0\n\tk8s.io/api v0.33.3\n\tk8s.io/apimachinery v0.33.3\n\tk8s.io/client-go v0.33.3\n\tk8s.io/klog/v2 v2.130.1\n\tk8s.io/kubectl v0.33.3\n\tsigs.k8s.io/gateway-api v1.3.0\n\tsigs.k8s.io/yaml v1.6.0\n)\n\n//replace github.com/weibaohui/kom v1.9.10 => github.com/weibaohui/kom v0.2.44-0.20250531071906-8089a4a1fd87\n\n//replace github.com/weibaohui/kom v0.2.29 => github.com/weibaohui/kom v0.2.30-0.20250504082828-c0893145fefa\n\nrequire (\n\tfilippo.io/edwards25519 v1.1.0 // indirect\n\tgithub.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect\n\tgithub.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect\n\tgithub.com/KyleBanks/depth v1.2.1 // indirect\n\tgithub.com/beorn7/perks v1.0.1 // indirect\n\tgithub.com/blang/semver/v4 v4.0.0 // indirect\n\tgithub.com/boombuler/barcode v1.0.2 // indirect\n\tgithub.com/bytedance/sonic v1.13.3 // indirect\n\tgithub.com/bytedance/sonic/loader v0.2.4 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/cloudwego/base64x v0.1.5 // indirect\n\tgithub.com/creack/pty v1.1.21 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.12.2 // indirect\n\tgithub.com/fatih/camelcase v1.0.0 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/gabriel-vasile/mimetype v1.4.9 // indirect\n\tgithub.com/gin-contrib/sse v1.1.0 // indirect\n\tgithub.com/glebarez/go-sqlite v1.21.2 // indirect\n\tgithub.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect\n\tgithub.com/go-errors/errors v1.5.1 // indirect\n\tgithub.com/go-jose/go-jose/v4 v4.0.5 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.1 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/spec v0.21.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.1 // indirect\n\tgithub.com/go-playground/locales v0.14.1 // indirect\n\tgithub.com/go-playground/universal-translator v0.18.1 // indirect\n\tgithub.com/go-playground/validator/v10 v10.26.0 // indirect\n\tgithub.com/go-sql-driver/mysql v1.8.1 // indirect\n\tgithub.com/goccy/go-json v0.10.5 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/google/btree v1.1.3 // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jackc/pgpassfile v1.0.0 // indirect\n\tgithub.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect\n\tgithub.com/jackc/pgx/v5 v5.6.0 // indirect\n\tgithub.com/jackc/puddle/v2 v2.2.2 // indirect\n\tgithub.com/jinzhu/inflection v1.0.0 // indirect\n\tgithub.com/jinzhu/now v1.1.5 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/cpuid/v2 v2.2.10 // indirect\n\tgithub.com/leodido/go-urn v1.4.0 // indirect\n\tgithub.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect\n\tgithub.com/mailru/easyjson v0.9.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/moby/term v0.5.2 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/ncruces/go-strftime v0.1.9 // indirect\n\tgithub.com/onsi/ginkgo/v2 v2.22.0 // indirect\n\tgithub.com/onsi/gomega v1.36.1 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.4 // indirect\n\tgithub.com/peterbourgon/diskv v2.0.1+incompatible // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/prometheus/client_model v0.6.1 // indirect\n\tgithub.com/prometheus/common v0.62.0 // indirect\n\tgithub.com/prometheus/procfs v0.15.1 // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n\tgithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/spf13/cobra v1.9.1 // indirect\n\tgithub.com/twitchyliquid64/golang-asm v0.15.1 // indirect\n\tgithub.com/ugorji/go/codec v1.3.0 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/xlab/treeprint v1.2.0 // indirect\n\tgithub.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.yaml.in/yaml/v2 v2.4.2 // indirect\n\tgo.yaml.in/yaml/v3 v3.0.3 // indirect\n\tgolang.org/x/arch v0.18.0 // indirect\n\tgolang.org/x/crypto v0.39.0 // indirect\n\tgolang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect\n\tgolang.org/x/mod v0.25.0 // indirect\n\tgolang.org/x/sync v0.15.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/term v0.32.0 // indirect\n\tgolang.org/x/text v0.26.0 // indirect\n\tgolang.org/x/time v0.11.0 // indirect\n\tgolang.org/x/tools v0.33.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tk8s.io/apiextensions-apiserver v0.33.3 // indirect\n\tk8s.io/cli-runtime v0.33.3 // indirect\n\tk8s.io/component-helpers v0.33.3 // indirect\n\tk8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect\n\tk8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e // indirect\n\tmodernc.org/libc v1.62.1 // indirect\n\tmodernc.org/mathutil v1.7.1 // indirect\n\tmodernc.org/memory v1.9.1 // indirect\n\tmodernc.org/sqlite v1.37.0 // indirect\n\tsigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect\n\tsigs.k8s.io/kustomize/api v0.19.0 // indirect\n\tsigs.k8s.io/kustomize/kyaml v0.19.0 // indirect\n\tsigs.k8s.io/randfill v1.0.0 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect\n)\n\n\n=== ui/package.json ===\n{\n  \"name\": \"k8m\",\n  \"scripts\": {\n    \"dev\": \"vite --mode development\",\n    \"build\": \"tsc && vite build\",\n    \"lint\": \"eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0\"\n  },\n  \"dependencies\": {\n    \"@ant-design/icons\": \"^5.6.1\",\n    \"@ant-design/x\": \"^1.2.0\",\n    \"@fortawesome/fontawesome-free\": \"^6.7.2\",\n    \"@monaco-editor/react\": \"^4.7.0\",\n    \"@xterm/addon-attach\": \"^0.11.0\",\n    \"@xterm/addon-clipboard\": \"^0.1.0\",\n    \"@xterm/addon-fit\": \"^0.10.0\",\n    \"@xterm/addon-search\": \"^0.15.0\",\n    \"@xterm/addon-serialize\": \"^0.13.0\",\n    \"@xterm/addon-unicode11\": \"^0.8.0\",\n    \"@xterm/addon-web-links\": \"^0.11.0\",\n    \"@xterm/addon-webgl\": \"^0.18.0\",\n    \"@xterm/xterm\": \"^5.5.0\",\n    \"amis\": \"^6.12.0\",\n    \"amis-core\": \"^6.12.0\",\n    \"amis-formula\": \"^6.12.0\",\n    \"amis-ui\": \"^6.12.0\",\n    \"ansi-to-html\": \"^0.7.2\",\n    \"antd\": \"^5.25.1\",\n    \"axios\": \"^1.9.0\",\n    \"copy-to-clipboard\": \"^3.3.3\",\n    \"crypto-js\": \"^4.2.0\",\n    \"dayjs\": \"^1.11.13\",\n    \"file-saver\": \"^2.0.5\",\n    \"i18n-jsautotranslate\": \"^3.17.0\",\n    \"js-yaml\": \"^4.1.0\",\n    \"jszip\": \"^3.10.1\",\n    \"jwt-decode\": \"^4.0.0\",\n    \"monaco-editor\": \"^0.52.2\",\n    \"react\": \"^18.3.1\",\n    \"react-countup\": \"^6.5.3\",\n    \"react-dom\": \"^18.3.1\",\n    \"react-draggable\": \"^4.4.6\",\n    \"react-router-dom\": \"^6.30.0\",\n    \"zustand\": \"^5.0.4\"\n  },\n  \"devDependencies\": {\n    \"@types/file-saver\": \"^2.0.7\",\n    \"@types/fs-extra\": \"^11.0.4\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/react\": \"^18.3.21\",\n    \"@types/react-dom\": \"^18.3.7\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.32.0\",\n    \"@typescript-eslint/parser\": \"^8.32.0\",\n    \"@vitejs/plugin-react\": \"^4.4.1\",\n    \"eslint-plugin-react-hooks\": \"^5.2.0\",\n    \"eslint-plugin-react-refresh\": \"^0.4.20\",\n    \"fs-extra\": \"^11.3.0\",\n    \"sass\": \"^1.87.0\",\n    \"typescript\": \"^5.8.3\",\n    \"vite\": \"^6.3.5\",\n    \"vite-plugin-monaco-editor\": \"^1.1.0\"\n  }\n}"
+}

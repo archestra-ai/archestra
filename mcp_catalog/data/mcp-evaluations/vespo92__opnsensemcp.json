@@ -1,0 +1,128 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "vespo92__opnsensemcp",
+  "display_name": "OPNSenseMCP",
+  "version": "1.0.0",
+  "description": "MCP Server for OPNSense to act as IaC proxy",
+  "author": {
+    "name": "vespo92"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OPNSense MCP Server\n\nA Model Context Protocol (MCP) server for managing OPNsense firewalls with Infrastructure as Code (IaC) capabilities.\n\n\n<a href=\"https://glama.ai/mcp/servers/@vespo92/OPNSenseMCP\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@vespo92/OPNSenseMCP/badge\" alt=\"OPNSense Server MCP server\" />\n</a>\n\n## Features\n=======\n![Version](https://img.shields.io/badge/version-0.7.0-blue)\n![License](https://img.shields.io/badge/license-MIT-green)\n![MCP](https://img.shields.io/badge/MCP-Compatible-orange)\n\n\n## 🚀 Features\n\n- **Complete OPNsense API Integration** - Manage VLANs, firewall rules, services, and more\n- **ARP Table Management** - View and search ARP entries, find devices by IP/MAC/hostname\n- **Infrastructure as Code** - Deploy and manage network infrastructure declaratively\n- **State Management** - Track resource state with rollback capabilities\n- **Caching Support** - Redis and PostgreSQL integration for performance\n- **DNS Blocking** - Built-in DNS blocklist management\n- **HAProxy Support** - Full HAProxy configuration and management\n- **Backup & Restore** - Configuration backup management\n- **Dual Transport Support** - STDIO for Claude Desktop, SSE for agents/containers\n\n## 📋 Prerequisites\n\n- Node.js 18+ \n- OPNsense firewall with API access enabled\n- (Optional) Redis for caching\n- (Optional) PostgreSQL for persistent cache\n\n## 🛠️ Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/vespo92/OPNSenseMCP\ncd opnsense-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Copy and configure environment\ncp .env.example .env\n# Edit .env with your OPNsense credentials\n```\n\n## 🚀 Transport Modes\n\nThe server supports two transport modes:\n\n### STDIO Mode (Default)\nFor direct integration with Claude Desktop:\n```bash\nnpm start                  # or npm run start:stdio\n```\n\n### SSE Mode\nFor HTTP-based integration with agents and containers:\n```bash\nnpm run start:sse          # Starts on port 3000\nnpm run start:sse -- --port 8080  # Custom port\n```\n\n**SSE Endpoints:**\n- `GET /sse` - SSE connection endpoint\n- `POST /messages` - Message handling\n- `GET /health` - Health check\n\nSee [SSE Deployment Guide](docs/SSE-DEPLOYMENT.md) for container deployment.\n\n## ⚙️ Configuration\n\nThe server supports multiple configuration methods:\n\n### Environment Variables (Auto-configuration)\nThe server automatically attempts to connect using environment variables on startup. Create a `.env` file:\n\n```env\n# Required\nOPNSENSE_HOST=https://192.168.1.1  # or just 192.168.1.1:55443\nOPNSENSE_API_KEY=your_api_key\nOPNSENSE_API_SECRET=your_api_secret\n\n# Optional\nIAC_ENABLED=true\nENABLE_CACHE=false\nREDIS_HOST=localhost\nPOSTGRES_HOST=localhost\n```\n\n### Manual Configuration\nIf environment variables are not set or connection fails, use the `configure` tool:\n```javascript\n// Configure connection manually\nawait configure({\n  host: \"https://192.168.1.1\",\n  apiKey: \"your_api_key\",\n  apiSecret: \"your_api_secret\",\n  verifySsl: true\n});\n```\n\n## 🚦 Quick Start\n\n```bash\n# Start the MCP server\nnpm start\n\n# Or use with Claude Desktop\n# Add to claude_desktop_config.json:\n{\n  \"mcpServers\": {\n    \"opnsense\": {\n      \"command\": \"node\",\n      \"args\": [\"dist/index.js\"],\n      \"cwd\": \"/path/to/opnsense-mcp\",\n      \"env\": {\n        \"OPNSENSE_HOST\": \"https://192.168.1.1:55443\",\n        \"OPNSENSE_API_KEY\": \"your_api_key\",\n        \"OPNSENSE_API_SECRET\": \"your_api_secret\",\n        \"OPNSENSE_VERIFY_SSL\": \"true\"\n      }\n    }\n  }\n}\n```\n\n## 📚 Documentation\n\n- [Getting Started Guide](docs/getting-started/README.md)\n- [API Reference](docs/api/README.md)\n- [IaC Architecture](docs/IaC-ARCHITECTURE.md)\n- [Troubleshooting](docs/troubleshooting/README.md)\n\n### Infrastructure as Code Example\n\nDeploy network infrastructure declaratively:\n\n```json\n{\n  \"name\": \"home-network\",\n  \"resources\": [{\n    \"type\": \"opnsense:network:vlan\",\n    \"id\": \"guest-vlan\",\n    \"name\": \"Guest Network\",\n    \"properties\": {\n      \"interface\": \"igc3\",\n      \"tag\": 10,\n      \"description\": \"Isolated guest network\"\n    }\n  }]\n}\n```\n\n## 📖 Usage Examples\n\n### Managing VLANs\n```javascript\n// Create a new VLAN for IoT devices\nconst vlan = {\n  type: \"opnsense:network:vlan\",\n  properties: {\n    interface: \"igc3\",\n    tag: 20,\n    description: \"IoT Network - Isolated\"\n  }\n};\n```\n\n### Firewall Rules\n```javascript\n// Block all traffic from guest network to main LAN\nconst rule = {\n  type: \"opnsense:firewall:rule\",\n  properties: {\n    action: \"block\",\n    interface: \"guest_vlan\",\n    source: \"guest_vlan_subnet\",\n    destination: \"lan_subnet\",\n    description: \"Block guest to LAN\"\n  }\n};\n```\n\n### DNS Blocking\n```javascript\n// Block social media sites\nconst blocklist = {\n  type: \"opnsense:dns:blocklist\",\n  properties: {\n    domains: [\"facebook.com\", \"twitter.com\", \"tiktok.com\"],\n    description: \"Social media block\",\n    enabled: true\n  }\n};\n```\n\n### Complete Network Setup Example\n```javascript\n// Deploy a complete guest network with isolation\nconst guestNetwork = {\n  name: \"guest-network-setup\",\n  resources: [\n    {\n      type: \"opnsense:network:vlan\",\n      id: \"guest-vlan\",\n      properties: {\n        interface: \"igc3\",\n        tag: 10,\n        description: \"Guest WiFi Network\"\n      }\n    },\n    {\n      type: \"opnsense:firewall:rule\",\n      id: \"guest-internet\",\n      properties: {\n        action: \"pass\",\n        interface: \"guest_vlan\",\n        source: \"guest_vlan_subnet\",\n        destination: \"any\",\n        description: \"Allow guest internet\"\n      }\n    },\n    {\n      type: \"opnsense:firewall:rule\",\n      id: \"block-guest-lan\",\n      properties: {\n        action: \"block\",\n        interface: \"guest_vlan\",\n        source: \"guest_vlan_subnet\",\n        destination: \"lan_subnet\",\n        description: \"Isolate guest from LAN\"\n      }\n    }\n  ]\n};\n```\n\n### Using with Claude Desktop\nOnce configured in Claude Desktop, you can ask Claude to:\n- \"Create a new VLAN for my smart home devices\"\n- \"Show me all devices on my guest network\"\n- \"Block pornhub.com on my network\"\n- \"Set up a Minecraft server VLAN with proper firewall rules\"\n- \"Find Kyle's laptop on the network\"\n- \"Create a backup of my firewall configuration\"\n\n## 🔧 Troubleshooting\n\n### Common Issues\n\n**Connection refused errors**\n- Ensure OPNsense API is enabled (System > Settings > Administration > API)\n- Check firewall rules allow API access from your host\n- Verify SSL settings match your configuration\n\n**Authentication failures**\n- API key and secret must be base64 encoded in OPNsense\n- Ensure no trailing spaces in credentials\n- Check user has appropriate permissions\n\n**VLAN creation fails**\n- Verify the physical interface exists and is not in use\n- Check VLAN tag is within valid range (1-4094)\n- Ensure interface supports VLAN tagging\n\n**Build errors**\n- Run `npm ci` for clean dependency installation\n- Ensure Node.js 18+ is installed\n- Check TypeScript version matches requirements\n\nFor more detailed troubleshooting, see our [Troubleshooting Guide](docs/troubleshooting/README.md).\n\n## 🗺️ Roadmap\n- [ ] Unified IaC orchestrator\n- [ ] Web UI for deployment management\n- [ ] Multi-firewall support\n\n## 🤝 Contributing\n\nContributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🙏 Acknowledgments\n\n- Built for the MCP (Model Context Protocol) ecosystem\n- Inspired by Pulumi and SST infrastructure patterns\n- Part of a larger vision for home infrastructure automation\n",
+  "category": "Security",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "opnsense-mcp-stdio": {
+          "command": "npm",
+          "args": ["start"],
+          "env": {}
+        },
+        "opnsense-mcp-sse": {
+          "command": "npm",
+          "args": ["run", "start:sse"],
+          "env": {}
+        },
+        "opnsense-mcp-sse-port-8080": {
+          "command": "npm",
+          "args": ["run", "start:sse", "--", "--port", "8080"],
+          "env": {}
+        },
+        "opnsense-mcp-claude-desktop-configured": {
+          "command": "node",
+          "args": ["dist/index.js"],
+          "env": {
+            "OPNSENSE_HOST": "https://192.168.1.1:55443",
+            "OPNSENSE_API_KEY": "your_api_key",
+            "OPNSENSE_API_SECRET": "your_api_secret",
+            "OPNSENSE_VERIFY_SSL": "true"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "vespo92",
+    "repo": "OPNSenseMCP",
+    "url": "https://github.com/vespo92/OPNSenseMCP",
+    "name": "OPNSenseMCP",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "28678adab0c2d79c3794f7dca3aedbfc664ba77d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:51:06.638Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/uuid",
+      "importance": 3
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "drizzle-orm",
+      "importance": 8
+    },
+    {
+      "name": "ioredis",
+      "importance": 7
+    },
+    {
+      "name": "pg",
+      "importance": 8
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"opnsense-mcp-server\",\n  \"version\": \"0.7.0\",\n  \"description\": \"Model Context Protocol server for OPNSense firewall management with ARP table, DNS filtering and HAProxy support via Claude Desktop\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/VinSpo/opnsense-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/VinSpo/opnsense-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/VinSpo/opnsense-mcp#readme\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"start:stdio\": \"node dist/index.js --transport stdio\",\n    \"start:sse\": \"node dist/index.js --transport sse --port 3000\",\n    \"dev\": \"tsx src/index.ts\",\n    \"dev:stdio\": \"tsx src/index.ts --transport stdio\",\n    \"dev:sse\": \"tsx src/index.ts --transport sse --port 3000\",\n    \"test\": \"tsx src/test-resources.ts\",\n    \"test:api\": \"node test-simple.js\",\n    \"test:vlan\": \"node test-vlan-comprehensive.js\",\n    \"test:minecraft\": \"node create-minecraft-vlan.js\",\n    \"prepare\": \"npm run build\",\n    \"db:generate\": \"drizzle-kit generate:pg\",\n    \"db:migrate\": \"tsx src/db/migrate.ts\",\n    \"db:push\": \"drizzle-kit push:pg\",\n    \"db:studio\": \"drizzle-kit studio\",\n    \"setup:cache\": \"node setup-enhanced-cache.js\",\n    \"test:network-query\": \"node test-network-query.js\",\n    \"test:dhcp\": \"node test-dhcp-fix.js\",\n    \"debug:dhcp\": \"node debug-dhcp-comprehensive.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"opnsense\",\n    \"firewall\",\n    \"api\"\n  ],\n  \"author\": \"VinSpo\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"@types/uuid\": \"^10.0.0\",\n    \"axios\": \"^1.6.0\",\n    \"dotenv\": \"^16.3.1\",\n    \"drizzle-orm\": \"^0.29.0\",\n    \"ioredis\": \"^5.6.1\",\n    \"pg\": \"^8.16.0\",\n    \"uuid\": \"^11.1.0\",\n    \"zod\": \"^3.25.62\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/pg\": \"^8.11.0\",\n    \"drizzle-kit\": \"^0.20.0\",\n    \"eslint\": \"^9.28.0\",\n    \"jest\": \"^30.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"rimraf\": \"^6.0.1\",\n    \"tsx\": \"^4.20.1\",\n    \"typescript\": \"^5.0.0\"\n  }\n}\n"
+}

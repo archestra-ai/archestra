@@ -28,6 +28,10 @@ jobs:
       desktop_release_created: ${{ steps.release-please.outputs['desktop_app--release_created'] }}
       mcp_server_docker_image_release_created: ${{ steps.release-please.outputs['mcp_server_docker_image--release_created'] }}
       mcp_server_docker_image_version: ${{ steps.release-please.outputs['mcp_server_docker_image--version'] }}
+      oauth_proxy_release_created: ${{ steps.release-please.outputs['oauth_proxy--release_created'] }}
+      oauth_proxy_version: ${{ steps.release-please.outputs['oauth_proxy--version'] }}
+      mcp_catalog_release_created: ${{ steps.release-please.outputs['mcp_catalog--release_created'] }}
+      mcp_catalog_version: ${{ steps.release-please.outputs['mcp_catalog--version'] }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -95,3 +99,39 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # TODO: uncomment this out when we are ready to deploy the oauth proxy from release-please
+  # deploy-oauth-proxy-to-prod:
+  #   name: Deploy OAuth Proxy to Production
+  #   if: needs.release-please.outputs.oauth_proxy_release_created
+  #   needs:
+  #     - release-please
+  #   uses: ./.github/workflows/deploy-oauth-proxy-server-to-cloud-run.yml
+  #   permissions:
+  #     contents: read
+  #     id-token: write  # Required for Workload Identity Federation
+  #   with:
+  #     environment: production
+  #     version: v${{ needs.release-please.outputs.oauth_proxy_version }}
+  #     base_url: https://oauth.archestra.ai
+  #   secrets:
+  #     GCP_PROJECT_ID: ${{ secrets.PRODUCTION_GCP_PROJECT_ID }}
+  #     GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+  #     GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+
+  deploy-mcp-catalog-to-prod:
+    name: Deploy MCP Catalog to Production
+    if: needs.release-please.outputs.mcp_catalog_release_created
+    needs:
+      - release-please
+    uses: ./.github/workflows/deploy-mcp-catalog-server-to-cloud-run.yml
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    with:
+      environment: production
+      version: v${{ needs.release-please.outputs.mcp_catalog_version }}
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.PRODUCTION_GCP_PROJECT_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}

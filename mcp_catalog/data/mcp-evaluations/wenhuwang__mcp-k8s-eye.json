@@ -1,0 +1,118 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "wenhuwang__mcp-k8s-eye",
+  "display_name": "mcp-k8s-eye",
+  "version": "1.0.0",
+  "description": "MCP Server for kubernetes management and diagnose your cluster and applications",
+  "author": {
+    "name": "wenhuwang"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## mcp-k8s-eye\n\nmcp-k8s-eye is a tool that can manage kubernetes cluster and analyze workload status.\n\n## Features\n\n### Core Kubernetes Operations\n- [x] Connect to a Kubernetes cluster\n- [x] **Generic Kubernetes Resources** management capabilities\n  - Support all navtie resources: Pod, Deployment, Service, StatefulSet, Ingress...\n  - Support CustomResourceDefinition resources\n  - Operations include: list, get, create, update, delete\n- [x] Pod management capabilities (exec, logs)\n- [x] Deployment management capabilities (scale)\n- [x] Describe Kubernetes resources\n- [ ] Explain Kubernetes resources\n\n\n### Diagnostics\n- [x] Pod diagnostics (analyze pod status, container status, pod resource utilization)\n- [x] Service diagnostics (analyze service selector configuration, not ready endpoints, events)\n- [x] Deployment diagnostics (analyze available replicas)\n- [x] StatefulSet diagnostics (analyze statefulset service if exists, pvc if exists, available replicas)\n- [x] CronJob diagnostics (analyze cronjob schedule, starting deadline, last schedule time)\n- [x] Ingress diagnostics (analyze ingress class configuration, related services, tls secrets)\n- [x] NetworkPolicy diagnostics (analyze networkpolicy configuration, affected pods)\n- [x] ValidatingWebhook diagnostics (analyze webhook configuration, referenced services and pods)\n- [x] MutatingWebhook diagnostics (analyze webhook configuration, referenced services and pods)\n- [x] Node diagnostics (analyze node conditions)\n- [ ] Cluster diagnostics and troubleshooting \n\n### Monitoring\n- [x] Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet workload resource usage (cpu, memory)\n- [ ] Node capacity, utilization (cpu, memory)\n- [ ] Cluster capacity, utilization (cpu, memory)\n\n### Advanced Features\n- [x] Multiple transport protocols support (Stdio, SSE)\n- [x] Support multiple AI Clients\n\n\n## Tools Usage\n\n### Resource Operation Tools\n- `resource_get`: Get detailed resource information about a specific resource in a namespace\n- `resource_list`: List detailed resource information about all resources in a namespace \n- `resource_create_or_update`: Create or update a resource in a namespace\n- `resource_delete`: Delete a resource in a namespace\n- `resource_describe`: Describe a resource detailed information in a namespace\n- `deployment_scale`: Scale a deployment in a namespace\n- `pod_exec`: Execute a command in a pod in a namespace`\n- `pod_logs`: Get logs from a pod in a namespace\n\n###  Diagnostics Tools\n- `pod_analyze`: Diagnose all pods in a namespace\n- `deployment_analyze`: Diagnose all deployments in a namespace\n- `statefulset_analyze`: Diagnose all statefulsets in a namespace\n- `service_analyze`: Diagnose all services in a namespace\n- `cronjob_analyze`: Diagnose all cronjobs in a namespace\n- `ingress_analyze`: Diagnose all ingresses in a namespace\n- `networkpolicy_analyze`: Diagnose all networkpolicies in a namespace\n- `validatingwebhook_analyze`: Diagnose all validatingwebhooks\n- `mutatingwebhook_analyze`: Diagnose all mutatingwebhooks\n- `node_analyze`: Diagnose all nodes in cluster\n\n### Monitoring Tools\n- `workload_resource_usage`: Get pod/deployment/replicaset/statefulset resource usage in a namepace (cpu, memory)\n\n\n## Requirements\n- Go 1.23 or higher\n- kubectl configured\n\n## Installation\n```\n# clone the repository\ngit clone https://github.com/wenhuwang/mcp-k8s-eye.git\ncd mcp-k8s-eye\n\n# build the binary\ngo build -o mcp-k8s-eye\n```\n\n## Usage\n### Stdio mode\n```\n{\n  \"mcpServers\": {\n    \"k8s eye\": {\n      \"command\": \"YOUR mcp-k8s-eye PATH\",\n      \"env\": {\n        \"HOME\": \"USER HOME DIR\"\n      },\n    }\n  }\n}\n```\n`env.HOME` is used to set the HOME directory for kubeconfig file.\n\n### SSE mode\n1. start your mcp sse server\n2. config your mcp server\n\n```\n{\n  \"mcpServers\": {\n    \"k8s eye\": {\n      \"url\": \"http://localhost:8080/sse\",\n      \"env\": {}\n    }\n  }\n}\n```\n\n### cursor tools\n![cursor tools](./images/mcp-server-tools.png)",
+  "category": "Cloud",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-k8s-eye": {
+          "command": "mcp-k8s-eye",
+          "args": [],
+          "env": {
+            "HOME": "USER_HOME_DIR"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "wenhuwang",
+    "repo": "mcp-k8s-eye",
+    "url": "https://github.com/wenhuwang/mcp-k8s-eye",
+    "name": "mcp-k8s-eye",
+    "path": null,
+    "stars": 23,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "dbaf0657f96f989abad108c851c5b926a4d0dc1a"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:04.691Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "k8s.io/client-go",
+      "importance": 10
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/api",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/kubectl",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/metrics",
+      "importance": 8
+    },
+    {
+      "name": "spf13/viper",
+      "importance": 7
+    },
+    {
+      "name": "sigs.k8s.io/yaml",
+      "importance": 7
+    },
+    {
+      "name": "robfig/cron/v3",
+      "importance": 6
+    },
+    {
+      "name": "google/gnostic",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/wenhuwang/mcp-k8s-eye\n\ngo 1.24.0\n\ntoolchain go1.24.3\n\nrequire (\n\tgithub.com/google/gnostic v0.7.0\n\tgithub.com/mark3labs/mcp-go v0.21.1\n\tgithub.com/robfig/cron/v3 v3.0.1\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/spf13/viper v1.19.0\n\tgithub.com/stretchr/testify v1.10.0\n\tk8s.io/api v0.33.1\n\tk8s.io/apimachinery v0.33.1\n\tk8s.io/client-go v0.33.1\n\tk8s.io/kubectl v0.33.1\n\tk8s.io/metrics v0.33.1\n\tsigs.k8s.io/yaml v1.4.0\n)\n\nrequire (\n\tgithub.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect\n\tgithub.com/blang/semver/v4 v4.0.0 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.11.0 // indirect\n\tgithub.com/fatih/camelcase v1.0.0 // indirect\n\tgithub.com/fsnotify/fsnotify v1.7.0 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/go-errors/errors v1.4.2 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.20.2 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/google/btree v1.1.3 // indirect\n\tgithub.com/google/gnostic-models v0.6.9 // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect\n\tgithub.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect\n\tgithub.com/hashicorp/hcl v1.0.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect\n\tgithub.com/magiconair/properties v1.8.7 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/moby/term v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.2 // indirect\n\tgithub.com/peterbourgon/diskv v2.0.1+incompatible // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect\n\tgithub.com/sagikazarmark/locafero v0.4.0 // indirect\n\tgithub.com/sagikazarmark/slog-shim v0.1.0 // indirect\n\tgithub.com/sourcegraph/conc v0.3.0 // indirect\n\tgithub.com/spf13/afero v1.11.0 // indirect\n\tgithub.com/spf13/cast v1.6.0 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/xlab/treeprint v1.2.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.uber.org/atomic v1.9.0 // indirect\n\tgo.uber.org/multierr v1.9.0 // indirect\n\tgolang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect\n\tgolang.org/x/net v0.38.0 // indirect\n\tgolang.org/x/oauth2 v0.27.0 // indirect\n\tgolang.org/x/sync v0.12.0 // indirect\n\tgolang.org/x/sys v0.31.0 // indirect\n\tgolang.org/x/term v0.30.0 // indirect\n\tgolang.org/x/text v0.23.0 // indirect\n\tgolang.org/x/time v0.9.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.5 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/ini.v1 v1.67.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tk8s.io/cli-runtime v0.33.1 // indirect\n\tk8s.io/component-helpers v0.33.1 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/kustomize/api v0.19.0 // indirect\n\tsigs.k8s.io/kustomize/kyaml v0.19.0 // indirect\n\tsigs.k8s.io/randfill v1.0.0 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect\n)\n"
+}

@@ -34,6 +34,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./desktop_app
 
       - name: Check prettier formatting
         run: pnpm prettier --check .
@@ -62,6 +64,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./desktop_app
 
       - name: Codegen
         run: pnpm codegen:all
@@ -89,6 +93,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./desktop_app
 
       - name: Verify no pending database migrations
         run: pnpm db:generate
@@ -125,3 +131,143 @@ jobs:
     with:
       push_to_gcr: false
       version: ${{ github.sha }}
+
+  ensure-mcp-catalog-data-is-valid:
+    name: Ensure MCP Catalog Data is Valid
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mcp_catalog
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./mcp_catalog
+
+      - name: Validate catalog data
+        run: pnpm catalog:validate
+
+  verify-mcp-catalog-has-no-pending-openapi-schema-changes:
+    name: Verify MCP Catalog has no pending OpenAPI schema changes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mcp_catalog
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./mcp_catalog
+
+      - name: Codegen
+        run: pnpm openapi:generate
+
+      - name: Check for changes
+        run: |
+          # Check both unstaged and staged changes
+          if ! git diff --exit-code || ! git diff --cached --exit-code; then
+            echo "❌ OpenAPI schema has uncommitted changes!"
+            echo ""
+            echo "The OpenAPI schema is out of sync with the API implementation."
+            echo "To fix this, run the following commands locally:"
+            echo ""
+            echo "  cd app"
+            echo "  npm run openapi:generate"
+            echo "  git add app/mcp-catalog/api/docs/openapi.json"
+            echo "  git commit -m 'chore: update OpenAPI schema'"
+            echo ""
+            echo "Then push your changes."
+            echo ""
+            echo "Changes detected:"
+            git diff --name-only
+            exit 1
+          fi
+
+  oauth-proxy-linting-and-tests:
+    name: OAuth Proxy Linting and Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./oauth_proxy
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./oauth_proxy
+
+      - name: TypeScript type check
+        run: pnpm typecheck
+
+      # - name: Run tests
+      #   run: pnpm test:run
+
+      # - name: Build
+      #   run: pnpm build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
+
+      - name: Build Docker image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./oauth_proxy/Dockerfile
+          push: false
+          tags: oauth-proxy:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  mcp-catalog-linting-and-tests:
+    name: MCP Catalog Linting and Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mcp_catalog
+    # TODO: once we setup pnpm workspaces have this reuse the setup-frontend action instead
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./mcp_catalog
+
+      - name: TypeScript type check
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test:run
+
+      - name: Build
+        run: pnpm build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
+
+      - name: Build Docker image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./mcp_catalog/Dockerfile
+          push: false
+          tags: mcp-catalog:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

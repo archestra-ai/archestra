@@ -1,0 +1,112 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "microsoft__playwright-mcp",
+  "display_name": "playwright-mcp",
+  "version": "1.0.0",
+  "description": "Playwright MCP server",
+  "author": {
+    "name": "microsoft"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Browser Automation",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "playwright-mcp": {
+          "command": "npx",
+          "args": ["@playwright/mcp@latest"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "microsoft",
+    "repo": "playwright-mcp",
+    "url": "https://github.com/microsoft/playwright-mcp",
+    "name": "microsoft__playwright-mcp",
+    "path": null,
+    "stars": 17318,
+    "contributors": 38,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.951Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 10
+    },
+    {
+      "name": "playwright-core",
+      "importance": 10
+    },
+    {
+      "name": "ws",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "commander",
+      "importance": 5
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "mime",
+      "importance": 4
+    },
+    {
+      "name": "debug",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": null
+}

@@ -1,0 +1,104 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "dbt-labs__dbt-mcp",
+  "display_name": "dbt-mcp",
+  "version": "1.0.0",
+  "description": "A MCP (Model Context Protocol) server for interacting with dbt.",
+  "author": {
+    "name": "dbt-labs"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# dbt MCP Server\n\nThis MCP (Model Context Protocol) server provides tools to interact with dbt. Read [this](https://docs.getdbt.com/blog/introducing-dbt-mcp-server) blog to learn more. Add comments or questions to GitHub Issues or join us in [the community Slack](https://www.getdbt.com/community/join-the-community) in the `#tools-dbt-mcp` channel.\n\n## Architecture\n\n![architecture diagram of the dbt MCP server](https://raw.githubusercontent.com/dbt-labs/dbt-mcp/refs/heads/main/docs/d2.png)\n\n## Tools\n\n### dbt CLI\n\n* `build` - Executes models, tests, snapshots, and seeds in dependency order\n* `compile` - Generates executable SQL from models, tests, and analyses without running them\n* `docs` - Generates documentation for the dbt project\n* `ls` (list) - Lists resources in the dbt project, such as models and tests\n* `parse` - Parses and validates the project’s files for syntax correctness\n* `run` -  Executes models to materialize them in the database\n* `test` - Runs tests to validate data and model integrity\n* `show` - Runs a query against the data warehouse\n\n> Allowing your client to utilize dbt commands through this MCP tooling could modify your data models, sources, and warehouse objects. Proceed only if you trust the client and understand the potential impact.\n\n\n### Semantic Layer\n\n* `list_metrics` - Retrieves all defined metrics\n* `get_dimensions` - Gets dimensions associated with specified metrics\n* `get_entities` - Gets entities associated with specified metrics\n* `query_metrics` - Queries metrics with optional grouping, ordering, filtering, and limiting\n\n\n### Discovery\n* `get_mart_models` - Gets all mart models\n* `get_all_models` - Gets all models\n* `get_model_details` - Gets details for a specific model\n* `get_model_parents` - Gets parent nodes of a specific model\n* `get_model_children` - Gets children models of a specific model\n\n### SQL\n* `text_to_sql` - Generate SQL from natural language requests\n* `execute_sql` - Execute SQL on dbt Cloud's backend infrastructure with support for Semantic Layer SQL syntax. Note: using a PAT instead of a service token for `DBT_TOKEN` is required for this tool.\n\n## Setup\n\nThere are two ways to setup dbt MCP, [local](#local) and [remote](#remote). Local setup is best for dbt projects that you are developing in a local IDE. Remote setup is better for building custom applications.\n\n### Local\n\n1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)\n2. Copy the [`.env.example` file](https://github.com/dbt-labs/dbt-mcp/blob/main/.env.example) locally under a file called `.env` and set it with the following environment variable configuration:\n\n#### Tools\n| Name                     | Default | Description                                                                     |\n| ------------------------ | ------- | ------------------------------------------------------------------------------- |\n| `DISABLE_DBT_CLI`        | `false` | Set this to `true` to disable dbt Core, dbt Cloud CLI, and dbt Fusion MCP tools |\n| `DISABLE_SEMANTIC_LAYER` | `false` | Set this to `true` to disable dbt Semantic Layer MCP tools                    |\n| `DISABLE_DISCOVERY`      | `false` | Set this to `true` to disable dbt Discovery API MCP tools                     |\n| `DISABLE_SQL`         | `true`  | Set this to `false` to enable SQL MCP tools                                |\n| `DISABLE_TOOLS`          | \"\"      | Set this to a list of tool names delimited by a `,` to disable certain tools    |\n\n\n#### Configuration for Discovery, Semantic Layer, and SQL Tools\n| Name                       | Default            | Description                                                                                                                                                                                                                                  |\n| -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `DBT_HOST`                 | `cloud.getdbt.com` | Your dbt Cloud instance hostname. This will look like an `Access URL` found [here](https://docs.getdbt.com/docs/cloud/about-cloud/access-regions-ip-addresses). If you are using Multi-cell, do not include the `ACCOUNT_PREFIX` here        |\n| `MULTICELL_ACCOUNT_PREFIX` | -                  | If you are using Multi-cell, set this to your `ACCOUNT_PREFIX`. If you are not using Multi-cell, do not set this environment variable. You can learn more [here](https://docs.getdbt.com/docs/cloud/about-cloud/access-regions-ip-addresses) |\n| `DBT_TOKEN`                | -                  | Your personal access token or service token. Note: a service token is required when using the Semantic Layer and this service token should have at least `Semantic Layer Only`, `Metadata Only`, and `Developer` permissions.                |\n| `DBT_PROD_ENV_ID`          | -                  | Your dbt Cloud production environment ID                                                                                                                                                                                                     |\n\n#### Configuration for SQL Tools\n| Name             | Description                               |\n| ---------------- | ----------------------------------------- |\n| `DBT_DEV_ENV_ID` | Your dbt Cloud development environment ID |\n| `DBT_USER_ID`    | Your dbt Cloud user ID                    |\n|                  |                                           |\n\n#### Configuration for dbt CLI\n| Name              | Description                                                                                                                                 |\n| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |\n| `DBT_PROJECT_DIR` | The path to where the repository of your dbt Project is hosted locally. This should look something like `/Users/firstnamelastname/reponame` |\n| `DBT_PATH`        | The path to your dbt Core, dbt Cloud CLI, or dbt Fusion executable. You can find your dbt executable by running `which dbt`                 |\n| `DBT_CLI_TIMEOUT` | Configure the number of seconds before your agent will timeout dbt CLI commands. Defaults to 10 seconds.                                    |\n\nIt is also possible to set any environment variable supported by your dbt executable (see [here](https://docs.getdbt.com/reference/global-configs/about-global-configs#available-flags) for the ones supported in dbt Core).\n\nWe automatically set `DBT_WARN_ERROR_OPTIONS='{\"error\": [\"NoNodesForSelectionCriteria\"]}'` so that the MCP server knows if no node is selected when running a dbt command.\nYou can overwrite it if needed but we believe that it provides a better experience when calling dbt from the MCP server, making sure that the tool is selecting valid nodes.\n\n#### Using with MCP Clients\n\nAfter going through the [Setup](#setup), you can use dbt-mcp with an MCP client.\n\nAdd this configuration to the respective client's config file. Be sure to replace the sections within `<>`:\n\n```json\n{\n  \"mcpServers\": {\n    \"dbt-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--env-file\",\n        \"<path-to-.env-file>\",\n        \"dbt-mcp\"\n      ]\n    },\n  }\n}\n```\n\n`<path-to-.env-file>` is where you saved the `.env` file from the Setup step\n\n#### Claude Code\n\nRun the following command to add the MCP server to Claude Code:\n\n```bash\nclaude mcp add dbt -- uvx --env-file <path-to-.env-file> dbt-mcp\n```\n\nBy default the MCP server is installed in the \"local\" scope, meaning that it will be active for Claude Code sessions in the current directory for the user who installed it.\n\nIt is also possible to install the MCP server:\n- in the \"user\" scope, to have it installed for all Claude Code sessions, independently of the directory used\n- in the \"project\" scope, to create a config file that can be version controlled so that all developers of the same project can have the MCP server already installed\n\nTo install it in the project scope, run the following and and commit the `.mcp.json` file. Be sure to use an env var file path that is the same for all users.\n```bash\nclaude mcp add dbt -s project -- uvx --env-file <path-to-.env-file> dbt-mcp\n```\n\nMore info on scopes [here](https://docs.anthropic.com/en/docs/claude-code/mcp#understanding-mcp-server-scopes)\n\n#### Claude Desktop\n\nFollow [these](https://modelcontextprotocol.io/quickstart/user) instructions to create the `claude_desktop_config.json` file and connect.\n\nFor debugging, you can find the Claude Desktop logs at `~/Library/Logs/Claude` for Mac or `%APPDATA%\\Claude\\logs` for Windows.\n\n#### Cursor\n\nNote the configuration options [here](#configuration) and input your selections with this link:\n\n<a href=\"https://cursor.com/install-mcp?name=dbt&config=eyJjb21tYW5kIjoidXZ4IGRidC1tY3AiLCJlbnYiOnsiREJUX0hPU1QiOiJjbG91ZC5nZXRkYnQuY29tIiwiTVVMVElDRUxMX0FDQ09VTlRfUFJFRklYIjoib3B0aW9uYWwtYWNjb3VudC1wcmVmaXgiLCJEQlRfVE9LRU4iOiJ5b3VyLXNlcnZpY2UtdG9rZW4iLCJEQlRfUFJPRF9FTlZfSUQiOiJ5b3VyLXByb2R1Y3Rpb24tZW52aXJvbm1lbnQtaWQiLCJEQlRfREVWX0VOVl9JRCI6InlvdXItZGV2ZWxvcG1lbnQtZW52aXJvbm1lbnQtaWQiLCJEQlRfVVNFUl9JRCI6InlvdXItdXNlci1pZCIsIkRCVF9QUk9KRUNUX0RJUiI6Ii9wYXRoL3RvL3lvdXIvZGJ0L3Byb2plY3QiLCJEQlRfUEFUSCI6Ii9wYXRoL3RvL3lvdXIvZGJ0L2V4ZWN1dGFibGUiLCJESVNBQkxFX0RCVF9DTEkiOiJmYWxzZSIsIkRJU0FCTEVfU0VNQU5USUNfTEFZRVIiOiJmYWxzZSIsIkRJU0FCTEVfRElTQ09WRVJZIjoiZmFsc2UiLCJESVNBQkxFX1JFTU9URSI6ImZhbHNlIn19\"><img src=\"https://cursor.com/deeplink/mcp-install-dark.svg\" alt=\"Add dbt MCP server to Cursor\" height=\"32\" /></a>\n\nCursor MCP docs [here](https://docs.cursor.com/context/model-context-protocol) for reference\n\n#### VS Code\n\n1. Open the Settings menu (Command + Comma) and select the correct tab atop the page for your use case\n    - `Workspace` - configures the server in the context of your workspace\n    - `User` - configures the server in the context of your user\n    - **Note for WSL users**: If you're using VS Code with WSL, you'll need to configure WSL-specific settings. Run the **Preferences: Open Remote Settings** command from the Command Palette (F1) or select the **Remote** tab in the Settings editor. Local User settings are reused in WSL but can be overridden with WSL-specific settings. Configuring MCP servers in the local User settings will not work properly in a WSL environment.\n\n2. Select Features → Chat\n\n3. Ensure that \"Mcp\" is `Enabled`\n\n![mcp-vscode-settings](https://github.com/user-attachments/assets/3d3fa853-2398-422a-8a6d-7f0a97120aba)\n\n4. Open the command palette `Control/Command + Shift + P`, and select either \"MCP: Open Workspace Folder MCP Configuration\" or \"MCP: Open User Configuration\" depending on whether you want to install the MCP server for this workspace or for all workspaces for the user\n\n5. Add your server configuration (`dbt`) to the provided `mcp.json` file as one of the servers:\n```json\n{\n\t\"servers\": {\n\t\t\"dbt\": {\n\t\t\t\"command\": \"uvx\",\n      \"args\": [\n        \"--env-file\",\n        \"<path-to-.env-file>\",\n        \"dbt-mcp\"\n      ]\n\t\t}\n\t}\n}\n```\n\n`<path-to-.env-file>` is where you saved the `.env` file from the Setup step\n\n6. You can start, stop, and configure your MCP servers by:\n- Running the `MCP: List Servers` command from the Command Palette (Control/Command + Shift + P) and selecting the server\n- Utlizing the keywords inline within the `mcp.json` file\n\n![inline-management](https://github.com/user-attachments/assets/d33d4083-5243-4b36-adab-72f12738c263)\n\nVS Code MCP docs [here](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) for reference\n\n### Remote\n\nThe remote setup doesn't require running dbt MCP locally. Instead, an HTTP connection is made to dbt MCP running within dbt Cloud. Currently, only Semantic Layer & Discovery tools are supported. To get started, ensure that you have [AI Features](https://docs.getdbt.com/docs/cloud/enable-dbt-copilot) turned on, and get the following information:\n\n- dbt Cloud host: Use this to form the full URL. For example, replace `<host>` here: `https://<host>/api/ai/v1/mcp/`. It may look like: `https://cloud.getdbt.com/api/ai/v1/mcp/`.\n- Production environment ID: This can be found on the `Orchestration` page of dbt Cloud. Use this to set a `x-dbt-prod-environment-id` header.\n- Service token: To fully utilize Remote MCP, this needs to be configured for the dbt Semantic Layer by following [this](https://docs.getdbt.com/docs/use-dbt-semantic-layer/setup-sl#2-add-a-credential-and-create-service-tokens) guide and have `Developer` permissions. Add this as a `Authorization` header with a value like: `token <token>`. Be sure to replace `<token>` with the value of your token.\n\nThen you can use these values to connect to the remote server with Streamable HTTP MCP transport. Use the example [here](https://github.com/dbt-labs/dbt-mcp/blob/76992ac51a905e9e0d2194774e7246ee288094b9/examples/remote_mcp/main.py) as a reference in Python. A similar implementation is possible with SDKs for many other languages.\n\nYou can also connect from MCP clients which support remote MCP with headers. For instance, you can connect Cursor to the remote server with the following configuration. Be sure to replace `<host>`, `<token>`, and `<prod-id>` with your information:\n\n```\n{\n  \"mcpServers\": {\n    \"dbt\": {\n      \"url\": \"https://<host>/api/ai/v1/mcp/\",\n      \"headers\": {\n        \"Authorization\": \"token <token>\",\n        \"x-dbt-prod-environment-id\": \"<prod-id>\",\n      }\n    }\n  }\n}\n```\n\n## Troubleshooting\n\n- Some MCP clients may be unable to find `uvx` from the JSON config. If this happens, try finding the full path to `uvx` with `which uvx` on Unix systems and placing this full path in the JSON. For instance: `\"command\": \"/the/full/path/to/uvx\"`.\n\n## Contributing\n\nRead `CONTRIBUTING.md` for instructions on how to get involved!\n",
+  "category": "Data",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "dbt-mcp": {
+          "command": "uvx",
+          "args": ["--env-file", "<path-to-.env-file>", "dbt-mcp"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "dbt-labs",
+    "repo": "dbt-mcp",
+    "url": "https://github.com/dbt-labs/dbt-mcp",
+    "name": "dbt-mcp",
+    "path": null,
+    "stars": 331,
+    "contributors": 19,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "ce4d3409f8fb0180f3ab875549bc9c716bf2fae0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:34:53.472Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dbt-protos",
+      "importance": 8
+    },
+    {
+      "name": "dbt-sl-sdk",
+      "importance": 9
+    },
+    {
+      "name": "dbtlabs-vortex",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dbt-mcp\"\ndescription = \"A MCP (Model Context Protocol) server for interacting with dbt resources.\"\nauthors = [{ name = \"dbt Labs\" }]\nreadme = \"README.md\"\nlicense = { file = \"LICENSE\" }\nrequires-python = \">=3.12\"\ndynamic = [\"version\"]\nclassifiers = [\n  \"License :: OSI Approved :: Apache Software License\",\n  \"Programming Language :: Python :: 3\",\n  \"Operating System :: OS Independent\",\n  \"Development Status :: 4 - Beta\",\n  \"Intended Audience :: Developers\",\n]\ndependencies = [\n  # Pinning all dependencies because this app is installed with uvx\n  # and we want to have a consistent install as much as possible.\n  \"dbt-protos==1.0.317\",\n  \"dbt-sl-sdk[sync]==0.11.0\",\n  \"dbtlabs-vortex==0.2.0\",\n  \"mcp[cli]==1.10.1\",\n  \"pandas==2.2.3\",\n  \"pydantic-settings==2.10.1\",\n  \"pyyaml==6.0.2\",\n  \"requests==2.32.4\",\n]\n[dependency-groups]\ndev = [\n  \"ruff>=0.11.2\",\n  \"types-requests>=2.32.0.20250328\",\n  \"mypy>=1.12.1\",\n  \"pre-commit>=4.2.0\",\n  \"pytest-asyncio>=0.26.0\",\n  \"pytest>=8.3.5\",\n  \"openai>=1.71.0\",\n  \"pyarrow-stubs>=19.1\",\n  \"types-pyyaml>=6.0.12.20250516\",\n]\n\n[project.urls]\nDocumentation = \"https://github.com/dbt-labs/dbt-mcp#readme\"\nIssues = \"https://github.com/dbt-labs/dbt-mcp/issues\"\nSource = \"https://github.com/dbt-labs/dbt-mcp\"\nChangelog = \"https://github.com/dbt-labs/dbt-mcp/blob/main/CHANGELOG.md\"\n\n[project.scripts]\ndbt-mcp = \"dbt_mcp.main:main\"\n\n[build-system]\nrequires = [\"hatchling\", \"hatch-vcs\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.sdist]\ninclude = [\"src/dbt_mcp/**/*\", \"README.md\", \"LICENSE\"]\n\n[tool.hatch.version]\nsource = \"vcs\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\npythonpath = [\".\", \"src\"]\n"
+}

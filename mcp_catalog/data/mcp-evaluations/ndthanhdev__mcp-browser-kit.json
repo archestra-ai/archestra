@@ -1,0 +1,160 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ndthanhdev__mcp-browser-kit",
+  "display_name": "mcp-browser-kit",
+  "version": "1.0.0",
+  "description": "An MCP Server that enables AI assistants to interact with your local browsers.",
+  "author": {
+    "name": "ndthanhdev"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Browser Automation",
+  "quality_score": 28,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-browser-kit-server": {
+          "command": "npx",
+          "args": ["@mcp-browser-kit/server"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "ndthanhdev",
+    "repo": "mcp-browser-kit",
+    "url": "https://github.com/ndthanhdev/mcp-browser-kit",
+    "name": "ndthanhdev__mcp-browser-kit",
+    "path": null,
+    "stars": 27,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.795Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@trpc/client",
+      "importance": 8
+    },
+    {
+      "name": "@trpc/server",
+      "importance": 10
+    },
+    {
+      "name": "change-case",
+      "importance": 4
+    },
+    {
+      "name": "consola",
+      "importance": 6
+    },
+    {
+      "name": "core-js",
+      "importance": 5
+    },
+    {
+      "name": "data-urls",
+      "importance": 5
+    },
+    {
+      "name": "dompurify",
+      "importance": 7
+    },
+    {
+      "name": "emittery",
+      "importance": 4
+    },
+    {
+      "name": "image-dimensions",
+      "importance": 5
+    },
+    {
+      "name": "inversify",
+      "importance": 8
+    },
+    {
+      "name": "js-base64",
+      "importance": 4
+    },
+    {
+      "name": "ok-value-error-reason",
+      "importance": 4
+    },
+    {
+      "name": "p-timeout",
+      "importance": 4
+    },
+    {
+      "name": "pino",
+      "importance": 7
+    },
+    {
+      "name": "ramda",
+      "importance": 6
+    },
+    {
+      "name": "reflect-metadata",
+      "importance": 8
+    },
+    {
+      "name": "sanitize-html",
+      "importance": 7
+    },
+    {
+      "name": "superjson",
+      "importance": 8
+    },
+    {
+      "name": "webextension-polyfill",
+      "importance": 9
+    },
+    {
+      "name": "winston",
+      "importance": 7
+    },
+    {
+      "name": "winston-transport-browserconsole",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

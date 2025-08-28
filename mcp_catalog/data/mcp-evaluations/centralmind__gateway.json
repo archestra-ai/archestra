@@ -1,0 +1,273 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "centralmind__gateway",
+  "display_name": "gateway",
+  "version": "1.0.0",
+  "description": "Universal MCP-Server for your Databases optimized for LLMs and AI-Agents.",
+  "author": {
+    "name": "centralmind"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n\n![Build Binaries](https://github.com/centralmind/gateway/actions/workflows/build-binaries.yml/badge.svg) &nbsp; <a href=\"https://discord.gg/XFhaUG4F5x\"><img src=\"https://dcbadge.limes.pink/api/server/https://discord.gg/XFhaUG4F5x\" height=\"20\"></a> &nbsp;&nbsp;<a href=\"https://t.me/+TM3T1SikjzA4ZWVi\"><img src=\"https://img.shields.io/badge/telegram-%E2%9D%A4%EF%B8%8F-252850?style=plastic&logo=telegram\" height=20></a> &nbsp;&nbsp; <a href=\"https://docs.centralmind.ai\"><img src=\"https://img.shields.io/badge/Full%20Documentation-blue?style=for-the-badge&logo=rocket&logoColor=white\" height=\"20\"></a>&nbsp;&nbsp; <a href=\"https://cursor.com/install-mcp?name=CentralMind%20Database%20Gateway&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXBsYXRmb3JtIGxpbnV4L2FtZDY0IGdoY3IuaW8vY2VudHJhbG1pbmQvZ2F0ZXdheTp2MC4yLjE4IC0tY29ubmVjdGlvbi1zdHJpbmcgcG9zdGdyZXNxbDovL215X3VzZXI6bXlfcGFzc0Bsb2NhbGhvc3Q6NTQzMi9teWRiIHN0YXJ0IHN0ZGlvIn0%3D\"><img height=\"21\" src=\"https://cursor.com/deeplink/mcp-install-dark.svg\"></a>\n\n\n</div>\n\n\n<h2 align=\"center\">CentralMind Gateway: Create API or MCP Server in Minutes</h2>\n\n🚀 Interactive Demo avialable here: https://centralmind.ai\n\n## What is Centralmind/Gateway\n\nSimple way to expose your database to AI-Agent via MCP or OpenAPI 3.1 protocols.\n\n```bash\ndocker run --platform linux/amd64 -p 9090:9090 \\\n  ghcr.io/centralmind/gateway:v0.2.18 start \\\n  --connection-string \"postgres://db-user:db-password@db-host/db-name?sslmode=require\"\n```\n\nThis will run for you an API:\n\n```shell\nINFO Gateway server started successfully!         \nINFO MCP SSE server for AI agents is running at: http://localhost:9090/sse \nINFO REST API with Swagger UI is available at: http://localhost:9090/ \n```\n\nWhich you can use inside your AI Agent:\n\n![mcp-raw-cursor-setup.png](./assets/mcp-raw-cursor-setup.png)\n\nGateway will generate AI optimized API.\n\n\n## Why Centralmind/Gateway\n\nAI agents and LLM-powered applications need fast, secure access to data. We're building an API layer that automatically generates secure, LLM-optimized APIs for your structured data.\n- Quickly start with MCP or OpenAPI, or use Direct/Raw SQL APIs\n- Filters out PII and sensitive data to ensure compliance with GDPR, CPRA, SOC 2, and other regulations\n- Adds traceability and auditing capabilities, ensuring AI applications aren't black boxes and allowing security teams to maintain control\n- Optimized for AI workloads: supports the Model Context Protocol (MCP) with enhanced metadata to help AI agents understand APIs, along with built-in caching and security features\n\nIt can be useful during development, when an LLM needs to create, adjust, or query data from your database.\nIn analytical scenarios, it enables you to chat with your database or data warehouse.\nEnrich your AI agents with data from your database using remote function/tool calling.\n\n![demo](/assets/demo.gif)\n\n## Features\n\n- ⚡ **Automatic API Generation** – Creates APIs automatically using LLM based on table schema and sampled data\n- 🗄️ **Structured Database Support** – Supports <a href=\"https://docs.centralmind.ai/connectors/postgres/\">PostgreSQL</a>, <a href=\"https://docs.centralmind.ai/connectors/mysql/\">MySQL</a>, <a href=\"https://docs.centralmind.ai/connectors/clickhouse/\">ClickHouse</a>, <a href=\"https://docs.centralmind.ai/connectors/snowflake/\">Snowflake</a>, <a href=\"https://docs.centralmind.ai/connectors/mssql/\">MSSQL</a>, <a href=\"https://docs.centralmind.ai/connectors/bigquery/\">BigQuery</a>, <a href=\"https://docs.centralmind.ai/connectors/oracle/\">Oracle Database</a>, <a href=\"https://docs.centralmind.ai/connectors/sqlite/\">SQLite</a>, <a href=\"https://docs.centralmind.ai/connectors/sqlite/\">ElasticSearch</a>\n- 🌍 **Multiple Protocol Support** – Provides APIs as REST or MCP Server including SSE mode\n- 🔐 **Authentication Options** – Built-in support for <a href=\"https://docs.centralmind.ai/plugins/api_keys/\">API keys</a> and <a href=\"https://docs.centralmind.ai/plugins/oauth/\">OAuth</a>\n- 🔒 **PII Protection** – Implements <a href=\"https://docs.centralmind.ai/plugins/pii_remover/\">regex plugin</a> or <a href=\"https://docs.centralmind.ai/plugins/presidio_anonymizer/\">Microsoft Presidio plugin</a> for PII and sensitive data redaction\n- 👀 **Comprehensive Monitoring** – Integration with <a href=\"https://docs.centralmind.ai/plugins/otel/\">OpenTelemetry (OTel)</a> for request tracking and audit trails\n- 📦 **Local & On-Premises** – Support for <a href=\"https://docs.centralmind.ai/providers/local-models/\">self-hosted LLMs</a> through configurable AI endpoints and models\n- 🤖 **Multiple AI Providers Support** - Support for [OpenAI](https://docs.centralmind.ai/providers/openai), [Anthropic](https://docs.centralmind.ai/providers/anthropic), [Amazon Bedrock](https://docs.centralmind.ai/providers/bedrock), [Google Gemini](https://docs.centralmind.ai/providers/gemini) & [Google VertexAI](https://docs.centralmind.ai/providers/anthropic-vertexai)\n- ⚡ **Flexible Configuration** – Easily extensible via YAML configuration and plugin system\n- 📜 **API Documentation** – Auto-generated Swagger documentation and OpenAPI 3.1.0 specification\n- 🔑 **Row-Level Security (RLS)** – Fine-grained data access control using <a href=\"https://docs.centralmind.ai/plugins/lua_rls/\">Lua scripts</a>\n- 🏎️ **Performance Optimization** – Implements time-based and <a href=\"https://docs.centralmind.ai/plugins/lru_cache/\">LRU caching</a> strategies\n\n## How it Works\n\n<div align=\"center\">\n\n![img.png](assets/diagram.png)\n\n</div>\n\n### 1. Connect & Discover\n\nGateway connects to your structured databases like PostgreSQL and automatically analyzes the schema and data samples\nto generate an optimized API structure based on your prompt. LLM is used only on discovery stage to produce API configuration.\nThe tool uses [AI Providers](https://docs.centralmind.ai/providers) to generate the API configuration while ensuring security\nthrough PII detection.\n\n### 2. Deploy\n\nGateway supports multiple deployment options from standalone binary, docker or <a href=\"https://docs.centralmind.ai/example/k8s/\">Kubernetes</a>.\nCheck our <a href=\"https://docs.centralmind.ai/docs/content/getting-started/launching-api/\">launching guide</a> for detailed\ninstructions. The system uses YAML configuration and plugins for easy customization.\n\n### 3. Use & Integrate\n\nAccess your data through REST APIs or Model Context Protocol (MCP) with built-in security features.\nGateway seamlessly integrates with AI models and applications like <a href=\"https://docs.centralmind.ai/docs/content/integration/langchain/\">LangChain</a>,\n<a href=\"https://docs.centralmind.ai/docs/content/integration/chatgpt/\">OpenAI</a> and\n<a href=\"https://docs.centralmind.ai/docs/content/integration/claude-desktop/\">Claude Desktop</a> using function calling\nor <a href=\"https://docs.centralmind.ai/docs/content/integration/cursor/\">Cursor</a> through MCP. You can also <a href=\"https://docs.centralmind.ai/plugins/otel/\">setup telemetry</a> to local or remote destination in otel format.\n\n## Documentation\n\n### Getting Started\n\n- <a href=\"https://docs.centralmind.ai/docs/content/getting-started/quickstart/\">Quickstart Guide</a>\n- <a href=\"https://docs.centralmind.ai/docs/content/getting-started/installation/\">Installation Instructions</a>\n- <a href=\"https://docs.centralmind.ai/docs/content/getting-started/generating-api/\">API Generation Guide</a>\n- <a href=\"https://docs.centralmind.ai/docs/content/getting-started/launching-api/\">API Launch Guide</a>\n\n### Additional Resources\n\n- <a href=\"https://docs.centralmind.ai/docs/content/integration/chatgpt/\">ChatGPT Integration Guide</a>\n- <a href=\"https://docs.centralmind.ai/connectors/\">Database Connector Documentation</a>\n- <a href=\"https://docs.centralmind.ai/plugins/\">Plugin Documentation</a>\n\n## How to Build\n\n```shell\n# Clone the repository\ngit clone https://github.com/centralmind/gateway.git\n\n# Navigate to project directory\ncd gateway\n\n# Install dependencies\ngo mod download\n\n# Build the project\ngo build .\n```\n\n## API Generation\n\nGateway uses LLM models to generate your API configuration. Follow these steps:\n\n\nChoose one of our supported AI providers:\n- [OpenAI](https://docs.centralmind.ai/providers/openai) and all OpenAI-compatible providers\n- [Anthropic](https://docs.centralmind.ai/providers/anthropic)\n- [Amazon Bedrock](https://docs.centralmind.ai/providers/bedrock)\n- [Google Vertex AI (Anthropic)](https://docs.centralmind.ai/providers/anthropic-vertexai)\n- [Google Gemini](https://docs.centralmind.ai/providers/gemini)\n\nGoogle Gemini provides a generous **free tier**. You can obtain an API key by visiting Google AI Studio:\n\n- [Google AI Studio](https://aistudio.google.com/apikey)\n\nOnce logged in, you can create an API key in the API section of AI Studio. The free tier includes a generous monthly token allocation, making it accessible for development and testing purposes.\n\nConfigure AI provider authorization. For Google Gemini, set an API key.\n\n```bash\nexport GEMINI_API_KEY='yourkey'\n```\n\n2. Run the discovery command:\n\n```shell\n./gateway discover \\\n  --ai-provider gemini \\\n  --connection-string \"postgresql://neondb_owner:MY_PASSWORD@MY_HOST.neon.tech/neondb?sslmode=require\" \\\n  --prompt \"Generate for me awesome readonly API\"\n```\n\n3. Enjoy the generation process:\n\n```shell\nINFO 🚀 API Discovery Process\nINFO Step 1: Read configs\nINFO ✅ Step 1 completed. Done.\n\nINFO Step 2: Discover data\nINFO Discovered Tables:\nINFO   - payment_dim: 3 columns, 39 rows\nINFO   - fact_table: 9 columns, 1000000 rows\nINFO ✅ Step 2 completed. Done.\n\n# Additional steps and output...\n\nINFO ✅ All steps completed. Done.\n\nINFO --- Execution Statistics ---\nINFO Total time taken: 1m10s\nINFO Tokens used: 16543 (Estimated cost: $0.0616)\nINFO Tables processed: 6\nINFO API methods created: 18\nINFO Total number of columns with PII data: 2\n```\n\n4. Review the generated configuration in `gateway.yaml`:\n\n```yaml\napi:\n  name: Awesome Readonly API\n  description: ''\n  version: '1.0'\ndatabase:\n  type: postgres\n  connection: YOUR_CONNECTION_INFO\n  tables:\n    - name: payment_dim\n      columns: # Table columns\n      endpoints:\n        - http_method: GET\n          http_path: /some_path\n          mcp_method: some_method\n          summary: Some readable summary\n          description: 'Some description'\n          query: SQL Query with params\n          params: # Query parameters\n```\n\n## Running the API\n\n### Run locally\n\n```shell\n./gateway start --config gateway.yaml\n```\n\n### Docker Compose\n\n```shell\ndocker compose -f ./example/simple/docker-compose.yml up\n```\n\n### MCP Protocol Integration\n\nGateway implements the MCP protocol for seamless integration with Claude and other tools. For detailed setup instructions, see our <a href=\"https://docs.centralmind.ai/docs/content/integration/claude-desktop/\">Claude integration guide</a>.\n\nTo add MCP Tool to Claude Desktop just adjust Claude's config :\n\n```json\n{\n  \"mcpServers\": {\n    \"gateway\": {\n      \"command\": \"PATH_TO_GATEWAY_BINARY\",\n      \"args\": [\"start\", \"--config\", \"PATH_TO_GATEWAY_YAML_CONFIG\", \"mcp-stdio\"]\n    }\n  }\n}\n```\n\n## Roadmap\n\nIt is always subject to change, and the roadmap will highly depend on user feedback. At this moment,\nwe are planning the following features:\n\n#### Database and Connectivity\n- 🗄️ **Extended Database Integrations** - Databricks, Redshift, S3 (Iceberg and Parquet), Oracle DB, Microsoft SQL Server, Elasticsearch\n- 🔑 **SSH tunneling** - ability to use jumphost or ssh bastion to tunnel connections\n\n#### Enhanced Functionality\n- 🔍 **Advanced Query Capabilities** - Complex filtering syntax and Aggregation functions as parameters\n- 🔐 **Enhanced MCP Security** - API key and OAuth authentication\n\n#### Platform Improvements\n- 📦 **Schema Management** - Automated schema evolution and API versioning\n- 🚦 **Advanced Traffic Management** - Intelligent rate limiting, Request throttling\n- ✍️ **Write Operations Support** - Insert, Update operations\n\n## Database Gateway in MCP Registries  \n- https://mcpreview.com/mcp-servers/centralmind/gateway\n- https://mcp.so/server/gateway/centralmind\n- https://smithery.ai/server/@centralmind/gateway\n- https://www.pulsemcp.com/servers/centralmind-database-gateway\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ghcr.io-centralmind-gateway-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--platform",
+            "linux/amd64",
+            "-p",
+            "9090:9090",
+            "ghcr.io/centralmind/gateway:v0.2.18",
+            "start",
+            "--connection-string",
+            "postgres://db-user:db-password@db-host/db-name?sslmode=require"
+          ],
+          "env": {}
+        },
+        "ghcr.io-centralmind-gateway-docker-stdio": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--platform",
+            "linux/amd64",
+            "ghcr.io/centralmind/gateway:v0.2.18",
+            "--connection-string",
+            "postgresql://my_user:my_pass@localhost:5432/mydb",
+            "start",
+            "stdio"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "centralmind",
+    "repo": "gateway",
+    "url": "https://github.com/centralmind/gateway",
+    "name": "gateway",
+    "path": null,
+    "stars": 440,
+    "contributors": 10,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "82eaeff6f61493731907d96795d18c4751f2d996"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:53.658Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "cloud.google.com/go/bigquery",
+      "importance": 9
+    },
+    {
+      "name": "ClickHouse/clickhouse-go/v2",
+      "importance": 9
+    },
+    {
+      "name": "anthropics/anthropic-sdk-go",
+      "importance": 9
+    },
+    {
+      "name": "aws/aws-sdk-go-v2/config",
+      "importance": 7
+    },
+    {
+      "name": "aws/aws-sdk-go-v2/service/bedrockruntime",
+      "importance": 9
+    },
+    {
+      "name": "charmbracelet/glamour",
+      "importance": 5
+    },
+    {
+      "name": "danielgtaylor/huma/v2",
+      "importance": 10
+    },
+    {
+      "name": "elastic/go-elasticsearch/v8",
+      "importance": 9
+    },
+    {
+      "name": "gin-gonic/gin",
+      "importance": 10
+    },
+    {
+      "name": "glebarez/go-sqlite",
+      "importance": 9
+    },
+    {
+      "name": "go-sql-driver/mysql",
+      "importance": 9
+    },
+    {
+      "name": "hashicorp/golang-lru/v2",
+      "importance": 6
+    },
+    {
+      "name": "jackc/pgx/v4",
+      "importance": 9
+    },
+    {
+      "name": "jmoiron/sqlx",
+      "importance": 8
+    },
+    {
+      "name": "marcboeker/go-duckdb/v2",
+      "importance": 9
+    },
+    {
+      "name": "microsoft/go-mssqldb",
+      "importance": 9
+    },
+    {
+      "name": "olekukonko/tablewriter",
+      "importance": 4
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 4
+    },
+    {
+      "name": "sashabaranov/go-openai",
+      "importance": 9
+    },
+    {
+      "name": "sijms/go-ora/v2",
+      "importance": 9
+    },
+    {
+      "name": "sirupsen/logrus",
+      "importance": 7
+    },
+    {
+      "name": "snowflakedb/gosnowflake",
+      "importance": 9
+    },
+    {
+      "name": "spf13/cast",
+      "importance": 4
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 6
+    },
+    {
+      "name": "yuin/gopher-lua",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel/exporters/stdout/stdouttrace",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel/sdk",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel/trace",
+      "importance": 8
+    },
+    {
+      "name": "go.uber.org/zap",
+      "importance": 7
+    },
+    {
+      "name": "go.ytsaurus.tech/library/go/core/log",
+      "importance": 7
+    },
+    {
+      "name": "golang.org/x/oauth2",
+      "importance": 7
+    },
+    {
+      "name": "golang.org/x/xerrors",
+      "importance": 4
+    },
+    {
+      "name": "google.golang.org/api",
+      "importance": 9
+    },
+    {
+      "name": "google.golang.org/grpc",
+      "importance": 8
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 6
+    },
+    {
+      "name": "@astrojs/react",
+      "importance": 5
+    },
+    {
+      "name": "@astrojs/starlight",
+      "importance": 8
+    },
+    {
+      "name": "astro",
+      "importance": 10
+    },
+    {
+      "name": "glob",
+      "importance": 3
+    },
+    {
+      "name": "react",
+      "importance": 5
+    },
+    {
+      "name": "react-dom",
+      "importance": 5
+    },
+    {
+      "name": "sharp",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/centralmind/gateway\n\ngo 1.24\n\ntoolchain go1.24.0\n\nrequire (\n\tcloud.google.com/go/bigquery v1.66.2\n\tgithub.com/ClickHouse/clickhouse-go/v2 v2.32.2\n\tgithub.com/anthropics/anthropic-sdk-go v0.2.0-alpha.13\n\tgithub.com/aws/aws-sdk-go-v2/config v1.29.9\n\tgithub.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.26.1\n\tgithub.com/charmbracelet/glamour v0.8.0\n\tgithub.com/danielgtaylor/huma/v2 v2.30.0\n\tgithub.com/docker/go-connections v0.5.0\n\tgithub.com/elastic/go-elasticsearch/v8 v8.17.1\n\tgithub.com/gin-gonic/gin v1.10.0\n\tgithub.com/glebarez/go-sqlite v1.22.0\n\tgithub.com/go-sql-driver/mysql v1.7.1\n\tgithub.com/hashicorp/golang-lru/v2 v2.0.7\n\tgithub.com/jackc/pgx/v4 v4.18.3\n\tgithub.com/jmoiron/sqlx v1.3.5\n\tgithub.com/marcboeker/go-duckdb/v2 v2.1.0\n\tgithub.com/microsoft/go-mssqldb v1.8.0\n\tgithub.com/olekukonko/tablewriter v0.0.5\n\tgithub.com/pkg/errors v0.9.1\n\tgithub.com/sashabaranov/go-openai v1.37.0\n\tgithub.com/sijms/go-ora/v2 v2.8.24\n\tgithub.com/sirupsen/logrus v1.9.3\n\tgithub.com/snowflakedb/gosnowflake v1.13.0\n\tgithub.com/spf13/cast v1.7.1\n\tgithub.com/spf13/cobra v1.8.1\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/testcontainers/testcontainers-go v0.35.0\n\tgithub.com/testcontainers/testcontainers-go/modules/clickhouse v0.35.0\n\tgithub.com/testcontainers/testcontainers-go/modules/elasticsearch v0.35.0\n\tgithub.com/testcontainers/testcontainers-go/modules/gcloud v0.35.0\n\tgithub.com/testcontainers/testcontainers-go/modules/postgres v0.35.0\n\tgithub.com/yuin/gopher-lua v1.1.1\n\tgo.opentelemetry.io/otel v1.35.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.35.0\n\tgo.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.34.0\n\tgo.opentelemetry.io/otel/sdk v1.35.0\n\tgo.opentelemetry.io/otel/trace v1.35.0\n\tgo.uber.org/zap v1.27.0\n\tgo.ytsaurus.tech/library/go/core/log v0.0.4\n\tgolang.org/x/oauth2 v0.26.0\n\tgolang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da\n\tgoogle.golang.org/api v0.218.0\n\tgoogle.golang.org/grpc v1.71.0\n\tgopkg.in/yaml.v3 v3.0.1\n)\n\nrequire (\n\tcloud.google.com/go v0.118.1 // indirect\n\tcloud.google.com/go/auth v0.14.0 // indirect\n\tcloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect\n\tcloud.google.com/go/compute/metadata v0.6.0 // indirect\n\tcloud.google.com/go/iam v1.3.1 // indirect\n\tgithub.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.2 // indirect\n\tgithub.com/alecthomas/chroma/v2 v2.14.0 // indirect\n\tgithub.com/apache/arrow-go/v18 v18.1.0 // indirect\n\tgithub.com/apache/arrow/go/v15 v15.0.2 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.30 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/sso v1.25.1 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.1 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/sts v1.33.17 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/aymerick/douceur v0.2.0 // indirect\n\tgithub.com/charmbracelet/lipgloss v0.12.1 // indirect\n\tgithub.com/charmbracelet/x/ansi v0.1.4 // indirect\n\tgithub.com/dlclark/regexp2 v1.11.0 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings v0.1.13 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings/darwin-amd64 v0.1.8 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings/darwin-arm64 v0.1.8 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings/linux-amd64 v0.1.8 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings/linux-arm64 v0.1.8 // indirect\n\tgithub.com/duckdb/duckdb-go-bindings/windows-amd64 v0.1.8 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/elastic/elastic-transport-go/v8 v8.6.1 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.2.1 // indirect\n\tgithub.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect\n\tgithub.com/golang-sql/sqlexp v0.1.0 // indirect\n\tgithub.com/golang/snappy v0.0.4 // indirect\n\tgithub.com/google/s2a-go v0.1.9 // indirect\n\tgithub.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect\n\tgithub.com/googleapis/gax-go/v2 v2.14.1 // indirect\n\tgithub.com/gorilla/css v1.0.1 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.2.0 // indirect\n\tgithub.com/marcboeker/go-duckdb/arrowmapping v0.0.6 // indirect\n\tgithub.com/marcboeker/go-duckdb/mapping v0.0.6 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mattn/go-sqlite3 v1.14.24 // indirect\n\tgithub.com/microcosm-cc/bluemonday v1.0.27 // indirect\n\tgithub.com/montanaflynn/stats v0.7.1 // indirect\n\tgithub.com/muesli/reflow v0.3.0 // indirect\n\tgithub.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a // indirect\n\tgithub.com/ncruces/go-strftime v0.1.9 // indirect\n\tgithub.com/patrickmn/go-cache v2.1.0+incompatible // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/tidwall/gjson v1.14.4 // indirect\n\tgithub.com/tidwall/match v1.1.1 // indirect\n\tgithub.com/tidwall/pretty v1.2.1 // indirect\n\tgithub.com/tidwall/sjson v1.2.5 // indirect\n\tgithub.com/xdg-go/pbkdf2 v1.0.0 // indirect\n\tgithub.com/xdg-go/scram v1.1.2 // indirect\n\tgithub.com/xdg-go/stringprep v1.0.4 // indirect\n\tgithub.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect\n\tgithub.com/yuin/goldmark v1.7.4 // indirect\n\tgithub.com/yuin/goldmark-emoji v1.0.3 // indirect\n\tgo.mongodb.org/mongo-driver v1.17.3 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.58.0 // indirect\n\tgolang.org/x/time v0.9.0 // indirect\n\tgoogle.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect\n\tmodernc.org/libc v1.41.0 // indirect\n\tmodernc.org/mathutil v1.6.0 // indirect\n\tmodernc.org/memory v1.7.2 // indirect\n\tmodernc.org/sqlite v1.29.6 // indirect\n)\n\nrequire (\n\tdario.cat/mergo v1.0.0 // indirect\n\tgithub.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect\n\tgithub.com/99designs/keyring v1.2.2 // indirect\n\tgithub.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1 // indirect\n\tgithub.com/Azure/azure-sdk-for-go/sdk/internal v1.8.0 // indirect\n\tgithub.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect\n\tgithub.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect\n\tgithub.com/BurntSushi/toml v1.4.0 // indirect\n\tgithub.com/ClickHouse/ch-go v0.65.1 // indirect\n\tgithub.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c // indirect\n\tgithub.com/Masterminds/semver/v3 v3.2.1 // indirect\n\tgithub.com/Microsoft/go-winio v0.6.2 // indirect\n\tgithub.com/andybalholm/brotli v1.1.1 // indirect\n\tgithub.com/apache/arrow/go/v16 v16.0.0 // indirect\n\tgithub.com/aws/aws-sdk-go-v2 v1.36.3\n\tgithub.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/credentials v1.17.62 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.15 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/internal/v4a v1.3.5 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.3 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.7 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.5 // indirect\n\tgithub.com/aws/aws-sdk-go-v2/service/s3 v1.53.1 // indirect\n\tgithub.com/aws/smithy-go v1.22.2 // indirect\n\tgithub.com/bytedance/sonic v1.12.3 // indirect\n\tgithub.com/bytedance/sonic/loader v0.2.0 // indirect\n\tgithub.com/cenkalti/backoff/v4 v4.3.0 // indirect\n\tgithub.com/cloudwego/base64x v0.1.4 // indirect\n\tgithub.com/cloudwego/iasm v0.2.0 // indirect\n\tgithub.com/containerd/log v0.1.0 // indirect\n\tgithub.com/containerd/platforms v0.2.1 // indirect\n\tgithub.com/cpuguy83/dockercfg v0.3.2 // indirect\n\tgithub.com/danieljoos/wincred v1.1.2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/didip/tollbooth v4.0.2+incompatible\n\tgithub.com/distribution/reference v0.6.0 // indirect\n\tgithub.com/docker/docker v27.5.1+incompatible // indirect\n\tgithub.com/docker/go-units v0.5.0 // indirect\n\tgithub.com/dvsekhvalnov/jose2go v1.6.0 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/gabriel-vasile/mimetype v1.4.7 // indirect\n\tgithub.com/gin-contrib/sse v0.1.0 // indirect\n\tgithub.com/go-faster/city v1.0.1 // indirect\n\tgithub.com/go-faster/errors v0.7.1 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-ole/go-ole v1.2.6 // indirect\n\tgithub.com/go-playground/locales v0.14.1 // indirect\n\tgithub.com/go-playground/universal-translator v0.18.1 // indirect\n\tgithub.com/go-playground/validator/v10 v10.22.1 // indirect\n\tgithub.com/goccy/go-json v0.10.5 // indirect\n\tgithub.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect\n\tgithub.com/gofrs/uuid v4.4.0+incompatible // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/golang-jwt/jwt/v5 v5.2.1 // indirect\n\tgithub.com/google/flatbuffers v25.1.24+incompatible // indirect\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 // indirect\n\tgithub.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jackc/chunkreader/v2 v2.0.1 // indirect\n\tgithub.com/jackc/pgconn v1.14.3 // indirect\n\tgithub.com/jackc/pgio v1.0.0 // indirect\n\tgithub.com/jackc/pgpassfile v1.0.0 // indirect\n\tgithub.com/jackc/pgproto3/v2 v2.3.3 // indirect\n\tgithub.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect\n\tgithub.com/jackc/pgtype v1.14.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/compress v1.17.11 // indirect\n\tgithub.com/klauspost/cpuid/v2 v2.2.9 // indirect\n\tgithub.com/leodido/go-urn v1.4.0 // indirect\n\tgithub.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect\n\tgithub.com/magiconair/properties v1.8.7 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/moby/docker-image-spec v1.3.1 // indirect\n\tgithub.com/moby/patternmatcher v0.6.0 // indirect\n\tgithub.com/moby/sys/sequential v0.5.0 // indirect\n\tgithub.com/moby/sys/user v0.1.0 // indirect\n\tgithub.com/moby/sys/userns v0.1.0 // indirect\n\tgithub.com/moby/term v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/morikuni/aec v1.0.0 // indirect\n\tgithub.com/mtibben/percent v0.2.1 // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.0 // indirect\n\tgithub.com/paulmach/orb v0.11.1 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.3 // indirect\n\tgithub.com/pierrec/lz4/v4 v4.1.22 // indirect\n\tgithub.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect\n\tgithub.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect\n\tgithub.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect\n\tgithub.com/segmentio/asm v1.2.0 // indirect\n\tgithub.com/shirou/gopsutil/v3 v3.23.12 // indirect\n\tgithub.com/shoenig/go-m1cpu v0.1.6 // indirect\n\tgithub.com/shopspring/decimal v1.4.0 // indirect\n\tgithub.com/spf13/pflag v1.0.6-0.20201009195203-85dd5c8bc61c\n\tgithub.com/testcontainers/testcontainers-go/modules/mysql v0.35.0\n\tgithub.com/tklauser/go-sysconf v0.3.12 // indirect\n\tgithub.com/tklauser/numcpus v0.6.1 // indirect\n\tgithub.com/twitchyliquid64/golang-asm v0.15.1 // indirect\n\tgithub.com/ugorji/go v1.1.4 // indirect\n\tgithub.com/yusufpapurcu/wmi v1.2.3 // indirect\n\tgithub.com/zeebo/xxh3 v1.0.2 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.58.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace v1.35.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.35.0 // indirect\n\tgo.opentelemetry.io/proto/otlp v1.5.0 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgo.ytsaurus.tech/library/go/core/xerrors v0.0.4 // indirect\n\tgo.ytsaurus.tech/library/go/x/xreflect v0.0.3 // indirect\n\tgo.ytsaurus.tech/library/go/x/xruntime v0.0.4 // indirect\n\tgolang.org/x/arch v0.11.0 // indirect\n\tgolang.org/x/crypto v0.33.0 // indirect\n\tgolang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect\n\tgolang.org/x/mod v0.23.0 // indirect\n\tgolang.org/x/net v0.35.0 // indirect\n\tgolang.org/x/sync v0.11.0 // indirect\n\tgolang.org/x/sys v0.30.0 // indirect\n\tgolang.org/x/term v0.29.0 // indirect\n\tgolang.org/x/text v0.22.0 // indirect\n\tgolang.org/x/tools v0.30.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect\n\tgoogle.golang.org/protobuf v1.36.5 // indirect\n)\n\n\n=== docs/package.json ===\n{\n  \"name\": \"tailwind\",\n  \"type\": \"module\",\n  \"version\": \"0.0.1\",\n  \"scripts\": {\n    \"dev\": \"concurrently \\\"npm run watch-docs\\\" \\\"astro dev\\\"\",\n    \"prebuild\": \"node scripts/collect-docs.js\",\n    \"build\": \"astro build\",\n    \"prepreview\": \"node scripts/collect-docs.js\",\n    \"preview\": \"astro preview\",\n    \"preastro\": \"node scripts/collect-docs.js\",\n    \"astro\": \"astro\",\n    \"collect-docs\": \"node scripts/collect-docs.js\",\n    \"watch-docs\": \"node scripts/collect-docs.js --watch\"\n  },\n  \"dependencies\": {\n    \"@astrojs/react\": \"^4.1.0\",\n    \"@astrojs/starlight\": \"^0.29.3\",\n    \"@types/react\": \"^18.3.12\",\n    \"@types/react-dom\": \"^18.3.1\",\n    \"astro\": \"^4.16.18\",\n    \"concurrently\": \"^8.2.2\",\n    \"glob\": \"^10.3.10\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\",\n    \"sharp\": \"^0.33.2\"\n  }\n}\n"
+}

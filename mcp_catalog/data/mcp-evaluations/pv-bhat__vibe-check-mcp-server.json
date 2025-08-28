@@ -1,0 +1,106 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "pv-bhat__vibe-check-mcp-server",
+  "display_name": "vibe-check-mcp-server",
+  "version": "1.0.0",
+  "description": "The definitive Vibe Coder's sanity check MCP server: Prevent cascading errors in AI workflows by implementing strategic pattern interrupts. Uses tool call \"Vibe Check\" with LearnLM 2.0 Flash, fine-tuned for pedagogy and metacognition to enhance complex workflow strategy, and prevents tunnel vision errors.",
+  "author": {
+    "name": "PV-Bhat"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🧠 VibeCheck MCP v2.2\n\n<img width=\"500\" height=\"300\" alt=\"vibecheckv2 1\" src=\"https://github.com/user-attachments/assets/98c55b95-8f3c-4106-b917-20ceaf292f63\" />\n\n*Adaptive metacognitive oversight for autonomous AI agents – a research-backed MCP server keeping LLMs aligned, reflective and safe.*\n\n## The Most Widely-Deployed Feedback Layer in the MCP Ecosystem\n> ~10k+ downloads on PulseMCP and counting.\n> Over 1k monthly tool calls via Smithery.\n> Listed on 12+ orchestration platforms.\n> Security rating 4.3 on MSEEP.ai.\n\n[![Version](https://img.shields.io/badge/version-2.2-blue)](https://github.com/PV-Bhat/vibe-check-mcp-server)\n[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)\n[![CI](https://github.com/PV-Bhat/vibe-check-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/PV-Bhat/vibe-check-mcp-server/actions/workflows/ci.yml)\n[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)](https://github.com/PV-Bhat/vibe-check-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@PV-Bhat/vibe-check-mcp-server)](https://smithery.ai/server/@PV-Bhat/vibe-check-mcp-server)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/a2954e62-a3f8-45b8-9a03-33add8b92599)\n[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blueviolet)](CONTRIBUTING.md)\n\n## Table of Contents\n- [What is VibeCheck MCP?](#what-is-vibecheck-mcp)\n- [The Problem: Pattern Inertia & Reasoning Lock-In](#the-problem-pattern-inertia--reasoning-lock-in)\n- [Key Features](#key-features)\n- [What's New in v2.2](#whats-new-in-v22)\n- [Quickstart & Installation](#quickstart--installation)\n- [Usage Examples](#usage-examples)\n- [Adaptive Metacognitive Interrupts (CPI)](#adaptive-metacognitive-interrupts-cpi)\n- [Agent Prompting Essentials](#agent-prompting-essentials)\n- [When to Use Each Tool](#when-to-use-each-tool)\n- [Documentation](#documentation)\n- [Research & Philosophy](#research--philosophy)\n- [Security](#security)\n- [Roadmap](#roadmap)\n- [Contributing & Community](#contributing--community)\n- [FAQ](#faq)\n- [Find VibeCheck MCP on](#find-vibecheck-mcp-on)\n- [Credits & License](#credits--license)\n\n---\n\n## What is VibeCheck MCP?\n\nVibeCheck MCP is a lightweight server implementing Anthropic's [Model Context Protocol](https://anthropic.com/mcp). It acts as an **AI meta-mentor** for your agents, interrupting pattern inertia with **Critical Path Interrupts (CPI)** to prevent Reasoning Lock-In (RLI). Think of it as a rubber-duck debugger for LLMs – a quick sanity check before your agent goes down the wrong path.\n\n## The Problem: Pattern Inertia & Reasoning Lock-In\n\nLarge language models can confidently follow flawed plans. Without an external nudge they may spiral into overengineering or misalignment. VibeCheck provides that nudge through short reflective pauses, improving reliability and safety.\n\n## Key Features\n\n| Feature | Description | Benefits |\n|---------|-------------|----------|\n| **CPI Adaptive Interrupts** | Phase-aware prompts that challenge assumptions | alignment, robustness |\n| **Multi-provider LLM** | Gemini, OpenAI and OpenRouter support | flexibility |\n| **History Continuity** | Summarizes prior advice when `sessionId` is supplied | context retention |\n| **Optional vibe_learn** | Log mistakes and fixes for future reflection | self-improvement |\n\n## What's New in v2.2\n- CPI-driven adaptive interrupts for smarter interventions\n- Multi-provider routing (Gemini, OpenAI, OpenRouter)\n- Optional `vibe_learn` logging\n- History continuity across sessions\n\n## Quickstart & Installation\n```bash\n# Clone and install\ngit clone https://github.com/PV-Bhat/vibe-check-mcp-server.git\ncd vibe-check-mcp-server\nnpm install\nnpm run build\n```\nThis project targets Node **20+**. If you see a TypeScript error about a duplicate `require` declaration when building with Node 20.19.3, ensure your dependencies are up to date (`npm install`) or use the Docker setup below which handles the build automatically.\n\nCreate a `.env` file with the API keys you plan to use:\n```bash\n# Gemini (default)\nGEMINI_API_KEY=your_gemini_api_key\n# Optional providers\nOPENAI_API_KEY=your_openai_api_key\nOPENROUTER_API_KEY=your_openrouter_api_key\n# Optional overrides\nDEFAULT_LLM_PROVIDER=gemini\nDEFAULT_MODEL=gemini-2.5-pro\n```\nStart the server:\n```bash\nnpm start\n```\nSee [docs/TESTING.md](./docs/TESTING.md) for instructions on how to run tests.\n\n### Docker\nThe repository includes a helper script for one-command setup. It builds the image, saves your `GEMINI_API_KEY` and configures the container to start automatically whenever you log in:\n```bash\nbash scripts/docker-setup.sh\n```\nThis script:\n- Creates `~/vibe-check-mcp` for persistent data\n- Builds the Docker image and sets up `docker-compose.yml`\n- Prompts for your API key and writes `~/vibe-check-mcp/.env`\n- Installs a systemd service (Linux) or LaunchAgent (macOS) so the container starts at login\n- Generates `vibe-check-tcp-wrapper.sh` which proxies Cursor IDE to the server\nAfter running it, open Cursor IDE → **Settings** → **MCP** and add a new server of type **Command** pointing to:\n```bash\n~/vibe-check-mcp/vibe-check-tcp-wrapper.sh\n```\nSee [Automatic Docker Setup](./docs/docker-automation.md) for full details.\nIf you prefer to run the commands manually:\n```bash\ndocker build -t vibe-check-mcp .\ndocker run -e GEMINI_API_KEY=your_gemini_api_key -p 3000:3000 vibe-check-mcp\n```\n\n### Integrating with Claude Desktop\nAdd to `claude_desktop_config.json`:\n```json\n\"vibe-check\": {\n  \"command\": \"node\",\n  \"args\": [\"/path/to/vibe-check-mcp/build/index.js\"],\n  \"env\": { \"GEMINI_API_KEY\": \"YOUR_GEMINI_API_KEY\" }\n}\n```\n\n## Usage Examples\n```ts\nimport { vibe_check } from 'vibe-check-mcp';\nconst result = await vibe_check({\n  goal: 'Write unit tests',\n  plan: 'Use vitest for coverage',\n  sessionId: 'demo1'\n});\nconsole.log(result.questions);\n```\n```mermaid\nflowchart TD\n  A[Agent Phase] --> B{Monitor Progress}\n  B -- high risk --> C[CPI Interrupt]\n  C --> D[Reflect & Adjust]\n  B -- smooth --> E[Continue]\n```\n\n## Adaptive Metacognitive Interrupts (CPI)\n<details><summary>Advanced CPI Details</summary>\nThe CPI architecture monitors planning, implementation and review phases. When uncertainty spikes, VibeCheck pauses execution, poses clarifying questions and resumes once the agent acknowledges the feedback.\n</details>\n\n## Agent Prompting Essentials\nIn your agent's system prompt, make it clear that `vibe_check` is a mandatory tool for reflection. Always pass the full user request and other relevant context. After correcting a mistake, you can optionally log it with `vibe_learn` to build a history for future analysis.\n\nExample snippet:\n```\nAs an autonomous agent you will:\n1. Call vibe_check after planning and before major actions.\n2. Provide the full user request and your current plan.\n3. Optionally, record resolved issues with vibe_learn.\n```\n\n## When to Use Each Tool\n| Tool | Purpose |\n|------|---------|\n| 🛑 **vibe_check** | Challenge assumptions and prevent tunnel vision |\n| 🔄 **vibe_learn** | Capture mistakes, preferences and successes |\n\n## Documentation\n- [Agent Prompting Strategies](./docs/agent-prompting.md)\n- [Advanced Integration](./docs/advanced-integration.md)\n- [Technical Reference](./docs/technical-reference.md)\n- [Automatic Docker Setup](./docs/docker-automation.md)\n- [Philosophy](./docs/philosophy.md)\n- [Case Studies](./docs/case-studies.md)\n- [Changelog](./docs/changelog.md)\n\n## Research & Philosophy\nSee [docs/philosophy.md](./docs/philosophy.md) for the alignment research behind VibeCheck. The approach draws inspiration from Reflexion, Constitutional AI and other high-trust frameworks.\n\n## Security\nThis repository includes a CI-based security scan that runs on every pull request. It checks dependencies with `npm audit` and scans the source for risky patterns. See [SECURITY.md](./SECURITY.md) for details and how to report issues.\n\n## Roadmap\n1. Benchmarks and latency profiling\n2. Adaptive tuning based on agent performance\n3. Multi-agent cooperation support\n4. Optional human-in-the-loop review\n\n## Contributing & Community\nContributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) and join our Discord for discussion.\n\n## FAQ\n- **Does it increase latency?** A single CPI call typically adds ~1 second depending on the provider.\n- **Can I disable logging?** Yes, `vibe_learn` is optional.\n\n## Find VibeCheck MCP on\n* 🌐 [MSEEP](https://mseep.ai/app/pv-bhat-vibe-check-mcp-server)\n* 📡 [MCP Servers](https://mcpservers.org/servers/PV-Bhat/vibe-check-mcp-server)\n* 🧠 [MCP.so](https://mcp.so/server/vibe-check-mcp-server/PV-Bhat)\n* 🛠️ [Creati.ai](https://creati.ai/mcp/vibe-check-mcp-server/)\n* 💡 [Pulse MCP](https://www.pulsemcp.com/servers/pv-bhat-vibe-check)\n* 📘 [Playbooks.com](https://playbooks.com/mcp/pv-bhat-vibe-check)\n* 🧰 [MCPHub.tools](https://mcphub.tools/detail/PV-Bhat/vibe-check-mcp-server)\n* 📇 [MCP Directory](https://mcpdirectory.ai/mcpserver/2419/)\n* 🧙 [MagicSlides](https://www.magicslides.app/mcps/pv-bhat-vibe-check)\n* 🗃️ [AIAgentsList](https://aiagentslist.com/mcp-servers/vibe-check-mcp-server)\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=PV-Bhat/vibe-check-mcp-server&type=Date)](https://www.star-history.com/#PV-Bhat/vibe-check-mcp-server&Date)\n\n## Credits & License\nVibeCheck MCP is released under the [MIT License](LICENSE). Built for reliable, enterprise-ready AI agents.\n",
+  "category": "AI Tools",
+  "quality_score": 77,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "vibe-check-mcp-server": {
+          "command": "npm",
+          "args": ["start"],
+          "env": {}
+        },
+        "vibe-check-mcp-docker": {
+          "command": "docker",
+          "args": ["run", "-e", "GEMINI_API_KEY=your_gemini_api_key", "-p", "3000:3000", "vibe-check-mcp"],
+          "env": {
+            "GEMINI_API_KEY": "your_gemini_api_key"
+          }
+        },
+        "vibe-check-mcp-with-config": {
+          "command": "node",
+          "args": ["/path/to/vibe-check-mcp/build/index.js"],
+          "env": {
+            "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "PV-Bhat",
+    "repo": "vibe-check-mcp-server",
+    "url": "https://github.com/PV-Bhat/vibe-check-mcp-server",
+    "name": "vibe-check-mcp-server",
+    "path": null,
+    "stars": 119,
+    "contributors": 4,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9b8e1e583060dc4aa70caed38d9a505de196ffbe"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T21:03:27.175Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@google/generative-ai",
+      "importance": 8
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"vibe-check-mcp\",\n  \"version\": \"2.2.0\",\n  \"description\": \"Metacognitive AI agent oversight: adaptive CPI interrupts for alignment, reflection and safety\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc-watch --onSuccess \\\"node build/index.js\\\"\",\n    \"test\": \"vitest run\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"security-check\": \"node scripts/security-check.cjs\"\n  },\n  \"dependencies\": {\n    \"@google/generative-ai\": \"^0.17.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"axios\": \"^1.8.4\",\n    \"dotenv\": \"^16.4.7\",\n    \"openai\": \"^4.68.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.25\",\n    \"@vitest/coverage-v8\": \"^3.2.4\",\n    \"tsc-watch\": \"^6.0.0\",\n    \"typescript\": \"^5.3.0\",\n    \"vitest\": \"^3.2.4\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"vibe-check\",\n    \"vibe-coding\",\n    \"metacognition\",\n    \"ai-alignment\",\n    \"llm-agents\",\n    \"autonomous-agents\",\n    \"reflection\",\n    \"agent-oversight\",\n    \"ai-safety\",\n    \"prompt-engineering\"\n  ],\n  \"author\": \"PV Bhat\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/PV-Bhat/vibe-check-mcp-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/PV-Bhat/vibe-check-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/PV-Bhat/vibe-check-mcp-server#readme\",\n  \"license\": \"MIT\"\n}\n"
+}

@@ -1,0 +1,107 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "yuna0x0__anilist-mcp",
+  "display_name": "anilist-mcp",
+  "version": "1.0.0",
+  "description": "AniList MCP server for accessing anime and manga data",
+  "author": {
+    "name": "yuna0x0"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AniList MCP Server\n\nA Model Context Protocol (MCP) server that interfaces with the AniList API, allowing LLM clients to access and interact with anime, manga, character, staff, and user data from AniList.\n\n## Features\n\n- Search for anime, manga, characters, staff, and studios\n- Get detailed information about specific anime, manga, characters, and staff members\n- Access user profiles and lists\n- Support for advanced filtering options\n- Retrieve genres and media tags\n\n## Prerequisites\n\n- Node.js 18+\n\n## Using with Claude Desktop (or other MCP clients)\n\n### Installing via Smithery\n\nTo install AniList MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@yuna0x0/anilist-mcp):\n\n```bash\nnpx -y @smithery/cli install @yuna0x0/anilist-mcp --client claude\n\n# For other MCP clients, use the following command:\n# List available clients\nnpx -y @smithery/cli list clients\n# Install to other clients\nnpx -y @smithery/cli install @yuna0x0/anilist-mcp --client <client_name>\n```\n\n### Installing via mcp-get\n\n```bash\nnpx @michaellatman/mcp-get@latest install anilist-mcp\n```\n\n### Manual Installation\n\n1. Add this server to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"anilist\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"anilist-mcp\"],\n      \"env\": {\n        \"ANILIST_TOKEN\": \"your_api_token\"\n      }\n    }\n  }\n}\n```\n\nYou may remove the `env` object entirely, if you are not planning to use the AniList Token for operations that require login.\n\n2. Restart Claude Desktop\n3. Use the tools to interact with AniList\n\n## Environment Variables\n\n- `ANILIST_TOKEN`: (Optional) AniList API Token (Only needed for operations that require login)\n\n### Get an AniList API Token (Optional)\n\nTo get an API token, follow these steps:\n\n1. Go to [AniList settings](https://anilist.co/settings/developer).\n2. Click on \"Create New Client\".\n3. Use this URL as your client's \"Redirect URL\":\n```\nhttps://anilist.co/api/v2/oauth/pin\n```\n\n4. Click \"Save\"\n5. Then go to https://anilist.co/api/v2/oauth/authorize?client_id={clientID}&response_type=token, replace the `{clientID}` with the client ID you get. It will ask you to log in and then provide you with the token to use.\n6. Copy the generated token and use it in your `.env` file or environment variables.\n\n## Available Tools\n\n### Misc Tools\n- **get_genres**: Get all available genres on AniList\n- **get_media_tags**: Get all available media tags on AniList\n- **get_site_statistics**: Get AniList site statistics over the last seven days\n- **get_studio**: Get information about a studio by its AniList ID or name\n- **favourite_studio**: [Requires Login] Favourite or unfavourite a studio by its ID\n\n### Activity Tools\n- **delete_activity**: [Requires Login] Delete the current authorized user's activity post\n- **get_activity**: Get a specific AniList activity by its ID\n- **get_user_activity**: Fetch activities from a user\n- **post_message_activity**: [Requires Login] Post a new message activity or update an existing one\n- **post_text_activity**: [Requires Login] Post a new text activity or update an existing one\n\n### List Tools\n- **get_user_anime_list**: Get a user's anime list\n- **get_user_manga_list**: Get a user's manga list\n- **add_list_entry**: [Requires Login] Add an entry to the authorized user's list\n- **remove_list_entry**: [Requires Login] Remove an entry from the authorized user's list\n- **update_list_entry**: [Requires Login] Update an entry on the authorized user's list\n\n### Media Tools\n- **get_anime**: Get detailed information about an anime by its AniList ID\n- **get_manga**: Get detailed information about a manga by its AniList ID\n- **favourite_anime**: [Requires Login] Favourite or unfavourite an anime by its ID\n- **favourite_manga**: [Requires Login] Favourite or unfavourite a manga by its ID\n\n### People Tools\n- **get_character**: Get information about a character by their AniList ID\n- **get_staff**: Get information about staff member by their AniList ID\n- **favourite_character**: [Requires Login] Favourite or unfavourite a character by its ID\n- **favourite_staff**: [Requires Login] Favourite or unfavourite a staff member by their ID\n- **get_todays_birthday_characters**: Get all characters whose birthday is today\n- **get_todays_birthday_staff**: Get all staff members whose birthday is today\n\n### Recommendation Tools\n- **get_recommendation**: Get an AniList recommendation by its ID\n- **get_recommendations_for_media**: Get AniList recommendations for a specific media\n\n### Search Tools\n- **search_activity**: Search for activities on AniList\n- **search_anime**: Search for anime with query term and filters\n- **search_manga**: Search for manga with query term and filters\n- **search_character**: Search for characters based on a query term\n- **search_staff**: Search for staff members based on a query term\n- **search_studio**: Search for studios based on a query term\n- **search_user**: Search for users on AniList\n\n### Thread Tools\n- **get_thread**: Get a specific thread by its AniList ID\n- **get_thread_comments**: Get comments for a specific thread\n- **delete_thread**: [Requires Login] Delete a thread by its ID\n\n### User Tools\n- **get_user_profile**: Get a user's AniList profile\n- **get_user_stats**: Get a user's AniList statistics\n- **get_full_user_info**: Get a user's complete profile and stats information\n- **get_user_recent_activity**: Get recent activity from a user\n- **get_authorized_user**: [Requires Login] Get profile information of the currently authorized user\n- **follow_user**: [Requires Login] Follow or unfollow a user by their ID\n- **update_user**: [Requires Login] Update user settings\n\n## Example Usage\n\n### Basic Anime Search\n\n```\nCan you search for anime similar to \"Bocchi the Rock!\"?\n```\n\n### Get Character Info\n\n```\nCan you tell me about the character Hitori Gotou? Use the AniList tools to find information.\n```\n\n### Compare Studio Works\n\n```\nWhat anime has Studio Ghibli produced? Can you list their most popular works?\n```\n\n## Local Development\n\nThis project uses [pnpm](https://pnpm.io) as its package manager.\n\nClone the repository and install dependencies:\n\n```bash\ngit clone https://github.com/yuna0x0/anilist-mcp.git\ncd anilist-mcp\npnpm install\n```\n\n### Configuration (Optional)\n\n1. Create a `.env` file by copying the example:\n```bash\ncp .env.example .env\n```\n\n2. Edit the `.env` file and add your AniList API token:\n```\nANILIST_TOKEN=your_api_token\n```\n\n## Debugging with MCP Inspector\n\nYou can use the MCP Inspector to test and debug the AniList MCP server:\n\n```bash\nnpx @modelcontextprotocol/inspector -e ANILIST_TOKEN=your_api_token npx anilist-mcp\n\n# Use this instead when Local Development\npnpm run inspector\n```\n\nThen open your browser to the provided URL (usually http://localhost:6274) to access the MCP Inspector interface. From there, you can:\n\n1. Connect to your running AniList MCP server\n2. Browse available tools\n3. Run tools with custom parameters\n4. View the responses\n\nThis is particularly useful for testing your setup before connecting it to Claude or another AI assistant.\n\n## Docker\n\nPull from Docker Hub:\n```bash\ndocker pull yuna0x0/anilist-mcp\n```\n\nDocker build (Local Development):\n```bash\ndocker build -t yuna0x0/anilist-mcp .\n```\n\nDocker multi-platform build (Local Development):\n```bash\ndocker buildx build --platform linux/amd64,linux/arm64 -t yuna0x0/anilist-mcp .\n```\n\n## Security Notice\n\nThis MCP server accepts your AniList API token in the .env file or as an environment variable. Keep this information secure and never commit it to version control.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "anilist-mcp": {
+          "command": "npx",
+          "args": ["-y", "anilist-mcp"],
+          "env": {}
+        },
+        "anilist-mcp-configured": {
+          "command": "npx",
+          "args": ["-y", "anilist-mcp"],
+          "env": {
+            "ANILIST_TOKEN": "your_api_token"
+          }
+        },
+        "yuna0x0-anilist-mcp-docker": {
+          "command": "docker",
+          "args": ["run", "--rm", "-i", "yuna0x0/anilist-mcp"],
+          "env": {}
+        },
+        "yuna0x0-anilist-mcp-docker-configured": {
+          "command": "docker",
+          "args": ["run", "--rm", "-i", "-e", "ANILIST_TOKEN=your_api_token", "yuna0x0/anilist-mcp"],
+          "env": {
+            "ANILIST_TOKEN": "your_api_token"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "yuna0x0",
+    "repo": "anilist-mcp",
+    "url": "https://github.com/yuna0x0/anilist-mcp",
+    "name": "yuna0x0__anilist-mcp",
+    "path": null,
+    "stars": 49,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "ab0d9f4cb7d2e25e1aa515f6a7c3241e62c16449"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:25:57.341Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@yuna0x0/anilist-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"anilist-mcp\",\n  \"version\": \"1.2.5\",\n  \"description\": \"AniList MCP server for accessing AniList API data\",\n  \"type\": \"module\",\n  \"module\": \"index.ts\",\n  \"author\": \"yuna0x0 <yuna@yuna0x0.com>\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/yuna0x0/anilist-mcp.git\"\n  },\n  \"license\": \"MIT\",\n  \"bin\": {\n    \"anilist-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"clean\": \"rimraf 'dist/'\",\n    \"build\": \"pnpm run clean && tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"pnpm run build\",\n    \"start\": \"pnpm run build && node dist/index.js\",\n    \"inspector\": \"pnpm run build && mcp-inspector node dist/index.js\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"keywords\": [\n    \"ai\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"anilist\",\n    \"api\",\n    \"llm\",\n    \"anime\",\n    \"manga\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.1\",\n    \"@yuna0x0/anilist-node\": \"^1.14.8\",\n    \"dotenv\": \"^17.2.1\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"devDependencies\": {\n    \"@modelcontextprotocol/inspector\": \"^0.16.2\",\n    \"rimraf\": \"^6.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.9.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"packageManager\": \"pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748\"\n}\n"
+}

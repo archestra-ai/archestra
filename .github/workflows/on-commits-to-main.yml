@@ -1,0 +1,67 @@
+name: On commits to main
+
+on:
+  push:
+    # TODO: uncomment out the following when done testing
+    # branches:
+    #   - main
+
+concurrency:
+  group: on-commits-to-main
+  cancel-in-progress: true
+
+# TODO: when we are ready to have "dev" environments for oauth proxy and mcp catalog, uncomment out the following jobs and workflows
+jobs:
+  hello-world:
+    name: Hello world
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hello world
+        run: echo "Hello world"
+
+  # deploy-oauth-proxy-to-dev:
+  #   name: Deploy OAuth Proxy to Dev
+  #   uses: ./.github/workflows/deploy-oauth-proxy-server-to-cloud-run.yml
+  #   permissions:
+  #     contents: read
+  #     id-token: write # Required for Workload Identity Federation
+  #   with:
+  #     environment: development
+  #     version: ${{ github.sha }}
+  #     base_url: https://oauth.dev.archestra.ai
+  #   secrets:
+  #     GCP_PROJECT_ID: ${{ secrets.DEVELOPMENT_GCP_PROJECT_ID }}
+  #     GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+  #     GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+
+  # deploy-mcp-catalog-to-dev:
+  #   name: Deploy MCP Catalog to Dev
+  #   uses: ./.github/workflows/deploy-mcp-catalog-server-to-cloud-run.yml
+  #   permissions:
+  #     contents: read
+  #     id-token: write # Required for Workload Identity Federation
+  #   with:
+  #     environment: development
+  #     version: ${{ github.sha }}
+  #     base_url: https://oauth.dev.archestra.ai
+  #   secrets:
+  #     GCP_PROJECT_ID: ${{ secrets.DEVELOPMENT_GCP_PROJECT_ID }}
+  #     GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+  #     GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+
+  deploy-mcp-catalog-to-prod:
+    name: Deploy MCP Catalog to Production
+    if: needs.release-please.outputs.mcp_catalog_release_created
+    needs:
+      - release-please
+    uses: ./.github/workflows/deploy-mcp-catalog-server-to-cloud-run.yml
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    with:
+      environment: production
+      version: v${{ needs.release-please.outputs.mcp_catalog_version }}
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.PRODUCTION_GCP_PROJECT_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.PRODUCTION_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}

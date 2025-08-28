@@ -1,0 +1,118 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "flux159__mcp-server-kubernetes",
+  "display_name": "mcp-server-kubernetes",
+  "version": "1.0.0",
+  "description": "MCP Server for kubernetes management commands",
+  "author": {
+    "name": "Flux159"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server Kubernetes\n\n[![CI](https://github.com/Flux159/mcp-server-kubernetes/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/mcp-server-kubernetes/actions/workflows/ci.yml)\n[![Language](https://img.shields.io/github/languages/top/Flux159/mcp-server-kubernetes)](https://github.com/yourusername/mcp-server-kubernetes)\n[![Bun](https://img.shields.io/badge/runtime-bun-orange)](https://bun.sh)\n[![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io/)\n[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)\n[![Stars](https://img.shields.io/github/stars/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/stargazers)\n[![Issues](https://img.shields.io/github/issues/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/issues)\n[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Flux159/mcp-server-kubernetes/pulls)\n[![Last Commit](https://img.shields.io/github/last-commit/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/commits/main)\n[![smithery badge](https://smithery.ai/badge/mcp-server-kubernetes)](https://smithery.ai/protocol/mcp-server-kubernetes)\n\nMCP Server that can connect to a Kubernetes cluster and manage it. Supports loading kubeconfig from multiple sources in priority order.\n\nhttps://github.com/user-attachments/assets/f25f8f4e-4d04-479b-9ae0-5dac452dd2ed\n\n<a href=\"https://glama.ai/mcp/servers/w71ieamqrt\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/w71ieamqrt/badge\" /></a>\n\n## Usage with Claude Desktop\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"]\n    }\n  }\n}\n```\n\nBy default, the server loads kubeconfig from `~/.kube/config`. For additional authentication options (environment variables, custom paths, etc.), see [ADVANCED_README.md](ADVANCED_README.md).\n\nThe server will automatically connect to your current kubectl context. Make sure you have:\n\n1. kubectl installed and in your PATH\n2. A valid kubeconfig file with contexts configured\n3. Access to a Kubernetes cluster configured for kubectl (e.g. minikube, Rancher Desktop, GKE, etc.)\n4. Helm v3 installed and in your PATH (no Tiller required). Optional if you don't plan to use Helm.\n\nYou can verify your connection by asking Claude to list your pods or create a test deployment.\n\nIf you have errors open up a standard terminal and run `kubectl get pods` to see if you can connect to your cluster without credentials issues.\n\n## Usage with mcp-chat\n\n[mcp-chat](https://github.com/Flux159/mcp-chat) is a CLI chat client for MCP servers. You can use it to interact with the Kubernetes server.\n\n```shell\nnpx mcp-chat --server \"npx mcp-server-kubernetes\"\n```\n\nAlternatively, pass it your existing Claude Desktop configuration file from above (Linux should pass the correct path to config):\n\nMac:\n\n```shell\nnpx mcp-chat --config \"~/Library/Application Support/Claude/claude_desktop_config.json\"\n```\n\nWindows:\n\n```shell\nnpx mcp-chat --config \"%APPDATA%\\Claude\\claude_desktop_config.json\"\n```\n\n## Features\n\n- [x] Connect to a Kubernetes cluster\n- [x] Unified kubectl API for managing resources\n  - Get or list resources with `kubectl_get`\n  - Describe resources with `kubectl_describe`\n  - List resources with `kubectl_get`\n  - Create resources with `kubectl_create`\n  - Apply YAML manifests with `kubectl_apply`\n  - Delete resources with `kubectl_delete`\n  - Get logs with `kubectl_logs`\n  - Manage kubectl contexts with `kubectl_context`\n  - Explain Kubernetes resources with `explain_resource`\n  - List API resources with `list_api_resources`\n  - Scale resources with `kubectl_scale`\n  - Update field(s) of a resource with `kubectl_patch`\n  - Manage deployment rollouts with `kubectl_rollout`\n  - Execute any kubectl command with `kubectl_generic`\n  - Verify connection with `ping`\n- [x] Advanced operations\n  - Scale deployments with `kubectl_scale` (replaces legacy `scale_deployment`)\n  - Port forward to pods and services with `port_forward`\n  - Run Helm operations\n    - Install, upgrade, and uninstall charts\n    - Support for custom values, repositories, and versions\n- [x] Troubleshooting Prompt (`k8s-diagnose`)\n  - Guides through a systematic Kubernetes troubleshooting flow for pods based on a keyword and optional namespace.\n- [x] Non-destructive mode for read and create/update-only access to clusters\n- [x] Secrets masking for security (masks sensitive data in `kubectl get secrets` commands, does not affect logs)\n\n## Prompts\n\nThe MCP Kubernetes server includes specialized prompts to assist with common diagnostic operations.\n\n### k8s-diagnose Prompt\n\nThis prompt provides a systematic troubleshooting flow for Kubernetes pods. It accepts a `keyword` to identify relevant pods and an optional `namespace` to narrow the search.\nThe prompt's output will guide you through an autonomous troubleshooting flow, providing instructions for identifying issues, collecting evidence, and suggesting remediation steps.\n\n## Local Development\n\nMake sure that you have [bun installed](https://bun.sh/docs/installation). Clone the repo & install dependencies:\n\n```bash\ngit clone https://github.com/Flux159/mcp-server-kubernetes.git\ncd mcp-server-kubernetes\nbun install\n```\n\n### Development Workflow\n\n1. Start the server in development mode (watches for file changes):\n\n```bash\nbun run dev\n```\n\n2. Run unit tests:\n\n```bash\nbun run test\n```\n\n3. Build the project:\n\n```bash\nbun run build\n```\n\n4. Local Testing with [Inspector](https://github.com/modelcontextprotocol/inspector)\n\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n# Follow further instructions on terminal for Inspector link\n```\n\n5. Local testing with Claude Desktop\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-kubernetes\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/your/mcp-server-kubernetes/dist/index.js\"]\n    }\n  }\n}\n```\n\n6. Local testing with [mcp-chat](https://github.com/Flux159/mcp-chat)\n\n```bash\nbun run chat\n```\n\n## Contributing\n\nSee the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.\n\n## Advanced\n\n### Non-Destructive Mode\n\nYou can run the server in a non-destructive mode that disables all destructive operations (delete pods, delete deployments, delete namespaces, etc.):\n\n```shell\nALLOW_ONLY_NON_DESTRUCTIVE_TOOLS=true npx mcp-server-kubernetes\n```\n\nFor Claude Desktop configuration with non-destructive mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes-readonly\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"],\n      \"env\": {\n        \"ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS\": \"true\"\n      }\n    }\n  }\n}\n```\n\n### Commands Available in Non-Destructive Mode\n\nAll read-only and resource creation/update operations remain available:\n\n- Resource Information: `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `explain_resource`, `list_api_resources`\n- Resource Creation/Modification: `kubectl_apply`, `kubectl_create`, `kubectl_scale`, `kubectl_patch`, `kubectl_rollout`\n- Helm Operations: `install_helm_chart`, `upgrade_helm_chart`\n- Connectivity: `port_forward`, `stop_port_forward`\n- Context Management: `kubectl_context`\n\n### Commands Disabled in Non-Destructive Mode\n\nThe following destructive operations are disabled:\n\n- `kubectl_delete`: Deleting any Kubernetes resources\n- `uninstall_helm_chart`: Uninstalling Helm charts\n- `cleanup`: Cleanup of managed resources\n- `kubectl_generic`: General kubectl command access (may include destructive operations)\n\nFor additional advanced features, see the [ADVANCED_README.md](ADVANCED_README.md).\n\n## Architecture\n\nSee this [DeepWiki link](https://deepwiki.com/Flux159/mcp-server-kubernetes) for a more indepth architecture overview created by Devin.\n\nThis section describes the high-level architecture of the MCP Kubernetes server.\n\n### Request Flow\n\nThe sequence diagram below illustrates how requests flow through the system:\n\n```mermaid\nsequenceDiagram\n    participant Client\n    participant Transport as Transport Layer\n    participant Server as MCP Server\n    participant Filter as Tool Filter\n    participant Handler as Request Handler\n    participant K8sManager as KubernetesManager\n    participant K8s as Kubernetes API\n\n    Note over Transport: StdioTransport or<br>SSE Transport\n\n    Client->>Transport: Send Request\n    Transport->>Server: Forward Request\n\n    alt Tools Request\n        Server->>Filter: Filter available tools\n        Note over Filter: Remove destructive tools<br>if in non-destructive mode\n        Filter->>Handler: Route to tools handler\n\n        alt kubectl operations\n            Handler->>K8sManager: Execute kubectl operation\n            K8sManager->>K8s: Make API call\n        else Helm operations\n            Handler->>K8sManager: Execute Helm operation\n            K8sManager->>K8s: Make API call\n        else Port Forward operations\n            Handler->>K8sManager: Set up port forwarding\n            K8sManager->>K8s: Make API call\n        end\n\n        K8s-->>K8sManager: Return result\n        K8sManager-->>Handler: Process response\n        Handler-->>Server: Return tool result\n    else Resource Request\n        Server->>Handler: Route to resource handler\n        Handler->>K8sManager: Get resource data\n        K8sManager->>K8s: Query API\n        K8s-->>K8sManager: Return data\n        K8sManager-->>Handler: Format response\n        Handler-->>Server: Return resource data\n    end\n\n    Server-->>Transport: Send Response\n    Transport-->>Client: Return Final Response\n```\n\nSee this [DeepWiki link](https://deepwiki.com/Flux159/mcp-server-kubernetes) for a more indepth architecture overview created by Devin.\n\n## Publishing new release\n\nGo to the [releases page](https://github.com/Flux159/mcp-server-kubernetes/releases), click on \"Draft New Release\", click \"Choose a tag\" and create a new tag by typing out a new version number using \"v{major}.{minor}.{patch}\" semver format. Then, write a release title \"Release v{major}.{minor}.{patch}\" and description / changelog if necessary and click \"Publish Release\".\n\nThis will create a new tag which will trigger a new release build via the cd.yml workflow. Once successful, the new release will be published to [npm](https://www.npmjs.com/package/mcp-server-kubernetes). Note that there is no need to update the package.json version manually, as the workflow will automatically update the version number in the package.json file & push a commit to main.\n\n## Not planned\n\nAdding clusters to kubectx.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=Flux159/mcp-server-kubernetes&type=Date)](https://www.star-history.com/#Flux159/mcp-server-kubernetes&Date)\n\n## 🖊️ Cite\n\nIf you find this repo useful, please cite:\n\n```\n@software{Patel_MCP_Server_Kubernetes_2024,\nauthor = {Patel, Paras and Sonwalkar, Suyog},\nmonth = jul,\ntitle = {{MCP Server Kubernetes}},\nurl = {https://github.com/Flux159/mcp-server-kubernetes},\nversion = {2.5.0},\nyear = {2024}\n}\n```\n",
+  "category": "AI Tools",
+  "quality_score": 75,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-server-kubernetes": {
+          "command": "npx",
+          "args": ["-y", "mcp-server-kubernetes"],
+          "env": {}
+        },
+        "mcp-server-kubernetes-readonly": {
+          "command": "npx",
+          "args": ["-y", "mcp-server-kubernetes"],
+          "env": {
+            "ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS": "true"
+          }
+        },
+        "mcp-server-kubernetes-local": {
+          "command": "node",
+          "args": ["/path/to/your/mcp-server-kubernetes/dist/index.js"],
+          "env": {}
+        },
+        "mcp-server-kubernetes-dev": {
+          "command": "bun",
+          "args": ["run", "dev"],
+          "env": {}
+        },
+        "mcp-server-kubernetes-chat-dev": {
+          "command": "bun",
+          "args": ["run", "chat"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Flux159",
+    "repo": "mcp-server-kubernetes",
+    "url": "https://github.com/Flux159/mcp-server-kubernetes",
+    "name": "mcp-server-kubernetes",
+    "path": null,
+    "stars": 942,
+    "contributors": 25,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e330a73df59768f66a772f877a10e11a72bb26fb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:48.521Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@kubernetes/client-node",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "js-yaml",
+      "importance": 6
+    },
+    {
+      "name": "yaml",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-kubernetes\",\n  \"version\": \"2.7.0\",\n  \"description\": \"MCP server for interacting with Kubernetes clusters via kubectl\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"author\": \"Flux159\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Flux159/mcp-server-kubernetes\"\n  },\n  \"bin\": {\n    \"mcp-server-kubernetes\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"builddxt\": \"node_modules/.bin/dxt pack\",\n    \"dev\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"vitest run\",\n    \"prepublishOnly\": \"npm run build\",\n    \"dockerbuild\": \"docker buildx build -t flux159/mcp-server-kubernetes --platform linux/amd64,linux/arm64 --push .\",\n    \"chat\": \"npx mcp-chat --server \\\"./dist/index.js\\\"\",\n    \"version:update\": \"node scripts/update-version.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"kubernetes\",\n    \"claude\",\n    \"anthropic\",\n    \"kubectl\"\n  ],\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"dependencies\": {\n    \"@kubernetes/client-node\": \"1.3.0\",\n    \"@modelcontextprotocol/sdk\": \"1.17.0\",\n    \"express\": \"4.21.2\",\n    \"js-yaml\": \"4.1.0\",\n    \"yaml\": \"2.7.0\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"5.0.1\",\n    \"@types/js-yaml\": \"4.0.9\",\n    \"@types/node\": \"22.9.3\",\n    \"shx\": \"0.3.4\",\n    \"typescript\": \"5.6.2\",\n    \"vitest\": \"2.1.9\",\n    \"@anthropic-ai/dxt\": \"0.1.0\"\n  }\n}\n"
+}

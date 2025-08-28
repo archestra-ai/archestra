@@ -1,0 +1,99 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "posthog__mcp",
+  "display_name": "mcp",
+  "version": "1.0.0",
+  "description": "Official PostHog MCP Server 🦔",
+  "author": {
+    "name": "posthog"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# PostHog MCP\n\n## Use the MCP Server\n\n### Quick install\n\nYou can install the MCP server automatically into popular clients by running the following command:\n\n```\nnpx @posthog/wizard@latest mcp add\n```\n\n### Manual install\n\n1. Obtain a personal API key using the MCP Server preset [here](https://app.posthog.com/settings/user-api-keys?preset=mcp_server).\n\n2. Add the MCP configuration to your desktop client (e.g. Cursor, Windsurf, Claude Desktop) and add your personal API key\n\n```json\n{\n  \"mcpServers\": {\n    \"posthog\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote@latest\",\n        \"https://mcp.posthog.com/sse\",\n        \"--header\",\n        \"Authorization:${POSTHOG_AUTH_HEADER}\"\n      ],\n      \"env\": {\n        \"POSTHOG_AUTH_HEADER\": \"Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\"\n      }\n    }\n  }\n}\n```\n\n### Using EU cloud or self-hosted instances\n\nIf you're using PostHog EU cloud or a self-hosted instance, you can specify a custom base URL by adding the `POSTHOG_BASE_URL` [environment variable](https://developers.cloudflare.com/workers/configuration/environment-variables) when running the MCP server locally or on your own infrastructure, e.g. `POSTHOG_BASE_URL=https://eu.posthog.com`\n\n**Here are some examples of prompts you can use:**\n- What feature flags do I have active?\n- Add a new feature flag for our homepage redesign\n- What are my most common errors?\n\n\n# Development\n\nTo run the MCP server locally, run the following command:\n\n```\npnpm run dev\n```\n\nAnd replace `https://mcp.posthog.com/sse` with `http://localhost:8787/sse` in the MCP configuration.\n\n## Project Structure\n\nThis repository is organized to support multiple language implementations:\n\n- `typescript/` - TypeScript implementation (current)\n- `python/` - Python implementation (planned)\n- `schema/` - Shared schema files generated from TypeScript for cross-language compatibility\n\n### Development Commands\n\n- `pnpm run dev` - Start development server\n- `pnpm run schema:build:json` - Generate JSON schema for other language implementations\n- `pnpm run lint:fix` - Format and lint code\n\n### Environment variables\n\n- Create `.dev.vars` in the root\n- Add Inkeep API key to enable `docs-search` tool (see `Inkeep API key - mcp`)\n\n```\nINKEEP_API_KEY=\"...\"\n```\n\n\n### Configuring the Model Context Protocol Inspector\n\nDuring development you can directly inspect the MCP tool call results using the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector). \n\nYou can run it using the following command:\n\n```bash\nnpx @modelcontextprotocol/inspector npx -y mcp-remote@latest http://localhost:8787/sse --header \"\\\"Authorization: Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\\\"\"\n```\n\nAlternatively, you can use the following configuration in the MCP Inspector:\n\nUse transport type `STDIO`.\n\n**Command:**\n\n```\nnpx\n```\n\n**Arguments:**\n\n```\n-y mcp-remote@latest http://localhost:8787/sse --header \"Authorization: Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\"\n```\n\n",
+  "category": "Development",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "posthog-mcp-dev": {
+          "command": "pnpm",
+          "args": ["run", "dev"],
+          "env": {
+            "POSTHOG_BASE_URL": "https://eu.posthog.com",
+            "INKEEP_API_KEY": "..."
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "posthog",
+    "repo": "mcp",
+    "url": "https://github.com/posthog/mcp",
+    "name": "mcp",
+    "path": null,
+    "stars": 90,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "31d4fd5cc1b5e375a9bd56cd5b530b7290b5a02a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:19.499Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/dotenv",
+      "importance": 2
+    },
+    {
+      "name": "agents",
+      "importance": 8
+    },
+    {
+      "name": "posthog-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"remote-mcp-server-authless\",\n\t\"version\": \"0.0.0\",\n\t\"private\": true,\n\t\"scripts\": {\n\t\t\"deploy\": \"wrangler deploy\",\n\t\t\"dev\": \"wrangler dev\",\n\t\t\"format\": \"biome format --write\",\n\t\t\"lint:fix\": \"biome lint --fix\",\n\t\t\"test\": \"vitest\",\n\t\t\"test:integration\": \"vitest run --config vitest.integration.config.mts\",\n\t\t\"test:watch\": \"vitest watch\",\n\t\t\"start\": \"wrangler dev\",\n\t\t\"cf-typegen\": \"wrangler types\",\n\t\t\"prepare\": \"husky\",\n\t\t\"schema:build:json\": \"tsx typescript/scripts/generate-tool-schema.ts\",\n\t\t\"schema:build:python\": \"bash python/scripts/generate-pydantic-models.sh\",\n\t\t\"schema:build\": \"pnpm run schema:build:json && pnpm run schema:build:python\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@biomejs/biome\": \"1.9.4\",\n\t\t\"@types/node\": \"^22.15.34\",\n\t\t\"dotenv\": \"^16.4.7\",\n\t\t\"husky\": \"^9.1.7\",\n\t\t\"tsx\": \"^4.20.3\",\n\t\t\"typescript\": \"^5.8.3\",\n\t\t\"vite\": \"^5.0.0\",\n\t\t\"vite-tsconfig-paths\": \"^5.1.4\",\n\t\t\"vitest\": \"^3.2.4\",\n\t\t\"wrangler\": \"^4.14.4\",\n\t\t\"zod-to-json-schema\": \"^3.24.6\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"^1.11.1\",\n\t\t\"@types/dotenv\": \"^6.1.1\",\n\t\t\"agents\": \"^0.0.80\",\n\t\t\"posthog-node\": \"^4.18.0\",\n\t\t\"zod\": \"^3.24.4\"\n\t},\n\t\"packageManager\": \"pnpm@9.15.5+sha256.8472168c3e1fd0bff287e694b053fccbbf20579a3ff9526b6333beab8df65a8d\"\n}\n\n\n=== python/pyproject.toml ===\n[project]\nname = \"posthog-mcp-python\"\nversion = \"0.1.0\"\ndescription = \"Python implementation of the PostHog Model Context Protocol (MCP) server\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nauthors = [\n    { name = \"PostHog\", email = \"hey@posthog.com\" },\n]\ndependencies = [\n    \"pydantic>=2.0.0\",\n]\n\n[dependency-groups]\ndev = [\n    \"datamodel-code-generator[http]>=0.25.0\",\n    \"ruff>=0.1.0\", \n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\".\"]\n\n[tool.ruff]\ntarget-version = \"py311\"\nline-length = 100\nindent-width = 4\n\n[tool.ruff.lint]\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings  \n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"UP\", # pyupgrade\n]\nignore = [\n    \"E501\", # line too long\n]\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.uv]\ndev-dependencies = []"
+}

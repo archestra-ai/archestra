@@ -1,0 +1,97 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "yuna0x0__hackmd-mcp",
+  "display_name": "hackmd-mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol server for integrating HackMD's note-taking platform with AI assistants.",
+  "author": {
+    "name": "yuna0x0"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# HackMD MCP Server\n[![smithery badge](https://smithery.ai/badge/@yuna0x0/hackmd-mcp)](https://smithery.ai/server/@yuna0x0/hackmd-mcp)\n\nThis is a Model Context Protocol (MCP) server for interacting with the [HackMD API](https://hackmd.io/@hackmd-api/developer-portal). It allows AI assistants to perform operations such as:\n\n- Get user information\n- List user's notes\n- Create, read, update, and delete notes\n- View read history\n- Work with team notes\n\n## Requirements\n\n- Node.js 18+\n\n## Environment Variables\n\n- `HACKMD_API_TOKEN`: **[Required]** Your HackMD API token\n- `HACKMD_API_URL`: (Optional) HackMD API Endpoint URL. Default: `https://api.hackmd.io/v1`\n\nYou can get an API token from [HackMD settings](https://hackmd.io/settings#api).\n\n## Install to Claude Desktop (or other MCP clients)\n\n### Installing via Smithery\n\nTo install HackMD MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@yuna0x0/hackmd-mcp):\n\n```bash\nnpx -y @smithery/cli install @yuna0x0/hackmd-mcp --client claude\n\n# For other MCP clients, use the following command:\n# List available clients\nnpx -y @smithery/cli list clients\n# Install to other clients\nnpx -y @smithery/cli install @yuna0x0/hackmd-mcp --client <client_name>\n```\n\n### Installing via mcp-get\n\n```bash\nnpx @michaellatman/mcp-get@latest install hackmd-mcp\n```\n\n### Manual Installation\n\n1. Add this server to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"hackmd\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"hackmd-mcp\"],\n      \"env\": {\n        \"HACKMD_API_TOKEN\": \"your_api_token\"\n      }\n    }\n  }\n}\n```\n\n2. Restart Claude Desktop\n3. Use the tools to interact with your HackMD account\n\n## Available Tools\n\n### User API\n- **get_user_info**: Get information about the authenticated user\n\n### User Notes API\n- **list_user_notes**: List all notes owned by the user\n- **get_note**: Get a note by its ID\n- **create_note**: Create a new note\n- **update_note**: Update an existing note\n- **delete_note**: Delete a note\n- **get_history**: Get user's reading history\n\n### Teams API\n- **list_teams**: List all teams accessible to the user\n\n### Team Notes API\n- **list_team_notes**: List all notes in a team\n- **create_team_note**: Create a new note in a team\n- **update_team_note**: Update an existing note in a team\n- **delete_team_note**: Delete a note in a team\n\n## Example Usage\n\n```\nCan you help me manage my HackMD notes?\n```\n\nThen use commands like:\n\n```\nPlease list all my notes.\n```\n\n## Local Development\n\nThis project uses [pnpm](https://pnpm.io) as its package manager.\n\nClone the repository and install dependencies:\n\n```bash\ngit clone https://github.com/yuna0x0/hackmd-mcp.git\ncd hackmd-mcp\npnpm install\n```\n\n### Configuration\n\n1. Create a `.env` file by copying the example:\n```bash\ncp .env.example .env\n```\n\n2. Edit the `.env` file and add your HackMD API token:\n```\nHACKMD_API_TOKEN=your_api_token\n```\n\n## Debugging with MCP Inspector\n\nYou can use the MCP Inspector to test and debug the HackMD MCP server:\n\n```bash\nnpx @modelcontextprotocol/inspector -e HACKMD_API_TOKEN=your_api_token npx hackmd-mcp\n\n# Use this instead when Local Development\npnpm run inspector\n```\n\nThen open your browser to the provided URL (usually http://127.0.0.1:6274) to access the MCP Inspector interface. From there, you can:\n\n1. Connect to your running HackMD MCP server\n2. Browse available tools\n3. Run tools with custom parameters\n4. View the responses\n\nThis is particularly useful for testing your setup before connecting it to Claude or another AI assistant.\n\n## Docker\n\nPull from Docker Hub:\n```bash\ndocker pull yuna0x0/hackmd-mcp\n```\n\nDocker build (Local Development):\n```bash\ndocker build -t yuna0x0/hackmd-mcp .\n```\n\nDocker multi-platform build (Local Development):\n```bash\ndocker buildx build --platform linux/amd64,linux/arm64 -t yuna0x0/hackmd-mcp .\n```\n\n## Security Notice\n\nThis MCP server requires your HackMD API token in the .env file or as an environment variable. Keep this information secure and never commit it to version control.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Knowledge",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "hackmd-mcp-configured": {
+          "command": "npx",
+          "args": ["-y", "hackmd-mcp"],
+          "env": {
+            "HACKMD_API_TOKEN": "your_api_token"
+          }
+        },
+        "yuna0x0-hackmd-mcp-docker-configured": {
+          "command": "docker",
+          "args": ["run", "-e", "HACKMD_API_TOKEN=your_api_token", "yuna0x0/hackmd-mcp"],
+          "env": {
+            "HACKMD_API_TOKEN": "your_api_token"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "yuna0x0",
+    "repo": "hackmd-mcp",
+    "url": "https://github.com/yuna0x0/hackmd-mcp",
+    "name": "hackmd-mcp",
+    "path": null,
+    "stars": 32,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c922eae4ea70d3a8771ece78285d22c53899f35c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T21:05:44.913Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@hackmd/api",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"hackmd-mcp\",\n  \"module\": \"index.ts\",\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"version\": \"1.2.8\",\n  \"author\": \"yuna0x0 <yuna@yuna0x0.com>\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/yuna0x0/hackmd-mcp.git\"\n  },\n  \"bin\": {\n    \"hackmd-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"clean\": \"rimraf 'dist/'\",\n    \"build\": \"pnpm run clean && tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"pnpm run build\",\n    \"start\": \"pnpm run build && node dist/index.js\",\n    \"inspector\": \"pnpm run build && mcp-inspector node dist/index.js\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@hackmd/api\": \"^2.4.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.11.1\",\n    \"dotenv\": \"^16.5.0\",\n    \"zod\": \"^3.24.4\"\n  },\n  \"devDependencies\": {\n    \"@modelcontextprotocol/inspector\": \"^0.11.0\",\n    \"rimraf\": \"^6.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"keywords\": [\n    \"api\",\n    \"ai\",\n    \"mcp\",\n    \"hackmd\",\n    \"llm\",\n    \"mcp-server\"\n  ],\n  \"packageManager\": \"pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39\",\n  \"pnpm\": {\n    \"overrides\": {\n      \"axios@>=0.8.1 <0.28.0\": \">=0.28.0\",\n      \"axios@<0.30.0\": \">=0.30.0\"\n    }\n  }\n}\n"
+}

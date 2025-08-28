@@ -1,0 +1,106 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "mark3labs__mcp-filesystem-server",
+  "display_name": "mcp-filesystem-server",
+  "version": "1.0.0",
+  "description": "Go server implementing Model Context Protocol (MCP) for filesystem operations.",
+  "author": {
+    "name": "mark3labs"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Filesystem Server\n\nThis MCP server provides secure access to the local filesystem via the Model Context Protocol (MCP).\n\n## Components\n\n### Resources\n\n- **file://**\n  - Name: File System\n  - Description: Access to files and directories on the local file system\n\n### Tools\n\n#### File Operations\n\n- **read_file**\n  - Read the complete contents of a file from the file system\n  - Parameters: `path` (required): Path to the file to read\n\n- **read_multiple_files**\n  - Read the contents of multiple files in a single operation\n  - Parameters: `paths` (required): List of file paths to read\n\n- **write_file**\n  - Create a new file or overwrite an existing file with new content\n  - Parameters: `path` (required): Path where to write the file, `content` (required): Content to write to the file\n\n- **copy_file**\n  - Copy files and directories\n  - Parameters: `source` (required): Source path of the file or directory, `destination` (required): Destination path\n\n- **move_file**\n  - Move or rename files and directories\n  - Parameters: `source` (required): Source path of the file or directory, `destination` (required): Destination path\n\n- **delete_file**\n  - Delete a file or directory from the file system\n  - Parameters: `path` (required): Path to the file or directory to delete, `recursive` (optional): Whether to recursively delete directories (default: false)\n\n- **modify_file**\n  - Update file by finding and replacing text using string matching or regex\n  - Parameters: `path` (required): Path to the file to modify, `find` (required): Text to search for, `replace` (required): Text to replace with, `all_occurrences` (optional): Replace all occurrences (default: true), `regex` (optional): Treat find pattern as regex (default: false)\n\n#### Directory Operations\n\n- **list_directory**\n  - Get a detailed listing of all files and directories in a specified path\n  - Parameters: `path` (required): Path of the directory to list\n\n- **create_directory**\n  - Create a new directory or ensure a directory exists\n  - Parameters: `path` (required): Path of the directory to create\n\n- **tree**\n  - Returns a hierarchical JSON representation of a directory structure\n  - Parameters: `path` (required): Path of the directory to traverse, `depth` (optional): Maximum depth to traverse (default: 3), `follow_symlinks` (optional): Whether to follow symbolic links (default: false)\n\n#### Search and Information\n\n- **search_files**\n  - Recursively search for files and directories matching a pattern\n  - Parameters: `path` (required): Starting path for the search, `pattern` (required): Search pattern to match against file names\n\n- **search_within_files**\n  - Search for text within file contents across directory trees\n  - Parameters: `path` (required): Starting directory for the search, `substring` (required): Text to search for within file contents, `depth` (optional): Maximum directory depth to search, `max_results` (optional): Maximum number of results to return (default: 1000)\n\n- **get_file_info**\n  - Retrieve detailed metadata about a file or directory\n  - Parameters: `path` (required): Path to the file or directory\n\n- **list_allowed_directories**\n  - Returns the list of directories that this server is allowed to access\n  - Parameters: None\n\n## Features\n\n- Secure access to specified directories\n- Path validation to prevent directory traversal attacks\n- Symlink resolution with security checks\n- MIME type detection\n- Support for text, binary, and image files\n- Size limits for inline content and base64 encoding\n\n## Getting Started\n\n### Installation\n\n#### Using Go Install\n\n```bash\ngo install github.com/mark3labs/mcp-filesystem-server@latest\n```\n\n### Usage\n\n#### As a standalone server\n\nStart the MCP server with allowed directories:\n\n```bash\nmcp-filesystem-server /path/to/allowed/directory [/another/allowed/directory ...]\n```\n\n#### As a library in your Go project\n\n```go\npackage main\n\nimport (\n\t\"log\"\n\t\"os\"\n\n\t\"github.com/mark3labs/mcp-filesystem-server/filesystemserver\"\n)\n\nfunc main() {\n\t// Create a new filesystem server with allowed directories\n\tallowedDirs := []string{\"/path/to/allowed/directory\", \"/another/allowed/directory\"}\n\tfs, err := filesystemserver.NewFilesystemServer(allowedDirs)\n\tif err != nil {\n\t\tlog.Fatalf(\"Failed to create server: %v\", err)\n\t}\n\n\t// Serve requests\n\tif err := fs.Serve(); err != nil {\n\t\tlog.Fatalf(\"Server error: %v\", err)\n\t}\n}\n```\n\n### Usage with Model Context Protocol\n\nTo integrate this server with apps that support MCP:\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"mcp-filesystem-server\",\n      \"args\": [\"/path/to/allowed/directory\", \"/another/allowed/directory\"]\n    }\n  }\n}\n```\n\n### Docker\n\n#### Running with Docker\n\nYou can run the Filesystem MCP server using Docker:\n\n```bash\ndocker run -i --rm ghcr.io/mark3labs/mcp-filesystem-server:latest /path/to/allowed/directory\n```\n\n#### Docker Configuration with MCP\n\nTo integrate the Docker image with apps that support MCP:\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"ghcr.io/mark3labs/mcp-filesystem-server:latest\",\n        \"/path/to/allowed/directory\"\n      ]\n    }\n  }\n}\n```\n\nIf you need changes made inside the container to reflect on the host filesystem, you can mount a volume. This allows the container to access and modify files on the host system. Here's an example:\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--volume=/allowed/directory/in/host:/allowed/directory/in/container\",\n        \"ghcr.io/mark3labs/mcp-filesystem-server:latest\",\n        \"/allowed/directory/in/container\"\n      ]\n    }\n  }\n}\n```\n\n## License\n\nSee the [LICENSE](LICENSE) file for details.\n",
+  "category": "File Management",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-filesystem-server": {
+          "command": "mcp-filesystem-server",
+          "args": ["/path/to/allowed/directory"]
+        },
+        "mcp-filesystem-server-docker": {
+          "command": "docker",
+          "args": ["run", "-i", "--rm", "ghcr.io/mark3labs/mcp-filesystem-server:latest", "/path/to/allowed/directory"]
+        },
+        "mcp-filesystem-server-docker-volume": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "--volume=/allowed/directory/in/host:/allowed/directory/in/container",
+            "ghcr.io/mark3labs/mcp-filesystem-server:latest",
+            "/allowed/directory/in/container"
+          ]
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "mark3labs",
+    "repo": "mcp-filesystem-server",
+    "url": "https://github.com/mark3labs/mcp-filesystem-server",
+    "name": "mcp-filesystem-server",
+    "path": null,
+    "stars": 476,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "830bc892adf9421d496c8192e0a7e8048892fbd4"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:59.008Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "djherbis/times",
+      "importance": 5
+    },
+    {
+      "name": "gabriel-vasile/mimetype",
+      "importance": 8
+    },
+    {
+      "name": "gobwas/glob",
+      "importance": 7
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/mark3labs/mcp-filesystem-server\n\ngo 1.23.2\n\nrequire (\n\tgithub.com/djherbis/times v1.6.0\n\tgithub.com/gabriel-vasile/mimetype v1.4.9\n\tgithub.com/gobwas/glob v0.2.3\n\tgithub.com/mark3labs/mcp-go v0.32.0\n\tgithub.com/stretchr/testify v1.10.0\n)\n\nrequire (\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/net v0.39.0 // indirect\n\tgolang.org/x/sys v0.32.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

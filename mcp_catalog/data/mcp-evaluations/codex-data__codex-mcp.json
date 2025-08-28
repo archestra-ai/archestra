@@ -1,0 +1,105 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "codex-data__codex-mcp",
+  "display_name": "codex-mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol server for the Codex API",
+  "author": {
+    "name": "Codex-Data"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Codex MCP Server\n\nAn [MCP](https://modelcontextprotocol.org/) server that provides enriched blockchain data from [Codex](https://codex.io). This server can be used with any MCP-compatible client like [Claude Desktop](https://www.anthropic.com/news/claude-desktop).\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/codex-data/codex-mcp.git\ncd codex-mcp\n\n# Install dependencies\npnpm install\n\n# Build the project\npnpm build\n```\n\n## Usage\n\nTo use the MCP Codex Server, you need to have a Codex API key. You can get your key from the [Codex Dashboard](https://dashboard.codex.io).\n\n### Using npx (No Installation Required)\n\nYou can run the MCP Codex Server directly without installation using npx:\n\n```bash\n# Run the server in stdio mode (for CLI tools)\nnpx @codex-data/codex-mcp\n```\n\n### Running the Server Locally\n\nStart the server using stdio (for embedding in CLI tools):\n\n```bash\npnpm start\n```\n\nFor development with auto-reload:\n\n```bash\npnpm dev\n```\n\n### Integration with Claude Desktop\n\n1. Open Claude Desktop settings\n2. Go to the Developer tab and click \"Edit Config\"\n3. Add a new server configuration:\n\nNo installation:\n\n```json\n{\n  \"mcpServers\": {\n    \"codex-data\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@codex-data/codex-mcp\"],\n      \"env\": {\n        \"CODEX_API_KEY\": \"<your-codex-api-key>\"\n      }\n    }\n  }\n}\n```\n\nLocal installation:\n\n```json\n{\n  \"mcpServers\": {\n    \"codex-data\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/codex-mcp/build/index.js\"],\n      \"env\": {\n        \"CODEX_API_KEY\": \"<your-codex-api-key>\"\n      }\n    }\n  }\n}\n```\n\n4. Replace `/path/to/codex-mcp` with the actual path to your installation\n5. Replace `<your-codex-api-key>` with your actual Codex API key\n\n### Connecting using Claude CLI\n\nIf you're using Claude CLI:\n\n```bash\n# Add the MCP server\nclaude mcp add codex-data -e CODEX_API_KEY=<your-codex-api-key> npx @codex-data/codex-mcp\n\n# Start Claude with the MCP server enabled\nclaude\n```\n\n## License\n\nISC\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "codex-data-codex-mcp-stdio": {
+          "command": "npx",
+          "args": ["@codex-data/codex-mcp"],
+          "env": {}
+        },
+        "codex-data-codex-mcp-configured": {
+          "command": "npx",
+          "args": ["-y", "@codex-data/codex-mcp"],
+          "env": {
+            "CODEX_API_KEY": "<your-codex-api-key>"
+          }
+        },
+        "codex-data-codex-mcp-local-configured": {
+          "command": "node",
+          "args": ["/path/to/codex-mcp/build/index.js"],
+          "env": {
+            "CODEX_API_KEY": "<your-codex-api-key>"
+          }
+        },
+        "codex-data-codex-mcp-cli-configured": {
+          "command": "npx",
+          "args": ["@codex-data/codex-mcp"],
+          "env": {
+            "CODEX_API_KEY": "<your-codex-api-key>"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Codex-Data",
+    "repo": "codex-mcp",
+    "url": "https://github.com/Codex-Data/codex-mcp",
+    "name": "codex-mcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d31ebf35eef28d8f3bd57ad63fb13b9470849cbd"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:37:10.939Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@codex-data/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@codex-data/codex-mcp\",\n  \"module\": \"src/index.ts\",\n  \"type\": \"module\",\n  \"version\": \"0.1.3\",\n  \"description\": \"Model Context Protocol (MCP) server for fetching blockchain data from Codex.io\",\n  \"bin\": {\n    \"codex-mcp\": \"./bin/cli.js\"\n  },\n  \"main\": \"build/index.js\",\n  \"files\": [\n    \"build/\",\n    \"bin/\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node --env-file=.env build/index.js\",\n    \"dev\": \"tsx watch --env-file=.env src/index.ts\",\n    \"lint\": \"eslint --ext .ts src\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"evm\",\n    \"blockchain\",\n    \"ethereum\",\n    \"solana\",\n    \"web3\",\n    \"smart-contracts\",\n    \"ai\",\n    \"agent\"\n  ],\n  \"author\": \"Codex\",\n  \"homepage\": \"https://docs.codex.io\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/codex-data/codex-mcp\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/codex-data/codex-mcp/issues\"\n  },\n  \"license\": \"ISC\",\n  \"packageManager\": \"pnpm@10.7.0\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.23.0\",\n    \"@types/node\": \"^22.13.14\",\n    \"eslint\": \"^9.23.0\",\n    \"globals\": \"^16.0.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.29.0\"\n  },\n  \"dependencies\": {\n    \"@codex-data/sdk\": \"^1.0.5\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"zod\": \"^3.24.2\"\n  }\n}\n"
+}

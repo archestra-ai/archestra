@@ -1,0 +1,88 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "diivi__aseprite-mcp",
+  "display_name": "aseprite-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for interacting with the Aseprite API",
+  "author": {
+    "name": "diivi"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Aseprite MCP Tools\n\nA Python module that serves as an MCP server for interacting with the Aseprite API\n\nDemo where Cursor draws a cloud in aseprite using the MCP:\n\nhttps://github.com/user-attachments/assets/572edf75-ab66-4700-87ee-d7d3d196c597\n\n\n## Installation:\n```json\n{\n  \"mcpServers\": {\n      \"aseprite\": {\n          \"command\": \"/opt/homebrew/bin/uv\",\n          \"args\": [\n              \"--directory\",\n              \"/path/to/repo\",\n              \"run\",\n              \"-m\",\n              \"aseprite_mcp\"\n          ]\n      }\n  }\n}\n```\n",
+  "category": "Art & Culture",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "aseprite_mcp": {
+          "command": "uv",
+          "args": ["--directory", "/path/to/repo", "run", "-m", "aseprite_mcp"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "diivi",
+    "repo": "aseprite-mcp",
+    "url": "https://github.com/diivi/aseprite-mcp",
+    "name": "diivi__aseprite-mcp",
+    "path": null,
+    "stars": 75,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "739e3f48a5c30432a14db5a81931716f1ccdec18"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:25:54.962Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "typing_extensions",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"aseprite-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n]\n\n\n=== requirements.txt ===\ntyping_extensions>=4.12.2\npython-dotenv>=1.0.0\npytest>=8.0.0\nblack>=24.0.0\nflake8>=7.0.0"
+}

@@ -1,0 +1,88 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "fradser__mcp-server-apple-reminders",
+  "display_name": "mcp-server-apple-reminders",
+  "version": "1.0.0",
+  "description": "MCP server from FradSer/mcp-server-apple-reminders",
+  "author": {
+    "name": "FradSer"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-server-apple-reminders": {
+          "command": "mcp-server-apple-reminders",
+          "args": [],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "FradSer",
+    "repo": "mcp-server-apple-reminders",
+    "url": "https://github.com/FradSer/mcp-server-apple-reminders",
+    "name": "fradser__mcp-server-apple-reminders",
+    "path": null,
+    "stars": 102,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.765Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "arktype",
+      "importance": 4
+    },
+    {
+      "name": "moment",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": null
+}

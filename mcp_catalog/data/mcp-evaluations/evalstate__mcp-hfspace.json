@@ -1,0 +1,100 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "evalstate__mcp-hfspace",
+  "display_name": "mcp-hfspace",
+  "version": "1.0.0",
+  "description": "MCP Server to Use HuggingFace spaces, easy configuration and Claude Desktop mode. ",
+  "author": {
+    "name": "evalstate"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-hfspace MCP Server 🤗\n\n> [!TIP]\n>\n> You can access and configure Hugging Face MCP services directly at https://hf.co/mcp, including Gradio spaces.\n>\n> This project has been superceded by the official [Hugging Face MCP Server](https://github.com/evalstate/hf-mcp-server) and [Gradio MCP Endpoints](https://huggingface.co/blog/gradio-mcp).\n> \n> Alternatively you can run hf-mcp-server locally as a STDIO Server, or with robust support for SSE, Streaming HTTP and Streaming HTTP JSON Mode. This also runs a local UI for selecting tools and endpoints and supports `ToolListChangedNotifications` too.\n\n## hf.co/mcp\n\n![image](https://github.com/user-attachments/assets/9cbf407b-2330-4330-8274-e47305a555b9)\n\n## mcp-hfspace\n\nRead the introduction here [llmindset.co.uk/resources/mcp-hfspace/](https://llmindset.co.uk/resources/mcp-hfspace/)\n\nConnect to [Hugging Face Spaces](https://huggingface.co/spaces) with minimal setup needed - simply add your spaces and go!\n\nBy default, it connects to `black-forest-labs/FLUX.1-schnell` providing Image Generation capabilities to Claude Desktop.\n\n\n\n\n![Default Setup](./images/2024-12-09-flower.png)\n\n\n## Gradio MCP Support\n\n> [!TIP]\n> Gradio 5.28 now has integrated MCP Support via SSE: https://huggingface.co/blog/gradio-mcp. Check out whether your target Space is MCP Enabled!\n\n## Installation\n\nNPM Package is `@llmindset/mcp-hfspace`.\n\nInstall a recent version of [NodeJS](https://nodejs.org/en/download) for your platform, then add the following to the `mcpServers` section of your `claude_desktop_config.json` file:\n\n```json\n    \"mcp-hfspace\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@llmindset/mcp-hfspace\"\n      ]\n    }\n```\n\nPlease make sure you are using Claude Desktop 0.78 or greater.\n\nThis will get you started with an Image Generator.\n\n### Basic setup\n\nSupply a list of HuggingFace spaces in the arguments. mcp-hfspace will find the most appropriate endpoint and automatically configure it for usage. An example `claude_desktop_config.json` is supplied [below](#installation).\n\nBy default the current working directory is used for file upload/download. On Windows this is a read/write folder at `\\users\\<username>\\AppData\\Roaming\\Claude\\<version.number\\`, and on MacOS it is the is the read-only root: `/`.\n\nIt is recommended to override this and set a Working Directory for handling the upload and download of images and other file-based content. Specify either the `--work-dir=/your_directory` argument or `MCP_HF_WORK_DIR` environment variable.\n\nAn example configuration for using a modern image generator, vision model and text to speech, with a working directory set is below:\n\n```json\n    \"mcp-hfspace\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@llmindset/mcp-hfspace\",\n        \"--work-dir=/Users/evalstate/mcp-store\",\n        \"shuttleai/shuttle-jaguar\",\n        \"styletts2/styletts2\",\n        \"Qwen/QVQ-72B-preview\"\n      ]\n    }\n```\n\nTo use private spaces, supply your Hugging Face Token with either the `--hf-token=hf_...` argument or `HF_TOKEN` environment variable.\n\nIt's possible to run multiple server instances to use different working directories and tokens if needed.\n\n## File Handling and Claude Desktop Mode\n\nBy default, the Server operates in _Claude Desktop Mode_. In this mode, Images are returned in the tool responses, while other files are saved in the working folder, their file path is returned as a message. This will usually give the best experience if using Claude Desktop as the client.\n\nURLs can also be supplied as inputs: the content gets passed to the Space.\n\nThere is an \"Available Resources\" prompt that gives Claude the available files and mime types from your working directory. This is currently the best way to manage files.\n\n### Example 1 - Image Generation (Download Image / Claude Vision)\n\nWe'll use Claude to compare images created by `shuttleai/shuttle-3.1-aesthetic` and `FLUX.1-schnell`. The images gets saved to the Work Directory, as well as included in Claude's context window - so Claude can use its vision capabilities.\n\n![Image Generation Comparison](./images/2024-12-05-flux-shuttle.png)\n\n### Example 2 - Vision Model (Upload Image)\n\nWe'll use `merve/paligemma2-vqav2` [space link](https://huggingface.co/spaces/merve/paligemma2-vqav2) to query an image. In this case, we specify the filename which is available in the Working Directory: we don't want to upload the Image directly to Claude's context window. So, we can prompt Claude:\n\n`use paligemma to find out who is in \"test_gemma.jpg\"` -> `Text Output: david bowie`\n![Vision - File Upload](./images/2024-12-09-bowie.png)\n\n_If you are uploading something to Claude's context use the Paperclip Attachment button, otherwise specify the filename for the Server to send directly._\n\nWe can also supply a URL. For example : `use paligemma to detect humans in https://e3.365dm.com/24/12/1600x900/skynews-taylor-swift-eras-tour_6771083.jpg?20241209000914` -> `One person is detected in the image - Taylor Swift on stage.`\n\n### Example 3 - Text-to-Speech (Download Audio)\n\nIn _Claude Desktop Mode_, the audio file is saved in the WORK_DIR, and Claude is notified of the creation. If not in desktop mode, the file is returned as a base64 encoded resource to the Client (useful if it supports embedded Audio attachments).\n\n![Voice Production](./images/2024-12-08-mcp-parler.png)\n\n### Example 4 - Speech-to-Text (Upload Audio)\n\nHere, we use `hf-audio/whisper-large-v3-turbo` to transcribe some audio, and make it available to Claude.\n\n![Audio Transcribe](./images/2024-12-09-transcribe.png)\n\n### Example 5 - Image-to-Image\n\nIn this example, we specify the filename for `microsoft/OmniParser` to use, and get returned an annotated Image and 2 separate pieces of text: descriptions and coordinates. The prompt used was `use omniparser to analyse ./screenshot.png` and `use the analysis to produce an artifact that reproduces that screen`. `DawnC/Pawmatch` is also good at this.\n\n![Omniparser and Artifact](./images/2024-12-08-mcp-omni-artifact.png)\n\n### Example 6 - Chat\n\nIn this example, Claude sets a number of reasoning puzzles for Qwen, and asks follow-up questions for clarification.\n\n![Qwen Reasoning Test](./images/2024-12-09-qwen-reason.png)\n\n### Specifying API Endpoint\n\nIf you need, you can specify a specific API Endpoint by adding it to the spacename. So rather than passing in `Qwen/Qwen2.5-72B-Instruct` you would use `Qwen/Qwen2.5-72B-Instruct/model_chat`.\n\n### Claude Desktop Mode\n\nThis can be disabled with the option --desktop-mode=false or the environment variable CLAUDE_DESKTOP_MODE=false. In this case, content as returned as an embedded Base64 encoded Resource.\n\n## Recommended Spaces\n\nSome recommended spaces to try:\n\n### Image Generation\n\n- shuttleai/shuttle-3.1-aesthetic\n- black-forest-labs/FLUX.1-schnell\n- yanze/PuLID-FLUX\n- gokaygokay/Inspyrenet-Rembg (Background Removal)\n- diyism/Datou1111-shou_xin - [Beautiful Pencil Drawings](https://x.com/ClementDelangue/status/1867318931502895358)\n\n### Chat\n\n- Qwen/Qwen2.5-72B-Instruct\n- prithivMLmods/Mistral-7B-Instruct-v0.3\n\n### Text-to-speech / Audio Generation\n\n- fantaxy/Sound-AI-SFX\n- parler-tts/parler_tts\n\n### Speech-to-text\n\n- hf-audio/whisper-large-v3-turbo\n- (the openai models use unnamed parameters so will not work)\n\n### Text-to-music\n\n- haoheliu/audioldm2-text2audio-text2music\n\n### Vision Tasks\n\n- microsoft/OmniParser\n- merve/paligemma2-vqav2\n- merve/paligemma-doc\n- DawnC/PawMatchAI\n- DawnC/PawMatchAI/on_find_match_click - for interactive dog recommendations\n\n## Other Features\n\n### Prompts\n\nPrompts for each Space are generated, and provide an opportunity to input. Bear in mind that often Spaces aren't configured with particularly helpful labels etc. Claude is actually very good at figuring this out, and the Tool description is quite rich (but not visible in Claude Desktop).\n\n### Resources\n\nA list of files in the WORK_DIR is returned, and as a convenience returns the name as \"Use the file...\" text. If you want to add something to Claude's context, use the paperclip - otherwise specify the filename for the MCP Server. Claude does not support transmitting resources from within Context.\n\n### Private Spaces\n\nPrivate Spaces are supported with a HuggingFace token. The Token is used to download and save generated content.\n\n### Using Claude Desktop\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-hfspace\": {\n      \"command\": \"npx\"\n      \"args\": [\n        \"-y\",\n        \"@llmindset/mcp-hfspace\",\n        \"--work-dir=~/mcp-files/ or x:/temp/mcp-files/\",\n        \"--HF_TOKEN=HF_{optional token}\"\n        \"Qwen/Qwen2-72B-Instruct\",\n        \"black-forest-labs/FLUX.1-schnell\",\n        \"space/example/specific-endpint\"\n        (... and so on)\n        ]\n    }\n  }\n}\n```\n\n## Known Issues and Limitations\n\n### mcp-hfspace\n\n- Endpoints with unnamed parameters are unsupported for the moment.\n- Full translation from some complex Python types to suitable MCP formats.\n\n### Claude Desktop\n\n- Claude Desktop 0.75 doesn't seem to respond to errors from the MCP Server, timing out instead. For persistent issues, use the MCP Inspector to get a better look at diagnosing what's going wrong. If something suddenly stops working, it's probably due to exhausting your HuggingFace ZeroGPU quota - try again after a short period, or set up your own Space for hosting.\n- Claude Desktop seems to use a hard timeout value of 60s, and doesn't appear to use Progress Notifications to manage UX or keep-alive. If you are using ZeroGPU spaces, large/heavy jobs may timeout. Check the WORK_DIR for results though; the MCP Server will still capture and save the result if it was produced.\n- Claude Desktops reporting of Server Status, logging etc. isn't great - use [@modelcontextprotocol/inspector](https://github.com/modelcontextprotocol/inspector) to help diagnose issues.\n\n### HuggingFace Spaces\n\n- If ZeroGPU quotas or queues are too long, try duplicating the space. If your job takes less than sixty seconds, you can usually change the function decorator `@spaces.GPU(duration=20)` in `app.py` to request less quota when running the job.\n- Passing HF_TOKEN will make ZeroGPU quotas apply to your (Pro) HF account\n- If you have a private space, and dedicated hardware your HF_TOKEN will give you direct access to that - no quota's apply. I recommend this if you are using for any kind of Production task.\n\n## Third Party MCP Services\n\n<a href=\"https://glama.ai/mcp/servers/s57c80wvgq\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/s57c80wvgq/badge\" alt=\"mcp-hfspace MCP server\" /></a>\n",
+  "category": "AI Tools",
+  "quality_score": 76,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "llmindset-mcp-hfspace": {
+          "command": "npx",
+          "args": ["-y", "@llmindset/mcp-hfspace"],
+          "env": {}
+        },
+        "llmindset-mcp-hfspace-configured": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "@llmindset/mcp-hfspace",
+            "--work-dir=/Users/evalstate/mcp-store",
+            "shuttleai/shuttle-jaguar",
+            "styletts2/styletts2",
+            "Qwen/QVQ-72B-preview"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "evalstate",
+    "repo": "mcp-hfspace",
+    "url": "https://github.com/evalstate/mcp-hfspace",
+    "name": "mcp-hfspace",
+    "path": null,
+    "stars": 344,
+    "contributors": 7,
+    "issues": 10,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b9e3903f1fb679629ec2995697b444700bcf001a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:58:31.345Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@gradio/client",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mime",
+      "importance": 5
+    },
+    {
+      "name": "minimist",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@llmindset/mcp-hfspace\",\n  \"version\": \"0.5.4\",\n  \"description\": \"MCP Server to connect to Hugging Face spaces. Simple configuration, Claude Desktop friendly.\",\n  \"type\": \"module\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"bin\": {\n    \"mcp-hfspace\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/evalstate/mcp-hfspace\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/evalstate/mcp-hfspace/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18\",\n    \"npm\": \">=9\"\n  },\n  \"scripts\": {\n    \"clean\": \"rimraf build\",\n    \"prebuild\": \"node scripts/generate-version.js\",\n    \"build\": \"npm run lint:fix && npm run format:fix && npm run clean && npm run prebuild && tsc\",\n    \"prepack\": \"npm run build\",\n    \"lint\": \"eslint src/**/*.ts --max-warnings 0\",\n    \"lint:fix\": \"eslint src/**/*.ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"format:fix\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"validate\": \"eslint src/**/*.ts && prettier --check \\\"src/**/*.ts\\\"\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"vitest\",\n    \"test:watch\": \"vitest watch\",\n    \"coverage\": \"vitest run --coverage\"\n  },\n  \"dependencies\": {\n    \"@gradio/client\": \"^1.14.2\",\n    \"@modelcontextprotocol/sdk\": \"1.9.0\",\n    \"mime\": \"^4.0.7\",\n    \"minimist\": \"^1.2.8\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"9.24.0\",\n    \"@types/minimist\": \"^1.2.5\",\n    \"@types/node\": \"^22.14.1\",\n    \"@typescript-eslint/eslint-plugin\": \"latest\",\n    \"@typescript-eslint/parser\": \"latest\",\n    \"eslint\": \"9.24.0\",\n    \"globals\": \"16.0.0\",\n    \"prettier\": \"latest\",\n    \"rimraf\": \"^6.0.1\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"8.30.1\",\n    \"vitest\": \"^3.1.1\"\n  }\n}\n"
+}

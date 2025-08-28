@@ -1,0 +1,92 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "huggingagi__mcp-baostock-server",
+  "display_name": "mcp-baostock-server",
+  "version": "1.0.0",
+  "description": "MCP server from HuggingAGI/mcp-baostock-server",
+  "author": {
+    "name": "HuggingAGI"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP BaoStock Server\n\n一个基于BaoStock的股票数据服务器，提供了多个接口用于获取股票市场数据。\n\n## 功能特点\n\n- 提供股票基本信息查询\n- 支持K线历史数据获取\n- 行业分类数据查询\n- 分红派息数据查询\n- 季度财务指标数据（盈利能力、营运能力、成长能力）\n- 指数数据查询\n- 估值指标数据查询\n\n## 安装与使用\n\n### 依赖要求\n\n- Python 3.10+\n- baostock\n- pandas\n\n### 使用说明\n\n安装使用\n```bash\nuv run mcp-baostock-server\n```\n\n![](./assets/demo.png)\n\n## 接口测试用例\n\n以下是各个接口的测试用例示例：\n\n### 1. 获取股票基本信息\n```python\n# 获取贵州茅台(sh.600519)的基本信息，包括上市日期、行业分类等基础数据\n```\n\n### 2. 获取K线历史数据\n```python\n获取平安银行(sz.000001)从2023年1月1日到2023年1月31日的日K线数据，使用前复权方式\n```\n\n### 3. 获取行业分类数据\n```python\n查询中国平安(sh.601318)所属的行业分类信息\n```\n\n### 4. 获取分红派息数据\n```python\n查看工商银行(sh.601398)在2022年的分红派息详细信息\n```\n\n### 5. 获取季度盈利能力数据\n```python\n获取贵州茅台2023年第一季度的盈利能力数据，包括净利润、毛利率等指标\n```\n\n### 6. 获取季度营运能力数据\n```python\n分析招商银行(sh.600036)2023年第二季度的营运能力指标，包括应收账款周转率和存货周转率\n```\n\n### 7. 获取季度成长能力数据\n```python\n评估比亚迪(sz.002594)2023年第三季度的成长能力，包括营收增长率和净利润增长率\n```\n\n### 8. 获取指数数据\n```python\n获取沪深300指数(sh.000300)从2023年1月1日到2023年12月31日的日线行情数据\n```\n\n### 9. 获取估值指标数据\n```python\n分析阿里巴巴(sh.688699)从2023年初至今的估值指标变化，包括市盈率、市净率等数据\n```\n\n## 技术交流\n\n- 微信: iamxxn886\n",
+  "category": "Finance",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-baostock-server": {
+          "command": "uv",
+          "args": ["run", "mcp-baostock-server"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "HuggingAGI",
+    "repo": "mcp-baostock-server",
+    "url": "https://github.com/HuggingAGI/mcp-baostock-server",
+    "name": "mcp-baostock-server",
+    "path": null,
+    "stars": 33,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e97f5a9cf3bc44fc7b354b18953260d903e53c97"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:37:13.966Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "baostock",
+      "importance": 9
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-baostock-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"baostock>=0.8.9\",\n    \"fastapi>=0.68.0\",\n    \"mcp[cli]>=1.6.0\",\n    \"uvicorn>=0.15.0\",\n    \"pandas>=1.3.0\"\n]\n\n[tool.poetry]\nname = \"baostock-mcp\"\nversion = \"0.1.0\"\ndescription = \"BaoStock MCP Server\"\nauthors = [\"会读论文的小仙女<huggingai666@gmail.com>\"]\n\n[tool.poetry.dependencies]\nfastapi = \"^0.68.0\"\nuvicorn = \"^0.15.0\"\nbaostock = \"^0.8.9\"\npandas = \"^1.3.0\"\n\n[tool.poetry.group.dev.dependencies]\npytest = \"^6.2.5\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-baostock-server = \"mcp_baostock_server.server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_baostock_server\"]\n"
+}

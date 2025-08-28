@@ -1,0 +1,133 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "aashari__mcp-server-atlassian-confluence",
+  "display_name": "mcp-server-atlassian-confluence",
+  "version": "1.0.0",
+  "description": "Node.js/TypeScript MCP server for Atlassian Confluence. Provides tools enabling AI systems (LLMs) to list/get spaces & pages (content formatted as Markdown) and search via CQL. Connects AI seamlessly to Confluence knowledge bases using the standard MCP interface.",
+  "author": {
+    "name": "aashari"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Atlassian Confluence MCP Server\n\nA Node.js/TypeScript Model Context Protocol (MCP) server for Atlassian Confluence Cloud. Enables AI systems (e.g., LLMs like Claude or Cursor AI) to securely interact with your Confluence spaces, pages, and content in real time.\n\n[![NPM Version](https://img.shields.io/npm/v/@aashari/mcp-server-atlassian-confluence)](https://www.npmjs.com/package/@aashari/mcp-server-atlassian-confluence)\n[![Build Status](https://img.shields.io/github/workflow/status/aashari/mcp-server-atlassian-confluence/CI)](https://github.com/aashari/mcp-server-atlassian-confluence/actions)\n\n## Why Use This Server?\n\n- **Minimal Input, Maximum Output**: Simple identifiers provide comprehensive details without requiring extra flags.\n- **Complete Knowledge Base Access**: Give AI assistants visibility into documentation, wikis, and knowledge base content.\n- **Rich Content Formatting**: Automatic conversion of Atlassian Document Format to readable Markdown.\n- **Secure Local Authentication**: Run locally with your credentials, never storing tokens on remote servers.\n- **Intuitive Markdown Responses**: Well-structured, consistent Markdown formatting for all outputs.\n\n## What is MCP?\n\nModel Context Protocol (MCP) is an open standard for securely connecting AI systems to external tools and data sources. This server implements MCP for Confluence Cloud, enabling AI assistants to interact with your Confluence content programmatically.\n\n## Prerequisites\n\n- **Node.js** (>=18.x): [Download](https://nodejs.org/)\n- **Atlassian Account** with access to Confluence Cloud\n\n## Setup\n\n### Step 1: Get Your Atlassian API Token\n\n1. Go to your Atlassian API token management page: [https://id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n2. Click **Create API token**.\n3. Give it a descriptive **Label** (e.g., `mcp-confluence-access`).\n4. Click **Create**.\n5. **Copy the generated API token** immediately. You won't be able to see it again.\n\n### Step 2: Configure Credentials\n\n#### Option A: MCP Config File (Recommended)\n\nEdit or create `~/.mcp/configs.json`:\n\n```json\n{\n\t\"confluence\": {\n\t\t\"environments\": {\n\t\t\t\"ATLASSIAN_SITE_NAME\": \"<YOUR_SITE_NAME>\",\n\t\t\t\"ATLASSIAN_USER_EMAIL\": \"<YOUR_ATLASSIAN_EMAIL>\",\n\t\t\t\"ATLASSIAN_API_TOKEN\": \"<YOUR_COPIED_API_TOKEN>\"\n\t\t}\n\t}\n}\n```\n\n- `<YOUR_SITE_NAME>`: Your Confluence site name (e.g., `mycompany` for `mycompany.atlassian.net`).\n- `<YOUR_ATLASSIAN_EMAIL>`: Your Atlassian account email.\n- `<YOUR_COPIED_API_TOKEN>`: The API token from Step 1.\n\n#### Option B: Environment Variables\n\n```bash\nexport ATLASSIAN_SITE_NAME=\"<YOUR_SITE_NAME>\"\nexport ATLASSIAN_USER_EMAIL=\"<YOUR_EMAIL>\"\nexport ATLASSIAN_API_TOKEN=\"<YOUR_API_TOKEN>\"\n```\n\n### Step 3: Install and Run\n\n#### Quick Start with `npx`\n\n```bash\nnpx -y @aashari/mcp-server-atlassian-confluence ls-spaces\n```\n\n#### Global Installation\n\n```bash\nnpm install -g @aashari/mcp-server-atlassian-confluence\nmcp-atlassian-confluence ls-spaces\n```\n\n### Step 4: Connect to AI Assistant\n\nConfigure your MCP-compatible client (e.g., Claude, Cursor AI):\n\n```json\n{\n\t\"mcpServers\": {\n\t\t\"confluence\": {\n\t\t\t\"command\": \"npx\",\n\t\t\t\"args\": [\"-y\", \"@aashari/mcp-server-atlassian-confluence\"]\n\t\t}\n\t}\n}\n```\n\n## MCP Tools\n\nMCP tools use `snake_case` names, `camelCase` parameters, and return Markdown-formatted responses.\n\n- **conf_ls_spaces**: Lists accessible Confluence spaces (`type`: str opt, `status`: str opt, `limit`: num opt, `cursor`: str opt). Use: View available spaces.\n- **conf_get_space**: Gets detailed space information (`spaceKey`: str req). Use: Access space content and metadata.\n- **conf_ls_pages**: Lists pages with filtering (`spaceIds`: str[] opt, `spaceKeys`: str[] opt, `title`: str opt, `status`: str[] opt, `sort`: str opt, `limit`: num opt, `cursor`: str opt). Use: Find pages matching criteria.\n- **conf_get_page**: Gets comprehensive page content (`pageId`: str req). Use: View full page content as Markdown.\n- **conf_ls_page_comments**: Lists comments on a page (`pageId`: str req). Use: Read page discussions.\n- **conf_search**: Searches Confluence content (`cql`: str opt, `query`: str opt, `title`: str opt, `spaceKey`: str opt, `labels`: str[] opt, `contentType`: str opt, `limit`: num opt, `cursor`: str opt). Use: Find specific content.\n\n<details>\n<summary><b>MCP Tool Examples (Click to expand)</b></summary>\n\n### `conf_ls_spaces`\n\n**List Global Spaces:**\n```json\n{ \"type\": \"global\", \"status\": \"current\", \"limit\": 10 }\n```\n\n### `conf_get_space`\n\n**Get Space Details:**\n```json\n{ \"spaceKey\": \"DEV\" }\n```\n\n### `conf_ls_pages`\n\n**List Pages by Space and Title:**\n```json\n{\n\t\"spaceKeys\": [\"DEV\"],\n\t\"title\": \"API Documentation\",\n\t\"status\": [\"current\"],\n\t\"sort\": \"-modified-date\"\n}\n```\n\n**List Pages from Multiple Spaces:**\n```json\n{\n\t\"spaceKeys\": [\"DEV\", \"HR\", \"MARKETING\"],\n\t\"limit\": 15,\n\t\"sort\": \"-modified-date\"\n}\n```\n\n### `conf_get_page`\n\n**Get Page Content:**\n```json\n{ \"pageId\": \"12345678\" }\n```\n\n### `conf_ls_page_comments`\n\n**List Page Comments:**\n```json\n{ \"pageId\": \"12345678\" }\n```\n\n### `conf_search`\n\n**Simple Search:**\n```json\n{\n\t\"query\": \"release notes Q1\",\n\t\"spaceKey\": \"PRODUCT\",\n\t\"contentType\": \"page\",\n\t\"limit\": 5\n}\n```\n\n**Advanced CQL Search:**\n```json\n{ \"cql\": \"space = DEV AND label = api AND created >= '2023-01-01'\" }\n```\n\n</details>\n\n## Transport Modes\n\nThis server supports two transport modes for different integration scenarios:\n\n### STDIO Transport (Default for MCP Clients)\n- Traditional subprocess communication via stdin/stdout\n- Ideal for local AI assistant integrations (Claude Desktop, Cursor AI)\n- Uses pipe-based communication for direct MCP protocol exchange\n\n```bash\n# Run with STDIO transport (default for AI assistants)\nTRANSPORT_MODE=stdio npx @aashari/mcp-server-atlassian-confluence\n\n# Using npm scripts (after installation)\nnpm run mcp:stdio\n```\n\n### HTTP Transport (Default for Server Mode)\n- Modern HTTP-based transport with Server-Sent Events (SSE)\n- Supports multiple concurrent connections\n- Better for web-based integrations and development\n- Runs on port 3000 by default (configurable via PORT env var)\n- Endpoint: http://localhost:3000/mcp\n- Health check: http://localhost:3000/\n\n```bash\n# Run with HTTP transport (default when no CLI args)\nTRANSPORT_MODE=http npx @aashari/mcp-server-atlassian-confluence\n\n# Using npm scripts (after installation)\nnpm run mcp:http\n\n# Test with MCP Inspector\nnpm run mcp:inspect\n```\n\n### Environment Variables\n\n**Transport Configuration:**\n- `TRANSPORT_MODE`: Set to `stdio` or `http` (default: `http` for server mode, `stdio` for MCP clients)\n- `PORT`: HTTP server port (default: 3000)\n- `DEBUG`: Enable debug logging (default: false)\n\n**Authentication:**\n- `ATLASSIAN_SITE_NAME`: Your Confluence site name\n- `ATLASSIAN_USER_EMAIL`: Your Atlassian account email\n- `ATLASSIAN_API_TOKEN`: Your Atlassian API token\n\n## CLI Commands\n\nCLI commands use `kebab-case`. Run `--help` for details (e.g., `mcp-atlassian-confluence ls-spaces --help`).\n\n- **ls-spaces**: Lists spaces (`--type`, `--status`, `--limit`, `--cursor`). Ex: `mcp-atlassian-confluence ls-spaces --type global`.\n- **get-space**: Gets space details (`--space-key`). Ex: `mcp-atlassian-confluence get-space --space-key DEV`.\n- **ls-pages**: Lists pages (`--space-keys`, `--title`, `--status`, `--sort`, `--limit`, `--cursor`). Ex: `mcp-atlassian-confluence ls-pages --space-keys DEV`.\n- **get-page**: Gets page content (`--page-id`). Ex: `mcp-atlassian-confluence get-page --page-id 12345678`.\n- **ls-page-comments**: Lists comments (`--page-id`). Ex: `mcp-atlassian-confluence ls-page-comments --page-id 12345678`.\n- **search**: Searches content (`--cql`, `--query`, `--space-key`, `--label`, `--type`, `--limit`, `--cursor`). Ex: `mcp-atlassian-confluence search --query \"security\"`.\n\n<details>\n<summary><b>CLI Command Examples (Click to expand)</b></summary>\n\n### List Spaces\n\n**List Global Spaces:**\n```bash\nmcp-atlassian-confluence ls-spaces --type global --status current --limit 10\n```\n\n### Get Space\n\n```bash\nmcp-atlassian-confluence get-space --space-key DEV\n```\n\n### List Pages\n\n**By Multiple Space Keys:**\n```bash\nmcp-atlassian-confluence ls-pages --space-keys DEV HR MARKETING --limit 15 --sort \"-modified-date\"\n```\n\n**With Title Filter:**\n```bash\nmcp-atlassian-confluence ls-pages --space-keys DEV --title \"API Documentation\" --status current\n```\n\n### Get Page\n\n```bash\nmcp-atlassian-confluence get-page --page-id 12345678\n```\n\n### List Page Comments\n\n```bash\nmcp-atlassian-confluence ls-page-comments --page-id 12345678\n```\n\n### Search\n\n**Simple Search:**\n```bash\nmcp-atlassian-confluence search --query \"security best practices\" --space-key DOCS --type page --limit 5\n```\n\n**CQL Search:**\n```bash\nmcp-atlassian-confluence search --cql \"label = official-docs AND creator = currentUser()\"\n```\n\n</details>\n\n## Response Format\n\nAll responses are Markdown-formatted, including:\n\n- **Title**: Content type and name.\n- **Content**: Full page content, search results, or list of items.\n- **Metadata**: Creator, date, labels, and other relevant information.\n- **Pagination**: Navigation information for paginated results.\n- **Links**: References to related resources when applicable.\n\n<details>\n<summary><b>Response Format Examples (Click to expand)</b></summary>\n\n### Space List Response\n\n```markdown\n# Confluence Spaces\n\nShowing **5** global spaces (current)\n\n| Key | Name | Description |\n|---|---|---|\n| [DEV](#) | Development | Engineering and development documentation |\n| [HR](#) | Human Resources | Employee policies and procedures |\n| [MARKETING](#) | Marketing | Brand guidelines and campaign materials |\n| [PRODUCT](#) | Product | Product specifications and roadmaps |\n| [SALES](#) | Sales | Sales processes and resources |\n\n*Retrieved from mycompany.atlassian.net on 2025-05-19 14:22 UTC*\n\nUse `cursor: \"next-page-token-123\"` to see more spaces.\n```\n\n### Page Content Response\n\n```markdown\n# API Authentication Guide\n\n**Space:** [DEV](#) (Development)\n**Created by:** Jane Smith on 2025-04-01\n**Last updated:** John Doe on 2025-05-15\n**Labels:** api, security, authentication\n\n## Overview\n\nThis document outlines the authentication approaches supported by our API platform.\n\n## Authentication Methods\n\n### OAuth 2.0\n\nWe support the following OAuth 2.0 flows:\n\n1. **Authorization Code Flow** - For web applications\n2. **Client Credentials Flow** - For server-to-server\n3. **Implicit Flow** - For legacy clients only\n\n### API Keys\n\nStatic API keys are supported but discouraged for production use due to security limitations:\n\n| Key Type | Use Case | Expiration |\n|---|---|---|\n| Development | Testing | 30 days |\n| Production | Live systems | 90 days |\n\n## Implementation Examples\n\n  import requests\n\n  def get_oauth_token():\n      return requests.post(\n          'https://api.example.com/oauth/token',\n          data={\n              'client_id': 'YOUR_CLIENT_ID',\n              'client_secret': 'YOUR_CLIENT_SECRET',\n              'grant_type': 'client_credentials'\n          }\n      ).json()['access_token']\n\n*Retrieved from mycompany.atlassian.net on 2025-05-19 14:25 UTC*\n```\n\n</details>\n\n## Development\n\n```bash\n# Clone repository\ngit clone https://github.com/aashari/mcp-server-atlassian-confluence.git\ncd mcp-server-atlassian-confluence\n\n# Install dependencies\nnpm install\n\n# Run in development mode\nnpm run dev:server\n\n# Run tests\nnpm test\n```\n\n## Contributing\n\nContributions are welcome! Please:\n\n1. Fork the repository.\n2. Create a feature branch (`git checkout -b feature/xyz`).\n3. Commit changes (`git commit -m \"Add xyz feature\"`).\n4. Push to the branch (`git push origin feature/xyz`).\n5. Open a pull request.\n\nSee [CONTRIBUTING.md](CONTRIBUTING.md) for details.\n\n## License\n\n[ISC License](LICENSE)\n",
+  "category": "AI Tools",
+  "quality_score": 71,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "aashari-mcp-server-atlassian-confluence": {
+          "command": "npx",
+          "args": ["-y", "@aashari/mcp-server-atlassian-confluence"],
+          "env": {}
+        },
+        "aashari-mcp-server-atlassian-confluence-stdio": {
+          "command": "npx",
+          "args": ["@aashari/mcp-server-atlassian-confluence"],
+          "env": {
+            "TRANSPORT_MODE": "stdio"
+          }
+        },
+        "aashari-mcp-server-atlassian-confluence-stdio-npm": {
+          "command": "npm",
+          "args": ["run", "mcp:stdio"],
+          "env": {
+            "TRANSPORT_MODE": "stdio"
+          }
+        },
+        "aashari-mcp-server-atlassian-confluence-http": {
+          "command": "npx",
+          "args": ["@aashari/mcp-server-atlassian-confluence"],
+          "env": {
+            "TRANSPORT_MODE": "http"
+          }
+        },
+        "aashari-mcp-server-atlassian-confluence-http-npm": {
+          "command": "npm",
+          "args": ["run", "mcp:http"],
+          "env": {
+            "TRANSPORT_MODE": "http"
+          }
+        },
+        "aashari-mcp-server-atlassian-confluence-inspect": {
+          "command": "npm",
+          "args": ["run", "mcp:inspect"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "aashari",
+    "repo": "mcp-server-atlassian-confluence",
+    "url": "https://github.com/aashari/mcp-server-atlassian-confluence",
+    "name": "mcp-server-atlassian-confluence",
+    "path": null,
+    "stars": 24,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "19cbbdb0ff17974b021feaf1545dcafa4f12283a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:35:05.542Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "turndown",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@aashari/mcp-server-atlassian-confluence\",\n\t\"version\": \"2.0.0\",\n\t\"description\": \"Node.js/TypeScript MCP server for Atlassian Confluence. Provides tools enabling AI systems (LLMs) to list/get spaces & pages (content formatted as Markdown) and search via CQL. Connects AI seamlessly to Confluence knowledge bases using the standard MCP interface.\",\n\t\"main\": \"dist/index.js\",\n\t\"types\": \"dist/index.d.ts\",\n\t\"type\": \"commonjs\",\n\t\"repository\": {\n\t\t\"type\": \"git\",\n\t\t\"url\": \"https://github.com/aashari/mcp-server-atlassian-confluence.git\"\n\t},\n\t\"bin\": {\n\t\t\"mcp-atlassian-confluence\": \"./dist/index.js\"\n\t},\n\t\"scripts\": {\n\t\t\"build\": \"tsc\",\n\t\t\"prepare\": \"npm run build && node scripts/ensure-executable.js\",\n\t\t\"postinstall\": \"node scripts/ensure-executable.js\",\n\t\t\"test\": \"jest\",\n\t\t\"test:coverage\": \"jest --coverage\",\n\t\t\"test:cli\": \"jest src/cli/.*\\\\.cli\\\\.test\\\\.ts --runInBand --testTimeout=60000\",\n\t\t\"lint\": \"eslint src --ext .ts --config eslint.config.mjs\",\n\t\t\"format\": \"prettier --write 'src/**/*.ts' 'scripts/**/*.js'\",\n\t\t\"publish:npm\": \"npm publish\",\n\t\t\"update:check\": \"npx npm-check-updates\",\n\t\t\"update:deps\": \"npx npm-check-updates -u && npm install --legacy-peer-deps\",\n\t\t\"update:version\": \"node scripts/update-version.js\",\n\t\t\"mcp:stdio\": \"TRANSPORT_MODE=stdio npm run build && node dist/index.js\",\n\t\t\"mcp:http\": \"TRANSPORT_MODE=http npm run build && node dist/index.js\",\n\t\t\"mcp:inspect\": \"TRANSPORT_MODE=http npm run build && (node dist/index.js &) && sleep 2 && npx @modelcontextprotocol/inspector http://localhost:3000/mcp\",\n\t\t\"dev:stdio\": \"npm run build && npx @modelcontextprotocol/inspector -e TRANSPORT_MODE=stdio -e DEBUG=true node dist/index.js\",\n\t\t\"dev:http\": \"DEBUG=true TRANSPORT_MODE=http npm run build && node dist/index.js\",\n\t\t\"dev:server\": \"DEBUG=true npm run build && npx @modelcontextprotocol/inspector -e DEBUG=true node dist/index.js\",\n\t\t\"dev:cli\": \"DEBUG=true npm run build && DEBUG=true node dist/index.js\",\n\t\t\"start:server\": \"npm run build && npx @modelcontextprotocol/inspector node dist/index.js\",\n\t\t\"start:cli\": \"npm run build && node dist/index.js\"\n\t},\n\t\"keywords\": [\n\t\t\"mcp\",\n\t\t\"typescript\",\n\t\t\"claude\",\n\t\t\"anthropic\",\n\t\t\"ai\",\n\t\t\"atlassian\",\n\t\t\"confluence\",\n\t\t\"wiki\",\n\t\t\"knowledge-base\",\n\t\t\"server\",\n\t\t\"model-context-protocol\",\n\t\t\"tools\",\n\t\t\"resources\",\n\t\t\"tooling\",\n\t\t\"ai-integration\",\n\t\t\"mcp-server\",\n\t\t\"llm\",\n\t\t\"ai-connector\",\n\t\t\"external-tools\",\n\t\t\"cli\",\n\t\t\"mcp-inspector\"\n\t],\n\t\"author\": \"\",\n\t\"license\": \"ISC\",\n\t\"devDependencies\": {\n\t\t\"@eslint/js\": \"^9.32.0\",\n\t\t\"@semantic-release/changelog\": \"^6.0.3\",\n\t\t\"@semantic-release/exec\": \"^7.1.0\",\n\t\t\"@semantic-release/git\": \"^10.0.1\",\n\t\t\"@semantic-release/github\": \"^11.0.3\",\n\t\t\"@semantic-release/npm\": \"^12.0.1\",\n\t\t\"@types/cors\": \"^2.8.19\",\n\t\t\"@types/express\": \"^5.0.3\",\n\t\t\"@types/jest\": \"^30.0.0\",\n\t\t\"@types/node\": \"^24.0.3\",\n\t\t\"@types/turndown\": \"^5.0.5\",\n\t\t\"@typescript-eslint/eslint-plugin\": \"^8.38.0\",\n\t\t\"@typescript-eslint/parser\": \"^8.38.0\",\n\t\t\"eslint\": \"^9.32.0\",\n\t\t\"eslint-config-prettier\": \"^10.1.5\",\n\t\t\"eslint-plugin-filenames\": \"^1.3.2\",\n\t\t\"eslint-plugin-prettier\": \"^5.5.0\",\n\t\t\"jest\": \"^30.0.5\",\n\t\t\"nodemon\": \"^3.1.10\",\n\t\t\"npm-check-updates\": \"^18.0.1\",\n\t\t\"prettier\": \"^3.6.2\",\n\t\t\"semantic-release\": \"^24.2.7\",\n\t\t\"ts-jest\": \"^29.4.0\",\n\t\t\"ts-node\": \"^10.9.2\",\n\t\t\"typescript\": \"^5.8.3\",\n\t\t\"typescript-eslint\": \"^8.38.0\"\n\t},\n\t\"publishConfig\": {\n\t\t\"registry\": \"https://registry.npmjs.org/\",\n\t\t\"access\": \"public\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"^1.17.1\",\n\t\t\"commander\": \"^14.0.0\",\n\t\t\"cors\": \"^2.8.5\",\n\t\t\"dotenv\": \"^17.2.1\",\n\t\t\"express\": \"^5.1.0\",\n\t\t\"turndown\": \"^7.2.0\",\n\t\t\"zod\": \"^3.25.67\"\n\t},\n\t\"directories\": {\n\t\t\"example\": \"examples\"\n\t},\n\t\"jest\": {\n\t\t\"preset\": \"ts-jest\",\n\t\t\"testEnvironment\": \"node\",\n\t\t\"testMatch\": [\n\t\t\t\"**/src/**/*.test.ts\"\n\t\t],\n\t\t\"collectCoverageFrom\": [\n\t\t\t\"src/**/*.ts\",\n\t\t\t\"!src/**/*.test.ts\",\n\t\t\t\"!src/**/*.spec.ts\"\n\t\t],\n\t\t\"coveragePathIgnorePatterns\": [\n\t\t\t\"/node_modules/\",\n\t\t\t\"/dist/\",\n\t\t\t\"/coverage/\"\n\t\t],\n\t\t\"coverageReporters\": [\n\t\t\t\"text\",\n\t\t\t\"lcov\",\n\t\t\t\"json-summary\"\n\t\t],\n\t\t\"transform\": {\n\t\t\t\"^.+\\\\.tsx?$\": [\n\t\t\t\t\"ts-jest\",\n\t\t\t\t{\n\t\t\t\t\t\"useESM\": true\n\t\t\t\t}\n\t\t\t]\n\t\t},\n\t\t\"moduleNameMapper\": {\n\t\t\t\"(.*)\\\\.(js|jsx)$\": \"$1\"\n\t\t},\n\t\t\"extensionsToTreatAsEsm\": [\n\t\t\t\".ts\"\n\t\t],\n\t\t\"moduleFileExtensions\": [\n\t\t\t\"ts\",\n\t\t\t\"tsx\",\n\t\t\t\"js\",\n\t\t\t\"jsx\",\n\t\t\t\"json\",\n\t\t\t\"node\"\n\t\t]\n\t}\n}\n\n\n=== scripts/package.json ===\n{\n  \"type\": \"module\"\n} "
+}

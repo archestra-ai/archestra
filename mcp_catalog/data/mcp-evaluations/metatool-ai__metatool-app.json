@@ -1,0 +1,95 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "metatool-ai__metatool-app",
+  "display_name": "metatool-app",
+  "version": "1.0.0",
+  "description": "MCP Aggregator, Orchestrator, Middleware, Gateway in one docker",
+  "author": {
+    "name": "metatool-ai"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🚀 MetaMCP (MCP Aggregator, Orchestrator, Middleware, Gateway in one docker)\n\n<div align=\"center\">\n\n<div align=\"center\">\n  <a href=\"https://discord.gg/mNsyat7mFX\" style=\"text-decoration: none;\">\n    <img src=\"https://img.shields.io/badge/Discord-MetaMCP-5865F2?style=flat-square&logo=discord&logoColor=white\" alt=\"Discord\" style=\"max-width: 100%;\">\n  </a>\n  <a href=\"https://docs.metamcp.com\" style=\"text-decoration: none;\">\n    <img src=\"https://img.shields.io/badge/Documentation-docs.metamcp.com-blue?style=flat-square&logo=book\" alt=\"Documentation\" style=\"max-width: 100%;\">\n  </a>\n  <a href=\"https://opensource.org/licenses/MIT\" style=\"text-decoration: none;\">\n    <img src=\"https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square\" alt=\"MIT License\" style=\"max-width: 100%;\">\n  </a>\n  <a href=\"https://github.com/metatool-ai/metamcp/pkgs/container/metamcp\" style=\"text-decoration: none;\">\n    <img src=\"https://img.shields.io/badge/GHCR-available-green.svg?style=flat-square&logo=github\" alt=\"GHCR\" style=\"max-width: 100%;\">\n  </a>\n  <a href=\"https://deepwiki.com/metatool-ai/metamcp\"><img src=\"https://img.shields.io/badge/DeepWiki-metatool--ai%2Fmetamcp-blue.svg?style=flat-square&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAyCAYAAAAnWDnqAAAAAXNSR0IArs4c6QAAA05JREFUaEPtmUtyEzEQhtWTQyQLHNak2AB7ZnyXZMEjXMGeK/AIi+QuHrMnbChYY7MIh8g01fJoopFb0uhhEqqcbWTp06/uv1saEDv4O3n3dV60RfP947Mm9/SQc0ICFQgzfc4CYZoTPAswgSJCCUJUnAAoRHOAUOcATwbmVLWdGoH//PB8mnKqScAhsD0kYP3j/Yt5LPQe2KvcXmGvRHcDnpxfL2zOYJ1mFwrryWTz0advv1Ut4CJgf5uhDuDj5eUcAUoahrdY/56ebRWeraTjMt/00Sh3UDtjgHtQNHwcRGOC98BJEAEymycmYcWwOprTgcB6VZ5JK5TAJ+fXGLBm3FDAmn6oPPjR4rKCAoJCal2eAiQp2x0vxTPB3ALO2CRkwmDy5WohzBDwSEFKRwPbknEggCPB/imwrycgxX2NzoMCHhPkDwqYMr9tRcP5qNrMZHkVnOjRMWwLCcr8ohBVb1OMjxLwGCvjTikrsBOiA6fNyCrm8V1rP93iVPpwaE+gO0SsWmPiXB+jikdf6SizrT5qKasx5j8ABbHpFTx+vFXp9EnYQmLx02h1QTTrl6eDqxLnGjporxl3NL3agEvXdT0WmEost648sQOYAeJS9Q7bfUVoMGnjo4AZdUMQku50McDcMWcBPvr0SzbTAFDfvJqwLzgxwATnCgnp4wDl6Aa+Ax283gghmj+vj7feE2KBBRMW3FzOpLOADl0Isb5587h/U4gGvkt5v60Z1VLG8BhYjbzRwyQZemwAd6cCR5/XFWLYZRIMpX39AR0tjaGGiGzLVyhse5C9RKC6ai42ppWPKiBagOvaYk8lO7DajerabOZP46Lby5wKjw1HCRx7p9sVMOWGzb/vA1hwiWc6jm3MvQDTogQkiqIhJV0nBQBTU+3okKCFDy9WwferkHjtxib7t3xIUQtHxnIwtx4mpg26/HfwVNVDb4oI9RHmx5WGelRVlrtiw43zboCLaxv46AZeB3IlTkwouebTr1y2NjSpHz68WNFjHvupy3q8TFn3Hos2IAk4Ju5dCo8B3wP7VPr/FGaKiG+T+v+TQqIrOqMTL1VdWV1DdmcbO8KXBz6esmYWYKPwDL5b5FA1a0hwapHiom0r/cKaoqr+27/XcrS5UwSMbQAAAABJRU5ErkJggg==\" alt=\"DeepWiki: MetaMCP\"></a>\n</div>\n\n</div>\n\n**MetaMCP** is a MCP proxy that lets you dynamically aggregate MCP servers into a unified MCP server, and apply middlewares. MetaMCP itself is a MCP server so it can be easily plugged into **ANY** MCP clients.\n\n![MetaMCP Diagram](metamcp.svg)\n\n---\n\nFor more details, consider visiting our documentation site: https://docs.metamcp.com\n\nEnglish | [中文](./README_cn.md)\n\n## 📋 Table of Contents\n\n- [🎯 Use Cases](#-use-cases)\n- [📖 Concepts](#-concepts)\n  - [🖥️ MCP Server](#️-mcp-server)\n  - [🏷️ MetaMCP Namespace](#️-metamcp-namespace)\n  - [🌐 MetaMCP Endpoint](#-metamcp-endpoint)\n  - [⚙️ Middleware](#️-middleware)\n  - [🔍 Inspector](#-inspector)\n- [🚀 Quick Start](#-quick-start)\n  - [🐳 Run with Docker Compose (Recommended)](#-run-with-docker-compose-recommended)\n  - [💻 Local Development](#-local-development)\n- [🔌 MCP Protocol Compatibility](#-mcp-protocol-compatibility)\n- [🔗 Connect to MetaMCP](#-connect-to-metamcp)\n  - [📝 E.g., Cursor via mcp.json](#-eg-cursor-via-mcpjson)\n  - [🖥️ Connecting Claude Desktop and Other STDIO-only Clients](#️-connecting-claude-desktop-and-other-stdio-only-clients)\n  - [🔧 API Key Auth Troubleshooting](#-api-key-auth-troubleshooting)\n- [❄️ Cold Start Problem and Custom Dockerfile](#️-cold-start-problem-and-custom-dockerfile)\n- [🔐 Authentication](#-authentication)\n- [🔗 OpenID Connect (OIDC) Provider Support](#-openid-connect-oidc-provider-support)\n  - [🛠️ Configuration](#️-configuration)\n  - [🏢 Supported Providers](#-supported-providers)\n  - [🔒 Security Features](#-security-features)\n  - [📱 Usage](#-usage)\n- [🌐 Custom Deployment and SSE conf for Nginx](#-custom-deployment-and-sse-conf-for-nginx)\n- [🏗️ Architecture](#️-architecture)\n  - [📊 Sequence Diagram](#-sequence-diagram)\n- [🗺️ Roadmap](#️-roadmap)\n- [🌐 i18n](#-i18n)\n- [🤝 Contributing](#-contributing)\n- [📄 License](#-license)\n- [🙏 Credits](#-credits)\n\n\n## 🎯 Use Cases\n- 🏷️ **Group MCP servers into namespaces, host them as meta-MCPs, and assign public endpoints** (SSE or Streamable HTTP), with auth. One-click to switch a namespace for an endpoint.\n-  🎯 **Pick tools you only need when remixing MCP servers.** Apply other **pluggable middleware** around observability, security, etc. (coming soon)\n-  🔍 **Use as enhanced MCP inspector** with saved server configs, and inspect your MetaMCP endpoints in house to see if it works or not.\n-  🔍 **Use as Elasticsearch for MCP tool selection** (coming soon)\n\nGenerally developers can use MetaMCP as **infrastructure** to host dynamically composed MCP servers through a unified endpoint, and build agents on top of it.\n\nQuick demo video: https://youtu.be/Cf6jVd2saAs\n\n![MetaMCP Screenshot](metamcp_screenshot.png)\n\n## 📖 Concepts\n\n### 🖥️ **MCP Server**\nA MCP server configuration that tells MetaMCP how to start a MCP server.\n\n```json\n\"HackerNews\": {\n  \"type\": \"STDIO\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-hn\"]\n}\n```\n\n### 🏷️ **MetaMCP Namespace**\n- Group one or more MCP servers into a namespace\n- Enable/disable MCP servers or at tool level\n- Apply middlewares to MCP requests and responses\n\n### 🌐 **MetaMCP Endpoint**\n- Create endpoints and assign namespace to endpoints\n- Multiple MCP servers in the namespace will be aggregated and emitted as a MetaMCP endpoint\n- Choose between API-Key Auth (in header or query param) or standard OAuth in MCP Spec 2025-06-18\n- Host through **SSE** or **Streamable HTTP** transports in MCP and **OpenAPI** endpoints for clients like [Open WebUI](https://github.com/open-webui/open-webui)\n\n### ⚙️ **Middleware**\n- Intercepts and transforms MCP requests and responses at namespace level\n- **Built-in example**: \"Filter inactive tools\" - optimizes tool context for LLMs\n- **Future ideas**: tool logging, error traces, validation, scanning\n\n### 🔍 **Inspector**\nSimilar to the official MCP inspector, but with **saved server configs** - MetaMCP automatically creates configurations so you can debug MetaMCP endpoints immediately.\n\n## 🚀 Quick Start\n\n### **🐳 Run with Docker Compose (Recommended)**\n\nClone repo, prepare `.env`, and start with docker compose:\n\n```bash\ngit clone https://github.com/metatool-ai/metamcp.git\ncd metamcp\ncp example.env .env\ndocker compose up -d\n```\n\nIf you modify APP_URL env vars, make sure you only access from the APP_URL, because MetaMCP enforces CORS policy on the URL, so no other URL is accessible.\n\nNote that the pg volume name may collide with your other pg dockers, which is global, consider rename it in `docker-compose.yml`:\n\n```\nvolumes:\n  metamcp_postgres_data:\n    driver: local\n```\n\n### **💻 Local Development**\n\nStill recommend running postgres through docker for easy setup:\n\n```bash\npnpm install\npnpm dev\n```\n\n## 🔌 MCP Protocol Compatibility\n\n- ✅ **Tools, Resources, and Prompts** supported\n- ✅ **OAuth-enabled MCP servers** tested for 03-26 version\n\nIf you have questions, feel free to leave **GitHub issues** or **PRs**.\n\n## 🔗 Connect to MetaMCP\n\n### 📝 E.g., Cursor via mcp.json\n\nExample `mcp.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"MetaMCP\": {\n      \"url\": \"http://localhost:12008/metamcp/<YOUR_ENDPOINT_NAME>/sse\"\n    }\n  }\n}\n```\n\n### 🖥️ Connecting Claude Desktop and Other STDIO-only Clients\n\nSince MetaMCP endpoints are remote only (SSE, Streamable HTTP, OpenAPI), clients that only support stdio servers (like Claude Desktop) need a local proxy to connect.\n\n**Note:** While `mcp-remote` is sometimes suggested for this purpose, it's designed for OAuth-based authentication and doesn't work with MetaMCP's API key authentication. Based on testing, `mcp-proxy` is the recommended solution.\n\nHere's a working configuration for Claude Desktop using `mcp-proxy`:\n\nUsing Streamable HTTP\n\n```json\n{\n  \"mcpServers\": {\n    \"MetaMCP\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-proxy\",\n        \"--transport\",\n        \"streamablehttp\",\n        \"http://localhost:12008/metamcp/<YOUR_ENDPOINT_NAME>/mcp\"\n      ],\n      \"env\": {\n        \"API_ACCESS_TOKEN\": \"<YOUR_API_KEY_HERE>\"\n      }\n    }\n  }\n}\n```\n\nUsing SSE\n\n```json\n{\n  \"mcpServers\": {\n    \"ehn\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-proxy\",\n        \"http://localhost:12008/metamcp/<YOUR_ENDPOINT_NAME>/sse\"\n      ],\n      \"env\": {\n        \"API_ACCESS_TOKEN\": \"<YOUR_API_KEY_HERE>\"\n      }\n    }\n  }\n}\n```\n\n**Important notes:**\n- Replace `<YOUR_ENDPOINT_NAME>` with your actual endpoint name\n- Replace `<YOUR_API_KEY_HERE>` with your MetaMCP API key (format: `sk_mt_...`)\n\nFor more details and alternative approaches, see [issue #76](https://github.com/metatool-ai/metamcp/issues/76#issuecomment-3046707532).\n\n### 🔧 API Key Auth Troubleshooting\n\n- `?api_key=` param api key auth doesn't work for SSE. It only works for Streamable HTTP and OpenAPI.\n- Best practice is to use the API key in `Authorization: Bearer <API_KEY>` header.\n- Try disable auth temporarily when you face connection issues to see if it is an auth issue.\n\n## ❄️ Cold Start Problem and Custom Dockerfile\n\n- MetaMCP pre-allocate idle sessions for each configured MCP servers and MetaMCPs. The default idle session for each is 1 and that can help reduce cold start time.\n- If your MCP requires dependencies other than `uvx` or `npx`, you need to customize the Dockerfile to install dependencies on your own.\n- Check [invalidation.md](invalidation.md) for a seq diagram about how idle session invalidates during updates.\n\n🛠️ **Solution**: Customize the Dockerfile to add dependencies or pre-install packages to reduce cold start time.\n\n## 🔐 Authentication\n\n- 🛡️ **Better Auth** for frontend & backend (TRPC procedures)\n- 🍪 **Session cookies** enforce secure internal MCP proxy connections\n- 🔑 **API key authentication** for external access via `Authorization: Bearer <api-key>` header\n- 🪪 **MCP OAuth**: Exposed endpoints have options to use standard OAuth in MCP Spec 2025-06-18, easy to connect.\n- 🏢 **Multi-tenancy**: Designed for organizations to deploy on their own machines. Supports both private and public access scopes. Users can create MCPs, namespaces, endpoints, and API keys for themselves or for everyone. Public API keys cannot access private MetaMCPs.\n\n## 🔗 OpenID Connect (OIDC) Provider Support\n\nMetaMCP supports **OpenID Connect authentication** for enterprise SSO integration. This allows organizations to use their existing identity providers (Auth0, Keycloak, Azure AD, etc.) for authentication.\n\n### 🛠️ **Configuration**\n\nAdd the following environment variables to your `.env` file:\n\n```bash\n# Required\nOIDC_CLIENT_ID=your-oidc-client-id\nOIDC_CLIENT_SECRET=your-oidc-client-secret\nOIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid-configuration\n\n# Optional customization\nOIDC_PROVIDER_ID=oidc\nOIDC_SCOPES=openid email profile\nOIDC_PKCE=true\n```\n\n### 🏢 **Supported Providers**\n\nMetaMCP has been tested with popular OIDC providers:\n\n- **Auth0**: `https://your-domain.auth0.com/.well-known/openid-configuration`\n- **Keycloak**: `https://your-keycloak.com/realms/your-realm/.well-known/openid-configuration`\n- **Azure AD**: `https://login.microsoftonline.com/your-tenant-id/v2.0/.well-known/openid-configuration`\n- **Google**: `https://accounts.google.com/.well-known/openid-configuration`\n- **Okta**: `https://your-domain.okta.com/.well-known/openid-configuration`\n\n### 🔒 **Security Features**\n\n- 🔐 **PKCE (Proof Key for Code Exchange)** enabled by default\n- 🛡️ **Authorization Code Flow** with automatic user creation\n- 🔄 **Auto-discovery** of OIDC endpoints\n- 🍪 **Seamless session management** with existing auth system\n\n### 📱 **Usage**\n\nOnce configured, users will see a **\"Sign in with OIDC\"** button on the login page alongside the email/password form. The authentication flow automatically creates new users on first login.\n\nFor more detailed configuration examples and troubleshooting, see **[CONTRIBUTING.md](CONTRIBUTING.md#openid-connect-oidc-provider-setup)**.\n\n## 🌐 Custom Deployment and SSE conf for Nginx\n\nIf you want to deploy it to a online service or a VPS, a instance of at least 2GB-4GB of memory is required. And the larger size, the better performance.\n\nSince MCP leverages SSE for long connection, if you are using reverse proxy like nginx, please refer to an example setup [nginx.conf.example](nginx.conf.example)\n\n## 🏗️ Architecture\n\n- **Frontend**: Next.js\n- **Backend**: Express.js with tRPC, hosting MCPs through TS SDK and internal proxy\n- **Auth**: Better Auth\n- **Structure**: Standalone monorepo with Turborepo and Docker publishing\n\n### 📊 Sequence Diagram\n\n*Note: Prompts and resources follow similar patterns to tools.*\n\n```mermaid\nsequenceDiagram\n    participant MCPClient as MCP Client (e.g., Claude Desktop)\n    participant MetaMCP as MetaMCP Server\n    participant MCPServers as Installed MCP Servers\n\n    MCPClient ->> MetaMCP: Request list tools\n\n    loop For each listed MCP Server\n        MetaMCP ->> MCPServers: Request list_tools\n        MCPServers ->> MetaMCP: Return list of tools\n    end\n\n    MetaMCP ->> MetaMCP: Aggregate tool lists & apply middleware\n    MetaMCP ->> MCPClient: Return aggregated list of tools\n\n    MCPClient ->> MetaMCP: Call tool\n    MetaMCP ->> MCPServers: call_tool to target MCP Server\n    MCPServers ->> MetaMCP: Return tool response\n    MetaMCP ->> MCPClient: Return tool response\n```\n\n## 🗺️ Roadmap\n\n**Potential next steps:**\n\n- [ ] 🔌 Headless Admin API access\n- [ ] 🔍 Dynamically apply search rules on MetaMCP endpoints\n- [ ] 🛠️ More middlewares\n- [ ] 💬 Chat/Agent Playground\n- [ ] 🧪 Testing & Evaluation for MCP tool selection optimization\n- [ ] ⚡ Dynamically generate MCP servers\n\n## 🌐 i18n\n\nSee [README-i18n.md](README-i18n.md)\n\nCurrently en and zh locale are supported, but welcome contributions.\n\n## 🤝 Contributing\n\nWe welcome contributions! See details at **[CONTRIBUTING.md](CONTRIBUTING.md)**\n\n## 📄 License\n\n**MIT**\n\nWould appreciate if you mentioned with back links if your projects use the code.\n\n## 🙏 Credits\n\nSome code inspired by:\n- [MCP Inspector](https://github.com/modelcontextprotocol/inspector)\n- [MCP Proxy Server](https://github.com/adamwattis/mcp-proxy-server)\n\nNot directly used the code by took ideas from\n- https://github.com/open-webui/openapi-servers\n- https://github.com/open-webui/mcpo\n",
+  "category": "Development",
+  "quality_score": 75,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "metamcp-docker": {
+          "command": "docker",
+          "args": ["compose", "up", "-d"]
+        },
+        "metamcp": {
+          "command": "pnpm",
+          "args": ["dev"]
+        },
+        "mcp-hn": {
+          "command": "uvx",
+          "args": ["mcp-hn"]
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "metatool-ai",
+    "repo": "metatool-app",
+    "url": "https://github.com/metatool-ai/metatool-app",
+    "name": "metatool-ai__metatool-app",
+    "path": null,
+    "stars": 1065,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "acda392d19fd3502ce20570ebf3e9c7b60b1b627"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:25:47.915Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "hono",
+      "importance": 9
+    },
+    {
+      "name": "pg",
+      "importance": 8
+    },
+    {
+      "name": "openid-client",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"metamcp\",\n  \"private\": true,\n  \"scripts\": {\n    \"build\": \"turbo run build\",\n    \"dev\": \"dotenv -e .env.local turbo run dev\",\n    \"lint\": \"turbo run lint\",\n    \"lint:fix\": \"turbo run lint:fix\",\n    \"format\": \"prettier --write \\\"**/*.{ts,tsx,md}\\\"\",\n    \"check-types\": \"turbo run check-types\"\n  },\n  \"devDependencies\": {\n    \"dotenv-cli\": \"^8.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"turbo\": \"^2.5.5\",\n    \"typescript\": \"5.8.2\"\n  },\n  \"packageManager\": \"pnpm@9.0.0\",\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

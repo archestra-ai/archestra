@@ -1,0 +1,88 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "lpigeon__ros-mcp-server",
+  "display_name": "ros-mcp-server",
+  "version": "1.0.0",
+  "description": "The ROS/ROS2 MCP Server is designed to support robots in performing complex tasks and adapting effectively to various environments by providing a set of functions that transform natural language commands, entered by a user through an LLM, into ROS/ROS2 commands for robot control.",
+  "author": {
+    "name": "lpigeon"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## Overview\n![Static Badge](https://img.shields.io/badge/ROS-Available-green)\n![Static Badge](https://img.shields.io/badge/ROS2-Available-green)\n[![smithery badge](https://smithery.ai/badge/@lpigeon/ros-mcp-server)](https://smithery.ai/server/@lpigeon/ros-mcp-server)\n![Static Badge](https://img.shields.io/badge/License-MIT-blue)\n\n<center><img src=\"https://github.com/lpigeon/ros-mcp-server/blob/main/img/framework.png\"/></center>\n\nThe ROS MCP Server is designed to support robots in performing complex tasks and adapting effectively to various environments by providing a set of functions that transform natural language commands, entered by a user through an LLM, into ROS commands for robot control. Furthermore, by utilizing ``rosbridge``, it is configured to operate with both ``ROS`` and ``ROS2`` systems, and its WebSocket-based communication enables broad applicability across diverse platforms.\n\nResearch based on this project can be found in the video linked below.  \n- [An Efficient Robot Control Framework Using the Model Context Protocol](https://www.youtube.com/watch?v=7ut4eqTxwHA)\n\n## Supported Types\n\n- geometry_msgs/Twist\n- sensor_msgs/Image\n- sensor_msgs/JointState\n\n## Features\n\n- **WebSocket-based universal compatibility**: Communicates with both ROS and ROS2 systems using rosbridge, enabling seamless integration regardless of ROS version.\n- **Cross-platform support**: Works on Linux, Windows, and MacOS, making it suitable for diverse development and deployment environments.\n- **Easy integration with LLMs and AI systems**: Natural language commands can be directly translated into robot actions via MCP functions.\n- **Extensible function set**: Easily add new robot control or sensor functions by extending the MCP tool interface.\n- **No ROS node modification required**: Interacts with existing ROS/ROS2 topics and services without changing your robot's core code.\n- **Native ROS/ROS2 command compatibility**: Optionally supports using local ROS/ROS2 libraries, so you can run native ROS commands and tools alongside WebSocket-based control. \n\n## Contributing\nContributions are welcome!  \nWhether you're fixing a typo, adding a new function, or suggesting improvements, your help is appreciated.  \nPlease follow the [contributing guidelines](CONTRIBUTING.md) for more details on how to contribute to this project.\n\n## Installation\n\n### Installing via Smithery\n\nTo install ``ros-mcp-server`` for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@lpigeon/ros-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @lpigeon/ros-mcp-server --client claude\n```\n\n### Installing Locally\n\n### `uv` Installation\n- To install `uv`, you can use the following command:\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\nor\n```bash\npip install uv\n```\n\n- Create virtual environment and activate it (Optional)\n```bash\nuv venv\nsource .venv/bin/activate\n```\n\n### MCP Server Configuration\nSet MCP setting to mcp.json.\n\n```bash\n{\n  \"mcpServers\": {\n    \"ros-mcp-server\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp-server\",,\n        \"run\",\n        \"server.py\"\n      ]\n    }\n  }\n}\n```\n\nIf you use Claude Desktop, you can find mcp.json using the following command:\n\n- MacOS\n```bash\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n- Linux(Ubuntu)\n  \nYou can install Claude Desktop to use [claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian).\n\n```bash\ncode ~/.config/Claude/claude_desktop_config.json\n```\n\n- Windows\n```bash\ncode $env:AppData\\Claude\\claude_desktop_config.json\n```\n\n## MCP Functions\n\nYou can find the list of functions in the [MCPFUNCTIONS.md](MCPFUNCTIONS.md).\n\n## How To Use\n### 1. Set IP and Port to connect rosbridge.\n- Open `server.py` and change your `LOCAL_IP`, `ROSBRIDGE_IP` and `ROSBRIDGE_PORT`. (`ROSBRIDGE_PORT`'s default value is `9090`)\n\n### 2. Run rosbridge server.\nROS 1\n```bash\nroslaunch rosbridge_server rosbridge_websocket.launch\n```\nROS 2\n```bash\nros2 launch rosbridge_server rosbridge_websocket_launch.xml\n```\n\n### 3. Run any AI system that has imported ``ros-mcp-server``.\n\n### 4. Type \"Make the robot move forward.\".\n<center><img src=\"https://github.com/lpigeon/ros-mcp-server/blob/main/img/how_to_use_1.png\" width=\"500\"/></center>\n\n### 5. Check `rosbridge_server` and `ros topic`.\n- `rosbridge_server`\n<center><img src=\"https://github.com/lpigeon/ros-mcp-server/blob/main/img/how_to_use_2.png\" /></center>\n\n- `ros topic`\n<center><img src=\"https://github.com/lpigeon/ros-mcp-server/blob/main/img/how_to_use_3.png\" /></center>\n\n## Simulation Test\nMCP-based control using the MOCA mobile manipulator within the NVIDIA Isaac Sim simulation environment. \n\n<center><img src=\"https://github.com/lpigeon/ros-mcp-server/blob/main/img/result.gif\" /></center>\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ros-mcp-server": {
+          "command": "uv",
+          "args": ["--directory", "/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp-server", "run", "server.py"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "lpigeon",
+    "repo": "ros-mcp-server",
+    "url": "https://github.com/lpigeon/ros-mcp-server",
+    "name": "ros-mcp-server",
+    "path": null,
+    "stars": 153,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8e53a4f91e140e88869b637ea16dd2c461192678"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:12.542Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "opencv-python",
+      "importance": 8
+    },
+    {
+      "name": "websocket",
+      "importance": 9
+    },
+    {
+      "name": "websocket-client",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ros-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"opencv-python>=4.11.0.86\",\n    \"websocket>=0.2.1\",\n    \"websocket-client>=1.8.0\",\n]\n"
+}

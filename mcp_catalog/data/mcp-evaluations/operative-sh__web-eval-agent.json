@@ -1,0 +1,120 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "operative-sh__web-eval-agent",
+  "display_name": "web-eval-agent",
+  "version": "1.0.0",
+  "description": "An MCP server that autonomously evaluates web applications. ",
+  "author": {
+    "name": "Operative-Sh"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "web-eval-agent": {
+          "command": "uvx",
+          "args": [
+            "--refresh-package",
+            "webEvalAgent",
+            "--from",
+            "git+https://github.com/Operative-Sh/web-eval-agent.git",
+            "webEvalAgent"
+          ],
+          "env": {
+            "OPERATIVE_API_KEY": "<YOUR_KEY>"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Operative-Sh",
+    "repo": "web-eval-agent",
+    "url": "https://github.com/Operative-Sh/web-eval-agent",
+    "name": "operative-sh__web-eval-agent",
+    "path": null,
+    "stars": 1151,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.728Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "flask",
+      "importance": 10
+    },
+    {
+      "name": "browser-use",
+      "importance": 9
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    },
+    {
+      "name": "langchain",
+      "importance": 8
+    },
+    {
+      "name": "flask-socketio",
+      "importance": 8
+    },
+    {
+      "name": "google-generativeai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-google-genai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-anthropic",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": null
+}

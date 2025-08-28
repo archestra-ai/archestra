@@ -1,0 +1,123 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "mahdin75__gis-mcp",
+  "display_name": "gis-mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol (MCP) server implementation that connects Large Language Models (LLMs) to GIS operations using GIS libraries, enabling AI assistants to perform geospatial operations and transformations.",
+  "author": {
+    "name": "mahdin75"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GIS MCP Server\n\n<div align=\"center\">\n  <h3>✨ Want to perform accurate geospatial analysis in your chatbot? ✨</h3>\n  <p><strong>Install GIS-MCP and transform your AI's spatial capabilities!</strong></p>\n  <br/>\n  <img src=\"docs/gis-mcp.png\" alt=\"GIS MCP Server Logo\" width=\"300\"/>\n</div>\n\nA Model Context Protocol (MCP) server implementation that connects Large Language Models (LLMs) to GIS operations using GIS libraries, enabling AI assistants to perform geospatial operations and transformations.\n\n> Alpha\n>\n> Version 0.3.0 (Alpha) is under active development. We welcome contributions and developers to join us in building this project.\n\n## 🎥 Demo\n\n<div align=\"center\">\n  <img src=\"docs/demo.gif\" alt=\"GIS MCP Server Demo\" width=\"800\"/>\n</div>\n\n### Rasterio Demo\n\n<div align=\"center\">\n  <a href=\"https://www.veed.io/view/95ff85f4-efbb-4154-9a04-d966c6ae1737?panel=share\">\n    <br/>\n    <em>Click to watch the Rasterio demo video or go to docs folder</em>\n  </a>\n</div>\n\n## 📋 Table of Contents\n\n- [Features](#-features)\n- [Prerequisites](#-prerequisites)\n- [Installation](#-installation)\n  - [pip Installation](#-pip-installation)\n  - [Development Installation](#-development-installation)\n- [Available Tools](#-available-tools)\n  - [Shapely Operations](#shapely-operations)\n    - [Basic Operations](#basic-operations)\n    - [Geometric Properties](#geometric-properties)\n    - [Transformations](#transformations)\n    - [Advanced Operations](#advanced-operations)\n    - [Measurements](#measurements)\n    - [Validation and Simplification](#validation-and-simplification)\n  - [PyProj Operations](#pyproj-operations)\n    - [Coordinate Transformations](#coordinate-transformations)\n    - [CRS Information](#crs-information)\n    - [Geodetic Calculations](#geodetic-calculations)\n  - [Geopandas Operations](#geopandas-operations)\n    - [I/O Operations](#i/o-operations)\n    - [Join Operations](#join-operations)\n  - [Rasterio Operations](#rasterio-operations)\n    - [Basic Raster Operations](#basic-raster-operations)\n    - [Raster Processing](#raster-processing)\n    - [Raster Analysis](#raster-analysis)\n- [Client Development](#-client-development)\n- [Planned Features](#-planned-features)\n- [Contributing](#-contributing)\n- [License](#-license)\n- [Related Projects](#-related-projects)\n- [Support](#-support)\n- [Badges](#-badges)\n\n## 🚀 Features\n\n- 🔍 Comprehensive geometric operations (intersection, union, buffer, etc.)\n- 🌐 Advanced coordinate transformations and projections\n- 📏 Precise distance and area calculations\n- 🗺️ Spatial analysis and validation\n- 🛠️ Easy integration with MCP-compatible clients\n\n## 📋 Prerequisites\n\n- Python 3.10 or higher\n- MCP-compatible client (like Claude Desktop or Cursor)\n- Internet connection for package installation\n\n## 🛠️ Installation\n\nChoose the installation method that best suits your needs:\n\n### Installing via Smithery\n\nTo install GIS MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mahdin75/gis-mcp):\n\n```bash\nnpx -y @smithery/cli install @mahdin75/gis-mcp --client claude\n```\n\n### 📦 pip Installation\n\nThe pip installation is recommended for most users:\n\n1. Install uv package manager:\n\n```bash\npip install uv\n```\n\n2. Create the Virtual Environment (Python 3.10+):\n\n```bash\nuv venv --python=3.10\n```\n\n3. Install the package:\n\n```bash\nuv pip install gis-mcp\n```\n\n4. Start the server:\n\n```bash\ngis-mcp\n```\n\n#### pip Configuration\n\nTo use the pip installation with Claude or Cursor, add the following configuration:\n\n**Claude Desktop:**\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"C:\\\\Users\\\\YourUsername\\\\.venv\\\\Scripts\\\\gis-mcp\",\n      \"args\": []\n    }\n  }\n}\n```\n\n**Linux/Mac:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"/home/YourUsername/.venv/bin/gis-mcp\",\n      \"args\": []\n    }\n  }\n}\n```\n\n**Cursor IDE** (create `.cursor/mcp.json`):\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"C:\\\\Users\\\\YourUsername\\\\.venv\\\\Scripts\\\\gis-mcp\",\n      \"args\": []\n    }\n  }\n}\n```\n\n**Linux/Mac:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"/home/YourUsername/.venv/bin/gis-mcp\",\n      \"args\": []\n    }\n  }\n}\n```\n\nAfter configuration:\n\n1. Make sure to replace `YourUsername` with your actual username\n2. For development installation, replace `/path/to/gis-mcp` with the actual path to your project\n3. Restart your IDE to apply the changes\n4. You can now use all GIS operations through Claude or Cursor!\n\n### 🛠️ Development Installation\n\nFor contributors and developers:\n\n1. Install uv package manager:\n\n```bash\npip install uv\n```\n\n2. Create the Virtual Environment:\n\n```bash\nuv venv --python=3.10\n```\n\n3. Install the package in development mode:\n\n```bash\nuv pip install -e .\n```\n\n4. Start the server:\n\n```bash\npython -m gis_mcp\n```\n\n#### Development Configuration\n\nTo use the development installation with Claude or Cursor, add the following configuration:\n\n**Claude Desktop:**\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"C:\\\\path\\\\to\\\\gis-mcp\\\\.venv\\\\Scripts\\\\python\",\n      \"args\": [\"-m\", \"gis_mcp\"]\n    }\n  }\n}\n```\n\n**Linux/Mac:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"/path/to/gis-mcp/.venv/bin/python\",\n      \"args\": [\"-m\", \"gis_mcp\"]\n    }\n  }\n}\n```\n\n**Cursor IDE** (create `.cursor/mcp.json`):\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"C:\\\\path\\\\to\\\\gis-mcp\\\\.venv\\\\Scripts\\\\python\",\n      \"args\": [\"-m\", \"gis_mcp\"]\n    }\n  }\n}\n```\n\n**Linux/Mac:**\n\n```json\n{\n  \"mcpServers\": {\n    \"gis-mcp\": {\n      \"command\": \"/path/to/gis-mcp/.venv/bin/python\",\n      \"args\": [\"-m\", \"gis_mcp\"]\n    }\n  }\n}\n```\n\nAfter configuration:\n\n1. Make sure to replace `YourUsername` with your actual username\n2. For development installation, replace `/path/to/gis-mcp` with the actual path to your project\n3. Restart your IDE to apply the changes\n4. You can now use all GIS operations through Claude or Cursor!\n\n## 🛠️ Available Tools\n\n### Shapely Operations\n\n#### Basic Operations\n\n| Tool                   | Description                                                    |\n| ---------------------- | -------------------------------------------------------------- |\n| `buffer`               | Create a buffer around geometries with customizable parameters |\n| `intersection`         | Find intersection of two geometries                            |\n| `union`                | Combine two geometries                                         |\n| `difference`           | Find difference between geometries                             |\n| `symmetric_difference` | Find symmetric difference between geometries                   |\n\n#### Geometric Properties\n\n| Tool                        | Description                                 |\n| --------------------------- | ------------------------------------------- |\n| `convex_hull`               | Calculate convex hull of a geometry         |\n| `envelope`                  | Get bounding box of a geometry              |\n| `minimum_rotated_rectangle` | Get minimum rotated rectangle of a geometry |\n| `get_centroid`              | Get the centroid of a geometry              |\n| `get_bounds`                | Get the bounds of a geometry                |\n| `get_coordinates`           | Get the coordinates of a geometry           |\n| `get_geometry_type`         | Get the type of a geometry                  |\n\n#### Transformations\n\n| Tool                 | Description                                       |\n| -------------------- | ------------------------------------------------- |\n| `rotate_geometry`    | Rotate a geometry with specified angle and origin |\n| `scale_geometry`     | Scale a geometry with x and y factors             |\n| `translate_geometry` | Translate a geometry with x, y, and z offsets     |\n\n#### Advanced Operations\n\n| Tool                     | Description                           |\n| ------------------------ | ------------------------------------- |\n| `triangulate_geometry`   | Create a triangulation of a geometry  |\n| `voronoi`                | Create a Voronoi diagram from points  |\n| `unary_union_geometries` | Create a union of multiple geometries |\n\n#### Measurements\n\n| Tool         | Description                  |\n| ------------ | ---------------------------- |\n| `get_length` | Get the length of a geometry |\n| `get_area`   | Get the area of a geometry   |\n\n#### Validation and Simplification\n\n| Tool         | Description                                  |\n| ------------ | -------------------------------------------- |\n| `is_valid`   | Check if a geometry is valid                 |\n| `make_valid` | Make a geometry valid                        |\n| `simplify`   | Simplify a geometry with specified tolerance |\n\n### PyProj Operations\n\n#### Coordinate Transformations\n\n| Tool                    | Description                       |\n| ----------------------- | --------------------------------- |\n| `transform_coordinates` | Transform coordinates between CRS |\n| `project_geometry`      | Project a geometry between CRS    |\n\n#### CRS Information\n\n| Tool                 | Description                              |\n| -------------------- | ---------------------------------------- |\n| `get_crs_info`       | Get detailed information about a CRS     |\n| `get_available_crs`  | Get list of all available CRS            |\n| `get_utm_zone`       | Get UTM zone for given coordinates       |\n| `get_utm_crs`        | Get UTM CRS for given coordinates        |\n| `get_geocentric_crs` | Get geocentric CRS for given coordinates |\n\n#### Geodetic Calculations\n\n| Tool                          | Description                                             |\n| ----------------------------- | ------------------------------------------------------- |\n| `get_geod_info`               | Get information about a geodetic calculation            |\n| `calculate_geodetic_distance` | Calculate geodetic distance between points              |\n| `calculate_geodetic_point`    | Calculate point at given distance and azimuth           |\n| `calculate_geodetic_area`     | Calculate area of a polygon using geodetic calculations |\n\n### GeoPandas Operations\n\n#### I/O Operations\n\n| Tool            | Description                                              |\n| --------------- | -------------------------------------------------------- |\n| `read_file_gpd` | Read a geospatial file and return stats and data preview |\n| `to_file_gpd`   | Write a GeoDataFrame to a file                           |\n\n#### Join Operations\n\n| Tool         | Description                                        |\n| ------------ | -------------------------------------------------- |\n| `append_gpd` | Concatenate two GeoDataFrames vertically           |\n| `merge_gpd`  | Perform database-style joins between GeoDataFrames |\n\n### Rasterio Operations\n\n#### Basic Raster Operations\n\n| Tool                     | Description                                              |\n| ------------------------ | -------------------------------------------------------- |\n| `metadata_raster`        | Get metadata from a raster dataset                       |\n| `get_raster_crs`         | Retrieve the CRS of a raster dataset                     |\n| `extract_band`           | Extract a specific band from a multi-band raster         |\n| `raster_band_statistics` | Calculate statistics (min, max, mean, std) for each band |\n| `raster_histogram`       | Compute histogram of pixel values for each band          |\n\n#### Raster Processing\n\n| Tool                         | Description                                   |\n| ---------------------------- | --------------------------------------------- |\n| `clip_raster_with_shapefile` | Clip a raster using polygons from a shapefile |\n| `resample_raster`            | Resample a raster by a scale factor           |\n| `reproject_raster`           | Reproject a raster to a new CRS               |\n| `tile_raster`                | Split a raster into square tiles              |\n\n#### Raster Analysis\n\n| Tool                | Description                                                     |\n| ------------------- | --------------------------------------------------------------- |\n| `compute_ndvi`      | Calculate Normalized Difference Vegetation Index                |\n| `raster_algebra`    | Perform algebraic operations on raster bands                    |\n| `concat_bands`      | Combine multiple single-band rasters into one multi-band raster |\n| `weighted_band_sum` | Compute weighted sum of all bands in a raster                   |\n\n## 🛠️ Client Development\n\nExample usage of the tools:\n\n### Buffer Operation\n\n```python\nTool: buffer\nParameters: {\n    \"geometry\": \"POINT(0 0)\",\n    \"distance\": 10,\n    \"resolution\": 16,\n    \"join_style\": 1,\n    \"mitre_limit\": 5.0,\n    \"single_sided\": false\n}\n```\n\n### Coordinate Transformation\n\n```python\nTool: transform_coordinates\nParameters: {\n    \"coordinates\": [0, 0],\n    \"source_crs\": \"EPSG:4326\",\n    \"target_crs\": \"EPSG:3857\"\n}\n```\n\n### Geodetic Distance\n\n```python\nTool: calculate_geodetic_distance\nParameters: {\n    \"point1\": [0, 0],\n    \"point2\": [10, 10],\n    \"ellps\": \"WGS84\"\n}\n```\n\n## 🔮 Planned Features\n\n- Add support for more GIS libraries - GDAL/OGR\n- Implement advanced spatial indexing\n- Add support for raster operations\n- Implement network analysis capabilities\n- Add support for 3D geometries\n- Implement performance optimizations\n\n## 🤝 Contributing\n\nWe welcome contributions! Here's how you can help:\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/AmazingFeature`)\n3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)\n4. Push to the branch (`git push origin feature/AmazingFeature`)\n5. Open a Pull Request\n\nPlease ensure your PR description clearly describes the problem and solution. Include the relevant issue number if applicable.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## 🔗 Related Projects\n\n- [Model Context Protocol](https://github.com/anthropics/model-context-protocol) - The core MCP implementation\n- [Shapely](https://github.com/shapely/shapely) - Python package for manipulation and analysis of geometric objects\n- [PyProj](https://github.com/pyproj4/pyproj) - Python interface to PROJ library\n- [GeoPandas](https://github.com/geopandas/geopandas) - Python package for working with geospatial data\n- [Rasterio](https://github.com/rasterio/rasterio) - Python package for reading and writing geospatial raster data\n\n## 📞 Support\n\nFor support, please open an issue in the GitHub repository.\n\n## 💬 Community\n\nJoin our Discord community for discussions, updates, and support:\n\n[![Join our Discord](https://img.shields.io/badge/Discord-Join%20our%20community-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/dzkXZsZK)\n\n## 👥 Contributors\n\n<a href=\"https://github.com/mahdin75/gis-mcp/graphs/contributors\">\n  <img src=\"https://contrib.rocks/image?repo=mahdin75/gis-mcp\" />\n</a>\n\nMade with [contrib.rocks](https://contrib.rocks).\n\n<br/>\n\n## 🏆 Badges\n\n<div align=\"center\">\n  <a href=\"https://glama.ai/mcp/servers/@mahdin75/gis-mcp\">\n    <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mahdin75/gis-mcp/badge\" alt=\"GIS Server MCP server\" />\n  </a>\n  <br/><br/><br/>\n  <a href=\"https://mcp.so/server/gis-mcp-server/mahdin75\">\n    <img src=\"https://mcp.so/logo.png\" alt=\"MCP.so Badge\" width=\"150\"/>\n  </a>\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "gis-mcp": {
+          "command": "gis-mcp",
+          "args": [],
+          "env": {}
+        },
+        "gis-mcp-configured": {
+          "command": "/home/YourUsername/.venv/bin/gis-mcp",
+          "args": [],
+          "env": {}
+        },
+        "gis-mcp-dev": {
+          "command": "python",
+          "args": ["-m", "gis_mcp"],
+          "env": {}
+        },
+        "gis-mcp-dev-configured": {
+          "command": "/path/to/gis-mcp/.venv/bin/python",
+          "args": ["-m", "gis_mcp"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "mahdin75",
+    "repo": "gis-mcp",
+    "url": "https://github.com/mahdin75/gis-mcp",
+    "name": "gis-mcp",
+    "path": null,
+    "stars": 31,
+    "contributors": 5,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "2209277e9fb8946b01a3ef9d1182257d225c8f5a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:20:06.106Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "shapely",
+      "importance": 9
+    },
+    {
+      "name": "pyproj",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "tabulate",
+      "importance": 4
+    },
+    {
+      "name": "rasterio",
+      "importance": 9
+    },
+    {
+      "name": "fiona",
+      "importance": 8
+    },
+    {
+      "name": "geopandas",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n\n[project]\nname = \"gis-mcp\"\nversion = \"0.2.0\"\ndescription = \"A Model Context Protocol (MCP) server implementation for GIS operations using GIS libraries\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = {file = \"LICENSE\"}\nauthors = [\n    {name = \"Mahdi Nazari Ashani\"},\n    {name = \"Shahab Esfandiar\"},\n    {name = \"Homa Ganjali\"},\n    {name = \"GIS MCP Server Contributors\"},\n]\n\nkeywords = [\"mcp\", \"gis\", \"llm\", \"agentic AI\", \"geospatial\", \"ogc\", \"pyproj\", \"shapely\", \"geopandas\", \"rasterio\"]\n\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n]\n\ndependencies = [\n    \"mcp==1.6.0\",\n    \"numpy>=1.23,<2.0\",\n    \"shapely>=2.1.0\",\n    \"pyproj>=3.7.1\",\n    \"pandas>=2.0.0\",\n    \"tabulate>=0.9.0\",\n    \"rasterio==1.3.9\",\n    \"fiona==1.9.6\",\n    \"geopandas==1.0.0\"\n]\n\n\n[project.scripts]\ngis-mcp = \"gis_mcp.main:main\"\n\n[tool.hatch.metadata]\nallow-direct-references = true\n"
+}

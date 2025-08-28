@@ -1,0 +1,140 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "rohitg00__kubectl-mcp-server",
+  "display_name": "kubectl-mcp-server",
+  "version": "1.0.0",
+  "description": "Chat with your Kubernetes Cluster using AI tools and IDEs like Claude and Cursor!",
+  "author": {
+    "name": "rohitg00"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Kubectl MCP Server\n\nA Model Context Protocol (MCP) server for Kubernetes that enables AI assistants like Claude, Cursor, and others to interact with Kubernetes clusters through natural language.\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)\n[![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io/)\n[![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://github.com/modelcontextprotocol/modelcontextprotocol)\n[![PyPI version](https://badge.fury.io/py/kubectl-mcp-tool.svg)](https://pypi.org/project/kubectl-mcp-tool/)\n\n## 🎥 Live Demo - Watch `kubectl-mcp-tool` in Action with Claude!\n![Claude MCP](./docs/claude/claude-mcp.gif)\n\n## 🎥 Live Demo - Watch `kubectl-mcp-tool` in Action with Cursor!\n![Cursor MCP](./docs/cursor/cursor-mcp.gif)\n\n## 🎥 Live Demo - Watch `kubectl-mcp-tool` in Action with Windsurf!\n![Windsurf MCP](./docs/windsurf/windsurf-mcp.gif)\n\n\n## Features\n\n### Core Kubernetes Operations\n- [x] Connect to a Kubernetes cluster\n- [x] List and manage pods, services, deployments, and nodes\n- [x] Create, delete, and describe pods and other resources\n- [x] Get pod logs and Kubernetes events\n- [x] Support for Helm v3 operations (installation, upgrades, uninstallation)\n- [x] kubectl explain and api-resources support\n- [x] Choose namespace for next commands (memory persistence)\n- [x] Port forward to pods\n- [x] Scale deployments and statefulsets\n- [x] Execute commands in containers\n- [x] Manage ConfigMaps and Secrets\n- [x] Rollback deployments to previous versions\n- [x] Ingress and NetworkPolicy management\n- [x] Context switching between clusters\n\n### Natural Language Processing\n- [x] Process natural language queries for kubectl operations\n- [x] Context-aware commands with memory of previous operations\n- [x] Human-friendly explanations of Kubernetes concepts\n- [x] Intelligent command construction from intent\n- [x] Fallback to kubectl when specialized tools aren't available\n- [x] Mock data support for offline/testing scenarios\n- [x] Namespace-aware query handling\n\n### Monitoring\n- [x] Cluster health monitoring\n- [x] Resource utilization tracking\n- [x] Pod status and health checks\n- [x] Event monitoring and alerting\n- [x] Node capacity and allocation analysis\n- [x] Historical performance tracking\n- [x] Resource usage statistics via kubectl top\n- [x] Container readiness and liveness tracking\n\n### Security\n- [x] RBAC validation and verification\n- [x] Security context auditing\n- [x] Secure connections to Kubernetes API\n- [x] Credentials management\n- [x] Network policy assessment\n- [x] Container security scanning\n- [x] Security best practices enforcement\n- [x] Role and ClusterRole management\n- [x] ServiceAccount creation and binding\n- [x] PodSecurityPolicy analysis\n- [x] RBAC permissions auditing\n- [x] Security context validation\n\n### Diagnostics\n- [x] Cluster diagnostics and troubleshooting\n- [x] Configuration validation\n- [x] Error analysis and recovery suggestions\n- [x] Connection status monitoring\n- [x] Log analysis and pattern detection\n- [x] Resource constraint identification\n- [x] Pod health check diagnostics\n- [x] Common error pattern identification\n- [x] Resource validation for misconfigurations\n- [x] Detailed liveness and readiness probe validation\n\n### Advanced Features\n- [x] Multiple transport protocols support (stdio, SSE)\n- [x] Integration with multiple AI assistants\n- [x] Extensible tool framework\n- [x] Custom resource definition support\n- [x] Cross-namespace operations\n- [x] Batch operations on multiple resources\n- [x] Intelligent resource relationship mapping\n- [x] Error explanation with recovery suggestions\n- [x] Volume management and identification\n\n## Architecture\n\n### Model Context Protocol (MCP) Integration\n\nThe Kubectl MCP Tool implements the [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/spec), enabling AI assistants to interact with Kubernetes clusters through a standardized interface. The architecture consists of:\n\n1. **MCP Server**: A compliant server that handles requests from MCP clients (AI assistants)\n2. **Tools Registry**: Registers Kubernetes operations as MCP tools with schemas\n3. **Transport Layer**: Supports stdio, SSE, and HTTP transport methods\n4. **Core Operations**: Translates tool calls to Kubernetes API operations\n5. **Response Formatter**: Converts Kubernetes responses to MCP-compliant responses\n\n### Request Flow\n\n![Request Flow](./image.png)\n\n### Dual Mode Operation\n\nThe tool operates in two modes:\n\n1. **CLI Mode**: Direct command-line interface for executing Kubernetes operations\n2. **Server Mode**: Running as an MCP server to handle requests from AI assistants\n\n## Installation\n\nFor detailed installation instructions, please see the [Installation Guide](./docs/INSTALLATION.md).\n\nYou can install kubectl-mcp-tool directly from PyPI:\n\n```bash\npip install kubectl-mcp-tool\n```\n\nFor a specific version:\n\n```bash\npip install kubectl-mcp-tool==1.1.1\n```\n\nThe package is available on PyPI: [https://pypi.org/project/kubectl-mcp-tool/1.1.1/](https://pypi.org/project/kubectl-mcp-tool/1.1.1/)\n\n### Prerequisites\n\n- Python 3.9+\n- kubectl CLI installed and configured\n- Access to a Kubernetes cluster\n- pip (Python package manager)\n\n### Global Installation\n\n```bash\n# Install latest version from PyPI\npip install kubectl-mcp-tool\n\n# Or install development version from GitHub\npip install git+https://github.com/rohitg00/kubectl-mcp-server.git\n```\n\n### Local Development Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/rohitg00/kubectl-mcp-server.git\ncd kubectl-mcp-server\n\n# Install in development mode\npip install -e .\n```\n\n### Verifying Installation\n\nAfter installation, verify the tool is working correctly:\n\n```bash\nkubectl-mcp --help\n```\n\nNote: This tool is designed to work as an MCP server that AI assistants connect to, not as a direct kubectl replacement. The primary command available is `kubectl-mcp serve` which starts the MCP server.\n\n## Docker Image\n\nIf you prefer using Docker, a pre-built image is available on Docker Hub:\n\n```bash\n# Pull the latest image\ndocker pull rohitghumare64/kubectl-mcp-server:latest\n```\n\n### Running the image\n\nThe server inside the container listens on port **8000**. Bind any free host port to 8000 and mount your kubeconfig:\n\n```bash\n# Replace 8081 with any free port on your host\n# Mount your local ~/.kube directory for cluster credentials\n\ndocker run -p 8081:8000 \\\n           -v $HOME/.kube:/root/.kube \\\n           rohitghumare64/kubectl-mcp-server:latest\n```\n\n* `-p 8081:8000` maps host port 8081 → container port 8000.\n* `-v $HOME/.kube:/root/.kube` mounts your kubeconfig so the server can reach the cluster.\n\n### Building a multi-architecture image (AMD64 & ARM64)\n\nIf you want to build and push a multi-arch image (so it runs on both x86_64 and Apple Silicon), use Docker Buildx:\n\n```bash\n# Ensure Buildx and QEMU are installed once per machine\n# docker buildx create --name multiarch --use\n# docker buildx inspect --bootstrap\n\n# Build and push for linux/amd64 and linux/arm64\n# (replace <your_username> if you're publishing to your own registry)\n\ndocker buildx build \\\n  --platform linux/amd64,linux/arm64 \\\n  -t rohitghumare64/kubectl-mcp-server:latest \\\n  --push .\n```\n\nThe published image will contain a manifest list with both architectures, and Docker will automatically pull the correct variant on each machine.\n\n### Configuration\n\nThe MCP server is allowed to access these paths to read your Kubernetes configuration:\n\n```yaml\nrun:\n  volumes:\n    - '{{kubectl-mcp-server.kubeconfig}}:/root/.kube'\nconfig:\n  description: The MCP server is allowed to access this path\n  parameters:\n    type: object\n    properties:\n      kubeconfig:\n        type: string\n        default:\n          $HOME/.kube\n    required:\n      - kubeconfig\n```\n\nThis configuration allows users to add their kubeconfig directory to the container, enabling the MCP server to authenticate with their Kubernetes cluster.\n\n## Usage with AI Assistants\n\n### Using the MCP Server\n\nThe MCP Server (`kubectl_mcp_tool.mcp_server`) is a robust implementation built on the FastMCP SDK that provides enhanced compatibility across different AI assistants:\n\n> **Note**: If you encounter any errors with the MCP Server implementation, you can fall back to using the minimal wrapper by replacing `kubectl_mcp_tool.mcp_server` with `kubectl_mcp_tool.minimal_wrapper` in your configuration. The minimal wrapper provides basic capabilities with simpler implementation.\n\n1. **Direct Configuration**\n   ```json\n   {\n     \"mcpServers\": {\n       \"kubernetes\": {\n         \"command\": \"python\",\n         \"args\": [\"-m\", \"kubectl_mcp_tool.mcp_server\"],\n         \"env\": {\n           \"KUBECONFIG\": \"/path/to/your/.kube/config\",\n           \"PATH\": \"/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\",\n           \"MCP_LOG_FILE\": \"/path/to/logs/debug.log\",\n           \"MCP_DEBUG\": \"1\"\n         }\n       }\n     }\n   }\n   ```\n\n2. **Key Environment Variables**\n   - `MCP_LOG_FILE`: Path to log file (recommended to avoid stdout pollution)\n   - `MCP_DEBUG`: Set to \"1\" for verbose logging\n   - `MCP_TEST_MOCK_MODE`: Set to \"1\" to use mock data instead of real cluster\n   - `KUBECONFIG`: Path to your Kubernetes config file\n   - `KUBECTL_MCP_LOG_LEVEL`: Set to \"DEBUG\", \"INFO\", \"WARNING\", or \"ERROR\"\n\n3. **Testing the MCP Server**\n   You can test if the server is working correctly with:\n   ```bash\n   python -m kubectl_mcp_tool.simple_ping\n   ```\n   This will attempt to connect to the server and execute a ping command.\n\n   Alternatively, you can directly run the server with:\n   ```bash\n   python -m kubectl_mcp_tool\n   ```\n\n### Claude Desktop\n\nAdd the following to your Claude Desktop configuration at `~/Library/Application\\ Support/Claude/claude_desktop_config.json` (Windows: `%APPDATA%\\Claude\\mcp.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"kubectl_mcp_tool.mcp_server\"], \n      \"env\": {\n        \"KUBECONFIG\": \"$HOME/.kube/config\" // or whatever your path is for the config file\n      }\n    }\n  }\n}\n```\n\n### Cursor AI\n\nAdd the following to your Cursor AI settings under MCP by adding a new global MCP server:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"kubectl_mcp_tool.mcp_server\"],\n      \"env\": {\n        \"KUBECONFIG\": \"/path/to/your/.kube/config\",\n        \"PATH\": \"/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin\"\n      }\n    }\n  }\n}\n```\n\nSave this configuration to `~/.cursor/mcp.json` for global settings.\n\n> **Note**: Replace `/path/to/your/.kube/config` with the actual path to your kubeconfig file. On most systems, this is `~/.kube/config`.\n\n### Windsurf\n\nAdd the following to your Windsurf configuration at `~/.config/windsurf/mcp.json` (Windows: `%APPDATA%\\WindSurf\\mcp.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"kubectl_mcp_tool.mcp_server\"],\n      \"env\": {\n        \"KUBECONFIG\": \"/path/to/your/.kube/config\"\n      }\n    }\n  }\n}\n```\n\n### Automatic Configuration\n\nFor automatic configuration of all supported AI assistants, run the provided installation script:\n\n```bash\nbash install.sh\n```",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "kubectl-mcp-tool": {
+          "command": "kubectl-mcp",
+          "args": ["serve"],
+          "env": {}
+        },
+        "rohitghumare64-kubectl-mcp-server-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "8081:8000",
+            "-v",
+            "$HOME/.kube:/root/.kube",
+            "rohitghumare64/kubectl-mcp-server:latest"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "rohitg00",
+    "repo": "kubectl-mcp-server",
+    "url": "https://github.com/rohitg00/kubectl-mcp-server",
+    "name": "kubectl-mcp-server",
+    "path": null,
+    "stars": 675,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f0986f3f3817283cf945b00ffb1329a3beef5f0e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:58.989Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "kubernetes",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "PyYAML",
+      "importance": 7
+    },
+    {
+      "name": "websocket-client",
+      "importance": 7
+    },
+    {
+      "name": "jsonschema",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp-sse",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "aiohttp",
+      "importance": 6
+    },
+    {
+      "name": "urllib3",
+      "importance": 5
+    },
+    {
+      "name": "cryptography",
+      "importance": 5
+    },
+    {
+      "name": "rich",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n# MCP dependency - updating to use the correct version\nmcp>=1.5.0\n\n# Framework dependencies\npydantic>=2.0.0\nfastapi>=0.100.0\nuvicorn>=0.22.0\n\n# Kubernetes dependencies\nkubernetes>=28.1.0\nPyYAML>=6.0.1\nrequests>=2.31.0\nurllib3>=2.1.0\nwebsocket-client>=1.7.0\njsonschema>=4.20.0\ncryptography>=42.0.2\n\n# Terminal formatting\nrich>=13.0.0\n\n# HTTP clients\naiohttp>=3.8.0\naiohttp-sse>=2.1.0\n\n# Build tools\nbuild>=0.10.0\nsetuptools>=67.0.0\nwheel>=0.41.0\ntwine>=4.0.0\n\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nwith open(\"README.md\", \"r\", encoding=\"utf-8\") as fh:\n    long_description = fh.read()\n\nsetup(\n    name=\"kubectl-mcp-tool\",\n    version=\"1.2.0\",\n    author=\"Rohit Ghumare\",\n    author_email=\"ghumare64@gmail.com\",\n    description=\"A Model Context Protocol (MCP) server for Kubernetes\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/rohitg00/kubectl-mcp-server\",\n    packages=find_packages(),\n    install_requires=[\n        \"mcp>=1.5.0\",\n        \"pydantic>=2.0.0\",\n        \"fastapi>=0.100.0\",\n        \"uvicorn>=0.22.0\",\n        \"kubernetes>=28.1.0\",\n        \"PyYAML>=6.0.1\",\n        \"requests>=2.31.0\",\n        \"urllib3>=2.1.0\",\n        \"websocket-client>=1.7.0\",\n        \"jsonschema>=4.20.0\",\n        \"cryptography>=42.0.2\",\n        \"rich>=13.0.0\",\n        \"aiohttp>=3.8.0\",\n        \"aiohttp-sse>=2.1.0\"\n    ],\n    entry_points={\n        \"console_scripts\": [\n            \"kubectl-mcp=kubectl_mcp_tool.__main__:main\",\n        ],\n    },\n    classifiers=[\n        \"Programming Language :: Python :: 3\",\n        \"Programming Language :: Python :: 3.9\",\n        \"Programming Language :: Python :: 3.10\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Operating System :: OS Independent\",\n    ],\n    python_requires=\">=3.9\",\n) "
+}

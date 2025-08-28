@@ -1,0 +1,39 @@
+name: Deploy MCP Catalog Server to Cloud Run
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "The environment to deploy to (development or production)"
+        required: true
+        type: string
+      version:
+        description: "The version to deploy (commit SHA for development, release version for production)"
+        required: true
+        type: string
+    secrets:
+      GCP_PROJECT_ID:
+        required: true
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: true
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run (${{ inputs.environment }})
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    uses: ./.github/workflows/deploy-service-to-cloud-run.yml
+    with:
+      service_name: mcp-catalog
+      dockerfile_path: ./mcp_catalog/Dockerfile
+      version: ${{ inputs.version }}
+      env_vars: |
+        NODE_ENV=${{ inputs.environment }}
+        LOG_LEVEL=info
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}

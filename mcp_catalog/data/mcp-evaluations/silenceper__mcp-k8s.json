@@ -1,0 +1,136 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "silenceper__mcp-k8s",
+  "display_name": "mcp-k8s",
+  "version": "1.0.0",
+  "description": "A Kubernetes MCP (Model Control Protocol) server that enables interaction with Kubernetes clusters through MCP tools.",
+  "author": {
+    "name": "silenceper"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-k8s\n\n[![Go Version](https://img.shields.io/github/go-mod/go-version/silenceper/mcp-k8s)](https://github.com/silenceper/mcp-k8s/blob/main/go.mod)\n[![License](https://img.shields.io/github/license/silenceper/mcp-k8s)](https://github.com/silenceper/mcp-k8s/blob/main/LICENSE)\n[![Latest Release](https://img.shields.io/github/v/release/silenceper/mcp-k8s)](https://github.com/silenceper/mcp-k8s/releases)\n[![Go Report Card](https://goreportcard.com/badge/github.com/silenceper/mcp-k8s)](https://goreportcard.com/report/github.com/silenceper/mcp-k8s)\n[![Go CI](https://github.com/silenceper/mcp-k8s/actions/workflows/go-ci.yml/badge.svg)](https://github.com/silenceper/mcp-k8s/actions/workflows/go-ci.yml)\n[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/silenceper/mcp-k8s/pulls)\n\nA Kubernetes MCP (Model Control Protocol) server that enables interaction with Kubernetes clusters through MCP tools.\n\n## Features\n\n- Query supported Kubernetes resource types (built-in resources and CRDs)\n- Kubernetes resource operations with fine-grained control\n  - Read operations: get resource details, list resources by type with filtering options\n  - Write operations: create, update, and delete resources (each can be independently enabled/disabled)\n  - Support for all Kubernetes resource types, including custom resources\n- Connects to Kubernetes cluster using kubeconfig\n- Helm support with fine-grained control\n  - Helm releases management (list, get, install, upgrade, uninstall)\n  - Helm repositories management (list, add, remove)\n  - Each operation can be independently enabled/disabled\n\n## Preview\n> Interaction through cursor\n\n![](./docs/create-deployment.png)\n\n## Use Cases\n\n### 1. Kubernetes Resource Management via LLM\n\n- **Interactive Resource Management**: Manage Kubernetes resources through natural language interaction with LLM, eliminating the need to memorize complex kubectl commands\n- **Batch Operations**: Describe complex batch operation requirements in natural language, letting LLM translate them into specific resource operations\n- **Resource Status Queries**: Query cluster resource status using natural language and receive easy-to-understand responses\n\n### 2. Automated Operations Scenarios\n\n- **Intelligent Operations Assistant**: Serve as an intelligent assistant for operators in daily cluster management tasks\n- **Problem Diagnosis**: Assist in cluster problem diagnosis through natural language problem descriptions\n- **Configuration Review**: Leverage LLM's understanding capabilities to help review and optimize Kubernetes resource configurations\n\n### 3. Development and Testing Support\n\n- **Quick Prototype Validation**: Developers can quickly create and validate resource configurations through natural language\n- **Environment Management**: Simplify test environment resource management, quickly create, modify, and clean up test resources\n- **Configuration Generation**: Automatically generate resource configurations that follow best practices based on requirement descriptions\n\n### 4. Education and Training Scenarios\n\n- **Interactive Learning**: Newcomers can learn Kubernetes concepts and operations through natural language interaction\n- **Best Practice Guidance**: LLM provides best practice suggestions during resource operations\n- **Error Explanation**: Provide easy-to-understand error explanations and correction suggestions when operations fail\n\n## Architecture\n\n### 1. Project Overview\n\nAn stdio-based MCP server that connects to Kubernetes clusters and provides the following capabilities:\n- Query Kubernetes resource types (including built-in resources and CRDs)\n- CRUD operations on Kubernetes resources (with configurable write operations)\n- Helm operations for release and repository management\n\n### 2. Technical Stack\n\n- Go\n- [mcp-go](https://github.com/mark3labs/mcp-go) SDK\n- Kubernetes client-go library\n- Helm v3 client library\n- Stdio for communication\n\n### 3. Core Components\n\n1. **MCP Server**: Uses mcp-go's `mcp-k8s` package to create an stdio-based MCP server\n2. **K8s Client**: Uses client-go to connect to Kubernetes clusters\n3. **Helm Client**: Uses Helm v3 library for Helm operations\n4. **Tool Implementations**: Implements various MCP tools for different Kubernetes operations\n\n### 4. Available Tools\n\n#### Resource Type Query Tools\n- `get_api_resources`: Get all supported API resource types in the cluster\n\n#### Resource Operation Tools\n- `get_resource`: Get detailed information about a specific resource\n- `list_resources`: List all instances of a resource type\n- `create_resource`: Create new resources (can be disabled)\n- `update_resource`: Update existing resources (can be disabled)\n- `delete_resource`: Delete resources (can be disabled)\n\n#### Helm Operation Tools\n- `list_helm_releases`: List all Helm releases in the cluster\n- `get_helm_release`: Get detailed information about a specific Helm release\n- `install_helm_chart`: Install a Helm chart (can be disabled)\n- `upgrade_helm_chart`: Upgrade a Helm release (can be disabled)\n- `uninstall_helm_chart`: Uninstall a Helm release (can be disabled)\n- `list_helm_repositories`: List configured Helm repositories\n- `add_helm_repository`: Add a new Helm repository (can be disabled)\n- `remove_helm_repository`: Remove a Helm repository (can be disabled)\n\n## Usage\n\nmcp-k8s supports two communication modes:\n\n### 1. Stdio Mode (Default)\n\nIn stdio mode, mcp-k8s communicates with the client through standard input/output streams. This is the default mode and is suitable for most use cases.\n\n```bash\n# Run in stdio mode (default)\n{\n    \"mcpServers\":\n    {\n        \"mcp-k8s\":\n        {\n            \"command\": \"/path/to/mcp-k8s\",\n            \"args\":\n            [\n                \"-kubeconfig\",\n                \"/path/to/kubeconfig\",\n                \"-enable-create\",\n                \"-enable-delete\",\n                \"-enable-update\",\n                \"-enable-list\",\n                \"-enable-helm-install\",\n                \"-enable-helm-upgrade\"\n            ]\n        }\n    }\n}\n```\n\n### 2. SSE Mode\n\nIn SSE (Server-Sent Events) mode, mcp-k8s exposes an HTTP endpoint to mcp client.\nYou can deploy the service on a remote server (but you need to pay attention to security)\n\n```bash\n# Run in SSE mode\n./bin/mcp-k8s -kubeconfig=/path/to/kubeconfig -transport=sse -port=8080 -host=localhost -enable-create -enable-delete -enable-list -enable-update -enable-helm-install\n# This command will open all operations\n```\n\nmcp config\n```json\n{\n  \"mcpServers\": {\n    \"mcp-k8s\": {\n      \"url\": \"http://localhost:8080/sse\",\n      \"args\": []\n    }\n  }\n}\n```\n\nSSE mode configuration:\n- `-transport`: Set to \"sse\" to enable SSE mode\n- `-port`: HTTP server port (default: 8080)\n- `--host`: HTTP server host (default: \"localhost\")\n\n### 3. Docker environment\n#### SSE Mode\n\n1. Complete Example\nAssuming your image name is mcp-k8s and you need to map ports and set environment parameters, you can run:\n```bash\ndocker run --rm -p 8080:8080 -i -v ~/.kube/config:/root/.kube/config ghcr.io/silenceper/mcp-k8s:latest -transport=sse\n```\n#### stdio Mode\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-k8s\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"-v\",\n        \"~/.kube/config:/root/.kube/config\",\n        \"--rm\",\n        \"ghcr.io/silenceper/mcp-k8s:latest\"\n      ]\n    }\n  }\n}\n```\n\n\n## Getting Started\n\n### Direct Usage\nYou can directly download the binary for your platform from the [releases page](https://github.com/silenceper/mcp-k8s/releases) and use it immediately.\n\n### Go Install\n\n```bash\ngo install github.com/silenceper/mcp-k8s/cmd/mcp-k8s@latest\n```\n\n### Build\n\n```bash\ngit clone https://github.com/silenceper/mcp-k8s.git\ncd mcp-k8s\ngo build -o bin/mcp-k8s cmd/mcp-k8s/main.go\n```\n\n### Command Line Arguments\n\n#### Kubernetes Resource Operations\n- `-kubeconfig`: Path to Kubernetes configuration file (uses default config if not specified)\n- `-enable-create`: Enable resource creation operations (default: false)\n- `-enable-update`: Enable resource update operations (default: false)\n- `-enable-delete`: Enable resource deletion operations (default: false)\n- `-enable-list`: Enable resource list operations (default: true)\n\n#### Helm Operations\n- `-enable-helm-release-list`: Enable Helm release list operations (default: true)\n- `-enable-helm-release-get`: Enable Helm release get operations (default: true)\n- `-enable-helm-install`: Enable Helm chart installation (default: false)\n- `-enable-helm-upgrade`: Enable Helm chart upgrade (default: false)\n- `-enable-helm-uninstall`: Enable Helm chart uninstallation (default: false)\n- `-enable-helm-repo-list`: Enable Helm repository list operations (default: true)\n- `-enable-helm-repo-add`: Enable Helm repository add operations (default: false)\n- `-enable-helm-repo-remove`: Enable Helm repository remove operations (default: false)\n\n#### Transport Configuration\n- `-transport`: Transport type (stdio or sse) (default: \"stdio\")\n- `-host`: Host for SSE transport (default \"localhost\")\n- `-port`: TCP port for SSE transport (default 8080)\n\n### Integration with MCP Clients\n\nmcp-k8s is an stdio-based MCP server that can be integrated with any MCP-compatible LLM client. Refer to your MCP client's documentation for integration instructions.\n\n## Security Considerations\n\n- Write operations are strictly controlled through independent configuration switches\n- Uses RBAC to ensure K8s client has only necessary permissions\n- Validates all user inputs to prevent injection attacks\n- Helm operations follow the same security principles with read operations enabled by default and write operations disabled by default\n\n## Follow WeChat Official Account\n![AI技术小林](./docs/qrcode.png)\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-k8s-stdio-configured": {
+          "command": "/path/to/mcp-k8s",
+          "args": [
+            "-kubeconfig",
+            "/path/to/kubeconfig",
+            "-enable-create",
+            "-enable-delete",
+            "-enable-update",
+            "-enable-list",
+            "-enable-helm-install",
+            "-enable-helm-upgrade"
+          ],
+          "env": {}
+        },
+        "mcp-k8s-sse": {
+          "command": "./bin/mcp-k8s",
+          "args": [
+            "-kubeconfig=/path/to/kubeconfig",
+            "-transport=sse",
+            "-port=8080",
+            "-host=localhost",
+            "-enable-create",
+            "-enable-delete",
+            "-enable-list",
+            "-enable-update",
+            "-enable-helm-install"
+          ],
+          "env": {}
+        },
+        "mcp-k8s-docker-sse": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--rm",
+            "-p",
+            "8080:8080",
+            "-i",
+            "-v",
+            "~/.kube/config:/root/.kube/config",
+            "ghcr.io/silenceper/mcp-k8s:latest",
+            "-transport=sse"
+          ],
+          "env": {}
+        },
+        "mcp-k8s-docker-stdio": {
+          "command": "docker",
+          "args": ["run", "-i", "-v", "~/.kube/config:/root/.kube/config", "--rm", "ghcr.io/silenceper/mcp-k8s:latest"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "silenceper",
+    "repo": "mcp-k8s",
+    "url": "https://github.com/silenceper/mcp-k8s",
+    "name": "mcp-k8s",
+    "path": null,
+    "stars": 115,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2439e644949648c1c9dd2b66e2866c3a9ee9d992"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:57.873Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "helm.sh/helm/v3",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/client-go",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 7
+    },
+    {
+      "name": "sigs.k8s.io/yaml",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/silenceper/mcp-k8s\n\ngo 1.24.1\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.17.0\n\thelm.sh/helm/v3 v3.17.4\n\tk8s.io/apimachinery v0.32.2\n\tk8s.io/client-go v0.32.2\n\tsigs.k8s.io/yaml v1.4.0\n)\n\nrequire (\n\tdario.cat/mergo v1.0.1 // indirect\n\tgithub.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect\n\tgithub.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect\n\tgithub.com/BurntSushi/toml v1.4.0 // indirect\n\tgithub.com/MakeNowJust/heredoc v1.0.0 // indirect\n\tgithub.com/Masterminds/goutils v1.1.1 // indirect\n\tgithub.com/Masterminds/semver/v3 v3.3.0 // indirect\n\tgithub.com/Masterminds/sprig/v3 v3.3.0 // indirect\n\tgithub.com/Masterminds/squirrel v1.5.4 // indirect\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/beorn7/perks v1.0.1 // indirect\n\tgithub.com/blang/semver/v4 v4.0.0 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/chai2010/gettext-go v1.0.2 // indirect\n\tgithub.com/containerd/containerd v1.7.27 // indirect\n\tgithub.com/containerd/errdefs v0.3.0 // indirect\n\tgithub.com/containerd/log v0.1.0 // indirect\n\tgithub.com/containerd/platforms v0.2.1 // indirect\n\tgithub.com/cyphar/filepath-securejoin v0.3.6 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/distribution/reference v0.6.0 // indirect\n\tgithub.com/docker/cli v25.0.1+incompatible // indirect\n\tgithub.com/docker/distribution v2.8.3+incompatible // indirect\n\tgithub.com/docker/docker v25.0.6+incompatible // indirect\n\tgithub.com/docker/docker-credential-helpers v0.7.0 // indirect\n\tgithub.com/docker/go-connections v0.5.0 // indirect\n\tgithub.com/docker/go-metrics v0.0.1 // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.11.3 // indirect\n\tgithub.com/evanphx/json-patch v5.9.0+incompatible // indirect\n\tgithub.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect\n\tgithub.com/fatih/color v1.13.0 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/go-errors/errors v1.4.2 // indirect\n\tgithub.com/go-gorp/gorp/v3 v3.1.0 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.20.4 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/gobwas/glob v0.2.3 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/golang/protobuf v1.5.4 // indirect\n\tgithub.com/google/btree v1.0.1 // indirect\n\tgithub.com/google/gnostic-models v0.6.8 // indirect\n\tgithub.com/google/go-cmp v0.6.0 // indirect\n\tgithub.com/google/gofuzz v1.2.0 // indirect\n\tgithub.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/mux v1.8.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.0 // indirect\n\tgithub.com/gosuri/uitable v0.0.4 // indirect\n\tgithub.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect\n\tgithub.com/hashicorp/errwrap v1.1.0 // indirect\n\tgithub.com/hashicorp/go-multierror v1.1.1 // indirect\n\tgithub.com/huandu/xstrings v1.5.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jmoiron/sqlx v1.4.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/compress v1.16.7 // indirect\n\tgithub.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect\n\tgithub.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect\n\tgithub.com/lib/pq v1.10.9 // indirect\n\tgithub.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.17 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.9 // indirect\n\tgithub.com/mitchellh/copystructure v1.2.0 // indirect\n\tgithub.com/mitchellh/go-wordwrap v1.0.1 // indirect\n\tgithub.com/mitchellh/reflectwalk v1.0.2 // indirect\n\tgithub.com/moby/locker v1.0.1 // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/moby/term v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.0 // indirect\n\tgithub.com/peterbourgon/diskv v2.0.1+incompatible // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/prometheus/client_golang v1.19.1 // indirect\n\tgithub.com/prometheus/client_model v0.6.1 // indirect\n\tgithub.com/prometheus/common v0.55.0 // indirect\n\tgithub.com/prometheus/procfs v0.15.1 // indirect\n\tgithub.com/rubenv/sql-migrate v1.7.1 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/shopspring/decimal v1.4.0 // indirect\n\tgithub.com/sirupsen/logrus v1.9.3 // indirect\n\tgithub.com/spf13/cast v1.7.0 // indirect\n\tgithub.com/spf13/cobra v1.8.1 // indirect\n\tgithub.com/spf13/pflag v1.0.5 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect\n\tgithub.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect\n\tgithub.com/xeipuuv/gojsonschema v1.2.0 // indirect\n\tgithub.com/xlab/treeprint v1.2.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect\n\tgo.opentelemetry.io/otel v1.28.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.28.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.28.0 // indirect\n\tgolang.org/x/crypto v0.36.0 // indirect\n\tgolang.org/x/net v0.38.0 // indirect\n\tgolang.org/x/oauth2 v0.27.0 // indirect\n\tgolang.org/x/sync v0.12.0 // indirect\n\tgolang.org/x/sys v0.31.0 // indirect\n\tgolang.org/x/term v0.30.0 // indirect\n\tgolang.org/x/text v0.23.0 // indirect\n\tgolang.org/x/time v0.7.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20240826202546-f6391c0de4c7 // indirect\n\tgoogle.golang.org/grpc v1.65.0 // indirect\n\tgoogle.golang.org/protobuf v1.35.2 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\tk8s.io/api v0.32.2 // indirect\n\tk8s.io/apiextensions-apiserver v0.32.2 // indirect\n\tk8s.io/apiserver v0.32.2 // indirect\n\tk8s.io/cli-runtime v0.32.2 // indirect\n\tk8s.io/component-base v0.32.2 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect\n\tk8s.io/kubectl v0.32.2 // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\toras.land/oras-go v1.2.5 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/kustomize/api v0.18.0 // indirect\n\tsigs.k8s.io/kustomize/kyaml v0.18.1 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect\n)\n"
+}

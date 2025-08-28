@@ -1,0 +1,106 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "octomind-dev__octomind-mcp",
+  "display_name": "octomind-mcp",
+  "version": "1.0.0",
+  "description": "An MCP server for octomind tools, resources and prompts",
+  "author": {
+    "name": "OctoMind-dev"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# octomind mcp server: let agents create and manage e2e tests\n\n<img src=\"images/light.png\" alt=\"Octomind Logo\" width=\"250\">\n\n[![smithery badge](https://smithery.ai/badge/@OctoMind-dev/octomind-mcp)](https://smithery.ai/server/@OctoMind-dev/octomind-mcp)\n\nOctomind provides a whole e2e platform for test creation, execution and management including auto-fix.\nWith this MCP server you can use Octomind tools and resources in your local development environment and \nenable it to create new e2e tests, execute them and more. see https://octomind.dev/ and \nhttps://octomind.dev/docs/mcp/install-octomind-mcp for more details.\n\n## See it in action together with testrail mcp\n\n[![Video Title](https://img.youtube.com/vi/I7lc9I0S62Y/0.jpg)](https://www.youtube.com/watch?v=I7lc9I0S62Y)\n\n## Configuration\n\n### Environment Variables\n\nThe server uses the following environment variables:\n\n- `APIKEY` - The API key for Octomind API (required)\n- `OCTOMIND_API_URL` - Base URL for the API endpoint to use (defaults to https://app.octomind.dev/api)\n- `REDIS_URL` - Redis connection URL for session storage (optional, format: redis://host:port)\n- `SESSION_EXPIRATION_SECONDS` - Time in seconds after which sessions expire (optional, Redis only)\n\n### Command Line Options\n\nThe server supports the following command line options:\n\n- `-s, --sse` - Enable SSE transport mode\n- `-t, --stream` - Enable Streamable HTTP transport mode\n- `-c, --clients` - Show client configuration examples\n- `-p, --port <port>` - Port to listen on (default: 3000)\n- `-r, --redis-url <url>` - Redis URL for session storage\n- `-e, --session-expiration <seconds>` - Session expiration time in seconds\n\n### Session Storage\n\nThe server supports two types of session storage:\n\n1. **In-memory storage** (default) - Sessions are stored in memory and will be lost when the server restarts\n2. **Redis storage** - Sessions are stored in Redis and can persist across server restarts\n\nFor production deployments, it's recommended to use Redis storage with an appropriate session expiration time. The Redis storage option also enables horizontal scaling with multiple server instances.\n\n### Logging Configuration\n\n- `LOG_FILENAME` - The file to write logs to (only for debugging). If not set, logging is disabled\n- `LOG_LEVEL` - The log level to use (defaults to info)\n\n## Tools\n\nThe following tools are implemented in this MCP server:\n\n- `search` - Search the Octomind documentation for a given query\n- `getTestCase` - Retrieve a test case for a given test target and test case ID\n- `executeTests` - Trigger test execution for a given test target on a specified URL\n- `getEnvironments` - List environments for a test target\n- `createEnvironment` - Create a new environment for a test target\n- `updateEnvironment` - Update an existing environment\n- `deleteEnvironment` - Delete an environment\n- `getTestReports` - Retrieve test reports for a test target\n- `getTestReport` - Get a specific test report by ID\n- `discovery` - Create a test case with a description or prompt\n- `getPrivateLocations` - List all private locations configured for the organization\n- `getVersion` - Get the current version of the Octomind MCP server\n\n## Installation\n\nYou can get configuration snippets for different clients by running:\n\n```bash\nnpx @octomind/octomind-mcp --clients\n```\n\nThis will output configuration examples for Claude Desktop, Cursor, and Windsurf. Here are the configuration files for most clients:\n\n### Installing via Smithery\n\nTo install octomind-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@OctoMind-dev/octomind-mcp):\n\n```bash\nnpx -y @smithery/cli install @OctoMind-dev/octomind-mcp --client claude\n```\n\n### Claude Desktop (.claude-config.json)\n```json\n{\n  \"mcpServers\": {\n    \"octomind-mcp\": {\n      \"name\": \"Octomind MCP Server\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@octomind/octomind-mcp@latest\"\n      ],\n      \"env\": {\n        \"APIKEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n### Cursor (cursor.json)\n```json\n{\n  \"mcpServers\": {\n    \"octomind-mcp\": {\n      \"name\": \"Octomind MCP Server\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@octomind/octomind-mcp@latest\"\n      ],\n      \"env\": {\n        \"APIKEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n### Windsurf (mcp_config.json)\n```json\n{\n  \"mcpServers\": {\n    \"octomind-mcp\": {\n      \"name\": \"Octomind MCP Server\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@octomind/octomind-mcp@latest\"\n      ],\n      \"environment\": {\n        \"APIKEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nNote: Replace `your-api-key-here` with your actual API key.\n\nTo get an APIKEY see here https://octomind.dev/docs/get-started/execution-without-ci#create-an-api-key\n\n# Listings / Integrations\n\nCertified by [MCPHub](https://mcphub.com/mcp-servers/octomind-dev/octomind-mcp)\n\n<a href=\"https://glama.ai/mcp/servers/@OctoMind-dev/octomind-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@OctoMind-dev/octomind-mcp/badge\" alt=\"octomind-mcp MCP server\" />\n</a>\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/octomind-dev-octomind-mcp-badge.png)](https://mseep.ai/app/octomind-dev-octomind-mcp)\n\n",
+  "category": "Development",
+  "quality_score": 76,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "octomind-mcp": {
+          "command": "npx",
+          "args": ["-y", "@octomind/octomind-mcp@latest"],
+          "env": {
+            "APIKEY": "your-api-key-here"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "OctoMind-dev",
+    "repo": "octomind-mcp",
+    "url": "https://github.com/OctoMind-dev/octomind-mcp",
+    "name": "octomind-mcp",
+    "path": null,
+    "stars": 20,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "318417a2ab9edf758b4f423c9a6f1acb8b38018e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:18.723Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "pino",
+      "importance": 7
+    },
+    {
+      "name": "redis",
+      "importance": 8
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@octomind/octomind-mcp\",\n  \"version\": \"1.2.0\",\n  \"description\": \"an mcp server for the octomind platform\",\n  \"main\": \"./dist/index.js\",\n  \"packageManager\": \"pnpm@10.12.3+sha512.467df2c586056165580ad6dfb54ceaad94c5a30f80893ebdec5a44c5aa73c205ae4a5bb9d5ed6bb84ea7c249ece786642bbb49d06a307df218d03da41c317417\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"bin\": {\n    \"octomind\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"!dist/**/*.map\"\n  ],\n  \"exports\": {\n    \"import\": \"./dist/index.js\",\n    \"require\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"version\": \"pnpm genversion -des src/version.ts\",\n    \"lint\": \"pnpm genversion -des src/version.ts && eslint src/**/*.ts tests/**/*.ts --max-warnings=0\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"build\": \"pnpm genversion -des src/version.ts && tsc --project tsconfig.build.json\",\n    \"octomind-mcp\": \"tsx src/index.ts\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/Octomind-dev/mcp-octomind.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"octomind\"\n  ],\n  \"author\": \"Stefan Rinke\",\n  \"license\": \"ISC\",\n  \"bugs\": {\n    \"url\": \"https://github.com/Octomind-dev/mcp-octomind/issues\"\n  },\n  \"homepage\": \"https://github.com/Octomind-dev/mcp-octomind#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.8.4\",\n    \"commander\": \"^14.0.0\",\n    \"express\": \"^5.1.0\",\n    \"pino\": \"^9.6.0\",\n    \"redis\": \"^5.0.1\",\n    \"uuid\": \"^11.1.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.1\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^24.0.1\",\n    \"@typescript-eslint/parser\": \"^8.25.0\",\n    \"eslint\": \"8.57.1\",\n    \"eslint-config-prettier\": \"^10.0.1\",\n    \"eslint-import-resolver-typescript\": \"^4.0.0\",\n    \"eslint-plugin-github\": \"^5.0.0\",\n    \"eslint-plugin-import\": \"^2.27.5\",\n    \"eslint-plugin-jest\": \"^29.0.0\",\n    \"eslint-plugin-prettier\": \"^5.0.0\",\n    \"genversion\": \"^3.2.0\",\n    \"jest\": \"^30.0.3\",\n    \"prettier\": \"^3.0.1\",\n    \"ts-jest\": \"^29.2.6\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.0.4\"\n  }\n}\n"
+}

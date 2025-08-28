@@ -1,0 +1,182 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "1mcp-app__agent",
+  "display_name": "agent",
+  "version": "1.0.0",
+  "description": "A unified Model Context Protocol server implementation that aggregates multiple MCP servers into one.",
+  "author": {
+    "name": "1mcp-app"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 1MCP - One MCP Server for All\n\nA unified Model Context Protocol server implementation that aggregates multiple MCP servers into one.\n\n[![NPM Version](https://img.shields.io/npm/v/@1mcp/agent)](https://www.npmjs.com/package/@1mcp/agent)\n[![NPM License](https://img.shields.io/npm/l/@1mcp/agent)](https://www.npmjs.com/package/@1mcp/agent)\n[![1MCP](https://img.shields.io/badge/1MCP-Docs-blue)](https://docs.1mcp.app)\n\n## Table of Contents\n\n- [Overview](#overview)\n- [Features](#features)\n- [Quick Start](#quick-start)\n- [Commands](#commands)\n- [Prerequisites](#prerequisites)\n- [Usage](#usage)\n- [Docker](#docker)\n- [Trust Proxy Configuration](#trust-proxy-configuration)\n- [Understanding Tags](#understanding-tags)\n- [Configuration](#configuration)\n- [Authentication](#authentication)\n- [Health Monitoring](#health-monitoring)\n- [How It Works](#how-it-works)\n- [Development](#development)\n- [Contributing](#contributing)\n- [License](#license)\n\n## Overview\n\n1MCP (One MCP) is designed to simplify the way you work with AI assistants. Instead of configuring multiple MCP servers for different clients (Claude Desktop, Cherry Studio, Cursor, Roo Code, Claude, etc.), 1MCP provides a single, unified server.\n\n## Features\n\n- **Unified Interface**: Aggregates multiple MCP servers into one.\n- **Resource Friendly**: Reduces system resource usage by eliminating redundant server instances.\n- **Simplified Configuration**: Simplifies configuration management across different AI assistants.\n- **Standardized Interaction**: Provides a standardized way for AI models to interact with external tools and resources.\n- **Dynamic Configuration**: Supports dynamic configuration reloading without server restart.\n- **Async Loading**: Optional asynchronous server loading with real-time capability updates via listChanged notifications.\n- **Graceful Shutdown**: Handles graceful shutdown and resource cleanup.\n- **Secure**: Includes comprehensive authentication and security features.\n- **Optimized**: Supports advanced filtering, pagination, and request optimization.\n- **Health Monitoring**: Built-in health check endpoints for monitoring and observability.\n\n## Quick Start\n\nGet up and running with 1MCP in just a few steps:\n\n### 1. Add MCP Servers\n\nAdd the MCP servers you want to use. Here are some popular examples:\n\n```bash\n# Add Context7 for documentation and code examples\nnpx -y @1mcp/agent mcp add context7 -- npx -y @upstash/context7-mcp\n\n# Add Sequential Thinking for complex analysis\nnpx -y @1mcp/agent mcp add sequential -- npx -y @modelcontextprotocol/server-sequential-thinking\n\n# Add Filesystem for file operations\nnpx -y @1mcp/agent mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/Documents\n```\n\n### 2. Start the 1MCP Server\n\n```bash\nnpx -y @1mcp/agent\n```\n\nThe server will start on `http://127.0.0.1:3050` and show you which MCP servers are active.\n\n### 3. Connect Your AI Assistant\n\n**For Cursor**, add to `~/.cursor/mcp.json` or `<project-root>/.cursor/mcp.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"1mcp\": {\n      \"url\": \"http://127.0.0.1:3050/mcp?app=cursor\"\n    }\n  }\n}\n```\n\n[![Install MCP Server to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=1mcp&config=eyJ1cmwiOiJodHRwOi8vMTI3LjAuMC4xOjMwNTAvbWNwP2FwcD1jdXJzb3IifQ%3D%3D)\n\n**For VSCode**, add to `settings.json` or `<project-root>/.vscode/mcp.json`:\n\n```json\n{\n  \"servers\": {\n    \"1mcp\": {\n      \"url\": \"http://127.0.0.1:3050/mcp?app=vscode\"\n    }\n  }\n}\n```\n\n[Install MCP Server to VSCode](vscode:mcp/install?%7B%22name%22%3A%221mcp%22%2C%22url%22%3A%22http%3A%2F%2F127.0.0.1%3A3050%2Fmcp%3Fapp%3Dvscode%22%7D)\n\n**For Claude Code**, run:\n\n```bash\nclaude mcp add -t http 1mcp \"http://127.0.0.1:3050/mcp?app=claude-code\"\n```\n\n### 4. Verify Everything Works\n\nCheck server status and connected MCP servers:\n\n```bash\nnpx -y @1mcp/agent mcp status\n```\n\nVisit the health endpoint to see system status: `http://127.0.0.1:3050/health`\n\nThat's it! All your MCP servers are now available through one unified endpoint. 🎉\n\n## Commands\n\n1MCP provides several commands to manage your MCP server configuration:\n\n### Core Commands\n\n- **`npx -y @1mcp/agent [serve]`** - Start the 1MCP server (default command)\n  - `--transport` - Choose transport type (stdio, http, sse)\n  - `--config` - Use specific config file\n  - `--port` - Change HTTP port\n\n### MCP Management\n\n- **`npx -y @1mcp/agent mcp add <name>`** - Add a new MCP server to configuration\n- **`npx -y @1mcp/agent mcp remove <name>`** - Remove an MCP server\n- **`npx -y @1mcp/agent mcp list`** - List all configured MCP servers\n- **`npx -y @1mcp/agent mcp status [name]`** - Show server status and details\n- **`npx -y @1mcp/agent mcp enable/disable <name>`** - Enable or disable servers\n- **`npx -y @1mcp/agent mcp update <name>`** - Update server configuration\n\n### App Integration\n\n- **`npx -y @1mcp/agent app consolidate`** - Consolidate configurations from other MCP apps\n- **`npx -y @1mcp/agent app discover`** - Discover MCP servers from installed applications\n- **`npx -y @1mcp/agent app list`** - List discovered applications\n- **`npx -y @1mcp/agent app status`** - Show consolidation status\n\nFor detailed command usage, run: `1mcp <command> --help`\n\nFull documentation: [Commands Reference](https://docs.1mcp.app/commands/)\n\n## Prerequisites\n\n- [Node.js](https://nodejs.org/) (version 21 or higher)\n- [pnpm](https://pnpm.io/)\n\n## Usage\n\nYou can run the server directly using `npx`:\n\n```bash\n# Basic usage (starts server with SSE transport)\nnpx -y @1mcp/agent\n\n# Use existing Claude Desktop config\nnpx -y @1mcp/agent --config ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n\n# Use stdio transport instead of SSE\nnpx -y @1mcp/agent --transport stdio\n\n# Use external URL for reverse proxy setup (nginx, etc.)\nnpx -y @1mcp/agent --external-url https://example.com\n\n# Configure trust proxy for reverse proxy setup\nnpx -y @1mcp/agent --trust-proxy=192.168.1.1\n\n# Show all available options\nnpx -y @1mcp/agent --help\n```\n\nAvailable options:\n\n| Option (CLI)                 | Environment Variable               | Description                                                                   |  Default   |\n| :--------------------------- | :--------------------------------- | :---------------------------------------------------------------------------- | :--------: |\n| `--transport`, `-t`          | `ONE_MCP_TRANSPORT`                | Choose transport type (\"stdio\", \"http\", or \"sse\")                             |   \"http\"   |\n| `--config`, `-c`             | `ONE_MCP_CONFIG`                   | Use a specific config file                                                    |            |\n| `--port`, `-P`               | `ONE_MCP_PORT`                     | Change HTTP port                                                              |    3050    |\n| `--host`, `-H`               | `ONE_MCP_HOST`                     | Change HTTP host                                                              | localhost  |\n| `--external-url`, `-u`       | `ONE_MCP_EXTERNAL_URL`             | External URL for OAuth callbacks and public URLs (e.g., https://example.com)  |            |\n| `--trust-proxy`              | `ONE_MCP_TRUST_PROXY`              | Trust proxy configuration for client IP detection (boolean, IP, CIDR, preset) | \"loopback\" |\n| `--tags`, `-g`               | `ONE_MCP_TAGS`                     | Filter servers by tags                                                        |            |\n| `--pagination`, `-p`         | `ONE_MCP_PAGINATION`               | Enable pagination for client/server lists (boolean)                           |   false    |\n| `--enable-auth`              | `ONE_MCP_ENABLE_AUTH`              | Enable authentication (OAuth 2.1)                                             |   false    |\n| `--enable-scope-validation`  | `ONE_MCP_ENABLE_SCOPE_VALIDATION`  | Enable tag-based scope validation (boolean)                                   |    true    |\n| `--enable-enhanced-security` | `ONE_MCP_ENABLE_ENHANCED_SECURITY` | Enable enhanced security middleware (boolean)                                 |   false    |\n| `--session-ttl`              | `ONE_MCP_SESSION_TTL`              | Session expiry time in minutes (number)                                       |    1440    |\n| `--session-storage-path`     | `ONE_MCP_SESSION_STORAGE_PATH`     | Custom session storage directory path (string)                                |            |\n| `--rate-limit-window`        | `ONE_MCP_RATE_LIMIT_WINDOW`        | OAuth rate limit window in minutes (number)                                   |     15     |\n| `--rate-limit-max`           | `ONE_MCP_RATE_LIMIT_MAX`           | Maximum requests per OAuth rate limit window (number)                         |    100     |\n\n| `--enable-async-loading` | `ONE_MCP_ENABLE_ASYNC_LOADING` | Enable asynchronous MCP server loading(boolean) | false |\n| `--health-info-level` | `ONE_MCP_HEALTH_INFO_LEVEL` | Health endpoint information detail level (\"full\", \"basic\", \"minimal\") | \"minimal\" |\n| `--log-level` | `ONE_MCP_LOG_LEVEL` | Set the log level (\"debug\", \"info\", \"warn\", \"error\") | \"info\" |\n| `--log-file` | `ONE_MCP_LOG_FILE` | Write logs to a file in addition to console (disables console logging only for stdio transport) | |\n| `--help`, `-h` | | Show help | |\n\n## Docker\n\nYou can also run 1MCP using Docker:\n\n```bash\n# Pull the latest image\ndocker pull ghcr.io/1mcp-app/agent:latest\n\n# Run with HTTP transport (default)\ndocker run -p 3050:3050 ghcr.io/1mcp-app/agent\n\n# Run with a custom config file\ndocker run -p 3050:3050 -v /path/to/config.json:/config.json ghcr.io/1mcp-app/agent --config /config.json\n\n# Run with stdio transport\ndocker run -i ghcr.io/1mcp-app/agent --transport stdio\n```\n\nAvailable image tags:\n\n- `latest`: Latest stable release\n- `vX.Y.Z`: Specific version (e.g. `v1.0.0`)\n- `sha-<commit>`: Specific commit\n\nExamples:\n\n```bash\n# Custom port, tags, and logging\ndocker run -p 3051:3051 \\\n  -e ONE_MCP_PORT=3051 \\\n  -e ONE_MCP_TAGS=network,filesystem \\\n  -e ONE_MCP_LOG_LEVEL=debug \\\n  ghcr.io/1mcp-app/agent\n\n# With external URL for reverse proxy\ndocker run -p 3050:3050 \\\n  -e ONE_MCP_EXTERNAL_URL=https://mcp.example.com \\\n  -e ONE_MCP_TRUST_PROXY=true \\\n  ghcr.io/1mcp-app/agent\n```\n\n## Trust Proxy Configuration\n\nWhen running 1MCP behind a reverse proxy, configure trust proxy settings for proper client IP detection:\n\n```bash\n# Default (safe for local development)\nnpx -y @1mcp/agent --trust-proxy=loopback\n\n# Behind reverse proxy\nnpx -y @1mcp/agent --trust-proxy=192.168.1.1\n\n# Behind CDN/Cloudflare\nnpx -y @1mcp/agent --trust-proxy=true\n```\n\nSee [docs/TRUST_PROXY.md](docs/TRUST_PROXY.md) for detailed configuration options, security considerations, and reverse proxy setup examples.\n\n## Understanding Tags\n\nTags help you control which MCP servers are available to different clients. Think of tags as labels that describe what each server can do.\n\n### How to Use Tags\n\n1. **In your server config**: Add tags to each server to describe its capabilities\n\n```json\n{\n  \"mcpServers\": {\n    \"web-server\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-fetch\"],\n      \"tags\": [\"network\", \"web\"],\n      \"disabled\": false\n    },\n    \"file-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"~/Downloads\"],\n      \"tags\": [\"filesystem\"],\n      \"disabled\": false\n    }\n  }\n}\n```\n\n2. **When starting 1MCP in stdio mode**: You can filter servers by tags\n\n```bash\n# Only start servers with the \"network\" tag\nnpx -y @1mcp/agent --transport stdio --tags \"network\"\n\n# Start servers with either \"network\" or \"filesystem\" tags\nnpx -y @1mcp/agent --transport stdio --tags \"network,filesystem\"\n```\n\n3. **When using SSE transport**: Clients can request servers with specific tags\n\n```json\n{\n  \"mcpServers\": {\n    \"1mcp\": {\n      \"type\": \"http\",\n      \"url\": \"http://localhost:3050/sse?tags=network\" // Only connect to network-capable servers\n    }\n  }\n}\n```\n\nExample tags:\n\n- `network`: For servers that make web requests\n- `filesystem`: For servers that handle file operations\n- `memory`: For servers that provide memory/storage\n- `shell`: For servers that run shell commands\n- `db`: For servers that handle database operations\n\n## Configuration\n\n### Global Configuration\n\nThe server automatically manages configuration in a global location:\n\n- macOS/Linux: `~/.config/1mcp/mcp.json`\n- Windows: `%APPDATA%/1mcp/mcp.json`\n\n### Configuration File Format\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-fetch\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-fetch\"],\n      \"disabled\": false\n    },\n    \"server-memory\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-memory\"],\n      \"disabled\": false\n    }\n  }\n}\n```\n\n## Authentication\n\n1MCP supports OAuth 2.1 for secure authentication. To enable it, use the `--enable-auth` flag. The `--auth` flag is deprecated and will be removed in a future version.\n\nWhen authentication is enabled, 1MCP acts as an OAuth 2.1 provider, allowing client applications to securely connect. This ensures that only authorized clients can access the MCP servers.\n\n## Health Monitoring\n\n1MCP provides comprehensive health check endpoints for monitoring and observability:\n\n### Health Check Endpoints\n\n- **`GET /health`** - Complete health status including system metrics, server status, and configuration\n- **`GET /health/live`** - Simple liveness probe (always returns 200 if server is running)\n- **`GET /health/ready`** - Readiness probe (returns 200 if configuration is loaded and ready)\n\n### Health Status Levels\n\n- **`healthy`** - All systems operational (HTTP 200)\n- **`degraded`** - Some issues but still functional (HTTP 200)\n- **`unhealthy`** - Critical issues affecting functionality (HTTP 503)\n\n### Monitoring Integration\n\nUse these endpoints with:\n\n- Load balancers (health checks)\n- Container orchestration (Kubernetes health probes)\n- CI/CD pipelines (deployment validation)\n\n## How It Works\n\n1MCP acts as a proxy, managing and aggregating multiple MCP servers. It starts and stops these servers as subprocesses and forwards requests from AI assistants to the appropriate server. This architecture allows for a single point of entry for all MCP traffic, simplifying management and reducing overhead.\n\n### System Architecture\n\n```mermaid\ngraph TB\n    subgraph \"AI Assistants\"\n        A1[Claude Desktop]\n        A2[Cursor]\n        A3[Cherry Studio]\n        A4[Roo Code]\n    end\n\n    subgraph \"1MCP Server\"\n        MCP[1MCP Agent]\n    end\n\n    subgraph \"MCP Servers\"\n        S1[Server 1]\n        S2[Server 2]\n        S3[Server 3]\n    end\n\n    A1 -->|http| MCP\n    A2 -->|http| MCP\n    A3 -->|http| MCP\n    A4 -->|http| MCP\n\n    MCP --> |http| S1\n    MCP --> |stdio| S2\n    MCP --> |stdio| S3\n```\n\n### Request Flow\n\n```mermaid\nsequenceDiagram\n    participant Client as AI Assistant\n    participant 1MCP as 1MCP Server\n    participant MCP as MCP Servers\n\n    Client->>1MCP: Send MCP Request\n    activate 1MCP\n\n    1MCP->>1MCP: Validate Request\n    1MCP->>1MCP: Load Config\n    1MCP->>MCP: Forward Request\n    activate MCP\n\n    MCP-->>1MCP: Response\n    deactivate MCP\n\n    1MCP-->>Client: Forward Response\n    deactivate 1MCP\n```\n\n## Development\n\nInstall dependencies:\n\n```bash\npnpm install\n```\n\nBuild the server:\n\n```bash\npnpm build\n```\n\nFor development with auto-rebuild:\n\n```bash\npnpm watch\n```\n\nRun the server:\n\n```bash\n# Copy the example environment file first\ncp .env.example .env\n\n# Then run the development server\npnpm dev\n```\n\n### Debugging\n\nUsing the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\npnpm inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n### Debugging & Source Maps\n\nThis project uses [source-map-support](https://www.npmjs.com/package/source-map-support) to enhance stack traces. When you run the server, stack traces will reference the original TypeScript source files instead of the compiled JavaScript. This makes debugging much easier, as error locations and line numbers will match your source code.\n\nNo extra setup is required—this is enabled by default. If you see a stack trace, it will point to `.ts` files and the correct line numbers. 🗺️\n\n## Contributing\n\nContributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.\n\n## License\n\nThis project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Aggregators",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "1mcp-agent": {
+          "command": "npx",
+          "args": ["-y", "@1mcp/agent"]
+        },
+        "1mcp-agent-with-config": {
+          "command": "npx",
+          "args": ["-y", "@1mcp/agent", "--config", "~/Library/Application Support/Claude/claude_desktop_config.json"]
+        },
+        "1mcp-agent-stdio": {
+          "command": "npx",
+          "args": ["-y", "@1mcp/agent", "--transport", "stdio"]
+        },
+        "1mcp-app-agent-docker": {
+          "command": "docker",
+          "args": ["run", "-p", "3050:3050", "ghcr.io/1mcp-app/agent"]
+        },
+        "1mcp-app-agent-docker-with-config": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "3050:3050",
+            "-v",
+            "/path/to/config.json:/config.json",
+            "ghcr.io/1mcp-app/agent",
+            "--config",
+            "/config.json"
+          ]
+        },
+        "1mcp-app-agent-docker-stdio": {
+          "command": "docker",
+          "args": ["run", "-i", "ghcr.io/1mcp-app/agent", "--transport", "stdio"]
+        },
+        "1mcp-app-agent-docker-with-env": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "3051:3051",
+            "-e",
+            "ONE_MCP_PORT=3051",
+            "-e",
+            "ONE_MCP_TAGS=network,filesystem",
+            "ghcr.io/1mcp-app/agent"
+          ],
+          "env": {
+            "ONE_MCP_PORT": "3051",
+            "ONE_MCP_TAGS": "network,filesystem"
+          }
+        },
+        "1mcp-app-agent-docker-proxy": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-p",
+            "3050:3050",
+            "-e",
+            "ONE_MCP_EXTERNAL_URL=https://mcp.example.com",
+            "-e",
+            "ONE_MCP_TRUST_PROXY=true",
+            "ghcr.io/1mcp-app/agent"
+          ],
+          "env": {
+            "ONE_MCP_EXTERNAL_URL": "https://mcp.example.com",
+            "ONE_MCP_TRUST_PROXY": "true"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "1mcp-app",
+    "repo": "agent",
+    "url": "https://github.com/1mcp-app/agent",
+    "name": "1mcp-app__agent",
+    "path": null,
+    "stars": 72,
+    "contributors": 3,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2f1bddf5d5cdc83ab8591bbb09086e9492c49ef8"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:25:46.450Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "yargs",
+      "importance": 9
+    },
+    {
+      "name": "winston",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "express-rate-limit",
+      "importance": 7
+    },
+    {
+      "name": "cors",
+      "importance": 6
+    },
+    {
+      "name": "body-parser",
+      "importance": 6
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "source-map-support",
+      "importance": 3
+    },
+    {
+      "name": "winston-transport",
+      "importance": 3
+    },
+    {
+      "name": "yargs-parser",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@1mcp/agent\",\n  \"version\": \"0.18.0\",\n  \"description\": \"One MCP server to aggregate them all - A unified Model Context Protocol server implementation\",\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"mcp-client\",\n    \"model-context-protocol\",\n    \"agent\",\n    \"proxy\",\n    \"server\",\n    \"cli\",\n    \"ai\",\n    \"llm\",\n    \"model-aggregation\",\n    \"typescript\"\n  ],\n  \"author\": \"William Xu <xuzp@1mcp.app>\",\n  \"homepage\": \"https://github.com/1mcp-app/agent\",\n  \"bugs\": {\n    \"url\": \"https://github.com/1mcp-app/agent/issues\"\n  },\n  \"license\": \"Apache-2.0\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/1mcp-app/agent.git\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"type\": \"module\",\n  \"bin\": {\n    \"1mcp\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"husky\": {\n    \"hooks\": {\n      \"pre-commit\": \"lint-staged\"\n    }\n  },\n  \"lint-staged\": {\n    \"*.ts\": [\n      \"bash -c 'tsc --noEmit --project tsconfig.test.json'\"\n    ],\n    \"*.{js,ts}\": [\n      \"eslint --fix\",\n      \"prettier --write\"\n    ],\n    \"*.{md,json,yml,yaml}\": [\n      \"prettier --write\"\n    ]\n  },\n  \"scripts\": {\n    \"dev\": \"tsc-watch --project tsconfig.build.json --onSuccess \\\"node --env-file=.env build/index.js\\\"\",\n    \"build\": \"tsc --project tsconfig.build.json && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"clean\": \"rm -rf build\",\n    \"prepare\": \"husky || true\",\n    \"watch\": \"tsc --watch --project tsconfig.build.json\",\n    \"inspector\": \"npx -y @modelcontextprotocol/inspector\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.{js,ts}\\\" \\\"test/**/*.{js,ts}\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.{js,ts}\\\" \\\"test/**/*.{js,ts}\\\"\",\n    \"typecheck\": \"tsc --noEmit --project tsconfig.test.json\",\n    \"test\": \"pnpm test:unit && pnpm test:e2e\",\n    \"test:unit\": \"vitest run\",\n    \"test:unit:watch\": \"vitest\",\n    \"test:unit:coverage\": \"vitest run --coverage\",\n    \"test:e2e\": \"vitest run --config vitest.e2e.config.ts\",\n    \"test:e2e:watch\": \"vitest --config vitest.e2e.config.ts\",\n    \"test:e2e:coverage\": \"vitest run --config vitest.e2e.config.ts --coverage\",\n    \"test:e2e:commands\": \"vitest run --config vitest.e2e.config.ts test/e2e/commands/\",\n    \"test:e2e:commands:watch\": \"vitest --config vitest.e2e.config.ts test/e2e/commands/\",\n    \"test:e2e:mcp\": \"vitest run --config vitest.e2e.config.ts test/e2e/commands/mcp/\",\n    \"test:e2e:app\": \"vitest run --config vitest.e2e.config.ts test/e2e/commands/app/\",\n    \"test:e2e:integration\": \"vitest run --config vitest.e2e.config.ts test/e2e/commands/integration/\",\n    \"test:e2e:errors\": \"vitest run --config vitest.e2e.config.ts test/e2e/commands/error-scenarios.test.ts\",\n    \"docs:dev\": \"vitepress dev docs\",\n    \"docs:build\": \"vitepress build docs\",\n    \"docs:preview\": \"vitepress preview docs\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"body-parser\": \"^2.2.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^5.1.0\",\n    \"express-rate-limit\": \"^7.5.1\",\n    \"json5\": \"^2.2.3\",\n    \"source-map-support\": \"^0.5.21\",\n    \"uuid\": \"^11.1.0\",\n    \"winston\": \"^3.17.0\",\n    \"winston-transport\": \"^4.9.0\",\n    \"yargs\": \"^17.7.2\",\n    \"yargs-parser\": \"^22.0.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@braintree/sanitize-url\": \"^7.1.1\",\n    \"@eslint/js\": \"^9.22.0\",\n    \"@testing-library/jest-dom\": \"^6.6.3\",\n    \"@types/body-parser\": \"^1.19.5\",\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^24.0.0\",\n    \"@types/supertest\": \"^6.0.3\",\n    \"@types/uuid\": \"^10.0.0\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.27.0\",\n    \"@typescript-eslint/parser\": \"^8.27.0\",\n    \"@vitest/coverage-v8\": \"^1.4.0\",\n    \"axios\": \"^1.10.0\",\n    \"cytoscape\": \"^3.32.1\",\n    \"cytoscape-cose-bilkent\": \"^4.1.0\",\n    \"dayjs\": \"^1.11.13\",\n    \"debug\": \"^4.4.1\",\n    \"eslint\": \"^9.22.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"eslint-plugin-prettier\": \"^5.2.3\",\n    \"globals\": \"^16.0.0\",\n    \"husky\": \"^9.1.7\",\n    \"jiti\": \"^2.4.2\",\n    \"lint-staged\": \"^16.1.2\",\n    \"mermaid\": \"^11.9.0\",\n    \"prettier\": \"^3.5.3\",\n    \"supertest\": \"^7.1.4\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsc-watch\": \"^7.1.1\",\n    \"typescript\": \"^5.3.3\",\n    \"vite-tsconfig-paths\": \"^5.1.4\",\n    \"vitepress\": \"^1.6.3\",\n    \"vitepress-plugin-mermaid\": \"^2.0.17\",\n    \"vitest\": \"^1.4.0\"\n  },\n  \"pnpm\": {\n    \"ignoredBuiltDependencies\": [\n      \"esbuild\"\n    ]\n  }\n}\n"
+}

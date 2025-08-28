@@ -1,0 +1,84 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "anaisbetts__mcp-installer",
+  "display_name": "mcp-installer",
+  "version": "1.0.0",
+  "description": "An MCP server that installs other MCP servers for you",
+  "author": {
+    "name": "anaisbetts"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-installer - A MCP Server to install MCP Servers\n\nThis server is a server that installs other MCP servers for you. Install it, and you can ask Claude to install MCP servers hosted in npm or PyPi for you. Requires `npx` and `uv` to be installed for node and Python servers respectively.\n\n![image](https://github.com/user-attachments/assets/d082e614-b4bc-485c-a7c5-f80680348793)\n\n### How to install:\n\nPut this into your `claude_desktop_config.json` (either at `~/Library/Application Support/Claude` on macOS or `C:\\Users\\NAME\\AppData\\Roaming\\Claude` on Windows):\n\n```json\n  \"mcpServers\": {\n    \"mcp-installer\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@anaisbetts/mcp-installer\"\n      ]\n    }\n  }\n```\n\n### Example prompts\n\n> Hey Claude, install the MCP server named mcp-server-fetch\n\n> Hey Claude, install the @modelcontextprotocol/server-filesystem package as an MCP server. Use ['/Users/anibetts/Desktop'] for the arguments\n\n> Hi Claude, please install the MCP server at /Users/anibetts/code/mcp-youtube, I'm too lazy to do it myself.\n\n> Install the server @modelcontextprotocol/server-github. Set the environment variable GITHUB_PERSONAL_ACCESS_TOKEN to '1234567890'\n",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-installer": {
+          "command": "npx",
+          "args": ["-y", "@anaisbetts/mcp-installer"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "anaisbetts",
+    "repo": "mcp-installer",
+    "url": "https://github.com/anaisbetts/mcp-installer",
+    "name": "mcp-installer",
+    "path": null,
+    "stars": 1340,
+    "contributors": 1,
+    "issues": 13,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "747fbd88aa2e54368f98252fc9e8d228748dc594"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:56:40.488Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "rimraf",
+      "importance": 4
+    },
+    {
+      "name": "spawn-rx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@anaisbetts/mcp-installer\",\n  \"version\": \"0.5.0\",\n  \"bin\": {\n    \"mcp-installer\": \"./lib/index.mjs\"\n  },\n  \"description\": \"A MCP server to install other MCP servers\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"prepare\": \"tsc && shx chmod +x ./lib/index.mjs\"\n  },\n  \"author\": \"Ani Betts <anais@anaisbetts.org>\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.1\",\n    \"rimraf\": \"^6.0.1\",\n    \"spawn-rx\": \"^4.0.0\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.6.3\"\n  }\n}\n"
+}

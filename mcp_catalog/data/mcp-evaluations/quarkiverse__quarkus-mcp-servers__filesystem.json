@@ -1,0 +1,109 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "quarkiverse__quarkus-mcp-servers__filesystem",
+  "display_name": "filesystem",
+  "version": "1.0.0",
+  "description": "Model Context Protocol Servers in Quarkus",
+  "author": {
+    "name": "quarkiverse"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Model Context Protocol Server for filesystem\n\nThis Model Context Protocol(MCP) server enables Large Language Models (LLMs) to list, read and modify files from the filesystem.\n\n![](images/filesystem-demo.png)\n\n## General Usage \n\n1. Install [jbang](https://www.jbang.dev/download/)\n2. Configure your MCP Client to run the server (see [Claude Desktop Config](#claude-desktop-config) below)\n\nUse the following command to start the server with access to specific paths.\n```shell\njbang filesystem@quarkiverse/quarkus-mcp-servers ~/code/quarkiverse ~/code/jbang \n```\n\n## Claude Desktop Config and [mcp-cli](https://github.com/chrishayuk/mcp-cli)\n\nAdd this to your `claude_desktop_config.json` or `server_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"jbang\",\n      \"args\": [\n        \"filesystem@quarkiverse/quarkus-mcp-servers\",\n        \"[path1]\",\n        \"[path2]\"\n      ]\n    }\n  }\n}\n```\n\n## Native Image/Executable\n\nUsing native image, the startup time is almost instant. \n\nYou can download the native images from the [release page](https://github.com/quarkiverse/quarkus-mcp-servers/releases).\n\nThen use the executable for your platform in your MCP client.\n\nExample for MacOS arm64 (M1, M2, etc.):\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"jbang\",\n      \"args\": [\n        \"mcp-server-filesystem-osx-aarch_64\",\n        \"[path1]\",\n        \"[path2]\"\n      ]\n    }\n  }\n}\n```\n\nYou can of course also rename the executable to something else, like `mcp-server-filesystem` if you want.\n\n### Troubleshooting\n\n**jbang not found**\n* Make sure you have `jbang` installed and available in your PATH\n* Alternatively, use full path to jbang executable (e.g. `/Users/username/.jbang/jbang`)\n\n**Get more logging**\n\nTo get more detailed logging you can add the following parameters to the jbang command line:\n\n```shell\n-Dquarkus.log.file.enable=true -Dquarkus.log.file.path=${user.home}/mcp-server-filesystem.log\n```\n\nExample:\n\n```shell\njbang -Dquarkus.log.file.enable=true -Dquarkus.log.file.path=${user.home}/mcp-server-filesystem.log filesystem@quarkiverse/quarkus-mcp-servers [path1] [path2] ...\n```\n\n### How was this made?\n\nThe MCP server uses Quarkus, the Supersonic Subatomic Java Framework and its Model Context Protocol support.\n\nIf you want to learn more about Quarkus MCP Server support, please see this [blog post](https://quarkus.io/blog/mcp-server/) \nand the Quarkus MCP Server [extension documentation](https://docs.quarkiverse.io/quarkus-mcp-server/dev/).\n\nTo launch the server it uses [jbang](https://jbang.dev/) to\nsetup Java and run the .jar as transparent as possible. Very similar to how `uvx`, `pipx`, `npmx` and others works; just for Java. ",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "filesystem-quarkiverse-quarkus-mcp-servers": {
+          "command": "jbang",
+          "args": ["filesystem@quarkiverse/quarkus-mcp-servers", "~/code/quarkiverse", "~/code/jbang"],
+          "env": {}
+        },
+        "filesystem-quarkiverse-quarkus-mcp-servers-configured": {
+          "command": "jbang",
+          "args": ["filesystem@quarkiverse/quarkus-mcp-servers", "[path1]", "[path2]"],
+          "env": {}
+        },
+        "mcp-server-filesystem-osx-aarch_64-configured": {
+          "command": "jbang",
+          "args": ["mcp-server-filesystem-osx-aarch_64", "[path1]", "[path2]"],
+          "env": {}
+        },
+        "filesystem-quarkiverse-quarkus-mcp-servers-with-logging": {
+          "command": "jbang",
+          "args": [
+            "-Dquarkus.log.file.enable=true",
+            "-Dquarkus.log.file.path=${user.home}/mcp-server-filesystem.log",
+            "filesystem@quarkiverse/quarkus-mcp-servers",
+            "[path1]",
+            "[path2]"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "quarkiverse",
+    "repo": "quarkus-mcp-servers",
+    "url": "https://github.com/quarkiverse/quarkus-mcp-servers/tree/main/filesystem",
+    "name": "quarkus-mcp-servers",
+    "path": "filesystem",
+    "stars": 159,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d2c1caad14f71ba3995394ff2ae1e2971bad7125"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:58.974Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "io.quarkiverse.mcp.servers:mcp-server-shared",
+      "importance": 9
+    },
+    {
+      "name": "io.quarkus:quarkus-jackson",
+      "importance": 7
+    },
+    {
+      "name": "io.quarkus:quarkus-qute",
+      "importance": 6
+    },
+    {
+      "name": "io.quarkus:quarkus-arc",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <artifactId>mcp-server-filesystem</artifactId>\n\n    <parent>\n        <groupId>io.quarkiverse.mcp.servers</groupId>\n        <artifactId>mcp-servers-parent</artifactId>\n        <version>999-SNAPSHOT</version>\n    </parent>\n\n    <name>MCP Servers :: Filesystem</name>\n\n    <properties>\n\n    </properties>\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>${quarkus.platform.group-id}</groupId>\n                <artifactId>${quarkus.platform.artifact-id}</artifactId>\n                <version>${quarkus.platform.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <dependencies>\n        <dependency>\n            <groupId>io.quarkiverse.mcp.servers</groupId>\n            <artifactId>mcp-server-shared</artifactId>\n            <version>${project.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-jackson</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-qute</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-arc</artifactId>\n        </dependency>\n\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-junit5</artifactId>\n            <scope>test</scope>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-junit5-component</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>${quarkus.platform.group-id}</groupId>\n                <artifactId>quarkus-maven-plugin</artifactId>\n                <version>${quarkus.platform.version}</version>\n                <extensions>true</extensions>\n                <executions>\n                    <execution>\n                        <goals>\n                            <goal>build</goal>\n                            <goal>generate-code</goal>\n                            <goal>generate-code-tests</goal>\n                            <goal>native-image-agent</goal>\n                        </goals>\n                    </execution>\n                </executions>\n            </plugin>\n            <plugin>\n                <artifactId>maven-compiler-plugin</artifactId>\n                <version>${compiler-plugin.version}</version>\n                <configuration>\n                    <parameters>true</parameters>\n                </configuration>\n            </plugin>\n            <plugin>\n                <artifactId>maven-surefire-plugin</artifactId>\n                <version>${surefire-plugin.version}</version>\n                <configuration>\n                    <systemPropertyVariables>\n                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>\n                        <maven.home>${maven.home}</maven.home>\n                    </systemPropertyVariables>\n                </configuration>\n            </plugin>\n            <plugin>\n                <artifactId>maven-failsafe-plugin</artifactId>\n                <version>${surefire-plugin.version}</version>\n                <executions>\n                    <execution>\n                        <goals>\n                            <goal>integration-test</goal>\n                            <goal>verify</goal>\n                        </goals>\n                    </execution>\n                </executions>\n                <configuration>\n                    <systemPropertyVariables>\n                        <native.image.path>${project.build.directory}/${project.build.finalName}-runner\n                        </native.image.path>\n                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>\n                        <maven.home>${maven.home}</maven.home>\n                    </systemPropertyVariables>\n                </configuration>\n            </plugin>\n        </plugins>\n    </build>\n\n</project>\n"
+}

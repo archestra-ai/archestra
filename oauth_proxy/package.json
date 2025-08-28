@@ -1,6 +1,6 @@
 {
   "name": "oauth-proxy",
-  "version": "2.0.0",
+  "version": "0.0.0-alpha",
   "description": "OAuth proxy server for secure PKCE-based token exchange",
   "main": "src/server.js",
   "type": "module",

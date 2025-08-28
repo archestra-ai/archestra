@@ -1,0 +1,107 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "ihor-sokoliuk__mcp-searxng",
+  "display_name": "mcp-searxng",
+  "version": "1.0.0",
+  "description": "MCP Server for SearXNG",
+  "author": {
+    "name": "ihor-sokoliuk"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# SearXNG MCP Server\n\nAn [MCP server](https://modelcontextprotocol.io/introduction) implementation that integrates the [SearXNG](https://docs.searxng.org) API, providing web search capabilities.\n\n<a href=\"https://glama.ai/mcp/servers/0j7jjyt7m9\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/0j7jjyt7m9/badge\" alt=\"SearXNG Server MCP server\" /></a>\n\n[![smithery badge](https://smithery.ai/badge/@ihor-sokoliuk/server-searxng)](https://smithery.ai/server/@ihor-sokoliuk/server-searxng)\n\n## Features\n\n- **Web Search**: General queries, news, articles, with pagination.\n- **Pagination**: Control which page of results to retrieve.\n- **Time Filtering**: Filter results by time range (day, month, year).\n- **Language Selection**: Filter results by preferred language.\n- **Safe Search**: Control content filtering level for search results.\n\n## Tools\n\n- **searxng_web_search**\n  - Execute web searches with pagination\n  - Inputs:\n    - `query` (string): The search query. This string is passed to external search services.\n    - `pageno` (number, optional): Search page number, starts at 1 (default 1)\n    - `time_range` (string, optional): Filter results by time range - one of: \"day\", \"month\", \"year\" (default: none)\n    - `language` (string, optional): Language code for results (e.g., \"en\", \"fr\", \"de\") or \"all\" (default: \"all\")\n    - `safesearch` (number, optional): Safe search filter level (0: None, 1: Moderate, 2: Strict) (default: instance setting)\n\n- **web_url_read**\n  - Read and convert the content from a URL to markdown\n  - Inputs:\n    - `url` (string): The URL to fetch and process\n\n## Configuration\n\n### Setting the SEARXNG_URL\n\n1. Choose a SearxNG instance from the [list of public instances](https://searx.space/) or use your local environment.\n2. Set the `SEARXNG_URL` environment variable to the instance URL.\n3. The default `SEARXNG_URL` value is `http://localhost:8080`.\n\n### Using Authentication\n\nIf you are using a password protected SearxNG instance you can set a username and password for HTTP Basic Auth:\n\n- Set the `AUTH_USERNAME` environmental variable to your username\n- Set the `AUTH_PASSWORD` environmental variable to your password\n\n### Usage with Claude Desktop\n\n### Installing via Smithery\n\nTo install SearxNG Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@ihor-sokoliuk/server-searxng):\n\n```bash\nnpx -y @smithery/cli install @ihor-sokoliuk/server-searxng --client claude\n```\n\n### [NPX](https://www.npmjs.com/package/mcp-searxng)\n\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-searxng\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n### [NPM](https://www.npmjs.com/package/mcp-searxng)\n\n```bash\nnpm install -g mcp-searxng\n```\n\nAnd then in your MCP config file:\n\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n### Docker\n\n#### Using [Pre-built Image from Docker Hub](https://hub.docker.com/r/isokoliuk/mcp-searxng)\n\n```bash\ndocker pull isokoliuk/mcp-searxng:latest\n```\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"SEARXNG_URL\",\n        \"isokoliuk/mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n#### Build Locally\n\n```bash\ndocker build -t mcp-searxng:latest -f Dockerfile .\n```\n\n#### Use\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"SEARXNG_URL\",\n        \"mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can see the full documentation [here](https://www.mcpevals.io/docs).\n\n```bash\nSEARXNG_URL=SEARXNG_URL OPENAI_API_KEY=your-key npx mcp-eval evals.ts index.ts\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Search",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-searxng-npx": {
+          "command": "npx",
+          "args": ["-y", "mcp-searxng"],
+          "env": {
+            "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+          }
+        },
+        "mcp-searxng-npm-direct": {
+          "command": "mcp-searxng",
+          "args": [],
+          "env": {
+            "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+          }
+        },
+        "isokoliuk-mcp-searxng-docker": {
+          "command": "docker",
+          "args": ["run", "-i", "--rm", "-e", "SEARXNG_URL", "isokoliuk/mcp-searxng:latest"],
+          "env": {
+            "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+          }
+        },
+        "mcp-searxng-docker": {
+          "command": "docker",
+          "args": ["run", "-i", "--rm", "-e", "SEARXNG_URL", "mcp-searxng:latest"],
+          "env": {
+            "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "ihor-sokoliuk",
+    "repo": "mcp-searxng",
+    "url": "https://github.com/ihor-sokoliuk/mcp-searxng",
+    "name": "mcp-searxng",
+    "path": null,
+    "stars": 166,
+    "contributors": 9,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fea5d587ca2bcd2acbd52ecfa05ff33290eab441"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:25:58.517Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 8
+    },
+    {
+      "name": "node-html-markdown",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-searxng\",\n    \"version\": \"0.5.1\",\n    \"description\": \"MCP server for SearXNG integration\",\n    \"license\": \"MIT\",\n    \"author\": \"Ihor Sokoliuk (https://github.com/ihor-sokoliuk)\",\n    \"homepage\": \"https://github.com/ihor-sokoliuk/mcp-searxng\",\n    \"bugs\": \"https://github.com/ihor-sokoliuk/mcp-searxng/issues\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/ihor-sokoliuk/mcp-searxng\"\n    },\n    \"keywords\": [\n        \"mcp\",\n        \"modelcontextprotocol\",\n        \"searxng\",\n        \"search\",\n        \"web-search\",\n        \"claude\",\n        \"ai\",\n        \"pagination\",\n        \"smithery\",\n        \"url-reader\"\n    ],\n    \"type\": \"module\",\n    \"bin\": {\n        \"mcp-searxng\": \"dist/index.js\"\n    },\n    \"files\": [\n        \"dist\"\n    ],\n    \"engines\": {\n        \"node\": \">=18\"\n    },\n    \"scripts\": {\n        \"build\": \"tsc && shx chmod +x dist/*.js\",\n        \"prepare\": \"npm run build\",\n        \"watch\": \"tsc --watch\",\n        \"inspector\": \"DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector node dist/index.js\",\n        \"postversion\": \"node scripts/update-version.js && git add index.ts && git commit --amend --no-edit\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"1.10.1\",\n        \"mcp-evals\": \"^1.0.18\",\n        \"@modelcontextprotocol/sdk\": \"1.15.0\",\n        \"node-html-markdown\": \"^1.3.0\"\n    },\n    \"devDependencies\": {\n        \"@types/node\": \"^22.14.1\",\n        \"shx\": \"^0.4.0\",\n        \"typescript\": \"^5.8.3\"\n    }\n}\n"
+}

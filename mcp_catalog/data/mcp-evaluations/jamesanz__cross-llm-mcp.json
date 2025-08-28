@@ -1,0 +1,84 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "jamesanz__cross-llm-mcp",
+  "display_name": "cross-llm-mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol (MCP) server that provides access to multiple Large Language Model (LLM) APIs including ChatGPT, Claude, and DeepSeek",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Cross-LLM MCP Server\n\nA Model Context Protocol (MCP) server that provides access to multiple Large Language Model (LLM) APIs including ChatGPT, Claude, and DeepSeek. This allows you to call different LLMs from within any MCP-compatible client and combine their responses.\n\n## Features\n\nThis MCP server offers five specialized tools for interacting with different LLM providers:\n\n### 🤖 Individual LLM Tools\n\n#### `call-chatgpt`\n\nCall OpenAI's ChatGPT API with a prompt.\n\n**Input:**\n\n- `prompt` (string): The prompt to send to ChatGPT\n- `model` (optional, string): ChatGPT model to use (default: gpt-4)\n- `temperature` (optional, number): Temperature for response randomness (0-2, default: 0.7)\n- `max_tokens` (optional, number): Maximum tokens in response (default: 1000)\n\n**Output:**\n\n- ChatGPT response with model information and token usage statistics\n\n**Example:**\n\n```\nChatGPT Response\nModel: gpt-4\n\nHere's a comprehensive explanation of quantum computing...\n\n---\nUsage:\n- Prompt tokens: 15\n- Completion tokens: 245\n- Total tokens: 260\n```\n\n#### `call-claude`\n\nCall Anthropic's Claude API with a prompt.\n\n**Input:**\n\n- `prompt` (string): The prompt to send to Claude\n- `model` (optional, string): Claude model to use (default: claude-3-sonnet-20240229)\n- `temperature` (optional, number): Temperature for response randomness (0-1, default: 0.7)\n- `max_tokens` (optional, number): Maximum tokens in response (default: 1000)\n\n**Output:**\n\n- Claude response with model information and token usage statistics\n\n#### `call-deepseek`\n\nCall DeepSeek API with a prompt.\n\n**Input:**\n\n- `prompt` (string): The prompt to send to DeepSeek\n- `model` (optional, string): DeepSeek model to use (default: deepseek-chat)\n- `temperature` (optional, number): Temperature for response randomness (0-2, default: 0.7)\n- `max_tokens` (optional, number): Maximum tokens in response (default: 1000)\n\n**Output:**\n\n- DeepSeek response with model information and token usage statistics\n\n### 🔄 Combined Tools\n\n#### `call-all-llms`\n\nCall all available LLM APIs (ChatGPT, Claude, DeepSeek) with the same prompt and get combined responses.\n\n**Input:**\n\n- `prompt` (string): The prompt to send to all LLMs\n- `temperature` (optional, number): Temperature for response randomness (0-2, default: 0.7)\n- `max_tokens` (optional, number): Maximum tokens in response (default: 1000)\n\n**Output:**\n\n- Combined responses from all LLMs with individual model information and usage statistics\n- Summary of successful responses and total tokens used\n\n**Example:**\n\n```\nMulti-LLM Response\n\nPrompt: Explain quantum computing in simple terms\n\n---\n\n## CHATGPT\n\nModel: gpt-4\n\nQuantum computing is like having a super-powered computer...\n\n---\n\n## CLAUDE\n\nModel: claude-3-sonnet-20240229\n\nQuantum computing represents a fundamental shift...\n\n---\n\n## DEEPSEEK\n\nModel: deepseek-chat\n\nQuantum computing harnesses the principles of quantum mechanics...\n\n---\n\nSummary:\n- Successful responses: 3/3\n- Total tokens used: 1250\n```\n\n#### `call-llm`\n\nCall a specific LLM provider by name.\n\n**Input:**\n\n- `provider` (string): The LLM provider to call (\"chatgpt\", \"claude\", or \"deepseek\")\n- `prompt` (string): The prompt to send to the LLM\n- `model` (optional, string): Model to use (uses provider default if not specified)\n- `temperature` (optional, number): Temperature for response randomness (0-2, default: 0.7)\n- `max_tokens` (optional, number): Maximum tokens in response (default: 1000)\n\n**Output:**\n\n- Response from the specified LLM with model information and usage statistics\n\n## Installation\n\n1. Clone this repository:\n\n```bash\ngit clone <repository-url>\ncd cross-llm-mcp\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Set up environment variables:\n\n```bash\ncp env.example .env\n```\n\n4. Edit the `.env` file with your API keys:\n\n```env\n# OpenAI/ChatGPT API Key\nOPENAI_API_KEY=your_openai_api_key_here\n\n# Anthropic/Claude API Key\nANTHROPIC_API_KEY=your_anthropic_api_key_here\n\n# DeepSeek API Key\nDEEPSEEK_API_KEY=your_deepseek_api_key_here\n\n# Default models for each provider\nDEFAULT_CHATGPT_MODEL=gpt-4\nDEFAULT_CLAUDE_MODEL=claude-3-sonnet-20240229\nDEFAULT_DEEPSEEK_MODEL=deepseek-chat\n```\n\n5. Build the project:\n\n```bash\nnpm run build\n```\n\n## Getting API Keys\n\n### OpenAI/ChatGPT\n\n1. Visit [OpenAI Platform](https://platform.openai.com/api-keys)\n2. Sign up or log in to your account\n3. Create a new API key\n4. Add it to your `.env` file as `OPENAI_API_KEY`\n\n### Anthropic/Claude\n\n1. Visit [Anthropic Console](https://console.anthropic.com/)\n2. Sign up or log in to your account\n3. Create a new API key\n4. Add it to your `.env` file as `ANTHROPIC_API_KEY`\n\n### DeepSeek\n\n1. Visit [DeepSeek Platform](https://platform.deepseek.com/)\n2. Sign up or log in to your account\n3. Create a new API key\n4. Add it to your `.env` file as `DEEPSEEK_API_KEY`\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n\n```bash\nnpm start\n```\n\nThe server runs on stdio and can be connected to any MCP-compatible client.\n\n### Example Queries\n\nHere are some example queries you can make with this MCP server:\n\n#### Call ChatGPT\n\n```json\n{\n  \"tool\": \"call-chatgpt\",\n  \"arguments\": {\n    \"prompt\": \"Explain quantum computing in simple terms\",\n    \"temperature\": 0.7,\n    \"max_tokens\": 500\n  }\n}\n```\n\n#### Call Claude\n\n```json\n{\n  \"tool\": \"call-claude\",\n  \"arguments\": {\n    \"prompt\": \"What are the benefits of renewable energy?\",\n    \"model\": \"claude-3-sonnet-20240229\"\n  }\n}\n```\n\n#### Call All LLMs\n\n```json\n{\n  \"tool\": \"call-all-llms\",\n  \"arguments\": {\n    \"prompt\": \"Write a short poem about artificial intelligence\",\n    \"temperature\": 0.8\n  }\n}\n```\n\n#### Call Specific LLM\n\n```json\n{\n  \"tool\": \"call-llm\",\n  \"arguments\": {\n    \"provider\": \"deepseek\",\n    \"prompt\": \"Explain machine learning algorithms\",\n    \"max_tokens\": 800\n  }\n}\n```\n\n## Use Cases\n\n### 1. **Multi-Perspective Analysis**\n\nUse `call-all-llms` to get different perspectives on the same topic from multiple AI models.\n\n### 2. **Model Comparison**\n\nCompare responses from different LLMs to understand their strengths and weaknesses.\n\n### 3. **Redundancy and Reliability**\n\nIf one LLM is unavailable, you can still get responses from other providers.\n\n### 4. **Cost Optimization**\n\nChoose the most cost-effective LLM for your specific use case.\n\n### 5. **Quality Assurance**\n\nCross-reference responses from multiple models to validate information.\n\n## API Endpoints\n\nThis MCP server uses the following API endpoints:\n\n- **OpenAI**: `https://api.openai.com/v1/chat/completions`\n- **Anthropic**: `https://api.anthropic.com/v1/messages`\n- **DeepSeek**: `https://api.deepseek.com/v1/chat/completions`\n\n## Error Handling\n\nThe server includes comprehensive error handling with detailed messages:\n\n### Missing API Key\n\n```\n**ChatGPT Error:** OpenAI API key not configured\n```\n\n### Invalid API Key\n\n```\n**Claude Error:** Claude API error: Invalid API key - please check your Anthropic API key\n```\n\n### Rate Limiting\n\n```\n**DeepSeek Error:** DeepSeek API error: Rate limit exceeded - please try again later\n```\n\n### Payment Issues\n\n```\n**ChatGPT Error:** ChatGPT API error: Payment required - please check your OpenAI billing\n```\n\n### Network Issues\n\n```\n**Claude Error:** Claude API error: Network timeout\n```\n\n## Configuration\n\n### Environment Variables\n\n- `OPENAI_API_KEY`: Your OpenAI API key\n- `ANTHROPIC_API_KEY`: Your Anthropic API key\n- `DEEPSEEK_API_KEY`: Your DeepSeek API key\n- `DEFAULT_CHATGPT_MODEL`: Default ChatGPT model (default: gpt-4)\n- `DEFAULT_CLAUDE_MODEL`: Default Claude model (default: claude-3-sonnet-20240229)\n- `DEFAULT_DEEPSEEK_MODEL`: Default DeepSeek model (default: deepseek-chat)\n\n### Supported Models\n\n#### ChatGPT Models\n\n- `gpt-4`\n- `gpt-4-turbo`\n- `gpt-3.5-turbo`\n- And other OpenAI models\n\n#### Claude Models\n\n- `claude-3-sonnet-20240229`\n- `claude-3-opus-20240229`\n- `claude-3-haiku-20240307`\n- And other Anthropic models\n\n#### DeepSeek Models\n\n- `deepseek-chat`\n- `deepseek-coder`\n- And other DeepSeek models\n\n## Project Structure\n\n```\ncross-llm-mcp/\n├── src/\n│   ├── index.ts          # Main MCP server with all 5 tools\n│   ├── types.ts          # TypeScript type definitions\n│   └── llm-clients.ts    # LLM API client implementations\n├── build/                # Compiled JavaScript output\n├── env.example           # Environment variables template\n├── example-usage.md      # Detailed usage examples\n├── package.json          # Project dependencies and scripts\n└── README.md            # This file\n```\n\n## Dependencies\n\n- `@modelcontextprotocol/sdk` - MCP SDK for server implementation\n- `superagent` - HTTP client for API requests\n- `zod` - Schema validation for tool parameters\n- `dotenv` - Environment variable management\n\n## Development\n\n### Building the Project\n\n```bash\nnpm run build\n```\n\n### Adding New LLM Providers\n\nTo add a new LLM provider:\n\n1. Add the provider type to `src/types.ts`\n2. Implement the client in `src/llm-clients.ts`\n3. Add the tool to `src/index.ts`\n4. Update the `callAllLLMs` method to include the new provider\n\n## Troubleshooting\n\n### Common Issues\n\n**Server won't start**\n\n- Check that all dependencies are installed: `npm install`\n- Verify the build was successful: `npm run build`\n- Ensure the `.env` file exists and has valid API keys\n\n**API errors**\n\n- Verify your API keys are correct and active\n- Check your API usage limits and billing status\n- Ensure you're using supported model names\n\n**No responses**\n\n- Check that at least one API key is configured\n- Verify network connectivity\n- Look for error messages in the response\n\n### Debug Mode\n\nFor debugging, you can run the server directly:\n\n```bash\nnode build/index.js\n```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## Support\n\nIf you encounter any issues or have questions, please:\n\n1. Check the troubleshooting section above\n2. Review the error messages for specific guidance\n3. Ensure your API keys are properly configured\n4. Verify your network connectivity\n",
+  "category": "Aggregators",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "cross-llm-mcp": {
+          "command": "npm",
+          "args": ["start"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "cross-llm-mcp",
+    "url": "https://github.com/JamesANZ/cross-llm-mcp",
+    "name": "cross-llm-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f4d69706721c77a3ec85ad00404ecc1a67a0b246"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T10:21:03.394Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "superagent",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bitcoin-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bitcoin-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"superagent\": \"^10.2.2\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"@types/superagent\": \"^8.1.9\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

@@ -1,0 +1,153 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "nguyenvanduocit__jira-mcp",
+  "display_name": "jira-mcp",
+  "version": "1.0.0",
+  "description": "A Go-based MCP (Model Control Protocol) connector for Jira that enables AI assistants like Claude to interact with Atlassian Jira. This tool provides a seamless interface for AI models to perform common Jira operations including issue management, sprint planning, and workflow transitions.",
+  "author": {
+    "name": "nguyenvanduocit"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Jira MCP\n\nA Go-based MCP (Model Control Protocol) connector for Jira that enables AI assistants like Claude to interact with Atlassian Jira. This tool provides a seamless interface for AI models to perform common Jira operations.\n\n## WHY\n\nWhile Atlassian provides an official MCP connector, our implementation offers **superior flexibility and real-world problem-solving capabilities**. We've built this connector to address the daily challenges developers and project managers actually face, not just basic API operations.\n\n**Key Advantages:**\n- **More Comprehensive Tools**: We provide 20+ specialized tools covering every aspect of Jira workflow management\n- **Real-World Focus**: Built to solve actual daily problems like sprint management, issue relationships, and workflow transitions\n- **Enhanced Flexibility**: Support for complex operations like moving issues between sprints, creating child issues, and managing issue relationships\n- **Better Integration**: Seamless integration with AI assistants for natural language Jira operations\n- **Practical Design**: Tools designed for actual development workflows, not just basic CRUD operations\n\n## Features\n\n### Issue Management\n- **Get detailed issue information** with customizable fields and expansions\n- **Create new issues** with full field support\n- **Create child issues (subtasks)** with automatic parent linking\n- **Update existing issues** with partial field updates\n- **Search issues** using powerful JQL (Jira Query Language)\n- **List available issue types** for any project\n- **Transition issues** through workflow states\n- **Move issues to sprints** (up to 50 issues at once)\n\n### Comments & Time Tracking\n- **Add comments** to issues\n- **Retrieve all comments** from issues\n- **Add worklogs** with time tracking and custom start times\n- **Flexible time format support** (3h, 30m, 1h 30m, etc.)\n\n### Issue Relationships & History\n- **Link issues** with relationship types (blocks, duplicates, relates to)\n- **Get related issues** and their relationships\n- **Retrieve complete issue history** and change logs\n- **Track issue transitions** and workflow changes\n\n### Sprint & Project Management\n- **List all sprints** for boards or projects\n- **Get active sprint** information\n- **Get detailed sprint information** by ID\n- **List project statuses** and available transitions\n- **Board and project integration** with automatic discovery\n\n### Advanced Features\n- **Bulk operations** support (move multiple issues to sprint)\n- **Flexible parameter handling** (board_id or project_key)\n- **Rich formatting** of responses for AI consumption\n- **Error handling** with detailed debugging information\n\n## 🚀 Quick Start Guide\n\n### Prerequisites\n\nBefore you begin, you'll need:\n1. **Atlassian Account** with access to a Jira instance\n2. **API Token** from Atlassian (we'll help you get this)\n3. **Cursor IDE** with Claude integration\n\n### Step 1: Get Your Atlassian API Token\n\n1. Go to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n2. Click **\"Create API token\"**\n3. Give it a name like \"Jira MCP Connector\"\n4. **Copy the token** (you won't see it again!)\n\n### Step 2: Choose Your Installation Method\n\nWe recommend **Docker** for the easiest setup:\n\n#### 🐳 Option A: Docker (Recommended)\n\n```bash\n# Pull the latest image\ndocker pull ghcr.io/nguyenvanduocit/jira-mcp:latest\n\n# Test it works (replace with your details)\ndocker run --rm \\\n  -e ATLASSIAN_HOST=https://your-company.atlassian.net \\\n  -e ATLASSIAN_EMAIL=your-email@company.com \\\n  -e ATLASSIAN_TOKEN=your-api-token \\\n  ghcr.io/nguyenvanduocit/jira-mcp:latest \\\n  --http_port 3000\n```\n\n#### 📦 Option B: Download Binary\n\n1. Go to [GitHub Releases](https://github.com/nguyenvanduocit/jira-mcp/releases)\n2. Download for your platform:\n   - **macOS**: `jira-mcp_darwin_amd64`\n   - **Linux**: `jira-mcp_linux_amd64`  \n   - **Windows**: `jira-mcp_windows_amd64.exe`\n3. Make it executable (macOS/Linux):\n   ```bash\n   chmod +x jira-mcp_*\n   sudo mv jira-mcp_* /usr/local/bin/jira-mcp\n   ```\n\n#### 🛠️ Option C: Build from Source\n\n```bash\ngo install github.com/nguyenvanduocit/jira-mcp@latest\n```\n\n### Step 3: Configure Cursor\n\n1. **Open Cursor**\n2. **Go to Settings** → **Features** → **Model Context Protocol**\n3. **Add a new MCP server** with this configuration:\n\n#### For Docker Users:\n```json\n{\n  \"mcpServers\": {\n    \"jira\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"--rm\", \"-i\",\n        \"-e\", \"ATLASSIAN_HOST=https://your-company.atlassian.net\",\n        \"-e\", \"ATLASSIAN_EMAIL=your-email@company.com\", \n        \"-e\", \"ATLASSIAN_TOKEN=your-api-token\",\n        \"ghcr.io/nguyenvanduocit/jira-mcp:latest\"\n      ]\n    }\n  }\n}\n```\n\n#### For Binary Users:\n```json\n{\n  \"mcpServers\": {\n    \"jira\": {\n      \"command\": \"/usr/local/bin/jira-mcp\",\n      \"env\": {\n        \"ATLASSIAN_HOST\": \"https://your-company.atlassian.net\",\n        \"ATLASSIAN_EMAIL\": \"your-email@company.com\",\n        \"ATLASSIAN_TOKEN\": \"your-api-token\"\n      }\n    }\n  }\n}\n```\n\n### Step 4: Test Your Setup\n\n1. **Restart Cursor** completely\n2. **Open a new chat** with Claude\n3. **Try these test commands**:\n\n```\nList my Jira projects\n```\n\n```\nShow me issues assigned to me\n```\n\n```\nWhat's in the current sprint?\n```\n\nIf you see Jira data, **congratulations! 🎉** You're all set up.\n\n## 🔧 Advanced Configuration\n\n### Using Environment Files\n\nCreate a `.env` file for easier management:\n\n```bash\n# .env file\nATLASSIAN_HOST=https://your-company.atlassian.net\nATLASSIAN_EMAIL=your-email@company.com\nATLASSIAN_TOKEN=your-api-token\n```\n\nThen use it:\n```bash\n# With binary\njira-mcp -env .env\n\n# With Docker\ndocker run --rm -i --env-file .env ghcr.io/nguyenvanduocit/jira-mcp:latest\n```\n\n### HTTP Mode for Development\n\nFor development and testing, you can run in HTTP mode:\n\n```bash\n# Start HTTP server on port 3000\njira-mcp -env .env -http_port 3000\n```\n\nThen configure Cursor with:\n```json\n{\n  \"mcpServers\": {\n    \"jira\": {\n      \"url\": \"http://localhost:3000/mcp\"\n    }\n  }\n}\n```\n\n## 🎯 Usage Examples\n\nOnce configured, you can ask Claude to help with Jira tasks using natural language:\n\n### Issue Management\n- *\"Create a new bug ticket for the login issue\"*\n- *\"Show me details for ticket PROJ-123\"*\n- *\"Move ticket PROJ-456 to In Progress\"*\n- *\"Add a comment to PROJ-789 saying the fix is ready\"*\n\n### Sprint Management  \n- *\"What's in our current sprint?\"*\n- *\"Move these 3 tickets to the next sprint: PROJ-1, PROJ-2, PROJ-3\"*\n- *\"Show me all tickets assigned to John in the current sprint\"*\n\n### Reporting & Analysis\n- *\"Show me all bugs created this week\"*\n- *\"List all tickets that are blocked\"*\n- *\"What tickets are ready for testing?\"*\n\n## 🛠️ Troubleshooting\n\n### Common Issues\n\n**❌ \"Connection failed\" or \"Authentication error\"**\n- Double-check your `ATLASSIAN_HOST` (should be like `company.atlassian.net`)\n- Verify your API token is correct\n- Make sure your email matches your Atlassian account\n\n**❌ \"No MCP servers found\"**\n- Restart Cursor completely after adding the configuration\n- Check the MCP configuration syntax in Cursor settings\n- Verify the binary path is correct (for binary installations)\n\n**❌ \"Permission denied\" errors**\n- Make sure your Atlassian account has access to the Jira projects\n- Check if your API token has the necessary permissions\n\n### Getting Help\n\n1. **Check the logs**: Run with `-http_port` to see detailed error messages\n2. **Test your credentials**: Try the Docker test command from Step 2\n3. **Verify Cursor config**: The app will show you the exact configuration to use\n\n## 📚 Development\n\nFor local development and contributing:\n\n```bash\n# Clone the repository\ngit clone https://github.com/nguyenvanduocit/jira-mcp.git\ncd jira-mcp\n\n# Create .env file with your credentials\ncp .env.example .env\n# Edit .env with your details\n\n# Run in development mode\njust dev\n# or\ngo run main.go -env .env -http_port 3002\n\n# Test with MCP inspector\nnpx @modelcontextprotocol/inspector http://localhost:3002/mcp\n```\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'feat: add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n---\n\n**Need help?** Check our [CHANGELOG.md](./CHANGELOG.md) for recent updates or open an issue on GitHub.",
+  "category": "Development",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ghcr.io-nguyenvanduocit-jira-mcp-docker-test": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--rm",
+            "-e",
+            "ATLASSIAN_HOST=https://your-company.atlassian.net",
+            "-e",
+            "ATLASSIAN_EMAIL=your-email@company.com",
+            "-e",
+            "ATLASSIAN_TOKEN=your-api-token",
+            "ghcr.io/nguyenvanduocit/jira-mcp:latest",
+            "--http_port",
+            "3000"
+          ],
+          "env": {
+            "ATLASSIAN_HOST": "https://your-company.atlassian.net",
+            "ATLASSIAN_EMAIL": "your-email@company.com",
+            "ATLASSIAN_TOKEN": "your-api-token"
+          }
+        },
+        "ghcr.io-nguyenvanduocit-jira-mcp-docker-cursor-configured": {
+          "command": "docker",
+          "args": [
+            "run",
+            "--rm",
+            "-i",
+            "-e",
+            "ATLASSIAN_HOST=https://your-company.atlassian.net",
+            "-e",
+            "ATLASSIAN_EMAIL=your-email@company.com",
+            "-e",
+            "ATLASSIAN_TOKEN=your-api-token",
+            "ghcr.io/nguyenvanduocit/jira-mcp:latest"
+          ],
+          "env": {
+            "ATLASSIAN_HOST": "https://your-company.atlassian.net",
+            "ATLASSIAN_EMAIL": "your-email@company.com",
+            "ATLASSIAN_TOKEN": "your-api-token"
+          }
+        },
+        "jira-mcp-binary-cursor-configured": {
+          "command": "/usr/local/bin/jira-mcp",
+          "args": [],
+          "env": {
+            "ATLASSIAN_HOST": "https://your-company.atlassian.net",
+            "ATLASSIAN_EMAIL": "your-email@company.com",
+            "ATLASSIAN_TOKEN": "your-api-token"
+          }
+        },
+        "jira-mcp-binary-env-file": {
+          "command": "jira-mcp",
+          "args": ["-env", ".env"],
+          "env": {}
+        },
+        "ghcr.io-nguyenvanduocit-jira-mcp-docker-env-file": {
+          "command": "docker",
+          "args": ["run", "--rm", "-i", "--env-file", ".env", "ghcr.io/nguyenvanduocit/jira-mcp:latest"],
+          "env": {}
+        },
+        "jira-mcp-binary-http-mode": {
+          "command": "jira-mcp",
+          "args": ["-env", ".env", "-http_port", "3000"],
+          "env": {}
+        },
+        "jira-mcp-go-run-dev": {
+          "command": "go",
+          "args": ["run", "main.go", "-env", ".env", "-http_port", "3002"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "nguyenvanduocit",
+    "repo": "jira-mcp",
+    "url": "https://github.com/nguyenvanduocit/jira-mcp",
+    "name": "jira-mcp",
+    "path": null,
+    "stars": 46,
+    "contributors": 6,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "00978837119e5d14d68e74fdc0f31ae3956f4220"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:52:03.512Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "ctreminiom/go-atlassian",
+      "importance": 9
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 6
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/nguyenvanduocit/jira-mcp\n\ngo 1.23.2\n\nrequire (\n\tgithub.com/ctreminiom/go-atlassian v1.6.1\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/mark3labs/mcp-go v0.32.0\n\tgithub.com/pkg/errors v0.9.1\n)\n\nrequire (\n\tdario.cat/mergo v1.0.2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/stretchr/testify v1.10.0 // indirect\n\tgithub.com/tidwall/gjson v1.18.0 // indirect\n\tgithub.com/tidwall/match v1.1.1 // indirect\n\tgithub.com/tidwall/pretty v1.2.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

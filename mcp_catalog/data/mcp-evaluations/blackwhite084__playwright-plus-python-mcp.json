@@ -1,0 +1,102 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "blackwhite084__playwright-plus-python-mcp",
+  "display_name": "playwright-plus-python-mcp",
+  "version": "1.0.0",
+  "description": "MCP server from blackwhite084/playwright-plus-python-mcp",
+  "author": {
+    "name": "blackwhite084"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# playwright-server MCP server\n\n\\A MCP server with playwright tools\\\n\n<a href=\"https://glama.ai/mcp/servers/c50bsocgzb\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/c50bsocgzb/badge\" alt=\"Playwright Server MCP server\" /></a>\n\n## Components\n\n### Resources\n\nThe server implements a simple note storage system with:\n- Custom note:// URI scheme for accessing individual notes\n- Each note resource has a name, description and text/plain mimetype\n\n### Prompts\n\nThe server provides a single prompt:\n- summarize-notes: Creates summaries of all stored notes\n  - Optional \"style\" argument to control detail level (brief/detailed)\n  - Generates prompt combining all current notes with style preference\n\n### Tools\n\nThe server implements the following tools:\n- `playwright_navigate`: Navigates to a specified URL. This operation will automatically create a new session if there is no active session.\n  - Requires a `url` argument (string).\n- `playwright_screenshot`: Takes a screenshot of the current page or a specific element.\n  - Requires a `name` argument (string) for the screenshot file name.\n  - Optional `selector` argument (string) to specify a CSS selector for the element to screenshot. If no selector is provided, a full-page screenshot is taken.\n- `playwright_click`: Clicks an element on the page using a CSS selector.\n  - Requires a `selector` argument (string) to specify the CSS selector for the element to click.\n- `playwright_fill`: Fills out an input field.\n  - Requires a `selector` argument (string) to specify the CSS selector for the input field.\n  - Requires a `value` argument (string) to specify the value to fill.\n- `playwright_evaluate`: Executes JavaScript code in the browser console.\n  - Requires a `script` argument (string) to specify the JavaScript code to execute.\n- `playwright_click_text`: Clicks an element on the page by its text content.\n  - Requires a `text` argument (string) to specify the text content of the element to click.\n- `playwright_get_text_content`: Get the text content of all visiable elements.\n- `playwright_get_html_content`: Get the HTML content of the page.\n  - Requires a `selector` argument (string) to specify the CSS selector for the element.\n\n## Configuration\n\n[TODO: Add configuration details specific to your implementation]\n\n## Quickstart\n\n### Install\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n  ```\n  \"mcpServers\": {\n    \"playwright-server\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"C:\\Users\\xxxxx\\Documents\\project\\python\\mcp\\playwright-server\",\n        \"run\",\n        \"playwright-server\"\n      ]\n    }\n  }\n  ```\n</details>\n\n<details>\n  <summary>Published Servers Configuration</summary>\n  ```\n  \"mcpServers\": {\n    \"playwright-server\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"playwright-server\"\n      ]\n    }\n  }\n  ```\n</details>\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory C:\\Users\\YUNYING\\Documents\\project\\python\\mcp\\playwright-server run playwright-server\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n",
+  "category": "Browser Automation",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "playwright-server-dev": {
+          "command": "uv",
+          "args": [
+            "--directory",
+            "C:\\Users\\xxxxx\\Documents\\project\\python\\mcp\\playwright-server",
+            "run",
+            "playwright-server"
+          ],
+          "env": {}
+        },
+        "playwright-server": {
+          "command": "uvx",
+          "args": ["playwright-server"],
+          "env": {}
+        },
+        "playwright-server-debug": {
+          "command": "npx",
+          "args": [
+            "@modelcontextprotocol/inspector",
+            "uv",
+            "--directory",
+            "C:\\Users\\YUNYING\\Documents\\project\\python\\mcp\\playwright-server",
+            "run",
+            "playwright-server"
+          ],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "blackwhite084",
+    "repo": "playwright-plus-python-mcp",
+    "url": "https://github.com/blackwhite084/playwright-plus-python-mcp",
+    "name": "blackwhite084__playwright-plus-python-mcp",
+    "path": null,
+    "stars": 142,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e5bdaad978ca041620c18e5614a7fd4987d5a4f8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:25:59.742Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"playwright-server\"\nversion = \"0.1.0\"\ndescription = \"\\\\A MCP server with playwright tools\\\\\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [ \"mcp>=1.1.2\", \"playwright\"]\n[[project.authors]]\nname = \"YUNYING\"\nemail = \"qcyunying@gmail.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nplaywright-server = \"playwright_server:main\"\n"
+}

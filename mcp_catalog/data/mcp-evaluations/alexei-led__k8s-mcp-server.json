@@ -1,0 +1,135 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "alexei-led__k8s-mcp-server",
+  "display_name": "k8s-mcp-server",
+  "version": "1.0.0",
+  "description": "K8s-mcp-server is a Model Context Protocol (MCP) server that enables AI assistants like Claude to securely execute Kubernetes commands. It provides a bridge between language models and essential Kubernetes CLI tools including kubectl, helm, istioctl, and argocd, allowing AI systems to assist with cluster management, troubleshooting, and deployments",
+  "author": {
+    "name": "alexei-led"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# K8s MCP Server\n\n[![CI Status](https://github.com/alexei-led/k8s-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/alexei-led/k8s-mcp-server/actions/workflows/ci.yml)\n[![Release Status](https://github.com/alexei-led/k8s-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/alexei-led/k8s-mcp-server/actions/workflows/release.yml)\n[![codecov](https://codecov.io/gh/alexei-led/k8s-mcp-server/graph/badge.svg?token=eCaXPJ0olS)](https://codecov.io/gh/alexei-led/k8s-mcp-server)\n[![Image Tags](https://ghcr-badge.egpl.dev/alexei-led/k8s-mcp-server/tags?color=%2344cc11&ignore=latest&n=4&label=image+tags&trim=)](https://github.com/alexei-led/k8s-mcp-server/pkgs/container/k8s-mcp-server/versions)\n[![Image Size](https://ghcr-badge.egpl.dev/alexei-led/k8s-mcp-server/size?color=%2344cc11&tag=latest&label=image+size&trim=)](https://github.com/alexei-led/k8s-mcp-server/pkgs/container/k8s-mcp-server)\n[![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nK8s MCP Server is a Docker-based server implementing [Anthropic's Model Context Protocol (MCP)](https://www.anthropic.com/news/introducing-mcp) that enables Claude to run Kubernetes CLI tools (`kubectl`, `istioctl`, `helm`, `argocd`) in a secure, containerized environment.\n\n## Demo: Deploy and Troubleshoot WordPress\n\n**Session 1:** Using k8s-mcp-server and Helm CLI to deploy a WordPress application in the claude-demo namespace, then intentionally breaking it by scaling the MariaDB StatefulSet to zero.\n\n**Session 2:** Troubleshooting session where we use k8s-mcp-server to diagnose the broken WordPress site through kubectl commands, identify the missing database issue, and fix it by scaling up the StatefulSet and configuring ingress access..\n\n[Demo](https://private-user-images.githubusercontent.com/1898375/428398164-5ddce5bc-ec92-459b-a506-5d4442618a81.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDMzNDE0OTEsIm5iZiI6MTc0MzM0MTE5MSwicGF0aCI6Ii8xODk4Mzc1LzQyODM5ODE2NC01ZGRjZTViYy1lYzkyLTQ1OWItYTUwNi01ZDQ0NDI2MThhODEubXA0P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDMzMCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTAzMzBUMTMyNjMxWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YmUyNDExMGUzOGRlN2QxNWViMzhhOTE4Y2U1ZmRjMTQxYTI0OGNlNTFjNTRlMjFjNmQ3NTNhNGFmODNkODIzMSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.hwKERwuQRXxHEYJ9d_fQ__XL1gj8l76nO6Yy6M4Uov8)\n\n## How It Works\n\n```mermaid\nflowchart LR\n    A[User] --> |Asks K8s question| B[Claude]\n    B --> |Sends command via MCP| C[K8s MCP Server]\n    C --> |Executes kubectl, helm, etc.| D[Kubernetes Cluster]\n    D --> |Returns results| C\n    C --> |Returns formatted results| B\n    B --> |Analyzes & explains| A\n```\n\nClaude can help users by:\n- Explaining complex Kubernetes concepts\n- Running commands against your cluster\n- Troubleshooting issues\n- Suggesting optimizations\n- Crafting Kubernetes manifests\n\n## Quick Start with Claude Desktop\n\nGet Claude helping with your Kubernetes clusters in under 2 minutes:\n\n1. **Create or update your Claude Desktop configuration file**:\n   - **macOS**: Edit `$HOME/Library/Application Support/Claude/claude_desktop_config.json`\n   - **Windows**: Edit `%APPDATA%\\Claude\\claude_desktop_config.json`\n   - **Linux**: Edit `$HOME/.config/Claude/claude_desktop_config.json`\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"kubernetes\": {\n         \"command\": \"docker\",\n         \"args\": [\n           \"run\",\n           \"-i\",\n           \"--rm\",\n           \"-v\",\n           \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n           \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n         ]\n       }\n     }\n   }\n   ```\n\n2. **Restart Claude Desktop**\n   - After restart, you'll see the Tools icon (🔨) in the bottom right of your input field\n   - This indicates Claude can now access K8s tools via the MCP server\n\n3. **Start using K8s tools directly in Claude Desktop**:\n   - \"What Kubernetes contexts do I have available?\"\n   - \"Show me all pods in the default namespace\"\n   - \"Create a deployment with 3 replicas of nginx:1.21\"\n   - \"Explain what's wrong with my StatefulSet 'database' in namespace 'prod'\"\n   - \"Deploy the bitnami/wordpress chart with Helm and set service type to LoadBalancer\"\n\n> **Note**: Claude Desktop will automatically route K8s commands through the MCP server, allowing natural conversation about your clusters without leaving the Claude interface.\n\n> **Cloud Providers**: For AWS EKS, GKE, or Azure AKS, you'll need additional configuration. See the [Cloud Provider Support](./docs/cloud-providers.md) guide.\n\n## Features\n\n- **Multiple Kubernetes Tools**: `kubectl`, `helm`, `istioctl`, and `argocd` in one container\n- **Cloud Providers**: Native support for AWS EKS, Google GKE, and Azure AKS\n- **Security**: Runs as non-root user with strict command validation\n- **Command Piping**: Support for common Unix tools like `jq`, `grep`, and `sed`\n- **Easy Configuration**: Simple environment variables for customization\n\n## Documentation\n\n- [Getting Started Guide](./docs/getting-started.md) - Detailed setup instructions\n- [Cloud Provider Support](./docs/cloud-providers.md) - EKS, GKE, and AKS configuration\n- [Supported Tools](./docs/supported-tools.md) - Complete list of all included CLI tools\n- [Environment Variables](./docs/environment-variables.md) - Configuration options\n- [Security Features](./docs/security.md) - Security modes and custom rules\n- [Claude Integration](./docs/claude-integration.md) - Detailed Claude Desktop setup\n- [Architecture](./docs/architecture.md) - System architecture and components\n- [Detailed Specification](./docs/spec.md) - Complete technical specification\n\n## Usage Examples\n\nOnce connected, you can ask Claude to help with Kubernetes tasks using natural language:\n\n```mermaid\nflowchart TB\n    subgraph \"Basic Commands\"\n        A1[\"Show me all pods in the default namespace\"]\n        A2[\"Get all services across all namespaces\"]\n        A3[\"Display the logs for the nginx pod\"]\n    end\n    \n    subgraph \"Troubleshooting\"\n        B1[\"Why is my deployment not starting?\"]\n        B2[\"Describe the failing pod and explain the error\"]\n        B3[\"Check if my service is properly connected to the pods\"]\n    end\n    \n    subgraph \"Deployments & Configuration\"\n        C1[\"Deploy the Nginx Helm chart\"]\n        C2[\"Create a deployment with 3 replicas of nginx:latest\"]\n        C3[\"Set up an ingress for my service\"]\n    end\n    \n    subgraph \"Advanced Operations\"\n        D1[\"Check the status of my Istio service mesh\"]\n        D2[\"Set up a canary deployment with 20% traffic to v2\"]\n        D3[\"Create an ArgoCD application for my repo\"]\n    end\n```\n\nClaude can understand your intent and run the appropriate kubectl, helm, istioctl, or argocd commands based on your request. It can then explain the output in simple terms or help you troubleshoot issues.\n\n## Advanced Claude Desktop Configuration\n\nConfigure Claude Desktop to optimize your Kubernetes workflow:\n\n### Target Specific Clusters and Namespaces\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n        \"-e\", \"K8S_CONTEXT=production-cluster\",\n        \"-e\", \"K8S_NAMESPACE=my-application\",\n        \"-e\", \"K8S_MCP_TIMEOUT=600\",\n        \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n### Connect to AWS EKS Clusters\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.aws:/home/appuser/.aws:ro\",\n        \"-e\", \"AWS_PROFILE=production\",\n        \"-e\", \"AWS_REGION=us-west-2\",\n        \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n### Connect to Google GKE Clusters\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.config/gcloud:/home/appuser/.config/gcloud:ro\",\n        \"-e\", \"CLOUDSDK_CORE_PROJECT=my-gcp-project\",\n        \"-e\", \"CLOUDSDK_COMPUTE_REGION=us-central1\",\n        \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n### Connect to Azure AKS Clusters\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.azure:/home/appuser/.azure:ro\",\n        \"-e\", \"AZURE_SUBSCRIPTION=my-subscription-id\",\n        \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n### Permissive Security Mode\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-v\", \"/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro\",\n        \"-e\", \"K8S_MCP_SECURITY_MODE=permissive\",\n        \"ghcr.io/alexei-led/k8s-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n> For detailed security configuration options, see [Security Documentation](./docs/security.md).\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "alexei-led-k8s-mcp-server-docker": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "-v",
+            "/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro",
+            "ghcr.io/alexei-led/k8s-mcp-server:latest"
+          ],
+          "env": {}
+        },
+        "alexei-led-k8s-mcp-server-docker-configured": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "-v",
+            "/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro",
+            "-e",
+            "K8S_CONTEXT=production-cluster",
+            "-e",
+            "K8S_NAMESPACE=my-application",
+            "-e",
+            "K8S_MCP_TIMEOUT=600",
+            "ghcr.io/alexei-led/k8s-mcp-server:latest"
+          ],
+          "env": {
+            "K8S_CONTEXT": "production-cluster",
+            "K8S_NAMESPACE": "my-application",
+            "K8S_MCP_TIMEOUT": "600"
+          }
+        },
+        "alexei-led-k8s-mcp-server-docker-aws": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "-v",
+            "/Users/YOUR_USER_NAME/.kube:/home/appuser/.kube:ro",
+            "-v",
+            "/Users/YOUR_USER_NAME/.aws:/home/appuser/.aws:ro",
+            "-e",
+            "AWS_PROFILE=production",
+            "ghcr.io/alexei-led/k8s-mcp-server:latest"
+          ],
+          "env": {
+            "AWS_PROFILE": "production"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    }
+  },
+  "github_info": {
+    "owner": "alexei-led",
+    "repo": "k8s-mcp-server",
+    "url": "https://github.com/alexei-led/k8s-mcp-server",
+    "name": "k8s-mcp-server",
+    "path": null,
+    "stars": 159,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "ff041329ced6e9954efcadd9b68f8572bbf26fbd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:44.011Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 8
+    },
+    {
+      "name": "psutil",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"k8s-mcp-server\"\nversion = \"1.3.0\"\ndescription = \"MCP Server for Kubernetes CLI tools (kubectl, istioctl, helm, argocd)\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nlicense = {text = \"MIT\"}\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"mcp\",\n    \"pydantic>=2.0.0\",\n    \"psutil>=5.9.0\",\n    \"pyyaml>=6.0.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"ruff\",\n    \"pytest\",\n    \"pytest-asyncio\",\n    \"pytest-cov\",\n]\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.black]\nline-length = 160\ntarget-version = ['py313']\n\n[tool.ruff]\nline-length = 160\ntarget-version = 'py313'\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"W\", \"I\", \"N\", \"UP\", \"B\", \"A\"]\nignore = []\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\n# Skip integration tests by default, run with coverage\naddopts = \"-m 'not integration' --cov=k8s_mcp_server\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\nmarkers = [\n    \"integration: marks tests as integration tests requiring a Kubernetes cluster\",\n    \"unit: marks tests as unit tests not requiring external dependencies\"\n]\n"
+}

@@ -1,0 +1,179 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "wenb1n-dev__mysql_mcp_server_pro",
+  "display_name": "mysql_mcp_server_pro",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server that supports secure interaction with MySQL databases and has anomaly analysis capabilities.更加牛逼！更加好用！不仅止于mysql的增删改查功能； 还包含了数据库异常分析能力；且便于开发者们进行个性化的工具扩展 ",
+  "author": {
+    "name": "wenb1n-dev"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![简体中文](https://img.shields.io/badge/简体中文-点击查看-orange)](README-zh.md)\n[![English](https://img.shields.io/badge/English-Click-yellow)](README.md)\n[![MseeP.ai Security Assessment Badge](https://mseep.net/mseep-audited.png)](https://mseep.ai/app/wenb1n-dev-mysql-mcp-server-pro)\n[![MCPHub](https://img.shields.io/badge/mcphub-audited-blue)](https://mcphub.com/mcp-servers/wenb1n-dev/mysql_mcp_server_pro)\n\n\n# mcp_mysql_server_pro\n\n## Introduction\nmcp_mysql_server_pro is not just about MySQL CRUD operations, but also includes database anomaly analysis capabilities and makes it easy for developers to extend with custom tools.\n\n- Supports all Model Context Protocol (MCP) transfer modes (STDIO, SSE, Streamable Http)\n- Supports OAuth2.0\n- Supports multiple SQL execution, separated by \";\"\n- Supports querying database table names and fields based on table comments\n- Supports SQL execution plan analysis\n- Supports Chinese field to pinyin conversion\n- Supports table lock analysis\n- Supports database health status analysis\n- Supports permission control with three roles: readonly, writer, and admin\n    ```\n    \"readonly\": [\"SELECT\", \"SHOW\", \"DESCRIBE\", \"EXPLAIN\"],  # Read-only permissions\n    \"writer\": [\"SELECT\", \"SHOW\", \"DESCRIBE\", \"EXPLAIN\", \"INSERT\", \"UPDATE\", \"DELETE\"],  # Read-write permissions\n    \"admin\": [\"SELECT\", \"SHOW\", \"DESCRIBE\", \"EXPLAIN\", \"INSERT\", \"UPDATE\", \"DELETE\", \n             \"CREATE\", \"ALTER\", \"DROP\", \"TRUNCATE\"]  # Administrator permissions\n    ```\n- Supports prompt template invocation\n\n\n## Tool List\n| Tool Name                  | Description                                                                                                                                                                                                              |\n|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| \n| execute_sql                | SQL execution tool that can execute [\"SELECT\", \"SHOW\", \"DESCRIBE\", \"EXPLAIN\", \"INSERT\", \"UPDATE\", \"DELETE\", \"CREATE\", \"ALTER\", \"DROP\", \"TRUNCATE\"] commands based on permission configuration                            |\n| get_chinese_initials       | Convert Chinese field names to pinyin initials                                                                                                                                                                           |\n| get_db_health_running      | Analyze MySQL health status (connection status, transaction status, running status, lock status detection)                                                                                                               |\n| get_table_desc             | Search for table structures in the database based on table names, supporting multi-table queries                                                                                                                         |\n| get_table_index            | Search for table indexes in the database based on table names, supporting multi-table queries                                                                                                                            |\n| get_table_lock             | Check if there are row-level locks or table-level locks in the current MySQL server                                                                                                                                      |\n| get_table_name             | Search for table names in the database based on table comments and descriptions                                                                                                                                          |\n| get_db_health_index_usage  | Get the index usage of the currently connected mysql database, including redundant index situations, poorly performing index situations, and the top 5 unused index situations with query times greater than 30 seconds  | \n| use_prompt_queryTableData | Use built-in prompts to let the model construct a chain call of tools in mcp (not a commonly used fixed tool, you need to modify the code to enable it, see this class for details) |\n\n## Prompt List\n| Prompt Name                | Description                                                                                                                           |\n|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------| \n| analyzing-mysql-prompt    | This is a prompt for analyzing MySQL-related issues                                                                                    |\n| query-table-data-prompt   | This is a prompt for querying table data using tools. If description is empty, it will be initialized as a MySQL database query assistant |\n\n## Usage Instructions\n\n### Installation and Configuration\n1. Install Package\n```bash\npip install mysql_mcp_server_pro\n```\n\n2. Configure Environment Variables\nCreate a `.env` file with the following content:\n```bash\n# MySQL Database Configuration\nMYSQL_HOST=localhost\nMYSQL_PORT=3306\nMYSQL_USER=your_username\nMYSQL_PASSWORD=your_password\nMYSQL_DATABASE=your_database\n# Optional, default is 'readonly'. Available values: readonly, writer, admin\nMYSQL_ROLE=readonly\n```\n\n3. Run Service\n```bash\n# SSE mode\nmysql_mcp_server_pro --mode sse --envfile /path/to/.env\n\n## Streamable Http mode (default)\nmysql_mcp_server_pro --envfile /path/to/.env\n\n# Streamable Http  oauth Authentication\nmysql_mcp_server_pro --oauth true\n\n```\n\n4. mcp client\n\ngo to see see \"Use uv to start the service\"\n^_^\n\n\nNote:\n- The `.env` file should be placed in the directory where you run the command or use --envfile parameter to specify the path\n- You can also set these variables directly in your environment\n- Make sure the database configuration is correct and can connect\n\n### Run with uvx, Client Configuration\n- This method can be used directly in MCP-supported clients, no need to download the source code. For example, Tongyi Qianwen plugin, trae editor, etc.\n```json\n{\n\t\"mcpServers\": {\n\t\t\"mysql\": {\n\t\t\t\"command\": \"uvx\",\n\t\t\t\"args\": [\n\t\t\t\t\"--from\",\n\t\t\t\t\"mysql_mcp_server_pro\",\n\t\t\t\t\"mysql_mcp_server_pro\",\n\t\t\t\t\"--mode\",\n\t\t\t\t\"stdio\"\n\t\t\t],\n\t\t\t\"env\": {\n\t\t\t\t\"MYSQL_HOST\": \"192.168.x.xxx\",\n\t\t\t\t\"MYSQL_PORT\": \"3306\",\n\t\t\t\t\"MYSQL_USER\": \"root\",\n\t\t\t\t\"MYSQL_PASSWORD\": \"root\",\n\t\t\t\t\"MYSQL_DATABASE\": \"a_llm\",\n\t\t\t\t\"MYSQL_ROLE\": \"admin\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\n### Local Development with Streamable Http mode\n\n- Use uv to start the service\n\nAdd the following content to your mcp client tools, such as cursor, cline, etc.\n\nmcp json as follows:\n```\n{\n  \"mcpServers\": {\n    \"mysql_mcp_server_pro\": {\n      \"name\": \"mysql_mcp_server_pro\",\n      \"type\": \"streamableHttp\",\n      \"description\": \"\",\n      \"isActive\": true,\n      \"url\": \"http://localhost:3000/mcp/\"\n    }\n  }\n}\n```\n\nModify the .env file content to update the database connection information with your database details:\n```\n# MySQL Database Configuration\nMYSQL_HOST=192.168.xxx.xxx\nMYSQL_PORT=3306\nMYSQL_USER=root\nMYSQL_PASSWORD=root\nMYSQL_DATABASE=a_llm\nMYSQL_ROLE=admin\n```\n\nStart commands:\n```\n# Download dependencies\nuv sync\n\n# Start\nuv run -m mysql_mcp_server_pro.server\n\n# Custom env file location\nuv run -m mysql_mcp_server_pro.server --envfile /path/to/.env\n\n# oauth Authentication\nuv run -m mysql_mcp_server_pro.server --oauth true\n```\n\n### Local Development with SSE Mode\n\n- Use uv to start the service\n\nAdd the following content to your mcp client tools, such as cursor, cline, etc.\n\nmcp json as follows:\n```\n{\n  \"mcpServers\": {\n    \"mysql_mcp_server_pro\": {\n      \"name\": \"mysql_mcp_server_pro\",\n      \"description\": \"\",\n      \"isActive\": true,\n      \"url\": \"http://localhost:9000/sse\"\n    }\n  }\n}\n```\n\nModify the .env file content to update the database connection information with your database details:\n```\n# MySQL Database Configuration\nMYSQL_HOST=192.168.xxx.xxx\nMYSQL_PORT=3306\nMYSQL_USER=root\nMYSQL_PASSWORD=root\nMYSQL_DATABASE=a_llm\nMYSQL_ROLE=admin\n```\n\nStart commands:\n```\n# Download dependencies\nuv sync\n\n# Start\nuv run -m mysql_mcp_server_pro.server --mode sse\n\n# Custom env file location\nuv run -m mysql_mcp_server_pro.server --mode sse --envfile /path/to/.env\n```\n\n### Local Development with STDIO Mode\n\nAdd the following content to your mcp client tools, such as cursor, cline, etc.\n\nmcp json as follows:\n```\n{\n  \"mcpServers\": {\n      \"operateMysql\": {\n        \"isActive\": true,\n        \"name\": \"operateMysql\",\n        \"command\": \"uv\",\n        \"args\": [\n          \"--directory\",\n          \"/Volumes/mysql_mcp_server_pro/src/mysql_mcp_server_pro\",    # Replace this with your project path\n          \"run\",\n          \"-m\",\n          \"mysql_mcp_server_pro.server\",\n          \"--mode\",\n          \"stdio\"\n        ],\n        \"env\": {\n          \"MYSQL_HOST\": \"localhost\",\n          \"MYSQL_PORT\": \"3306\",\n          \"MYSQL_USER\": \"root\", \n          \"MYSQL_PASSWORD\": \"123456\",\n          \"MYSQL_DATABASE\": \"a_llm\",\n          \"MYSQL_ROLE\": \"admin\"\n       }\n    }\n  }\n} \n```\n\n## Custom Tool Extensions\n1. Add a new tool class in the handles package, inherit from BaseHandler, and implement get_tool_description and run_tool methods\n\n2. Import the new tool in __init__.py to make it available in the server\n\n## OAuth2.0 Authentication\n1. Start the authentication service. By default, it uses the built-in OAuth 2.0 password mode authentication. You can modify your own authentication service address in the env file.\n```aiignore\nuv run -m mysql_mcp_server_pro.server --oauth true\n```\n\n2. Visit the authentication service at http://localhost:3000/login. Default username and password are configured in the env file.\n   ![image](https://github.com/user-attachments/assets/ec8a629e-62f9-4b93-b3cc-442b3d2dc46f)\n\n\n3. Copy the token and add it to the request headers, for example:\n   ![image](https://github.com/user-attachments/assets/a5451e35-bddd-4e49-8aa9-a4178d30ec88)\n\n```json\n{\n  \"mcpServers\": {\n    \"mysql_mcp_server_pro\": {\n      \"name\": \"mysql_mcp_server_pro\",\n      \"type\": \"streamableHttp\",\n      \"description\": \"\",\n      \"isActive\": true,\n      \"url\": \"http://localhost:3000/mcp/\",\n      \"headers\": {\n        \"authorization\": \"bearer TOKEN_VALUE\"\n      }\n    }\n  }\n}\n```\n\n## Examples\n1. Create a new table and insert data, prompt format as follows:\n```\n# Task\n   Create an organizational structure table with the following structure: department name, department number, parent department, is valid.\n# Requirements\n - Table name: department\n - Common fields need indexes\n - Each field needs comments, table needs comment\n - Generate 5 real data records after creation\n```\n![image](https://github.com/user-attachments/assets/34118993-2a4c-4804-92f8-7fba9df89190)\n![image](https://github.com/user-attachments/assets/f8299f01-c321-4dbf-b5de-13ba06885cc1)\n\n\n2. Query data based on table comments, prompt as follows:\n```\nSearch for data with Department name 'Executive Office' in Department organizational structure table\n```\n![image](https://github.com/user-attachments/assets/dcf96603-548e-42d9-9217-78e569be7a8d)\n\n\n3. Analyze slow SQL, prompt as follows:\n```\nselect * from t_jcsjzx_hjkq_cd_xsz_sk xsz\nleft join t_jcsjzx_hjkq_jcd jcd on jcd.cddm = xsz.cddm \nBased on current index situation, review execution plan and provide optimization suggestions in markdown format, including table index status, execution details, and optimization recommendations\n```\n\n4. Analyze SQL deadlock issues, prompt as follows:\n```\nupdate t_admin_rms_zzjg set sfyx = '0' where xh = '1' is stuck, please analyze the cause\n```\n![image](https://github.com/user-attachments/assets/25bca1cd-854c-4591-ac6e-32d464b12066)\n\n\n5. Analyze the health status prompt as follows\n```\nCheck the current health status of MySQL\n```\n![image](https://github.com/user-attachments/assets/1f221ab8-59bf-402c-a15a-ec3eba1eea59)\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mysql-mcp-server-pro-sse": {
+          "command": "mysql_mcp_server_pro",
+          "args": ["--mode", "sse", "--envfile", "/path/to/.env"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        },
+        "mysql-mcp-server-pro-streamable-http": {
+          "command": "mysql_mcp_server_pro",
+          "args": ["--envfile", "/path/to/.env"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        },
+        "mysql-mcp-server-pro-oauth": {
+          "command": "mysql_mcp_server_pro",
+          "args": ["--oauth", "true"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        },
+        "mysql-mcp-server-pro-stdio": {
+          "command": "uvx",
+          "args": ["--from", "mysql_mcp_server_pro", "mysql_mcp_server_pro", "--mode", "stdio"],
+          "env": {
+            "MYSQL_HOST": "192.168.x.xxx",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "root",
+            "MYSQL_PASSWORD": "root",
+            "MYSQL_DATABASE": "a_llm",
+            "MYSQL_ROLE": "admin"
+          }
+        },
+        "mysql-mcp-server-pro-uv-streamable-http": {
+          "command": "uv",
+          "args": ["run", "-m", "mysql_mcp_server_pro.server"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        },
+        "mysql-mcp-server-pro-uv-streamable-http-envfile": {
+          "command": "uv",
+          "args": ["run", "-m", "mysql_mcp_server_pro.server", "--envfile", "/path/to/.env"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        },
+        "mysql-mcp-server-pro-uv-oauth": {
+          "command": "uv",
+          "args": ["run", "-m", "mysql_mcp_server_pro.server", "--oauth", "true"],
+          "env": {
+            "MYSQL_HOST": "localhost",
+            "MYSQL_PORT": "3306",
+            "MYSQL_USER": "your_username",
+            "MYSQL_PASSWORD": "your_password",
+            "MYSQL_DATABASE": "your_database",
+            "MYSQL_ROLE": "readonly"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "wenb1n-dev",
+    "repo": "mysql_mcp_server_pro",
+    "url": "https://github.com/wenb1n-dev/mysql_mcp_server_pro",
+    "name": "mysql_mcp_server_pro",
+    "path": null,
+    "stars": 238,
+    "contributors": 2,
+    "issues": 35,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "7e976a26712b04e087ca24926e3379a14864f11d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:34:43.518Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "mysql-connector-python",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 8
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "PyJWT",
+      "importance": 7
+    },
+    {
+      "name": "pypinyin",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mysql_mcp_server_pro\"\nversion = \"0.1.0\"\nlicense = { text = \"MIT\" }\ndescription = \"Support for SSE, STDIO in MySQL MCP server, includes CRUD, database anomaly analysis capabilities .支持SSE，STDIO；不仅止于mysql的增删改查功能； 还包含了数据库异常分析能力；且便于开发者们进行个性化的工具扩展\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp>=1.8.0\",\n    \"mysql-connector-python>=9.2.0\",\n    \"pymysql>=1.1.1\",\n    \"pypinyin>=0.54.0\",\n    \"python-dotenv>=1.1.0\",\n    \"starlette>=0.46.1\",\n    \"uvicorn>=0.34.0\",\n    \"PyJWT>=2.8.0\",\n    \"sqlalchemy>=2.0.0\",\n]\n\n[[project.authors]]\nname = \"wenb1n\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmysql_mcp_server_pro = \"mysql_mcp_server_pro.cli:stdio_entry\"\n\n\n[tool.hatch.build]\npackages = [\"src\"]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mysql_mcp_server_pro\"]\n\n[project.urls]\nHomepage = \"https://github.com/wenb1n-dev/mysql_mcp_server_pro\"\nDocumentation = \"https://github.com/wenb1n-dev/mysql_mcp_server_pro/blob/main/README.md\"\nRepository = \"https://github.com/wenb1n-dev/mysql_mcp_server_pro.git\"\n\n=== requirements.txt ===\nmcp>=1.8.0\r\nmysql-connector-python>=9.2.0\r\npymysql>=1.1.1\r\npypinyin>=0.54.0\r\npython-dotenv>=1.1.0\r\nstarlette>=0.46.1\r\nuvicorn>=0.34.0\r\nPyJWT>=2.8.0\r\nsqlalchemy>=2.0.0"
+}

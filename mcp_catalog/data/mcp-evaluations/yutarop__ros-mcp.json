@@ -1,0 +1,101 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "yutarop__ros-mcp",
+  "display_name": "ros-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for ROS to control robots via topics, services, and actions.",
+  "author": {
+    "name": "Yutarop"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## ROS MCP\r\n**ROS MCP** is a MCP server designed for controlling robots in ROS environments using natural language. \r\nIt supports communication via ROS topics, services, and actions, and works with any ROS message type.\r\n\r\n## Demo\r\n#### Test to see if ros topics, services, and actions can be used.\r\nhttps://github.com/user-attachments/assets/61143c37-fb73-4998-9cbc-844d92ae61d9\r\n\r\n## Components\r\n- **Socket Server** ([`socket_server.py`](https://github.com/Yutarop/ros-mcp/blob/main/src/socket_server.py)): A lightweight server that runs on localhost:8765 to handle GUI-related operations. \r\nIt receives instructions from the MCP server to launch tools such as `Gazebo` or `rqt_graph` on the local display.\r\n\r\n- **MCP Server** ([`ros-general.py`](https://github.com/Yutarop/ros-mcp/blob/main/ros-general.py)): A Python-based server that implements the MCP.\r\nIt processes natural language input, maps it to ROS commands, and communicates with the socket server.\r\nTo enable node communication between the MCP server and the local machine, both must be configured with the same `ROS_DOMAIN_ID` on the same local network.\r\n\r\n## Overview of MCP Tools\r\n- `Topic Management`: List, monitor, and publish to ROS2 topics\r\n- `Node Control`: List and inspect running ROS2 nodes\r\n- `Service Interaction`: Call ROS2 services with custom\r\n- `Action Support`: Send goals to ROS2 actions\r\n- `GUI Integration`: Launch ROS2 GUI tools via WebSocket server\r\n- `Environment Debugging`: Check ROS2 setup and configuration\r\n- `Process Management`: Clean up running ROS2 processes\r\n\r\nPlease refer [here](https://github.com/Yutarop/ros-mcp/wiki/Available-Tools) for more details.\r\n\r\n## Getting Started\r\n#### Requirements\r\n- ROS2 Humble Hawksbill (This project has only been tested with ROS2 Humble. Compatibility with other ROS2 distributions is not guaranteed.)\r\n- claude desktop ([Linux](https://github.com/aaddrick/claude-desktop-debian), [macOS](https://claude.ai/download) and [Windows](https://claude.ai/download))\r\n- Python 3.10+\r\n- websockets >= 15.0.1\r\n- uv package manager ([Installing uv](https://docs.astral.sh/uv/getting-started/installation/))\r\n- Other dependencies as listed in `pyproject.toml`\r\n\r\n### Installation\r\n#### Git clone and install websockets package\r\n```bash\r\ngit clone git@github.com:Yutarop/ros-mcp.git\r\ncd ros-mcp\r\npip install \"websockets>=15.0.1\"\r\n```\r\n\r\n#### Activate .venv and install dependencies\r\n```bash\r\nuv venv\r\nsource .venv/bin/activate\r\nuv pip install -e .\r\n```\r\n\r\n#### Claude Settings (`claude_desktop_config.json`)\r\nTo use the MCP server correctly with Claude Desktop, you need to modify the claude_desktop_config.json file with appropriate values.\r\n```\r\n{\r\n  \"mcpServers\": {\r\n    \"ros-general\": {\r\n      \"command\": \"uv\",\r\n      \"args\": [\r\n        \"--directory\",\r\n        \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp\",\r\n        \"run\",\r\n        \"bash\",\r\n        \"-c\",\r\n        \"export ROS_LOG_DIR=/tmp && export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-YOUR_ROS_DOMAIN_ID} && source /opt/ros/humble/setup.bash && python3 /ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-general.py\"\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n##### **💡 Replace the following placeholders:**\r\n- `/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp`\r\nReplace with the absolute path the ros-mcp directory. \r\nFor example: /home/ubuntu/ros-mcp\r\n\r\n- `YOUR_ROS_DOMAIN_ID`\r\n  Replace with the ROS domain ID used in your environment to enable ROS communication between the MCP server and your local machine. If you're not sure what your current domain ID is, you can check it by running the following command in your terminal:\r\n  ```bash\r\n  echo $ROS_DOMAIN_ID\r\n  ```\r\n  If nothing is printed, the domain ID is not set, and the default value 0 will be used.\r\n  Alternatively, you can set it manually using the following command:\r\n  ```bash\r\n  export ROS_DOMAIN_ID=10  # Replace 10 with your desired domain ID\r\n  ```\r\n- `/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-general.py`\r\nReplace with the absolute path to your ros-general.py script.\r\nFor example: /home/ubuntu/ros-mcp/ros-general.py\r\n\r\n## Running the Servers\r\n#### Start MCP server\r\nMake sure your virtual environment is activated before running the MCP server:\r\n```bash\r\n(ros-mcp) $ uv run ros-general.py\r\n```\r\n#### Start socket server\r\n```bash\r\npython3 socket_server.py\r\n```\r\n > 💡not in the virtual environment!\r\n\r\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ros-general": {
+          "command": "uv",
+          "args": ["run", "ros-general.py"],
+          "env": {}
+        },
+        "ros-general-configured": {
+          "command": "uv",
+          "args": [
+            "--directory",
+            "/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp",
+            "run",
+            "bash",
+            "-c",
+            "export ROS_LOG_DIR=/tmp && export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-YOUR_ROS_DOMAIN_ID} && source /opt/ros/humble/setup.bash && python3 /ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp/ros-general.py"
+          ],
+          "env": {}
+        },
+        "socket-server": {
+          "command": "python3",
+          "args": ["socket_server.py"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Yutarop",
+    "repo": "ros-mcp",
+    "url": "https://github.com/Yutarop/ros-mcp",
+    "name": "ros-mcp",
+    "path": null,
+    "stars": 16,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4d8afc43b42b8119b43785fe186c27456eac127b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:33.884Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "websockets",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ros-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.9.4\",\n    \"websockets>=15.0.1\",\n]\n"
+}

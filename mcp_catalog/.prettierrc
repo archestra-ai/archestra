@@ -1,0 +1,19 @@
+{
+  "endOfLine": "auto",
+  "printWidth": 120,
+  "trailingComma": "es5",
+  "semi": true,
+  "jsxSingleQuote": false,
+  "singleQuote": true,
+  "useTabs": false,
+  "tabWidth": 2,
+  "importOrder": [
+    "<THIRD_PARTY_MODULES>",
+    "^@(components|constants|mcpCatalog|lib)(.*)$",
+    "^[./](?!.*\\.(css|scss|sass|less|styl)$)",
+    "^[./].*\\.(css|scss|sass|less|styl)$"
+  ],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true,
+  "plugins": ["@trivago/prettier-plugin-sort-imports"]
+}

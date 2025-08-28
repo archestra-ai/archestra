@@ -1,0 +1,85 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "aim-intelligence__aim-mcp",
+  "display_name": "AIM-MCP",
+  "version": "1.0.0",
+  "description": "AIM MCP Server :: Guard and Protect your MCPs & AI Chatting",
+  "author": {
+    "name": "AIM-Intelligence"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AIM Guard MCP\n\n[![NPM Version](https://img.shields.io/npm/v/aim-guard-mcp)](https://www.npmjs.com/package/aim-guard-mcp)\n[![Smithery Server](https://img.shields.io/badge/Smithery-MCP%20Server-red)](https://smithery.ai/server/@AIM-Intelligence/aim-mcp)\n\n🛡️ **AIM MCP Server :: Guard and Protect your MCPs & AI Agents**\n\nA Model Context Protocol (MCP) server that provides AI-powered security analysis and safety instruction tools. This server helps protect AI agents by providing security guidelines, content analysis, and cautionary instructions when interacting with various MCPs and external services.\n\n## Features\n\n- 🛡️ **AI Safety Guard**: Provides contextual security instructions and precautions for AI Agents before MCP interactions\n- 🔍 **Text Guard Analysis**: Analyze text content for harmful or inappropriate content using AIM Intelligence API\n- 🔒 **Security Prompt Enhancement**: Add security instructions to user prompts for safer AI interactions\n- ⚡ **Fast & Lightweight**: Built with TypeScript and Zod validation\n- 🔧 **Easy Integration**: Works with any MCP-compatible AI assistant\n- 🔗 **API Integration**: Connects to AIM Intelligence API for advanced content analysis\n\n## Installation\n\n### NPX (Recommended)\n\n```bash\nnpx aim-guard-mcp\n```\n\n### Global Installation\n\n```bash\nnpm install -g aim-guard-mcp\naim-guard-mcp\n```\n\n### Local Installation\n\n```bash\nnpm install aim-guard-mcp\n```\n\n## Usage\n\n### As MCP Server\n\nAdd to your MCP client configuration:\n\n```json\n{\n  \"servers\": {\n    \"aim-guard\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"aim-guard-mcp\"]\n    }\n  }\n}\n```\n\n### Testing the Tools\n\n#### Test AI Safety Guard\n\n```bash\n# Get safety instructions for database operations\n{\n  \"name\": \"ai-safety-guard\",\n  \"arguments\": {\n    \"mcp_type\": \"database\",\n    \"operation_type\": \"query\",\n    \"sensitivity_level\": \"confidential\"\n  }\n}\n```\n\n#### Test Text Guard\n\n```bash\n# This will analyze the text for harmful content\n{\n  \"name\": \"aim-text-guard\",\n  \"arguments\": {\n    \"text\": \"This is a sample text to analyze for safety.\"\n  }\n}\n```\n\n#### Test Security Prompt Enhancement\n\n```bash\n# Enhance a user prompt with security instructions\n{\n  \"name\": \"aim-security-prompt-tool\",\n  \"arguments\": {\n    \"user_prompt\": \"Please help me with this task\",\n    \"security_level\": \"strict\"\n  }\n}\n```\n\n### Available Tools\n\n#### 1. `ai-safety-guard`\n\nProvides contextual security instructions and precautions for AI Agents before they interact with other MCPs.\n\n```json\n{\n  \"name\": \"ai-safety-guard\",\n  \"arguments\": {\n    \"mcp_type\": \"email|slack|database|file|web|general\", // Type of MCP being called\n    \"operation_type\": \"read|write|execute|delete|send|query\", // Operation being performed\n    \"sensitivity_level\": \"public|internal|confidential|restricted\" // Data sensitivity level\n  }\n}\n```\n\n**Features**:\n\n- Context-aware security guidelines based on MCP type\n- Operation-specific warnings and precautions\n- Sensitivity-level protocols and restrictions\n- Comprehensive checklists for safe MCP interactions\n- Red flag detection and abort recommendations\n\n#### 2. `aim-text-guard`\n\nAnalyze text content for harmful or inappropriate content using AIM Intelligence API.\n\n```json\n{\n  \"name\": \"aim-text-guard\",\n  \"arguments\": {\n    \"text\": \"Text content to analyze for harmful content\"\n  }\n}\n```\n\n**Features**:\n\n- Real-time content analysis\n- Harmful content detection\n- Detailed analysis results in JSON format\n- Error handling with informative messages\n- Timestamp tracking for analysis requests\n\n#### 3. `aim-security-prompt-tool`\n\nEnhance user prompts with security instructions for safer AI interactions.\n\n```json\n{\n  \"name\": \"aim-security-prompt-tool\",\n  \"arguments\": {\n    \"user_prompt\": \"Original user prompt to enhance\",\n    \"security_level\": \"basic|standard|strict\" // Optional, defaults to 'standard'\n  }\n}\n```\n\n**Features**:\n\n- Multi-level security enhancement (basic, standard, strict)\n- Comprehensive threat analysis instructions\n- Social engineering protection guidelines\n- Security policy compliance checks\n- Sanitization and validation requirements\n\n## Security Features\n\n### 🛡️ AI Agent Protection\n\n- **MCP Interaction Safety**: Contextual guidelines for different MCP types\n- **Operation Validation**: Specific precautions for read/write/execute operations\n- **Data Sensitivity Handling**: Protocols based on data classification levels\n\n### 🔍 Content Analysis\n\n- **Real-time Threat Detection**: Analyze content for harmful patterns\n- **API-powered Analysis**: Advanced AI-driven content safety assessment\n- **Comprehensive Reporting**: Detailed security analysis results\n\n### 🔒 Prompt Security\n\n- **Security-Enhanced Prompts**: Add protective instructions to user prompts\n- **Configurable Security Levels**: Basic to strict security protocols\n- **Threat Prevention**: Proactive security measures in AI interactions\n\n## Development\n\n```bash\n# Clone the repository\ngit clone https://github.com/AIM-Intelligence/AIM-MCP.git\ncd AIM-MCP\n\n# Install dependencies\npnpm install\n\n# Build the project\npnpm run build\n\n# Run in development mode\npnpm run dev\n\n# Run tests\npnpm test\n```\n\n## Deployment\n\nThis project uses automated CI/CD pipeline for seamless deployment to NPM.\n\n### Automatic Deployment\n\nWhen you push to the `main` branch, GitHub Actions will automatically:\n\n1. **Build and Test**: Compile TypeScript and run tests\n2. **Version Check**: Compare current version with published version\n3. **Publish to NPM**: Automatically publish if version has changed\n4. **Create Release**: Generate GitHub release with version tag\n\n### Manual Version Management\n\n```bash\n# Bump patch version (1.0.0 -> 1.0.1)\npnpm run release:patch\n\n# Bump minor version (1.0.0 -> 1.1.0)\npnpm run release:minor\n\n# Bump major version (1.0.0 -> 2.0.0)\npnpm run release:major\n```\n\n### Setting up NPM Token\n\nTo enable automatic deployment, add your NPM token to GitHub Secrets:\n\n1. Go to [npmjs.com](https://www.npmjs.com) and create an automation token\n2. In your GitHub repository, go to Settings > Secrets and variables > Actions\n3. Add a new secret named `NPM_TOKEN` with your NPM token value\n\n### Deployment Workflow\n\n```mermaid\ngraph LR\n    A[Push to main] --> B[GitHub Actions]\n    B --> C[Build & Test]\n    C --> D[Version Check]\n    D --> E{Version Changed?}\n    E -->|Yes| F[Publish to NPM]\n    E -->|No| G[Skip Deployment]\n    F --> H[Create GitHub Release]\n    F --> I[Create Git Tag]\n```\n\n## Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\n- 📧 Email: support@aim-intelligence.com\n- 🐛 Issues: [GitHub Issues](https://github.com/AIM-Intelligence/AIM-MCP/issues)\n- 📖 Documentation: [GitHub Wiki](https://github.com/AIM-Intelligence/AIM-MCP/wiki)\n\n---\n\nMade with ❤️ by [AIM Intelligence](https://github.com/AIM-Intelligence)\n",
+  "category": "Security",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "aim-guard-mcp": {
+          "command": "npx",
+          "args": ["aim-guard-mcp"],
+          "env": {}
+        },
+        "aim-guard-mcp-stdio": {
+          "command": "npx",
+          "args": ["aim-guard-mcp"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "AIM-Intelligence",
+    "repo": "AIM-MCP",
+    "url": "https://github.com/AIM-Intelligence/AIM-MCP",
+    "name": "AIM-MCP",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "18213c2c9af1d728bd560449770be8fe74166ef3"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:30:13.029Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"aim-guard-mcp\",\n  \"version\": \"1.1.5\",\n  \"description\": \"AIM MCP Server :: Guard and Protect your MCPs & AI Chatting\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"aim-guard-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"build:index\": \"tsc src/index.ts --outDir dist\",\n    \"dev\": \"tsx src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"jest\",\n    \"prepublishOnly\": \"pnpm run build\",\n    \"publish:npm\": \"npm publish --access public\",\n    \"version:patch\": \"node scripts/increment-version.js patch\",\n    \"version:minor\": \"node scripts/increment-version.js minor\",\n    \"version:major\": \"node scripts/increment-version.js major\",\n    \"release:patch\": \"pnpm run version:patch && git add . && git commit -m \\\"chore: bump version\\\" && git push\",\n    \"release:minor\": \"pnpm run version:minor && git add . && git commit -m \\\"chore: bump minor version\\\" && git push\",\n    \"release:major\": \"pnpm run version:major && git add . && git commit -m \\\"chore: bump major version\\\" && git push\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/AIM-Intelligence/AIM-MCP.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"security\",\n    \"aim-intelligence\",\n    \"data-extraction\",\n    \"copilot-guard\"\n  ],\n  \"author\": \"AIM-Intelligence\",\n  \"license\": \"ISC\",\n  \"type\": \"commonjs\",\n  \"bugs\": {\n    \"url\": \"https://github.com/AIM-Intelligence/AIM-MCP/issues\"\n  },\n  \"homepage\": \"https://github.com/AIM-Intelligence/AIM-MCP#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"zod\": \"^3.25.49\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.29\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"packageManager\": \"pnpm@9.5.0+sha512.140036830124618d624a2187b50d04289d5a087f326c9edfc0ccd733d76c4f52c3a313d4fc148794a2a9d81553016004e6742e8cf850670268a7387fc220c903\"\n}\n"
+}

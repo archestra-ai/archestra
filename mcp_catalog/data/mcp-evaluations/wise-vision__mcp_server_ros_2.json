@@ -1,0 +1,92 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "wise-vision__mcp_server_ros_2",
+  "display_name": "mcp_server_ros_2",
+  "version": "1.0.0",
+  "description": "Advanced MCP Server ROS 2 bridging AI agents straight into robotics",
+  "author": {
+    "name": "wise-vision"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "\n# WiseVision ROS2 MCP Server\n\nPython server implementing Model Context Protocol (MCP) for ROS2.\n\n![Demo](docs/assets/mcp-ros2-server.gif)\n\n# Features\n- List available topics \n- List available services \n- Call service\n- Get messages from [WiseVision Data Black Box](https://github.com/wise-vision/wisevision_data_black_box) ([influxDB](https://www.influxdata.com) alternative to [Rosbag2](https://github.com/ros2/rosbag2))\n- Subscribe topic to get messages\n- Publish message on topic\n- Echo message on topic\n- Get fields from message type\n\n\n**Note:** To call service with custom service source it before start server.\n\n## API\n\n### Tools\n\n- **ros2_topic_list**\n    - Retrun list of available topics\n    - Output:\n        - `topic_name` (string): Topic name\n        - `topic_type` (string): Message topic type\n\n- **ros2_service_list**\n    - Retruns list available services\n    - Output:\n        - `service_name` (string): Service name\n        - `service_type` (string): Service type\n        - `request_fields` (string array): Fields in service\n\n- **ros2_service_call**\n    - Call ros2 service\n    - Inputs:\n        - `service_name` (string): Service name\n        - `service_type` (string): Service type\n        - `fields` (string array): Fields in service request filled with user data\n        - `force_call` (bool): Force service call without every field in service field up, Default set to false\n    - Output:\n        - `result` (string): Return result of the service call\n        - `error` (string): Return error in case of error\n    - Features:\n        - Check if service exists\n        - Check if every field in service is provide\n\n- **ros2_topic_subscribe**\n    - Subscribes to a ROS 2 topic and collects messages either for a duration or a message limit.\n    - Inputs:\n        - `topic_name` (string): Topic name\n        - `msg_type` (string): Message type\n        - `duration` (float): How long subscribe topic\n        - `message_limit` (int): How many messages collect\n        - Default to collect first message, waiting 5 seconds\n    - Output:\n        - `messages`: Serialized messages from topic\n        - `count`: Number of collected messages\n        - `duration`: How long messages has been collected\n\n- **ros2_get_messages**\n    - Inputs:\n        - `topic_name` (string): Topic name\n        - `message_type` (string): Message type\n        - `number_of_msg`(int): How many messages get from data black box\n        - `time_start` (str): Start time for data retrieval. Only messages with timestamps after this will be returned\n        - `time_end` (str):  End time for data retrieval. Only messages with timestamps before this will be returned\n    - Output:\n        - `timestamps`: Time values used to indicate when each message was created, recorded, or received. Typically represented as ISO 8601 strings or UNIX epoch times. Used for filtering, ordering, and synchronizing data.\n        - `messages`: Individual units of published data in ROS 2 topics. Each message contains a structured payload defined by its message type (e.g., `std_msgs/msg/String`).\n\n- **ros2_get_message_fields**\n    - Inputs:\n        - `message_type` (string): Message type\n    - Output:\n        - Returns the field names and types for a given ROS 2 message request type\n\n- **ros2_topic_publish**\n    - Inputs:\n        - `topic_name` (string): Topic name\n        - `message_type` (string): Message type\n        - `data` (dict): Dictionary with message fields\n    - Output:\n        - `status`: Status of publication\n\n- **ros2_topic_echo_wait**\n    - Inputs:\n        - `topic_name` (string): Topic name\n        - `message_type` (string): Message type\n        - `timeout` (float): Duration to wait for a message before giving up.\n    - Output:\n        - `message`: The deserialized ROS 2 message, converted to a Python dictionary (via message_to_ordereddict)\n        - `received`: true, indicating the message was successfully received\n\n## Usage\n\n### MCP Server Configuration\n> [!NOTE]\n> The server is running inside a Docker container as the root user. To communicate with other ROS components, they must also be run as root.\n\n> [!NOTE]\n> Due to this [issue](https://github.com/microsoft/vscode-copilot-release/issues/7505), this MCP server doesn't work with Copilot in Visual Studio Code.\n\n**Docker run**\n\nSet MCP setting to mcp.json.\n```json\n\"mcp_server_ros_2\": {\n    \"command\": \"docker\",\n    \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"wisevision/mcp_server_ros_2\"\n    ],\n    }\n\n```\n\n### Build docker image locally\n```bash\ngit clone https://github.com/wise-vision/mcp_server_ros_2.git\ncd mcp_server_ros_2\ndocker build -t wisevision/mcp_server_ros_2 .\n```\n\n\nAdd  this to AI Agent prompt:\n```txt\nYou are an AI assistant that uses external tools via an MCP server.\nBefore calling any tool, always check your memory to see if the list of available tools is known.\n\t•\tIf you don’t have the current tool list in memory, your first action should be to call the list-tools tool.\n\t•\tNever guess tool names or parameters.\n\t•\tIf a user requests something that may require a tool and you don’t have the right tool info, ask them or call list-tools first.\nOnce the tool list is loaded, you may call tools directly using their documented names and schemas.\n```\n\n# Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [ `npm` ](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp_server_ros2 run mcp_server_ros_2\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "wisevision-mcp_server_ros_2-docker": {
+          "command": "docker",
+          "args": ["run", "-i", "--rm", "wisevision/mcp_server_ros_2"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "wise-vision",
+    "repo": "mcp_server_ros_2",
+    "url": "https://github.com/wise-vision/mcp_server_ros_2",
+    "name": "mcp_server_ros_2",
+    "path": null,
+    "stars": 26,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "023d5d3c83b3fe8796415589d2136d133ce34fed"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T10:15:07.201Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "PyYAML",
+      "importance": 7
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 6
+    },
+    {
+      "name": "lark",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mcp_server_ros_2\"\nversion = \"0.1.0\"\ndescription = \"MCP Server for ROS 2\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.4\",\n    \"numpy>=1.21,<2.0\", \n    \"PyYAML\",\n    \"python-dateutil\",\n    \"lark\"\n]\n\n[tool.uv]\ndev-dependencies = [\n    \"pytest>=8.0\",\n]\n\n[project.scripts]\nmcp_ros_2_server = \"server.main:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"server\"]\n"
+}

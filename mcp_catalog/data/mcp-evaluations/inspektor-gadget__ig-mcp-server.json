@@ -1,0 +1,131 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "inspektor-gadget__ig-mcp-server",
+  "display_name": "ig-mcp-server",
+  "version": "1.0.0",
+  "description": "Debug your Container and Kubernetes workloads with an AI interface ",
+  "author": {
+    "name": "inspektor-gadget"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![GitHub Release](https://img.shields.io/github/v/release/inspektor-gadget/ig-mcp-server)](https://github.com/inspektor-gadget/ig-mcp-server/releases)\n[![License](https://img.shields.io/github/license/inspektor-gadget/ig-mcp-server)](LICENSE)\n[![Slack](https://img.shields.io/badge/slack-%23inspektor--gadget-brightgreen)](https://kubernetes.slack.com/channels/inspektor-gadget)\n[![Go Report Card](https://goreportcard.com/badge/github.com/inspektor-gadget/ig-mcp-server)](https://goreportcard.com/report/github.com/inspektor-gadget/ig-mcp-server)\n[![Examples](https://img.shields.io/badge/examples-view-orange)](examples/README.md)\n[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/inspektor-gadget/ig-mcp-server)\n\n# Inspektor Gadget MCP Server\n\nAI-powered debugging and inspection for Kubernetes clusters using Inspektor Gadget.\n\nhttps://github.com/user-attachments/assets/86367982-c0aa-455c-ac9e-ca43348899df\n\n## Features\n\n- AI-powered interface for Kubernetes troubleshooting and monitoring\n- One-click Inspektor Gadget deployment and removal\n- Intelligent output summarization and analysis\n- Automatic gadget discovery from Artifact Hub\n\n## Quick Start\n\n1. Ensure you have Docker and a valid `kubeconfig` file\n2. Configure the MCP server in VS Code (see [INSTALL.md](INSTALL.md))\n3. Start using AI commands in VS Code Copilot Chat\n4. Try: \"Show me DNS traffic\" or \"Deploy Inspektor Gadget\"\n5. Head to [examples](examples/README.md) for detailed examples.\n\n## Installation\n\nYou can use the following commands to quickly configure the Inspektor Gadget MCP server using either Docker or a binary in your VS Code settings.\n\n### Docker\n\n<summary>\n  <details>\n    <summary>Install Inspektor Gadget MCP Server - Artifact Hub Discovery</summary>\n    <pre><code>code --add-mcp '{\n  \"name\": \"inspektor-gadget\",\n  \"command\": \"docker\",\n  \"args\": [\n    \"run\",\n    \"-i\",\n    \"--rm\",\n    \"--mount\",\n    \"type=bind,src=${env:HOME}/.kube/config,dst=/kubeconfig\",\n    \"ghcr.io/inspektor-gadget/ig-mcp-server:latest\",\n    \"-gadget-discoverer=artifacthub\"\n  ]\n}'</code></pre>\n  </details>\n<details>\n    <summary>Install Inspektor Gadget MCP Server - Specific Gadgets</summary>\n    <pre><code>code --add-mcp '{\n  \"name\": \"inspektor-gadget\",\n  \"command\": \"docker\",\n  \"args\": [\n    \"run\",\n    \"-i\",\n    \"--rm\",\n    \"--mount\",\n    \"type=bind,src=${env:HOME}/.kube/config,dst=/kubeconfig\",\n    \"ghcr.io/inspektor-gadget/ig-mcp-server:latest\",\n    \"-gadget-images=trace_dns:latest,trace_tcp:latest,snapshot_process:latest,snapshot_socket:latest\"\n  ]\n}'</code></pre>\n  </details>\n</summary>\n\n### Binary\n\nYou can head to the [Releases](https://github.com/inspektor-gadget/ig-mcp-server/releases) page and download the latest binary for your platform:\n\n<summary>\n  <details>\n    <summary>Linux</summary>\n    <pre><code>MCP_VERSION=$(curl -s https://api.github.com/repos/inspektor-gadget/ig-mcp-server/releases/latest | jq -r .tag_name)\nMCP_ARCH=amd64\ncurl -sL https://github.com/inspektor-gadget/ig-mcp-server/releases/download/${MCP_VERSION}/ig-mcp-server-linux-${MCP_ARCH}.tar.gz | sudo tar -C /usr/local/bin -xzf - ig-mcp-server\n</code></pre>\n  </details>\n  <details>\n    <summary>macOS</summary>\n    <pre><code>MCP_VERSION=$(curl -s https://api.github.com/repos/inspektor-gadget/ig-mcp-server/releases/latest | jq -r .tag_name)\nMCP_ARCH=arm64\ncurl -sL https://github.com/inspektor-gadget/ig-mcp-server/releases/download/${MCP_VERSION}/ig-mcp-server-darwin-${MCP_ARCH}.tar.gz | sudo tar -C /usr/local/bin -xzf - ig-mcp-server\n</code></pre>\n  </details>\n  <details>\n    <summary>Windows</summary>\n    <pre><code>$MCP_VERSION = (curl.exe -s https://api.github.com/repos/inspektor-gadget/ig-mcp-server/releases/latest | ConvertFrom-Json).tag_name\n$MCP_ARCH = \"amd64\"\ncurl.exe -L \"https://github.com/inspektor-gadget/ig-mcp-server/releases/download/$MCP_VERSION/ig-mcp-server-windows-$MCP_ARCH.tar.gz\" -o \"ig-mcp-server.tar.gz\"\n$destPath = \"C:\\Program Files\\ig-mcp-server\"\nif (-Not (Test-Path $destPath -PathType Container)) { mkdir $destPath}\ntar.exe -xzf \"ig-mcp-server.tar.gz\" -C \"$destPath\"\nrm ig-mcp-server.tar.gz\nWrite-Host \"✅ Extracted to $destPath\"\nWrite-Host \"👉 Please add '$destPath' to your PATH environment variable manually.\"\n</code></pre>\n  </details>\n</summary>\n\nAfter downloading, you can run the following command to add it to your VS Code MCP configuration.\n\n<summary>\n  <details>\n    <summary>Install Inspektor Gadget MCP Server - Artifact Hub Discovery</summary>\n    <pre><code>code --add-mcp '{\n  \"name\": \"inspektor-gadget\",\n  \"command\": \"ig-mcp-server\",\n  \"args\": [\n    \"-gadget-discoverer=artifacthub\"\n  ]\n}'</code></pre>\n  </details>\n<details>\n    <summary>Install Inspektor Gadget MCP Server - Specific Gadgets</summary>\n    <pre><code>code --add-mcp '{\n    \"name\": \"inspektor-gadget\",\n    \"command\": \"ig-mcp-server\",\n    \"args\": [\n      \"-gadget-images=trace_dns:latest,trace_tcp:latest\"\n    ]\n}'</code></pre>\n    </details>\n</summary>\n\n## Available Tools\n\n### Management Tools\n- **is_inspektor_gadget_deployed**: Checks if Inspektor Gadget is deployed in your cluster\n- **deploy_inspektor_gadget**: Installs Inspektor Gadget in your cluster (skipped if `-read-only` is set)\n- **undeploy_inspektor_gadget**: Removes Inspektor Gadget from your cluster (skipped if `-read-only` is set)\n\n### Lifecycle Tools\n\n- **stop-gadget**: Stops a background running gadget\n- **get-results**: Retrieves results from a background running gadget\n- **wait**: Waits for a gadget to finish running\n\n### Dynamic Tools\n\nEach gadget is registered as its own MCP tool (e.g., `trace_dns`, `trace_tcp`, etc.) and supports running gadgets in foreground mode, which is useful for debugging/development and also in background mode for observability.\n\nAlso, You can control which gadgets are available by configuring the MCP server with the `-gadget-discoverer` or `-gadget-images` options, allowing you to limit the tools to only those you need.\n\n#### Gadget Discovery\n\nGadget discovery allows controlling which gadgets are available for use. You can choose between two methods:\n\n- **Automatic**: Uses Artifact Hub (`-gadget-discoverer=artifacthub`)\n- **Manual**: Specify gadgets directly (`-gadget-images=trace_dns:latest`)\n\n![Gadget Tools](media/gadget-tools.png)\n\nSee [INSTALL.md](INSTALL.md) for configuration options.\n\n## Security Notes\n\n- Requires read-only access to your kubeconfig file\n- Needs network access for Artifact Hub discovery\n- See [security guide](SECURITY.md) for setting up server with minimal permissions\n\n## Resources\n\n- 📖 [Documentation](https://inspektor-gadget.io/docs/)\n- 🔍 [Examples](examples/README.md)\n- 🐛 [Issues](https://github.com/inspektor-gadget/ig-mcp-server/issues)\n- 💬 [Slack](https://kubernetes.slack.com/channels/inspektor-gadget)\n- 🌐 [Website](https://inspektor-gadget.io/)\n- 📋 [Troubleshooting](TROUBLESHOOTING.md)\n- 🔒 [Security Guide](SECURITY.md)\n\n## Related Projects\n\n- [Inspektor Gadget](https://github.com/inspektor-gadget/inspektor-gadget) - Kubernetes debugging tool\n- [MCP Specification](https://spec.modelcontextprotocol.io/) - Model Context Protocol\n\n## License\n\nApache License 2.0 - see [LICENSE](LICENSE) for details.\n",
+  "category": "Development",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ghcr.io-inspektor-gadget-ig-mcp-server-docker-artifacthub-discovery": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "--mount",
+            "type=bind,src=${env:HOME}/.kube/config,dst=/kubeconfig",
+            "ghcr.io/inspektor-gadget/ig-mcp-server:latest",
+            "-gadget-discoverer=artifacthub"
+          ],
+          "env": {}
+        },
+        "ghcr.io-inspektor-gadget-ig-mcp-server-docker-specific-gadgets": {
+          "command": "docker",
+          "args": [
+            "run",
+            "-i",
+            "--rm",
+            "--mount",
+            "type=bind,src=${env:HOME}/.kube/config,dst=/kubeconfig",
+            "ghcr.io/inspektor-gadget/ig-mcp-server:latest",
+            "-gadget-images=trace_dns:latest,trace_tcp:latest,snapshot_process:latest,snapshot_socket:latest"
+          ],
+          "env": {}
+        },
+        "ig-mcp-server-binary-artifacthub-discovery": {
+          "command": "ig-mcp-server",
+          "args": ["-gadget-discoverer=artifacthub"],
+          "env": {}
+        },
+        "ig-mcp-server-binary-specific-gadgets": {
+          "command": "ig-mcp-server",
+          "args": ["-gadget-images=trace_dns:latest,trace_tcp:latest"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "inspektor-gadget",
+    "repo": "ig-mcp-server",
+    "url": "https://github.com/inspektor-gadget/ig-mcp-server",
+    "name": "ig-mcp-server",
+    "path": null,
+    "stars": 10,
+    "contributors": 3,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e3713304a550f914cd57af84b25f4ea4302d104f"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:23:28.905Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "inspektor-gadget/inspektor-gadget",
+      "importance": 9
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 4
+    },
+    {
+      "name": "helm.sh/helm/v3",
+      "importance": 8
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 8
+    },
+    {
+      "name": "k8s.io/cli-runtime",
+      "importance": 8
+    },
+    {
+      "name": "k8s.io/client-go",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/inspektor-gadget/ig-mcp-server\n\ngo 1.24.1\n\nrequire (\n\tgithub.com/inspektor-gadget/inspektor-gadget v0.42.0\n\tgithub.com/mark3labs/mcp-go v0.34.0\n\tgopkg.in/yaml.v3 v3.0.1\n\thelm.sh/helm/v3 v3.18.4\n\tk8s.io/apimachinery v0.33.3\n\tk8s.io/cli-runtime v0.33.3\n\tk8s.io/client-go v0.33.3\n)\n\nrequire (\n\tdario.cat/mergo v1.0.2 // indirect\n\tgithub.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect\n\tgithub.com/BurntSushi/toml v1.5.0 // indirect\n\tgithub.com/MakeNowJust/heredoc v1.0.0 // indirect\n\tgithub.com/Masterminds/goutils v1.1.1 // indirect\n\tgithub.com/Masterminds/semver/v3 v3.3.1 // indirect\n\tgithub.com/Masterminds/sprig/v3 v3.3.0 // indirect\n\tgithub.com/Masterminds/squirrel v1.5.4 // indirect\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/blang/semver v3.5.1+incompatible // indirect\n\tgithub.com/blang/semver/v4 v4.0.0 // indirect\n\tgithub.com/chai2010/gettext-go v1.0.3 // indirect\n\tgithub.com/cilium/ebpf v0.18.0 // indirect\n\tgithub.com/containerd/containerd v1.7.27 // indirect\n\tgithub.com/containerd/errdefs v1.0.0 // indirect\n\tgithub.com/containerd/log v0.1.0 // indirect\n\tgithub.com/containerd/platforms v0.2.1 // indirect\n\tgithub.com/cyphar/filepath-securejoin v0.4.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/distribution/reference v0.6.0 // indirect\n\tgithub.com/docker/cli v28.3.0+incompatible // indirect\n\tgithub.com/docker/docker-credential-helpers v0.9.3 // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.12.2 // indirect\n\tgithub.com/evanphx/json-patch v5.9.11+incompatible // indirect\n\tgithub.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect\n\tgithub.com/fatih/color v1.18.0 // indirect\n\tgithub.com/fsnotify/fsnotify v1.9.0 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.8.0 // indirect\n\tgithub.com/go-errors/errors v1.5.1 // indirect\n\tgithub.com/go-gorp/gorp/v3 v3.1.0 // indirect\n\tgithub.com/go-jose/go-jose/v4 v4.1.0 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.1 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.1 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.3.0 // indirect\n\tgithub.com/gobwas/glob v0.2.3 // indirect\n\tgithub.com/gofrs/flock v0.12.1 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/google/btree v1.1.3 // indirect\n\tgithub.com/google/gnostic-models v0.6.9 // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/go-containerregistry v0.20.6 // indirect\n\tgithub.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect\n\tgithub.com/gosuri/uitable v0.0.4 // indirect\n\tgithub.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect\n\tgithub.com/hashicorp/errwrap v1.1.0 // indirect\n\tgithub.com/hashicorp/go-multierror v1.1.1 // indirect\n\tgithub.com/huandu/xstrings v1.5.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jmoiron/sqlx v1.4.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/compress v1.18.0 // indirect\n\tgithub.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect\n\tgithub.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect\n\tgithub.com/letsencrypt/boulder v0.0.0-20250625233552-4e74a255825f // indirect\n\tgithub.com/lib/pq v1.10.9 // indirect\n\tgithub.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect\n\tgithub.com/mailru/easyjson v0.9.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mitchellh/copystructure v1.2.0 // indirect\n\tgithub.com/mitchellh/go-wordwrap v1.0.1 // indirect\n\tgithub.com/mitchellh/reflectwalk v1.0.2 // indirect\n\tgithub.com/moby/moby v28.3.0+incompatible // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/moby/term v0.5.2 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/onsi/ginkgo/v2 v2.23.3 // indirect\n\tgithub.com/onsi/gomega v1.36.2 // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.1 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.4 // indirect\n\tgithub.com/peterbourgon/diskv v2.0.1+incompatible // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/rubenv/sql-migrate v1.8.0 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/sagikazarmark/locafero v0.9.0 // indirect\n\tgithub.com/secure-systems-lab/go-securesystemslib v0.9.0 // indirect\n\tgithub.com/shopspring/decimal v1.4.0 // indirect\n\tgithub.com/sigstore/protobuf-specs v0.4.3 // indirect\n\tgithub.com/sigstore/sigstore v1.9.5 // indirect\n\tgithub.com/sirupsen/logrus v1.9.3 // indirect\n\tgithub.com/sourcegraph/conc v0.3.0 // indirect\n\tgithub.com/spf13/afero v1.14.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/spf13/cobra v1.9.1 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/spf13/viper v1.20.1 // indirect\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgithub.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect\n\tgithub.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect\n\tgithub.com/xeipuuv/gojsonschema v1.2.0 // indirect\n\tgithub.com/xlab/treeprint v1.2.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/otel v1.37.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.37.0 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgo.yaml.in/yaml/v2 v2.4.2 // indirect\n\tgo.yaml.in/yaml/v3 v3.0.3 // indirect\n\tgolang.org/x/crypto v0.39.0 // indirect\n\tgolang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect\n\tgolang.org/x/net v0.41.0 // indirect\n\tgolang.org/x/oauth2 v0.30.0 // indirect\n\tgolang.org/x/sync v0.15.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/term v0.32.0 // indirect\n\tgolang.org/x/text v0.26.0 // indirect\n\tgolang.org/x/time v0.12.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect\n\tgoogle.golang.org/grpc v1.73.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/yaml.v2 v2.4.0 // indirect\n\tk8s.io/api v0.33.3 // indirect\n\tk8s.io/apiextensions-apiserver v0.33.2 // indirect\n\tk8s.io/apiserver v0.33.2 // indirect\n\tk8s.io/component-base v0.33.2 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/kube-openapi v0.0.0-20250610211856-8b98d1ed966a // indirect\n\tk8s.io/kubectl v0.33.2 // indirect\n\tk8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect\n\toras.land/oras-go/v2 v2.6.0 // indirect\n\tsigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect\n\tsigs.k8s.io/kustomize/api v0.19.0 // indirect\n\tsigs.k8s.io/kustomize/kyaml v0.19.0 // indirect\n\tsigs.k8s.io/randfill v1.0.0 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect\n\tsigs.k8s.io/yaml v1.5.0 // indirect\n)\n\n// Override cilium/ebpf dependency with inspektor-gadget/ebpf for compatibility with inspektor-gadget/inspektor-gadget\nreplace github.com/cilium/ebpf => github.com/inspektor-gadget/ebpf v0.0.0-20250625205447-f72d1b709b03\n"
+}

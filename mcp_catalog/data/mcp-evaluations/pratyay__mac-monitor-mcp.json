@@ -1,0 +1,76 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "pratyay__mac-monitor-mcp",
+  "display_name": "mac-monitor-mcp",
+  "version": "1.0.0",
+  "description": "MCP server from Pratyay/mac-monitor-mcp",
+  "author": {
+    "name": "Pratyay"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MacOS Resource Monitor MCP Server\n\nA Model Context Protocol (MCP) server that identifies resource-intensive processes on macOS across CPU, memory, and network usage.\n\n## Overview\n\nMacOS Resource Monitor is a lightweight MCP server that exposes an MCP endpoint for monitoring system resources. It analyzes CPU, memory, and network usage, and identifies the most resource-intensive processes on your Mac, returning data in a structured JSON format.\n\n## Requirements\n\n- macOS operating system\n- Python 3.10+\n- MCP server library\n\n## Installation\n\n1. Clone this repository:\n   ```bash\n   git clone https://github.com/Pratyay/mac-monitor-mcp.git\n   cd mac-monitor-mcp\n   ```\n\n2. Create a virtual environment (recommended):\n   ```bash\n   python -m venv venv\n   source venv/bin/activate  \n   ```\n\n3. Install the required dependencies:\n   ```bash\n   pip install mcp\n   ```\n\n## Usage\n\n1. Start the MCP server:\n   ```bash\n   python src/monitor.py\n   ```\n\n2. You should see the message:\n   ```\n   Simple MacOS Resource Monitor MCP server starting...\n   Monitoring CPU, Memory, and Network resource usage...\n   ```\n\n3. The server will start and expose the MCP endpoint, which can be accessed by an LLM or other client.\n\n### Using the Tool\n\nThe server exposes a single tool:\n\n- `get_resource_intensive_processes()`: Returns information about the most resource-intensive processes\n\nWhen called, this tool will return a JSON object containing information about the top resource consumers in each category (CPU, memory, and network).\n\n### Sample Output\n\n```json\n{\n  \"cpu_intensive_processes\": [\n    {\n      \"pid\": \"1234\",\n      \"cpu_percent\": 45.2,\n      \"command\": \"firefox\"\n    },\n    {\n      \"pid\": \"5678\",\n      \"cpu_percent\": 32.1,\n      \"command\": \"Chrome\"\n    }\n  ],\n  \"memory_intensive_processes\": [\n    {\n      \"pid\": \"1234\",\n      \"memory_percent\": 8.5,\n      \"resident_memory_kb\": 1048576,\n      \"command\": \"firefox\"\n    },\n    {\n      \"pid\": \"8901\",\n      \"memory_percent\": 6.2,\n      \"resident_memory_kb\": 768432,\n      \"command\": \"Docker\"\n    }\n  ],\n  \"network_intensive_processes\": [\n    {\n      \"command\": \"Dropbox\",\n      \"network_connections\": 12\n    },\n    {\n      \"command\": \"Spotify\",\n      \"network_connections\": 8\n    }\n  ]\n}\n```\n\n## How It Works\n\nThe MacOS Resource Monitor uses built-in macOS command-line utilities:\n\n- `ps`: To identify top CPU and memory consuming processes\n- `lsof`: To monitor network connections and identify network-intensive processes\n\nData is collected when the tool is invoked, providing a real-time snapshot of system resource usage.\n\n## Integration with LLMs\n\nThis MCP server is designed to work with Large Language Models (LLMs) that support the Model Context Protocol. The LLM can use the `get_resource_intensive_processes` tool to access system resource information and provide intelligent analysis.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## Potential Improvements\n\nHere are some ways you could enhance this monitor:\n\n- Add disk I/O monitoring\n- Improve network usage monitoring to include bandwidth\n- Add visualization capabilities\n- Extend compatibility to other operating systems\n",
+  "category": "Monitoring",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mac-monitor-mcp": {
+          "command": "python",
+          "args": ["src/monitor.py"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "Pratyay",
+    "repo": "mac-monitor-mcp",
+    "url": "https://github.com/Pratyay/mac-monitor-mcp",
+    "name": "mac-monitor-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1cf6ac79d5ce006b77cd9a2305fc582642c439d4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:17.369Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

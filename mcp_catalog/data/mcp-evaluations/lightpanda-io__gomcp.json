@@ -1,0 +1,102 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "lightpanda-io__gomcp",
+  "display_name": "gomcp",
+  "version": "1.0.0",
+  "description": "Lightpanda MCP server written in Go",
+  "author": {
+    "name": "lightpanda-io"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "gomcp-stdio": {
+          "command": "/path/to/gomcp",
+          "args": ["stdio"],
+          "env": {}
+        },
+        "gomcp-remote-stdio": {
+          "command": "gomcp",
+          "args": ["-cdp", "ws://127.0.0.1:9222", "stdio"],
+          "env": {}
+        },
+        "gomcp-sse": {
+          "command": "./gomcp",
+          "args": ["sse"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "lightpanda-io",
+    "repo": "gomcp",
+    "url": "https://github.com/lightpanda-io/gomcp",
+    "name": "lightpanda-io__gomcp",
+    "path": null,
+    "stars": 25,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.885Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "JohannesKaufmann/html-to-markdown",
+      "importance": 6
+    },
+    {
+      "name": "chromedp/cdproto",
+      "importance": 8
+    },
+    {
+      "name": "chromedp/chromedp",
+      "importance": 10
+    },
+    {
+      "name": "gin-contrib/sse",
+      "importance": 9
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": null
+}

@@ -1,0 +1,84 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "dave-wind__mysql-mcp-server",
+  "display_name": "mysql-mcp-server",
+  "version": "1.0.0",
+  "description": "mcp model-context-protocol mysql cursor n8n",
+  "author": {
+    "name": "dave-wind"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# @davewind/mysql-mcp-server\n\n\nA Model Context Protocol server that provides read-only access to Mysql databases. This server enables LLMs to inspect database schemas and execute read-only queries.\n\n### Key Features\n1.Read-Only Database Access: Enforces read-only operations through SQL validation and READ ONLY transactions  \n2.Schema Discovery: Automatically identifies and exposes database table structures  \n3.SQL Query Execution: Provides a query tool that accepts and executes SELECT statements  \n4.Model Context Protocol Compliance: Implements the MCP specification for seamless integration with compatible LLMs  \n5.Simple Configuration: Easy setup with minimal configuration required  \n\n\n### Tools\n\n- **query**\n  - Execute read-only SQL queries against the connected database\n  - Input: `sql` (string): The SQL query to execute\n  - All queries are executed within a READ ONLY transaction\n\n### Resources\n\nThe server provides schema information for each table in the database:\n\n- **Table Schemas** (`mysql://user:password@localhost:3306/database`)\n  - JSON schema information for each table\n  - Includes column names and data types\n  - Automatically discovered from database metadata\n\n\n### Install\n```bash\nnpm install @davewind/mysql-mcp-server -g\n```\n\n## Configuration\nMCP settings configuration file:\n\n> recommended use\n\n```json\n{\n  \"mcpServers\": {\n    \"mysql\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@davewind/mysql-mcp-server\", \"mysql://user:password@localhost:port/database\"],\n    }\n  }\n}\n```\n\n\n\n### Test\n>  Replace mysql://user:password@localhost:port/  and npm run inspector\n```js\n  \"scripts\": {\n    \"inspector\": \"npx @modelcontextprotocol/inspector@0.10.2 build/index.js mysql://user:password@localhost:port/database\n  }\n```\n\n\n### Env\n\n```js\n\nnode v18 +\n\n```\n\n### System Architecture\n> The MySQL MCP Server acts as an intermediary between LLMs and MySQL databases, processing requests according to the Model Context Protocol.\n<p>\n  <img src=\"./docs/High-Level Architecture.png\" alt=\"\"/>\n</p>\n\n\n### Component Interaction\n<p>\n  <img src=\"./docs/component-Interaction.png\" alt=\"\"/>\n</p>\n\n\n### Component Interaction\n<p>\n  <img src=\"./docs/component-Interaction.png\" alt=\"\"/>\n</p>\n\n### Security Model\n> The MySQL MCP Server implements a strict security model to ensure that database access is read-only.\n<p>\n  <img src=\"./docs/Security Model.png\" alt=\"\"/>\n</p>\n\nSecurity measures include:\n\n1.SQL query validation to allow only SELECT statements\n2.Execution of all queries within READ ONLY transactions\n3.No support for data modification operations (INSERT, UPDATE, DELETE, etc.)\n4. No support for database schema modification (CREATE, ALTER, DROP, etc.)\n\n\n### Integration with LLMs\n> The MySQL MCP Server is designed to work with any LLM system that supports the Model Context Protocol. It communicates through JSON-RPC over stdio, following the MCP specification.\n<p>\n  <img src=\"./docs/Integration with LLMs.png\" alt=\"\"/>\n</p>\n\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "davewind-mysql-mcp-server": {
+          "command": "npx",
+          "args": ["-y", "@davewind/mysql-mcp-server", "mysql://user:password@localhost:port/database"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "dave-wind",
+    "repo": "mysql-mcp-server",
+    "url": "https://github.com/dave-wind/mysql-mcp-server",
+    "name": "mysql-mcp-server",
+    "path": null,
+    "stars": 9,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d82eabc611cd247af2d1ab081b41430d4f8e3687"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:58.176Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mysql2",
+      "importance": 9
+    },
+    {
+      "name": "node-fetch",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@davewind/mysql-mcp-server\",\n  \"version\": \"0.2.0\",\n  \"description\": \"A Model Context Protocol server for MySQL\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-mysql\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector@0.10.2 build/index.js mysql://user:password@localhost:port/database\",\n    \"test\": \"node test-mcp.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"mysql\",\n    \"database\",\n    \"cursor\",\n    \"n8n\"\n  ],\n  \"author\": \"dave-wind\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.10.2\",\n    \"mysql2\": \"^3.11.5\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/dave-wind/mysql-mcp-server\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

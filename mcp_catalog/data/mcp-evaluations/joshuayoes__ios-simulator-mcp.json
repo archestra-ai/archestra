@@ -1,0 +1,85 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "joshuayoes__ios-simulator-mcp",
+  "display_name": "ios-simulator-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for interacting with the iOS simulator",
+  "author": {
+    "name": "joshuayoes"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# iOS Simulator MCP Server\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=ios-simulator&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImlvcy1zaW11bGF0b3ItbWNwIl19) [![NPM Version](https://img.shields.io/npm/v/ios-simulator-mcp)](https://www.npmjs.com/package/ios-simulator-mcp)\n\nA Model Context Protocol (MCP) server for interacting with iOS simulators. This server allows you to interact with iOS simulators by getting information about them, controlling UI interactions, and inspecting UI elements.\n\n> **Security Notice**: Command injection vulnerabilities present in versions < 1.3.3 have been fixed. Please update to v1.3.3 or later. See [SECURITY.md](SECURITY.md) for details.\n\n<a href=\"https://glama.ai/mcp/servers/@joshuayoes/ios-simulator-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@joshuayoes/ios-simulator-mcp/badge\" alt=\"iOS Simulator MCP server\" />\n</a>\n\nhttps://github.com/user-attachments/assets/453ebe7b-cc93-4ac2-b08d-0f8ac8339ad3\n\n## Features\n\n- Get the ID of the currently booted iOS simulator\n- Interact with the simulator UI:\n  - Describe all accessibility elements on screen\n  - Tap on screen coordinates\n  - Input text\n  - Swipe between coordinates\n  - Get information about UI elements at specific coordinates\n  - Take screenshots of the simulator screen\n  - Show a view of the simulator screen to your AI agent\n- Filter specific tools using environment variables\n\n## Configuration\n\n### Environment Variables\n\n- `IOS_SIMULATOR_MCP_FILTERED_TOOLS`: A comma-separated list of tool names to filter out from being registered. For example: `screenshot,record_video,stop_recording`\n\n## 💡 Use Case: QA Step via MCP Tool Calls\n\nThis MCP server allows AI assistants integrated with a Model Context Protocol (MCP) client to perform Quality Assurance tasks by making tool calls. This is useful immediately after implementing features to help ensure UI consistency and correct behavior.\n\n### How to Use\n\nAfter a feature implementation, instruct your AI assistant within its MCP client environment to use the available tools. For example, in Cursor's agent mode, you could use the prompts below to quickly validate and document UI interactions.\n\n### Example Prompts\n\n- **Verify UI Elements:**\n\n  ```\n  Verify all accessibility elements on the current screen\n  ```\n\n- **Confirm Text Input:**\n\n  ```\n  Enter \"QA Test\" into the text input field and confirm the input is correct\n  ```\n\n- **Check Tap Response:**\n\n  ```\n  Tap on coordinates x=250, y=400 and verify the expected element is triggered\n  ```\n\n- **Validate Swipe Action:**\n\n  ```\n  Swipe from x=150, y=600 to x=150, y=100 and confirm correct behavior\n  ```\n\n- **Detailed Element Check:**\n\n  ```\n  Describe the UI element at position x=300, y=350 to ensure proper labeling and functionality\n  ```\n\n- **Show Your AI Agent the Simulator Screen:**\n\n  ```\n  View the current simulator screen\n  ```\n\n- **Take Screenshot:**\n\n  ```\n  Take a screenshot of the current simulator screen and save it to my_screenshot.png\n  ```\n\n- **Record Video:**\n\n  ```\n  Start recording a video of the simulator screen (saves to ~/Downloads/simulator_recording_$DATE.mp4 by default)\n  ```\n\n- **Stop Recording:**\n  ```\n  Stop the current simulator screen recording\n  ```\n\n## Prerequisites\n\n- Node.js\n- macOS (as iOS simulators are only available on macOS)\n- [Xcode](https://developer.apple.com/xcode/resources/) and iOS simulators installed\n- Facebook [IDB](https://fbidb.io/) tool [(see install guide)](https://fbidb.io/docs/installation)\n\n## Installation\n\nThis section provides instructions for integrating the iOS Simulator MCP server with different Model Context Protocol (MCP) clients.\n\n### Installation with Cursor\n\nCursor manages MCP servers through its configuration file located at `~/.cursor/mcp.json`.\n\n#### Option 1: Using NPX (Recommended)\n\n1.  Edit your Cursor MCP configuration file. You can often open it directly from Cursor or use a command like:\n    ```bash\n    # Open with your default editor (or use 'code', 'vim', etc.)\n    open ~/.cursor/mcp.json\n    # Or use Cursor's command if available\n    # cursor ~/.cursor/mcp.json\n    ```\n2.  Add or update the `mcpServers` section with the iOS simulator server configuration:\n    ```json\n    {\n      \"mcpServers\": {\n        // ... other servers might be listed here ...\n        \"ios-simulator\": {\n          \"command\": \"npx\",\n          \"args\": [\"-y\", \"ios-simulator-mcp\"]\n        }\n      }\n    }\n    ```\n    Ensure the JSON structure is valid, especially if `mcpServers` already exists.\n3.  Restart Cursor for the changes to take effect.\n\n#### Option 2: Local Development\n\n1.  Clone this repository:\n    ```bash\n    git clone https://github.com/joshuayoes/ios-simulator-mcp\n    cd ios-simulator-mcp\n    ```\n2.  Install dependencies:\n    ```bash\n    npm install\n    ```\n3.  Build the project:\n    ```bash\n    npm run build\n    ```\n4.  Edit your Cursor MCP configuration file (as shown in Option 1).\n5.  Add or update the `mcpServers` section, pointing to your local build:\n    ```json\n    {\n      \"mcpServers\": {\n        // ... other servers might be listed here ...\n        \"ios-simulator\": {\n          \"command\": \"node\",\n          \"args\": [\"/full/path/to/your/ios-simulator-mcp/build/index.js\"]\n        }\n      }\n    }\n    ```\n    **Important:** Replace `/full/path/to/your/` with the absolute path to where you cloned the `ios-simulator-mcp` repository.\n6.  Restart Cursor for the changes to take effect.\n\n### Installation with Claude Code\n\nClaude Code CLI can manage MCP servers using the `claude mcp` commands or by editing its configuration files directly. For more details on Claude Code MCP configuration, refer to the [official documentation](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp).\n\n#### Option 1: Using NPX (Recommended)\n\n1.  Add the server using the `claude mcp add` command:\n    ```bash\n    claude mcp add ios-simulator npx ios-simulator-mcp\n    ```\n2.  Restart any running Claude Code sessions if necessary.\n\n#### Option 2: Local Development\n\n1.  Clone this repository, install dependencies, and build the project as described in the Cursor \"Local Development\" steps 1-3.\n2.  Add the server using the `claude mcp add` command, pointing to your local build:\n    ```bash\n    claude mcp add ios-simulator --command node --args \"/full/path/to/your/ios-simulator-mcp/build/index.js\"\n    ```\n    **Important:** Replace `/full/path/to/your/` with the absolute path to where you cloned the `ios-simulator-mcp` repository.\n3.  Restart any running Claude Code sessions if necessary.\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "ios-simulator-mcp": {
+          "command": "npx",
+          "args": ["-y", "ios-simulator-mcp"],
+          "env": {}
+        },
+        "ios-simulator-mcp-local-dev": {
+          "command": "node",
+          "args": ["/full/path/to/your/ios-simulator-mcp/build/index.js"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "joshuayoes",
+    "repo": "ios-simulator-mcp",
+    "url": "https://github.com/joshuayoes/ios-simulator-mcp",
+    "name": "ios-simulator-mcp",
+    "path": null,
+    "stars": 832,
+    "contributors": 6,
+    "issues": 14,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "537f15c7fc9dda9b9e6a69938b3d48b424fa852c"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:09.306Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ios-simulator-mcp\",\n  \"version\": \"1.4.0\",\n  \"description\": \"MCP server for interacting with the iOS simulator\",\n  \"bin\": {\n    \"ios-simulator-mcp\": \"./build/index.js\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/joshuayoes/ios-simulator-mcp.git\"\n  },\n  \"files\": [\n    \"build\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"prepare\": \"npm run build\",\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"start\": \"node build/index.js\",\n    \"watch\": \"tsc --watch\",\n    \"predev\": \"npm run build\",\n    \"dev\": \"npx @modelcontextprotocol/inspector node build/index.js\"\n  },\n  \"keywords\": [\n    \"ios\",\n    \"simulator\",\n    \"mcp\",\n    \"modelcontextprotocol\"\n  ],\n  \"author\": {\n    \"name\": \"Joshua Yoes\",\n    \"url\": \"https://joshuayoes.com\"\n  },\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@modelcontextprotocol/inspector\": \"^0.4.1\",\n    \"@types/node\": \"^22.13.5\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n"
+}

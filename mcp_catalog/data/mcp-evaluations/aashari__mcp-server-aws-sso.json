@@ -1,0 +1,130 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "aashari__mcp-server-aws-sso",
+  "display_name": "mcp-server-aws-sso",
+  "version": "1.0.0",
+  "description": "Node.js/TypeScript MCP server for AWS Single Sign-On (SSO). Enables AI systems (LLMs) with tools to initiate SSO login (device auth flow), list accounts/roles, and securely execute AWS CLI commands using temporary credentials. Streamlines AI interaction with AWS resources.",
+  "author": {
+    "name": "aashari"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AWS SSO MCP Server\n\nA Node.js/TypeScript Model Context Protocol (MCP) server for AWS Single Sign-On (SSO). Enables AI systems (e.g., LLMs like Claude or Cursor AI) to securely interact with AWS resources by initiating SSO login, listing accounts/roles, and executing AWS CLI commands using temporary credentials.\n\n[![NPM Version](https://img.shields.io/npm/v/@aashari/mcp-server-aws-sso)](https://www.npmjs.com/package/@aashari/mcp-server-aws-sso)\n[![Build Status](https://img.shields.io/github/workflow/status/aashari/mcp-server-aws-sso/CI)](https://github.com/aashari/mcp-server-aws-sso/actions)\n\n## Why Use This Server?\n\n- **Seamless SSO Integration**: Authenticate via AWS SSO device flow, avoiding long-term credential exposure.\n- **Secure Credential Management**: Uses temporary credentials with automatic rotation.\n- **Multi-Account Support**: Discover and manage all AWS accounts/roles accessible via SSO.\n- **AWS CLI Compatibility**: Execute any AWS CLI command securely through AI or CLI interfaces.\n- **Automated Authentication**: Simplifies login with browser launch and token polling.\n\n## What is MCP?\n\nModel Context Protocol (MCP) is an open standard for securely connecting AI systems to external tools and data sources. This server implements MCP for AWS SSO, enabling AI assistants to manage AWS resources programmatically.\n\n## Prerequisites\n\n- **Node.js** (>=18.x): [Download](https://nodejs.org/)\n- **AWS CLI v2**: [Install](https://aws.amazon.com/cli/)\n- **AWS Account with SSO Configured**: Ensure AWS IAM Identity Center is enabled with permission sets and user assignments.\n\n## Setup\n\n### Step 1: Configure AWS SSO\n\n1. Enable AWS IAM Identity Center in your AWS account.\n2. Set up your identity source (e.g., AWS SSO directory, Active Directory, or external IdP).\n3. Configure permission sets and assign users to AWS accounts.\n4. Note your **AWS SSO Start URL** (e.g., `https://your-sso-portal.awsapps.com/start`).\n\n### Step 2: Configure Credentials\n\n#### Option A: MCP Config File (Recommended)\n\nEdit or create `~/.mcp/configs.json`:\n\n```json\n{\n\t\"aws-sso\": {\n\t\t\"environments\": {\n\t\t\t\"AWS_REGION\": \"us-east-1\",\n\t\t\t\"AWS_SSO_START_URL\": \"https://your-sso-portal.awsapps.com/start\",\n\t\t\t\"DEBUG\": \"true\"\n\t\t}\n\t}\n}\n```\n\n#### Option B: Environment Variables\n\n```bash\nexport AWS_REGION=us-east-1\nexport AWS_SSO_START_URL=https://your-sso-portal.awsapps.com/start\nexport DEBUG=true\n```\n\n### Step 3: Install and Run\n\n#### Quick Start with `npx`\n\n```bash\nnpx -y @aashari/mcp-server-aws-sso login\n```\n\n#### Global Installation\n\n```bash\nnpm install -g @aashari/mcp-server-aws-sso\nmcp-aws-sso login\n```\n\n### Step 4: Connect to AI Assistant\n\nConfigure your MCP-compatible client (e.g., Claude, Cursor AI):\n\n```json\n{\n\t\"mcpServers\": {\n\t\t\"aws-sso\": {\n\t\t\t\"command\": \"npx\",\n\t\t\t\"args\": [\"-y\", \"@aashari/mcp-server-aws-sso\"]\n\t\t}\n\t}\n}\n```\n\n## MCP Tools\n\nMCP tools use `snake_case` names, `camelCase` parameters, and return Markdown-formatted responses.\n\n- **aws_sso_login**: Initiates AWS SSO device authorization (`launchBrowser`: bool opt, `autoPoll`: bool opt). Use: Log in to AWS SSO.\n- **aws_sso_status**: Checks SSO authentication status (no params). Use: Verify authentication.\n- **aws_sso_ls_accounts**: Lists accessible AWS accounts/roles (no params). Use: Discover accounts.\n- **aws_sso_exec_command**: Executes AWS CLI command with temporary credentials (`accountId`: str req, `roleName`: str req, `command`: str req, `region`: str opt). Use: Run `aws s3 ls`.\n- **aws_sso_ec2_exec_command**: Runs shell commands on EC2 via SSM (`instanceId`: str req, `accountId`: str req, `roleName`: str req, `command`: str req, `region`: str opt). Use: Check EC2 disk space.\n\n<details>\n<summary><b>MCP Tool Examples (Click to expand)</b></summary>\n\n### `aws_sso_login`\n\n**Basic Login:**\n```json\n{}\n```\n\n**Custom Login Options:**\n```json\n{\n  \"launchBrowser\": false,\n  \"autoPoll\": true\n}\n```\n\n### `aws_sso_status`\n\n**Check Authentication Status:**\n```json\n{}\n```\n\n### `aws_sso_ls_accounts`\n\n**List All Accounts and Roles:**\n```json\n{}\n```\n\n### `aws_sso_exec_command`\n\n**List S3 Buckets:**\n```json\n{\n  \"accountId\": \"123456789012\", \n  \"roleName\": \"ReadOnly\",\n  \"command\": \"aws s3 ls\"\n}\n```\n\n**Describe EC2 Instances in a Specific Region:**\n```json\n{\n  \"accountId\": \"123456789012\",\n  \"roleName\": \"AdminRole\",\n  \"command\": \"aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId,State.Name,InstanceType]' --output table\",\n  \"region\": \"us-west-2\"\n}\n```\n\n### `aws_sso_ec2_exec_command`\n\n**Check System Resources:**\n```json\n{\n  \"instanceId\": \"i-0a69e80761897dcce\",\n  \"accountId\": \"123456789012\",\n  \"roleName\": \"InfraOps\",\n  \"command\": \"uptime && df -h && free -m\"\n}\n```\n\n</details>\n\n## Transport Modes\n\nThis server supports two transport modes for different integration scenarios:\n\n### STDIO Transport (Default for MCP Clients)\n- Traditional subprocess communication via stdin/stdout\n- Ideal for local AI assistant integrations (Claude Desktop, Cursor AI)\n- Uses pipe-based communication for direct MCP protocol exchange\n\n```bash\n# Run with STDIO transport (default for AI assistants)\nTRANSPORT_MODE=stdio npx @aashari/mcp-server-aws-sso\n\n# Using npm scripts (after installation)\nnpm run mcp:stdio\n```\n\n### HTTP Transport (Default for Server Mode)\n- Modern HTTP-based transport with Server-Sent Events (SSE)\n- Supports multiple concurrent connections\n- Better for web-based integrations and development\n- Runs on port 3000 by default (configurable via PORT env var)\n- Endpoint: http://localhost:3000/mcp\n- Health check: http://localhost:3000/\n\n```bash\n# Run with HTTP transport (default when no CLI args)\nTRANSPORT_MODE=http npx @aashari/mcp-server-aws-sso\n\n# Using npm scripts (after installation)\nnpm run mcp:http\n\n# Test with MCP Inspector\nnpm run mcp:inspect\n```\n\n### Environment Variables\n\n**Transport Configuration:**\n- `TRANSPORT_MODE`: Set to `stdio` or `http` (default: `http` for server mode, `stdio` for MCP clients)\n- `PORT`: HTTP server port (default: 3000)\n- `DEBUG`: Enable debug logging (default: false)\n\n**Authentication:**\n- `AWS_SSO_START_URL`: Your AWS SSO start URL\n- `AWS_SSO_REGION`: Your AWS SSO region\n- `AWS_PROFILE`: Your AWS profile name (optional)\n- `AWS_REGION`: Your AWS region (optional)\n\n## CLI Commands\n\nCLI commands use `kebab-case`. Run `--help` for details (e.g., `mcp-aws-sso login --help`).\n\n- **login**: Authenticates via AWS SSO (`--no-launch-browser`, `--no-auto-poll`). Ex: `mcp-aws-sso login`.\n- **status**: Checks authentication status (no options). Ex: `mcp-aws-sso status`.\n- **ls-accounts**: Lists accounts/roles (no options). Ex: `mcp-aws-sso ls-accounts`.\n- **exec-command**: Runs AWS CLI command (`--account-id`, `--role-name`, `--command`, `--region`). Ex: `mcp-aws-sso exec-command --account-id 123456789012 --role-name ReadOnly --command \"aws s3 ls\"`.\n- **ec2-exec-command**: Runs shell command on EC2 (`--instance-id`, `--account-id`, `--role-name`, `--command`, `--region`). Ex: `mcp-aws-sso ec2-exec-command --instance-id i-0a69e80761897dcce --account-id 123456789012 --role-name InfraOps --command \"uptime\"`.\n\n<details>\n<summary><b>CLI Command Examples (Click to expand)</b></summary>\n\n### Login\n\n**Standard Login (launches browser and polls automatically):**\n```bash\nmcp-aws-sso login\n```\n\n**Login without Browser Launch:**\n```bash\nmcp-aws-sso login --no-launch-browser\n```\n\n### Execute AWS Commands\n\n**List S3 Buckets:**\n```bash\nmcp-aws-sso exec-command \\\n  --account-id 123456789012 \\\n  --role-name ReadOnly \\\n  --command \"aws s3 ls\"\n```\n\n**List EC2 Instances with Specific Region:**\n```bash\nmcp-aws-sso exec-command \\\n  --account-id 123456789012 \\\n  --role-name AdminRole \\\n  --region us-west-2 \\\n  --command \"aws ec2 describe-instances --output table\"\n```\n\n### Execute EC2 Commands\n\n**Check System Resources:**\n```bash\nmcp-aws-sso ec2-exec-command \\\n  --instance-id i-0a69e80761897dcce \\\n  --account-id 123456789012 \\\n  --role-name InfraOps \\\n  --command \"uptime && df -h && free -m\"\n```\n\n</details>\n\n## Response Format\n\nAll responses are Markdown-formatted, including:\n\n- **Status**: Success or error details.\n- **Context**: Account, role, region, and execution time.\n- **Output**: Command results or troubleshooting steps.\n\n<details>\n<summary><b>Response Format Examples (Click to expand)</b></summary>\n\n### MCP Tool Response Example (`aws_sso_exec_command`)\n\n```markdown\n# AWS SSO: Command Result\n\n**Account/Role:** 123456789012/ReadOnly\n**Region:** us-east-1 (Default: ap-southeast-1)\n\n## Command\n\n\taws s3 ls\n\n## Output\n\n\t2023-01-15 08:42:53 my-bucket-1\n\t2023-05-22 14:18:19 my-bucket-2\n\t2024-02-10 11:05:37 my-logs-bucket\n\n*Executed: 2025-05-19 06:21:49 UTC*\n```\n\n### Error Response Example\n\n```markdown\n# ❌ AWS SSO: Command Error\n\n**Account/Role:** 123456789012/ReadOnly\n**Region:** us-east-1 (Default: ap-southeast-1)\n\n## Command\n\t\n\taws s3api get-object --bucket restricted-bucket --key secret.txt output.txt\n\n## Error: Permission Denied\nThe role `ReadOnly` does not have permission to execute this command.\n\n## Error Details\n\n\tAn error occurred (AccessDenied) when calling the GetObject operation: Access Denied\n\n### Troubleshooting\n\n#### Available Roles\n- AdminAccess\n- PowerUserAccess\n- S3FullAccess\n\nTry executing the command again using one of the roles listed above that has appropriate permissions.\n\n*Executed: 2025-05-19 06:17:49 UTC*\n```\n\n</details>\n\n## Development\n\n```bash\n# Clone repository\ngit clone https://github.com/aashari/mcp-server-aws-sso.git\ncd mcp-server-aws-sso\n\n# Install dependencies\nnpm install\n\n# Run in development mode\nnpm run dev:server\n\n# Run tests\nnpm test\n```\n\n## Contributing\n\nContributions are welcome! Please:\n\n1. Fork the repository.\n2. Create a feature branch (`git checkout -b feature/xyz`).\n3. Commit changes (`git commit -m \"Add xyz feature\"`).\n4. Push to the branch (`git push origin feature/xyz`).\n5. Open a pull request.\n\nSee [CONTRIBUTING.md](CONTRIBUTING.md) for details.\n\n## License\n\n[ISC License](LICENSE)\n\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "aashari-mcp-server-aws-sso": {
+          "command": "npx",
+          "args": ["-y", "@aashari/mcp-server-aws-sso"],
+          "env": {}
+        },
+        "aashari-mcp-server-aws-sso-stdio": {
+          "command": "npx",
+          "args": ["-y", "@aashari/mcp-server-aws-sso"],
+          "env": {
+            "TRANSPORT_MODE": "stdio"
+          }
+        },
+        "aashari-mcp-server-aws-sso-http": {
+          "command": "npx",
+          "args": ["-y", "@aashari/mcp-server-aws-sso"],
+          "env": {
+            "TRANSPORT_MODE": "http"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "aashari",
+    "repo": "mcp-server-aws-sso",
+    "url": "https://github.com/aashari/mcp-server-aws-sso",
+    "name": "mcp-server-aws-sso",
+    "path": null,
+    "stars": 3,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "7ead64289947c0d6240b9170fd091c44f05a2b67"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:42.503Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@aws-sdk/client-sso",
+      "importance": 9
+    },
+    {
+      "name": "@aws-sdk/client-sso-oidc",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "commander",
+      "importance": 6
+    },
+    {
+      "name": "@aws-sdk/client-ec2",
+      "importance": 5
+    },
+    {
+      "name": "@aws-sdk/client-ssm",
+      "importance": 5
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    },
+    {
+      "name": "cors",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@aashari/mcp-server-aws-sso\",\n\t\"version\": \"1.21.0\",\n\t\"description\": \"Node.js/TypeScript MCP server for AWS Single Sign-On (SSO). Enables AI systems (LLMs) with tools to initiate SSO login (device auth flow), list accounts/roles, and securely execute AWS CLI commands using temporary credentials. Streamlines AI interaction with AWS resources.\",\n\t\"main\": \"dist/index.js\",\n\t\"types\": \"dist/index.d.ts\",\n\t\"_moduleNotes\": \"Although source code uses ESM syntax, the build output target is CommonJS to align with Node.js compatibility and patterns seen in related MCP servers. tsconfig.json's 'module': 'NodeNext' handles the input syntax, while tsc outputs CJS.\",\n\t\"type\": \"commonjs\",\n\t\"repository\": {\n\t\t\"type\": \"git\",\n\t\t\"url\": \"https://github.com/aashari/mcp-server-aws-sso.git\"\n\t},\n\t\"bin\": {\n\t\t\"mcp-aws-sso\": \"./dist/index.js\"\n\t},\n\t\"scripts\": {\n\t\t\"build\": \"tsc\",\n\t\t\"prepare\": \"npm run build && node scripts/ensure-executable.js\",\n\t\t\"postinstall\": \"node scripts/ensure-executable.js\",\n\t\t\"test\": \"jest --passWithNoTests\",\n\t\t\"test:coverage\": \"jest --coverage\",\n\t\t\"test:cli\": \"jest src/cli/.*\\\\.cli\\\\.test\\\\.ts --runInBand --testTimeout=60000\",\n\t\t\"lint\": \"eslint src --ext .ts --config eslint.config.mjs\",\n\t\t\"format\": \"prettier --write 'src/**/*.ts' 'scripts/**/*.js'\",\n\t\t\"publish:npm\": \"npm publish\",\n\t\t\"update:check\": \"npx npm-check-updates\",\n\t\t\"update:deps\": \"npx npm-check-updates -u && npm install --legacy-peer-deps\",\n\t\t\"update:version\": \"node scripts/update-version.js\",\n\t\t\"mcp:stdio\": \"TRANSPORT_MODE=stdio npm run build && node dist/index.js\",\n\t\t\"mcp:http\": \"TRANSPORT_MODE=http npm run build && node dist/index.js\",\n\t\t\"mcp:inspect\": \"TRANSPORT_MODE=http npm run build && (node dist/index.js &) && sleep 2 && npx @modelcontextprotocol/inspector http://localhost:3000/mcp\",\n\t\t\"dev:stdio\": \"npm run build && npx @modelcontextprotocol/inspector -e TRANSPORT_MODE=stdio -e DEBUG=true node dist/index.js\",\n\t\t\"dev:http\": \"DEBUG=true TRANSPORT_MODE=http npm run build && node dist/index.js\",\n\t\t\"dev:server\": \"DEBUG=true npm run build && npx @modelcontextprotocol/inspector -e DEBUG=true node dist/index.js\",\n\t\t\"dev:cli\": \"DEBUG=true npm run build && DEBUG=true node dist/index.js\",\n\t\t\"start:server\": \"npm run build && npx @modelcontextprotocol/inspector node dist/index.js\",\n\t\t\"start:cli\": \"npm run build && node dist/index.js\"\n\t},\n\t\"keywords\": [\n\t\t\"mcp\",\n\t\t\"typescript\",\n\t\t\"claude\",\n\t\t\"anthropic\",\n\t\t\"ai\",\n\t\t\"aws\",\n\t\t\"amazon-web-services\",\n\t\t\"sso\",\n\t\t\"single-sign-on\",\n\t\t\"aws-sso\",\n\t\t\"server\",\n\t\t\"model-context-protocol\",\n\t\t\"tools\",\n\t\t\"resources\",\n\t\t\"tooling\",\n\t\t\"ai-integration\",\n\t\t\"mcp-server\",\n\t\t\"llm\",\n\t\t\"ai-connector\",\n\t\t\"external-tools\",\n\t\t\"cli\",\n\t\t\"mcp-inspector\"\n\t],\n\t\"author\": \"\",\n\t\"license\": \"ISC\",\n\t\"devDependencies\": {\n\t\t\"@eslint/js\": \"^9.32.0\",\n\t\t\"@semantic-release/changelog\": \"^6.0.3\",\n\t\t\"@semantic-release/exec\": \"^7.1.0\",\n\t\t\"@semantic-release/git\": \"^10.0.1\",\n\t\t\"@semantic-release/github\": \"^11.0.3\",\n\t\t\"@semantic-release/npm\": \"^12.0.1\",\n\t\t\"@types/cors\": \"^2.8.19\",\n\t\t\"@types/express\": \"^5.0.3\",\n\t\t\"@types/jest\": \"^30.0.0\",\n\t\t\"@types/node\": \"^24.0.3\",\n\t\t\"@types/open\": \"^6.2.1\",\n\t\t\"@typescript-eslint/eslint-plugin\": \"^8.38.0\",\n\t\t\"@typescript-eslint/parser\": \"^8.38.0\",\n\t\t\"eslint\": \"^9.32.0\",\n\t\t\"eslint-config-prettier\": \"^10.1.5\",\n\t\t\"eslint-plugin-prettier\": \"^5.5.0\",\n\t\t\"jest\": \"^30.0.5\",\n\t\t\"nodemon\": \"^3.1.10\",\n\t\t\"npm-check-updates\": \"^18.0.1\",\n\t\t\"prettier\": \"^3.6.2\",\n\t\t\"semantic-release\": \"^24.2.7\",\n\t\t\"ts-jest\": \"^29.4.0\",\n\t\t\"ts-node\": \"^10.9.2\",\n\t\t\"typescript\": \"^5.8.3\",\n\t\t\"typescript-eslint\": \"^8.38.0\"\n\t},\n\t\"publishConfig\": {\n\t\t\"registry\": \"https://registry.npmjs.org/\",\n\t\t\"access\": \"public\"\n\t},\n\t\"dependencies\": {\n\t\t\"@aws-sdk/client-ec2\": \"^3.830.0\",\n\t\t\"@aws-sdk/client-ssm\": \"^3.830.0\",\n\t\t\"@aws-sdk/client-sso\": \"^3.830.0\",\n\t\t\"@aws-sdk/client-sso-oidc\": \"^3.830.0\",\n\t\t\"@modelcontextprotocol/sdk\": \"^1.17.1\",\n\t\t\"commander\": \"^14.0.0\",\n\t\t\"cors\": \"^2.8.5\",\n\t\t\"dotenv\": \"^17.2.1\",\n\t\t\"express\": \"^5.1.0\",\n\t\t\"open\": \"^10.1.2\",\n\t\t\"zod\": \"^3.25.67\"\n\t},\n\t\"directories\": {\n\t\t\"example\": \"examples\"\n\t},\n\t\"jest\": {\n\t\t\"preset\": \"ts-jest\",\n\t\t\"testEnvironment\": \"node\",\n\t\t\"testMatch\": [\n\t\t\t\"**/src/**/*.test.ts\"\n\t\t],\n\t\t\"collectCoverageFrom\": [\n\t\t\t\"src/**/*.ts\",\n\t\t\t\"!src/**/*.test.ts\",\n\t\t\t\"!src/**/*.spec.ts\"\n\t\t],\n\t\t\"coveragePathIgnorePatterns\": [\n\t\t\t\"/node_modules/\",\n\t\t\t\"/dist/\",\n\t\t\t\"/coverage/\"\n\t\t],\n\t\t\"coverageReporters\": [\n\t\t\t\"text\",\n\t\t\t\"lcov\",\n\t\t\t\"json-summary\"\n\t\t],\n\t\t\"transform\": {\n\t\t\t\"^.+\\\\.tsx?$\": [\n\t\t\t\t\"ts-jest\",\n\t\t\t\t{\n\t\t\t\t\t\"useESM\": true\n\t\t\t\t}\n\t\t\t]\n\t\t},\n\t\t\"moduleNameMapper\": {\n\t\t\t\"(.*)\\\\.(js|jsx)$\": \"$1\"\n\t\t},\n\t\t\"extensionsToTreatAsEsm\": [\n\t\t\t\".ts\"\n\t\t],\n\t\t\"moduleFileExtensions\": [\n\t\t\t\"ts\",\n\t\t\t\"tsx\",\n\t\t\t\"js\",\n\t\t\t\"jsx\",\n\t\t\t\"json\",\n\t\t\t\"node\"\n\t\t]\n\t}\n}\n\n\n=== scripts/package.json ===\n{\n  \"type\": \"module\"\n} "
+}

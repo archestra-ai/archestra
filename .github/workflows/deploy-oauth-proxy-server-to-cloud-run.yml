@@ -1,0 +1,47 @@
+name: Deploy OAuth Proxy Server to Cloud Run
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "The environment to deploy to (development or production)"
+        required: true
+        type: string
+      version:
+        description: "The version to deploy (commit SHA for development, release version for production)"
+        required: true
+        type: string
+      base_url:
+        description: "The base URL that the oauth-proxy service is running on (used to construct the redirect URL for the OAuth flows)"
+        required: true
+        type: string
+    secrets:
+      GCP_PROJECT_ID:
+        required: true
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: true
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run (${{ inputs.environment }})
+    permissions:
+      contents: read
+      id-token: write # Required for Workload Identity Federation
+    uses: ./.github/workflows/deploy-service-to-cloud-run.yml
+    with:
+      service_name: oauth-proxy
+      dockerfile_path: ./oauth_proxy/Dockerfile
+      version: ${{ inputs.version }}
+      env_vars: |
+        NODE_ENV=${{ inputs.environment }}
+        BASE_URL=${{ inputs.base_url }}
+        LOG_LEVEL=info
+      secrets: |
+        GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest
+        GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest
+    secrets:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}

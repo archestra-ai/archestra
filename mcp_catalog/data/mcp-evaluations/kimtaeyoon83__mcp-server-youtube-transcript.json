@@ -1,0 +1,84 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "kimtaeyoon83__mcp-server-youtube-transcript",
+  "display_name": "mcp-server-youtube-transcript",
+  "version": "1.0.0",
+  "description": "This is an MCP server that allows you to directly download transcripts of YouTube videos.",
+  "author": {
+    "name": "kimtaeyoon83"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "kimtaeyoon83-mcp-server-youtube-transcript": {
+          "command": "npx",
+          "args": ["-y", "@kimtaeyoon83/mcp-server-youtube-transcript"],
+          "env": {}
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    }
+  },
+  "github_info": {
+    "owner": "kimtaeyoon83",
+    "repo": "mcp-server-youtube-transcript",
+    "url": "https://github.com/kimtaeyoon83/mcp-server-youtube-transcript",
+    "name": "kimtaeyoon83__mcp-server-youtube-transcript",
+    "path": null,
+    "stars": 292,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-18T14:26:01.625Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "youtube-captions-scraper",
+      "importance": 9
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": null
+}

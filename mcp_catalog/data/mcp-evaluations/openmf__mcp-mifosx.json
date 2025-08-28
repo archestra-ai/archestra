@@ -1,0 +1,97 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "openmf__mcp-mifosx",
+  "display_name": "mcp-mifosx",
+  "version": "1.0.0",
+  "description": "Model Context Protocol - MCP for Mifos X",
+  "author": {
+    "name": "openMF"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Mifos X - AI - Model Context Protocol (MCP) \n\nThis project provides Model Context Protocol (MCP) for the Mifos X Ecosystem, enabling AI agents to access financial data and operations. Implementations is available in **Java (Quarkus)**.\n\n---\n\n## MCP Developer Tools\n\nUse the **MCP Inspector** to test and debug your server:\n\n```bash\nnpx @modelcontextprotocol/inspector\n```\n\nThis starts a local web UI to connect to your MCP server via STDIO or SSE.\n\n---\n\n## Getting Started\n\n### 1. Choose Your Implementation\n\n#### **Java (Quarkus)**\n**Prerequisites**: JDK 17+, Maven\n\n**Steps**:\n1. Configure environment variables in your shell or IDE:\n   ```bash\n   export MIFOSX_BASE_URL=\"https://your-fineract-instance\"\n   export MIFOSX_BASIC_AUTH_TOKEN=\"your_api_token\"\n   export MIFOS_TENANT_ID=\"default\"\n   ```\n2. Run via JBang (for quick execution):\n   ```bash\n   jbang --quiet org.mifos.community.ai:mcp-server:1.0.0-SNAPSHOT:runner\n   ```\n3. (Optional) Build a native executable:\n   ```bash\n   ./mvnw package -Dnative\n   ./target/mcp-server-1.0.0-SNAPSHOT-runner\n   ```\n\n---\n\n## Configuration\n\nAll implementations require the following environment variables:\n\n| Variable               | Description                          |\n|------------------------|--------------------------------------|\n| `FINERACT_BASE_URL`    | Base URL of your Fineract instance   |\n| `FINERACT_BASIC_AUTH_TOKEN` | API authentication token |\n| `FINERACT_TENANT_ID`   | Tenant identifier (default: `default`) |\n\n**Note**: Java uses `MIFOSX_` prefixed variables (e.g., `MIFOSX_BASE_URL`).\n\n---\n\n## Building Native Executables (Java Only)\n\nFor Java (Quarkus), create a native executable:\n```bash\n./mvnw package -Dnative -Dquarkus.native.container-build=true\n./target/mcp-server-1.0.0-SNAPSHOT-runner\n```\n\n---\n\n## Testing with MCP Inspector\n\n1. Start your MCP server (Python/Java/Node.js).\n2. Run the inspector:\n   ```bash\n   npx @modelcontextprotocol/inspector\n   ```\n3. Connect to the server using the `STDIO` transport.\n\n---\n\n## Contributing\n\n- **Java**: Extend `src/main/java/org/mifos/community/ai/...` for new endpoints.\n\n---\n\n## Contact\n\n- Apache Fineract Community: [https://community.apache.org/](https://community.apache.org/)\n- MCP Specification: [https://modelcontextprotocol.org](https://modelcontextprotocol.org)\n\n---\n\n## Guides\n\n- **Java/Quarkus**: [Quarkus MCP Guide](https://docs.quarkiverse.io/quarkus-mcp-server/dev/index.html)\n\n---\n\n\n### Key Features:\n- **Standardized API access** via `fineract://` URIs\n- **MCP-compliant** with STDIO/SSE transports\n- **Environment-agnostic** configuration\n\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "org.mifos.community.ai:mcp-server:1.0.0-SNAPSHOT:runner": {
+          "command": "jbang",
+          "args": ["--quiet", "org.mifos.community.ai:mcp-server:1.0.0-SNAPSHOT:runner"],
+          "env": {
+            "MIFOSX_BASE_URL": "https://your-fineract-instance",
+            "MIFOSX_BASIC_AUTH_TOKEN": "your_api_token",
+            "MIFOS_TENANT_ID": "default"
+          }
+        },
+        "mcp-server-1.0.0-SNAPSHOT-runner": {
+          "command": "./target/mcp-server-1.0.0-SNAPSHOT-runner",
+          "args": [],
+          "env": {
+            "MIFOSX_BASE_URL": "https://your-fineract-instance",
+            "MIFOSX_BASIC_AUTH_TOKEN": "your_api_token",
+            "MIFOS_TENANT_ID": "default"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "openMF",
+    "repo": "mcp-mifosx",
+    "url": "https://github.com/openMF/mcp-mifosx",
+    "name": "mcp-mifosx",
+    "path": null,
+    "stars": 12,
+    "contributors": 8,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1dc975388732c13bd14343e5307952426c35d42c"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:13:56.078Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "Quarkus",
+      "importance": 10
+    },
+    {
+      "name": "Quarkus MCP Server",
+      "importance": 10
+    },
+    {
+      "name": "Fineract API Client",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

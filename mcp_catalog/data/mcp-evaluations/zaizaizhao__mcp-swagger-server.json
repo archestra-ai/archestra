@@ -1,0 +1,159 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "zaizaizhao__mcp-swagger-server",
+  "display_name": "mcp-swagger-server",
+  "version": "1.0.0",
+  "description": "MCP Swagger Server 是一个 Monorepo 项目，核心功能是将任何符合 OpenAPI/Swagger 规范的 REST API 转换为 Model Context Protocol (MCP) 格式，让 AI 助手能够理解和调用您的 API。",
+  "author": {
+    "name": "zaizaizhao"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Swagger Server 🚀\n\n<div align=\"center\">\n\n[![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)](https://www.typescriptlang.org/)\n[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)\n[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\n\n**将 OpenAPI/Swagger 规范转换为 Model Context Protocol (MCP) 格式的服务器**\n\n零配置将您的 REST API 转换为 AI 可调用的工具\n\n[🚀 快速开始](#快速开始) • [📖 使用指南](#使用指南) • [🛠️ 开发](#开发)\n\n**Languages**: [English](README_EN.md) | 中文\n\n</div>\n\n---\n\n## 🎯 项目简介\n\nMCP Swagger Server 是一个 **Monorepo** 项目，核心功能是将任何符合 OpenAPI/Swagger 规范的 REST API 转换为 Model Context Protocol (MCP) 格式，让 AI 助手能够理解和调用您的 API。\n\n### 📦 项目结构\n\n```\nmcp-swagger-server/\n├── packages/\n│   ├── mcp-swagger-server/     # 🔧 核心 MCP 服务器 (可用)\n│   ├── mcp-swagger-parser/     # 📝 OpenAPI 解析器 (开发中)\n│   ├── mcp-swagger-ui/         # 🎨 Web 界面 (开发中)\n│   └── mcp-swagger-api/        # 🔗 REST API 后端 (开发中)\n└── scripts/                    # 🔨 构建工具\n```\n\n### ✨ 核心特性\n\n- **🔄 零配置转换**: 输入 OpenAPI 规范，立即获得 MCP 工具\n- **🎯 AI 原生设计**: 专为 Claude、ChatGPT 等 AI 助手优化\n- **🔌 多传输协议**: 支持 SSE、Streamable 和 Stdio 传输\n- **🔐 安全认证**: 支持 Bearer Token 认证保护 API 访问\n- **⚡ 高性能**: 基于 TypeScript 构建，提供完整的类型安全\n\n## 🚀 快速开始\n\n### 环境要求\n\n- Node.js ≥ 20.0.0\n- pnpm ≥ 8.0.0 (推荐)\n\n### 安装\n\n```bash\n# 克隆项目\ngit clone https://github.com/zaizaizhao/mcp-swagger-server.git\ncd mcp-swagger-server\n\n# 安装依赖\npnpm install\n\n# 构建项目\npnpm build\n```\n\n### 快速启动\n\n```bash\n# 进入 MCP 服务器包目录\ncd packages/mcp-swagger-server\n\n# 使用 Petstore API 示例启动\npnpm cli:petstore\n\n# 或者使用 GitHub API 示例\npnpm cli:github\n```\n\n## 📖 使用指南\n\n### 🔧 `mcp-swagger-server` 包\n\n这是项目的核心包，提供了完整的 MCP 服务器功能。\n\n#### 安装和使用\n\n```bash\n# 全局安装\nnpm install -g mcp-swagger-server\n\n# 命令行使用\nmcp-swagger-server --openapi https://petstore.swagger.io/v2/swagger.json --transport streamable --port 3322\n```\n\n#### 支持的传输协议\n\n- **stdio**: 用于命令行集成\n- **sse**: Server-Sent Events，适用于 Web 应用\n- **streamable**: HTTP 流传输，适用于现代 Web 应用\n\n#### 命令行选项\n\n```bash\n# 基本用法\nmcp-swagger-server [选项]\n\n# 选项：\n--openapi, -o       OpenAPI 规范的 URL 或文件路径\n--transport, -t     传输协议 (stdio|sse|streamable)\n--port, -p          端口号\n--watch, -w         监控文件变化\n--verbose           详细日志输出\n\n# Bearer Token 认证选项：\n--auth-type         认证类型 (bearer)\n--bearer-token      直接指定 Bearer Token\n--bearer-env        从环境变量读取 Token\n--config, -c        配置文件路径\n```\n\n#### 示例\n\n```bash\n# 使用本地 OpenAPI 文件\nmcp-swagger-server --openapi ./swagger.json --transport sse --port 3322\n\n# 使用远程 OpenAPI URL\nmcp-swagger-server --openapi https://api.example.com/openapi.json --transport streamable --port 3323\n\n# 监控文件变化\nmcp-swagger-server --openapi ./api.yaml --transport stdio --watch\n\n# 使用 Bearer Token 认证\nmcp-swagger-server --openapi https://api.example.com/openapi.json --auth-type bearer --bearer-token \"your-token-here\" --transport sse --port 3322\n\n# 从环境变量读取 Token\nexport API_TOKEN=\"your-token-here\"\nmcp-swagger-server --openapi https://api.example.com/openapi.json --auth-type bearer --bearer-env API_TOKEN --transport stdio\n```\n\n### 🔐 Bearer Token 认证\n\n`mcp-swagger-server` 支持 Bearer Token 认证，可以保护需要身份验证的 API 访问。\n\n#### 认证方式\n\n**1. 直接指定 Token**\n```bash\nmcp-swagger-server --auth-type bearer --bearer-token \"your-token-here\" --openapi https://api.example.com/openapi.json\n```\n\n**2. 环境变量方式**\n```bash\n# 设置环境变量\nexport API_TOKEN=\"your-token-here\"\n\n# 使用环境变量\nmcp-swagger-server --auth-type bearer --bearer-env API_TOKEN --openapi https://api.example.com/openapi.json\n```\n\n**3. 配置文件方式**\n```json\n{\n  \"transport\": \"sse\",\n  \"port\": 3322,\n  \"openapi\": \"https://api.example.com/openapi.json\",\n  \"auth\": {\n    \"type\": \"bearer\",\n    \"bearer\": {\n      \"token\": \"your-token-here\",\n      \"source\": \"static\"\n    }\n  }\n}\n```\n\n```bash\n# 使用配置文件\nmcp-swagger-server --config config.json\n```\n\n#### 环境变量配置\n\n创建 `.env` 文件：\n```env\n# 基础配置\nMCP_PORT=3322\nMCP_TRANSPORT=stdio\nMCP_OPENAPI_URL=https://api.example.com/openapi.json\n\n# 认证配置\nMCP_AUTH_TYPE=bearer\nAPI_TOKEN=your-bearer-token-here\n```\n\n### 🤖 与 AI 助手集成\n\n#### Claude Desktop 配置\n\n```json\n{\n  \"mcpServers\": {\n    \"swagger-converter\": {\n      \"command\": \"mcp-swagger-server\",\n      \"args\": [\n        \"--openapi\", \"https://petstore.swagger.io/v2/swagger.json\",\n        \"--transport\", \"stdio\"\n      ]\n    },\n    \"secured-api\": {\n      \"command\": \"mcp-swagger-server\",\n      \"args\": [\n        \"--openapi\", \"https://api.example.com/openapi.json\",\n        \"--transport\", \"stdio\",\n        \"--auth-type\", \"bearer\",\n        \"--bearer-env\", \"API_TOKEN\"\n      ],\n      \"env\": {\n        \"API_TOKEN\": \"your-bearer-token-here\"\n      }\n    }\n  }\n}\n```\n\n#### 编程方式使用\n\n```typescript\nimport { createMcpServer } from 'mcp-swagger-server';\n\n// 基本使用\nconst server = await createMcpServer({\n  openapi: 'https://api.example.com/openapi.json',\n  transport: 'streamable',\n  port: 3322\n});\n\n// 使用 Bearer Token 认证\nconst securedServer = await createMcpServer({\n  openapi: 'https://api.example.com/openapi.json',\n  transport: 'streamable',\n  port: 3322,\n  auth: {\n    type: 'bearer',\n    bearer: {\n      token: 'your-token-here',\n      source: 'static'\n    }\n  }\n});\n\nawait server.start();\n```\n\n## 🛠️ 开发\n\n### 构建系统\n\n```bash\n# 构建所有包\npnpm build\n\n# 仅构建后端包\npnpm build:packages\n\n# 开发模式\npnpm dev\n\n# 清理构建产物\npnpm clean\n```\n\n### 测试和调试\n\n```bash\n# 运行测试\npnpm test\n\n# 代码检查\npnpm lint\n\n# 类型检查\npnpm type-check\n\n# 项目健康检查\npnpm diagnostic\n```\n\n### 开发 MCP 服务器\n\n```bash\ncd packages/mcp-swagger-server\n\n# 开发模式启动\npnpm dev\n\n# 运行 CLI 工具\npnpm cli --help\n\n```\n\n## 📋 项目状态\n\n| 包 | 状态 | 描述 |\n|---|---|---|\n| `mcp-swagger-server` | ✅ 可用 | 核心 MCP 服务器，支持多种传输协议 |\n| `mcp-swagger-parser` | 🚧 开发中 | OpenAPI 解析器和转换工具 |\n| `mcp-swagger-ui` | 🚧 开发中 | Vue.js Web 界面 |\n| `mcp-swagger-api` | 🚧 开发中 | NestJS REST API 后端 |\n\n## 🤝 贡献\n\n欢迎贡献！请先阅读 [贡献指南](CONTRIBUTING.md)。\n\n## 📄 许可证\n\nMIT License - 详见 [LICENSE](LICENSE) 文件。\n\n---\n\n<div align=\"center\">\n\n**Built with ❤️ by ZhaoYaNan(ZTE)**\n\n[⭐ Star](../../stargazers) • [🐛 Issues](../../issues) • [💬 Discussions](../../discussions)\n\n</div>",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {
+        "mcp-swagger-server-cli-petstore": {
+          "command": "pnpm",
+          "args": ["cli:petstore"],
+          "env": {}
+        },
+        "mcp-swagger-server-cli-github": {
+          "command": "pnpm",
+          "args": ["cli:github"],
+          "env": {}
+        },
+        "mcp-swagger-server-petstore-streamable": {
+          "command": "mcp-swagger-server",
+          "args": [
+            "--openapi",
+            "https://petstore.swagger.io/v2/swagger.json",
+            "--transport",
+            "streamable",
+            "--port",
+            "3322"
+          ],
+          "env": {}
+        },
+        "mcp-swagger-server-local-file-sse": {
+          "command": "mcp-swagger-server",
+          "args": ["--openapi", "./swagger.json", "--transport", "sse", "--port", "3322"],
+          "env": {}
+        },
+        "mcp-swagger-server-remote-api-streamable": {
+          "command": "mcp-swagger-server",
+          "args": ["--openapi", "https://api.example.com/openapi.json", "--transport", "streamable", "--port", "3323"],
+          "env": {}
+        },
+        "mcp-swagger-server-watch-stdio": {
+          "command": "mcp-swagger-server",
+          "args": ["--openapi", "./api.yaml", "--transport", "stdio", "--watch"],
+          "env": {}
+        },
+        "mcp-swagger-server-bearer-token": {
+          "command": "mcp-swagger-server",
+          "args": [
+            "--openapi",
+            "https://api.example.com/openapi.json",
+            "--auth-type",
+            "bearer",
+            "--bearer-token",
+            "your-token-here",
+            "--transport",
+            "sse",
+            "--port",
+            "3322"
+          ],
+          "env": {}
+        },
+        "mcp-swagger-server-bearer-env": {
+          "command": "mcp-swagger-server",
+          "args": [
+            "--auth-type",
+            "bearer",
+            "--bearer-env",
+            "API_TOKEN",
+            "--openapi",
+            "https://api.example.com/openapi.json"
+          ],
+          "env": {
+            "API_TOKEN": "your-token-here"
+          }
+        },
+        "mcp-swagger-server-with-config": {
+          "command": "mcp-swagger-server",
+          "args": ["--config", "config.json"],
+          "env": {}
+        },
+        "mcp-swagger-server-claude-petstore-stdio": {
+          "command": "mcp-swagger-server",
+          "args": ["--openapi", "https://petstore.swagger.io/v2/swagger.json", "--transport", "stdio"],
+          "env": {}
+        },
+        "mcp-swagger-server-claude-secured-stdio": {
+          "command": "mcp-swagger-server",
+          "args": [
+            "--openapi",
+            "https://api.example.com/openapi.json",
+            "--transport",
+            "stdio",
+            "--auth-type",
+            "bearer",
+            "--bearer-env",
+            "API_TOKEN"
+          ],
+          "env": {
+            "API_TOKEN": "your-bearer-token-here"
+          }
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    }
+  },
+  "github_info": {
+    "owner": "zaizaizhao",
+    "repo": "mcp-swagger-server",
+    "url": "https://github.com/zaizaizhao/mcp-swagger-server",
+    "name": "mcp-swagger-server",
+    "path": null,
+    "stars": 11,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "813d931dd6c2f5c4ea1a93d2da2180eab0e97842"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:34.708Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-swagger-monorepo\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Swagger Server - A comprehensive monorepo for OpenAPI/Swagger to MCP conversion\",\n  \"private\": true,\n  \"scripts\": {\n    \"build\": \"node scripts/build.js\",\n    \"build:packages\": \"node scripts/build.js --non-ui\",\n    \"prepack\": \"node scripts/build.js\",\n    \"pack\": \"pnpm pack --filter mcp-swagger-server && pnpm pack --filter mcp-swagger-parser\",\n    \"publish\":\"pnpm publish --filter mcp-swagger-server && pnpm publish --filter mcp-swagger-parser\",\n    \"dev\": \"node scripts/dev.js\",\n    \"dev:ui\": \"pnpm --filter=mcp-swagger-ui run dev\",\n    \"clean\": \"node scripts/clean.js\",\n    \"clean:build\": \"node scripts/clean.js --build-only\",\n    \"diagnostic\": \"node scripts/diagnostic.js\",\n    \"test\": \"pnpm -r run test\",\n    \"lint\": \"pnpm -r run lint\",\n    \"type-check\": \"pnpm -r run type-check\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"swagger\",\n    \"openapi\",\n    \"monorepo\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@changesets/changelog-github\": \"^0.5.1\",\n    \"@changesets/cli\": \"^2.29.5\",\n    \"@types/node\": \"^22.15.21\",\n    \"cross-env\": \"^7.0.3\",\n    \"nodemon\": \"^3.1.10\",\n    \"rimraf\": \"^5.0.5\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsconfig-paths\": \"^4.2.0\",\n    \"tslib\": \"^2.8.1\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

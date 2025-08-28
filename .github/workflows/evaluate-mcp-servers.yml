@@ -42,11 +42,13 @@ jobs:
       - name: Run evaluation script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_EVALUATION: ${{ github.event.inputs.force }}
+          CONCURRENCY: ${{ github.event.inputs.concurrency || '5' }}
         run: |
           # Determine evaluation mode
-          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+          if [[ "${FORCE_EVALUATION}" == "true" ]]; then
             echo "Running forced evaluation of all servers..."
-            pnpm catalog:evaluate -- --all --force --concurrency ${{ github.event.inputs.concurrency || '5' }}
+            pnpm catalog:evaluate -- --all --force --concurrency "${CONCURRENCY}"
           elif [[ "${{ github.event_name }}" == "push" ]]; then
             echo "Detecting newly added servers from git diff..."
 
@@ -70,7 +72,7 @@ jobs:
             fi
           else
             echo "Evaluating only missing servers..."
-            pnpm catalog:evaluate -- --missing-only --all --concurrency ${{ github.event.inputs.concurrency || '5' }}
+            pnpm catalog:evaluate -- --missing-only --all --concurrency "${CONCURRENCY}"
           fi
 
       - name: Generate evaluation report
@@ -106,6 +108,10 @@ jobs:
       - name: Commit and Push or Create PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_EVALUATION: ${{ github.event.inputs.force }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -128,10 +134,10 @@ jobs:
           fi
 
           # Create commit message
-          if [[ "${{ github.event.inputs.force }}" == "true" ]]; then
+          if [[ "${FORCE_EVALUATION}" == "true" ]]; then
             COMMIT_MSG="chore: force re-evaluate all MCP servers"
             PR_TITLE="chore: Force re-evaluate all MCP servers"
-          elif [[ "${{ github.event_name }}" == "push" ]] && [ -f app/new_servers.txt ] && [ -s app/new_servers.txt ]; then
+          elif [[ "${EVENT_NAME}" == "push" ]] && [ -f app/new_servers.txt ] && [ -s app/new_servers.txt ]; then
             NEW_COUNT=$(wc -l < app/new_servers.txt)
             COMMIT_MSG="chore: evaluate $NEW_COUNT newly added MCP server(s)"
             PR_TITLE="chore: Evaluate $NEW_COUNT newly added MCP server(s)"
@@ -155,8 +161,8 @@ jobs:
             # Commit changes
             git commit -m "$COMMIT_MSG
             
-            Triggered by: ${{ github.event_name }}
-            Workflow: ${{ github.workflow }} #${{ github.run_number }}"
+            Triggered by: ${EVENT_NAME}
+            Workflow: ${WORKFLOW_NAME} #${RUN_NUMBER}"
             
             # Push the new branch
             git push origin "$BRANCH_NAME"
@@ -166,8 +172,8 @@ jobs:
 
             This PR contains automated evaluation results for MCP servers.
             
-            **Triggered by:** ${{ github.event_name }}  
-            **Workflow run:** ${{ github.workflow }} #${{ github.run_number }}
+            **Triggered by:** ${EVENT_NAME}  
+            **Workflow run:** ${WORKFLOW_NAME} #${RUN_NUMBER}
             
             ### Changes
             - Updated evaluation data for MCP servers
@@ -190,8 +196,8 @@ jobs:
             # Commit changes
             git commit -m "$COMMIT_MSG
             
-            Triggered by: ${{ github.event_name }}
-            Workflow: ${{ github.workflow }} #${{ github.run_number }}"
+            Triggered by: ${EVENT_NAME}
+            Workflow: ${WORKFLOW_NAME} #${RUN_NUMBER}"
             
             # Push to current branch
             git push

@@ -38,6 +38,13 @@ export type ArchestraMcpServerManifest = {
       };
     };
   };
+  server_docker?: {
+    command: string;
+    args?: Array<string>;
+    env?: {
+      [key: string]: string;
+    };
+  };
   tools?: Array<{
     name: string;
     description?: string;

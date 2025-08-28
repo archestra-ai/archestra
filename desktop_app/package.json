@@ -1,7 +1,7 @@
 {
   "name": "Archestra",
   "productName": "Archestra",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "description": "Enterprise MCP Platform for AI Agents",
   "license": "MIT",
   "repository": {

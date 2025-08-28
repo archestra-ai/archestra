@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./desktop_app
+        working-directory: desktop_app
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -38,7 +38,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./desktop_app
+          working-directory: desktop_app
 
       - name: Check prettier formatting
         run: pnpm prettier --check .
@@ -60,7 +60,7 @@ jobs:
       contents: write # needed to commit generated code for review
     defaults:
       run:
-        working-directory: ./desktop_app
+        working-directory: desktop_app
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -70,7 +70,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./desktop_app
+          working-directory: desktop_app
 
       - name: Codegen
         run: pnpm codegen:all
@@ -91,7 +91,7 @@ jobs:
       contents: write # needed to commit generated code for review
     defaults:
       run:
-        working-directory: ./desktop_app
+        working-directory: desktop_app
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -101,7 +101,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./desktop_app
+          working-directory: desktop_app
 
       - name: Verify no pending database migrations
         run: pnpm db:generate
@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./mcp_catalog
+        working-directory: mcp_catalog
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -154,7 +154,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./mcp_catalog
+          working-directory: mcp_catalog
 
       - name: Validate catalog data
         run: pnpm catalog:validate
@@ -166,7 +166,7 @@ jobs:
       contents: write # needed to commit generated code for review
     defaults:
       run:
-        working-directory: ./mcp_catalog
+        working-directory: mcp_catalog
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -176,7 +176,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./mcp_catalog
+          working-directory: mcp_catalog
 
       - name: Codegen
         run: pnpm openapi:generate
@@ -195,7 +195,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./oauth_proxy
+        working-directory: oauth_proxy
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -205,7 +205,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./oauth_proxy
+          working-directory: oauth_proxy
 
       # - name: TypeScript type check
       #   run: pnpm typecheck
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./mcp_catalog
+        working-directory: mcp_catalog
     # TODO: once we setup pnpm workspaces have this reuse the setup-frontend action instead
     steps:
       - name: Checkout project
@@ -245,7 +245,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
-          working-directory: ./mcp_catalog
+          working-directory: mcp_catalog
 
       - name: TypeScript type check
         run: pnpm typecheck

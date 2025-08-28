@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Note: The README.md includes a Developer Quickstart section that shows basic setup steps. When following those instructions, ensure you're in the `desktop_app/` directory for all commands after cloning.
 
+**Exception**: When working with the MCP Catalog server, use the `mcp_catalog/` directory for catalog-specific commands.
+
 ## Important Rules
 
 1. **NEVER modify files in `src/ui/components/ui/`** - These are shadcn/ui components and should remain unchanged
@@ -59,6 +61,15 @@ pnpm db:push          # Push schema changes (dev only)
 ```bash
 cd desktop_app
 pnpm generate:openapi-clients  # Generate TypeScript clients from OpenAPI specs
+```
+
+### MCP Catalog Commands
+
+```bash
+cd mcp_catalog
+pnpm catalog:validate         # Validate catalog data integrity
+pnpm catalog:evaluate         # Evaluate MCP servers
+pnpm generate:openapi-schema  # Generate OpenAPI schema for catalog API
 ```
 
 ## High-Level Architecture
@@ -290,6 +301,8 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
     - Catalog defines provider in `archestra_config.oauth.provider`
     - UI auto-detects and triggers appropriate auth flow
     - Browser auth mapped via `useBrowserAuth` flag
+    - Catalog server serves MCP server metadata and evaluation results
+    - Automated quality scoring and tool analysis for each server
   - **API Endpoints**:
     - `POST /api/mcp_server/start_oauth` - Start OAuth with PKCE
     - `POST /api/mcp_server/complete_oauth` - Complete OAuth flow
@@ -335,6 +348,19 @@ oauth_proxy/
 │   └── routes/        # API routes
 │       ├── callback.js # OAuth callback handler
 │       └── token.js    # Token exchange endpoint
+└── package.json       # Dependencies and scripts
+
+mcp_catalog/
+├── src/
+│   ├── api/           # API routes and OpenAPI schemas
+│   ├── lib/           # Catalog utilities and data access
+│   └── types.ts       # TypeScript type definitions
+├── data/
+│   ├── mcp-servers.json    # Main catalog of MCP servers
+│   └── mcp-evaluations/    # Server evaluation results
+├── scripts/           # Catalog management scripts
+│   ├── evaluate-catalog.ts # Evaluate MCP servers
+│   └── validate-catalog.ts # Validate catalog data
 └── package.json       # Dependencies and scripts
 ```
 
@@ -403,6 +429,10 @@ Key tables (snake_case naming):
   - **Authorized Users**: Currently configured for `joeyorlando`, `Matvey-Kuk`, and `iskhakov`
   - **Compliance**: Ensures adherence to Anthropic's single-account OAuth token policy
   - **Adding New Users**: Add repository secret `USERNAME_CLAUDE_CODE_OAUTH_TOKEN` and update user-scoped workflows
+- **MCP Catalog Workflows**:
+  - `evaluate-mcp-servers.yml`: Automated evaluation of MCP servers with Gemini API
+  - `deploy-mcp-catalog-server-to-cloud-run.yml`: Deploy catalog server to Google Cloud Run
+  - `on-commits-to-main.yml`: Trigger deployments on main branch commits
 
 ### Development Notes
 
@@ -411,6 +441,9 @@ Key tables (snake_case naming):
   - MCP server logs: `~/Library/Application Support/archestra/logs/<container-name>.log`
 - Binary resources: `desktop_app/resources/bin/` (platform-specific)
 - OAuth proxy server: `oauth_proxy/` (top-level directory)
+- MCP Catalog server: `mcp_catalog/` (top-level directory)
+  - Catalog data: `mcp_catalog/data/mcp-servers.json`
+  - Evaluation results: `mcp_catalog/data/mcp-evaluations/`
 - Code signing configured for macOS notarization
 - ASAR packaging enabled for production builds
 

@@ -28,6 +28,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.4",
     "prettier": "^3.6.2",
+    "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
     "typescript": "^5",
     "vite": "^7.0.6",

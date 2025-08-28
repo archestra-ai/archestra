@@ -127,6 +127,48 @@ export interface OAuthProviderDefinition {
   };
 
   /**
+   * Optional method to extract user email from OAuth tokens.
+   * Providers can implement their own logic to get the user's email address.
+   *
+   * @param tokens - OAuth tokens from the provider
+   * @returns Promise resolving to email address or undefined
+   *
+   * @example
+   * ```typescript
+   * extractUserEmail: async (tokens) => {
+   *   // Extract from ID token or call userinfo endpoint
+   *   return emailAddress;
+   * }
+   * ```
+   */
+  extractUserEmail?: (tokens: TokenResponse) => Promise<string | undefined>;
+
+  /**
+   * Optional method to insert files into container at startup.
+   * This allows providers to create credential files or configuration before the main command runs.
+   *
+   * @param env - Environment variables containing OAuth tokens
+   * @returns Command wrapper configuration or undefined if no file insertion needed
+   *
+   * @example
+   * ```typescript
+   * insertFileToContainer: (env) => {
+   *   if (!env.OAUTH_TOKEN) return undefined;
+   *   return {
+   *     wrapperCommand: 'sh',
+   *     wrapperArgs: ['-c', 'echo "$OAUTH_TOKEN" > /path/to/token.json && $@'],
+   *   };
+   * }
+   * ```
+   */
+  insertFileToContainer?: (env: Record<string, string>) =>
+    | {
+        wrapperCommand: string;
+        wrapperArgs: string[];
+      }
+    | undefined;
+
+  /**
    * Optional browser-based authentication configuration.
    * Some providers (like Slack) support extracting tokens directly from their web interface.
    */

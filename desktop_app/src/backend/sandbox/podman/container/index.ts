@@ -16,6 +16,7 @@ import {
 } from '@backend/clients/libpod/gen';
 import config from '@backend/config';
 import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@backend/models/mcpServer';
+import { oauthProviders } from '@backend/server/plugins/oauth/providers';
 import log from '@backend/utils/logger';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
 
@@ -103,24 +104,31 @@ export default class PodmanContainer {
       this.args = dockerConfig.args;
       // Merge environment variables - OAuth tokens from env override Docker config placeholders
       this.envVars = { ...dockerConfig.env, ...env };
-    } else if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
-      // Check if Google OAuth tokens are present and wrap command if needed
-      // Wrap the command to create the credentials file on startup
-      const originalCommand = [command, ...(args || [])].join(' ');
-      const email = env.GOOGLE_OAUTH_EMAIL;
-
-      this.command = 'sh';
-      this.args = [
-        '-c',
-        `mkdir -p ~/.google_workspace_mcp/credentials && ` +
-          `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
-          `${originalCommand}`,
-      ];
-      this.envVars = env;
     } else {
-      this.command = command;
-      this.args = args || [];
-      this.envVars = env;
+      // Check if any OAuth provider needs to insert files into the container
+      let commandWrapped = false;
+
+      for (const provider of Object.values(oauthProviders)) {
+        if (provider.insertFileToContainer) {
+          const wrapperConfig = provider.insertFileToContainer(env);
+          if (wrapperConfig) {
+            // Apply the wrapper by combining it with the original command
+            this.command = wrapperConfig.wrapperCommand;
+            this.args = [...wrapperConfig.wrapperArgs, command, ...(args || [])];
+            this.envVars = env;
+            commandWrapped = true;
+            log.info(`Applied file insertion wrapper for provider: ${provider.name}`);
+            break; // Only apply the first matching provider
+          }
+        }
+      }
+
+      if (!commandWrapped) {
+        // No OAuth provider needs file insertion, use original command
+        this.command = command;
+        this.args = args || [];
+        this.envVars = env;
+      }
     }
 
     // Set the socket path for the container (needed for attach operations)

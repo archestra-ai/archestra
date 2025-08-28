@@ -21,27 +21,6 @@ interface PendingOAuthInstall {
 }
 const pendingOAuthInstalls = new Map<string, PendingOAuthInstall>();
 
-/**
- * Helper function to extract email from Google ID token
- * ID tokens are JWT tokens with payload containing user info
- */
-function extractEmailFromIdToken(idToken: string): string | undefined {
-  try {
-    // ID token is a JWT: header.payload.signature
-    const parts = idToken.split('.');
-    if (parts.length !== 3) return undefined;
-
-    // Decode the payload (base64url encoded)
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
-    const data = JSON.parse(payload);
-
-    return data.email;
-  } catch (error) {
-    log.error('Failed to extract email from ID token:', error);
-    return undefined;
-  }
-}
-
 const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     '/api/mcp_server/start_oauth',
@@ -172,6 +151,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           refresh_token: z.string().optional(),
           expiry_date: z.string().optional(),
           code: z.string().optional(),
+          id_token: z.string().optional(), // Google OAuth provides ID token with user info
         }),
         response: {
           200: McpServerSchema,
@@ -224,12 +204,22 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           const tokens = await tokenResponse.json();
 
+          // Log the full response from OAuth proxy for debugging
+          fastify.log.info({ tokens }, 'OAuth proxy token response');
+
           // Continue with the installation using the tokens
           body.access_token = tokens.access_token;
           body.refresh_token = tokens.refresh_token;
           body.expiry_date = tokens.expires_in
             ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
             : undefined;
+          // Store ID token for email extraction (Google OAuth)
+          if (tokens.id_token) {
+            body.id_token = tokens.id_token;
+            fastify.log.info('ID token found in OAuth response');
+          } else {
+            fastify.log.warn('No ID token in OAuth response');
+          }
         } catch (error) {
           fastify.log.error('Token exchange error:', error);
           return reply.code(400).send({
@@ -260,32 +250,27 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           expires_in: body.expiry_date
             ? Math.floor((new Date(body.expiry_date).getTime() - Date.now()) / 1000)
             : undefined,
+          id_token: body.id_token,
         };
 
         const tokenEnvVars = await handleProviderTokens(provider, tokens, installData.id || installData.displayName);
 
-        // For Google provider, extract email from user config values
-        let googleEmail: string | undefined;
-        if (providerName === 'google' && installData.userConfigValues) {
-          // Try to find email from user config values
-          // Common field names: email, user_email, account_email, google_email
-          const emailValue =
-            installData.userConfigValues.email ||
-            installData.userConfigValues.user_email ||
-            installData.userConfigValues.account_email ||
-            installData.userConfigValues.google_email;
+        // Log the complete body for debugging
+        fastify.log.info({ body }, 'Complete body object');
+        fastify.log.info({ tokens }, 'TokenResponse object');
 
-          // Convert to string if it's a valid value
-          if (typeof emailValue === 'string') {
-            googleEmail = emailValue;
-          } else if (emailValue) {
-            googleEmail = String(emailValue);
-          } else {
-            // If no email in config, try to decode from ID token if available
-            googleEmail =
-              (tokens.id_token ? extractEmailFromIdToken(tokens.id_token) : undefined) ||
-              // Fallback to a default
-              'user@example.com';
+        // Extract user email if provider supports it
+        let userEmail: string | undefined;
+        if (provider.extractUserEmail) {
+          fastify.log.info(`Provider ${providerName} supports email extraction`);
+          userEmail = await provider.extractUserEmail(tokens);
+
+          if (!userEmail) {
+            fastify.log.warn(`Could not extract email from ${providerName} OAuth, using fallback`);
+            // Provider-specific fallback (for Google, this is required)
+            if (providerName === 'google') {
+              userEmail = 'user@example.com';
+            }
           }
         }
 
@@ -297,8 +282,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               env: {
                 ...installData.serverConfig.env,
                 ...tokenEnvVars,
-                // Add Google email if available
-                ...(googleEmail ? { GOOGLE_OAUTH_EMAIL: googleEmail } : {}),
+                // Add provider-specific email if available
+                ...(providerName === 'google' && userEmail ? { GOOGLE_OAUTH_EMAIL: userEmail } : {}),
               },
             }
           : installData.serverConfig;

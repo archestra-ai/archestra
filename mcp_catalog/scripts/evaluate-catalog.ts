@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
-import { DxtManifestServerSchema, DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import z from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import { DxtManifestServerSchema, DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
 import { extractServerInfo, loadServers } from '@mcpCatalog/lib/catalog';
 import { calculateQualityScore } from '@mcpCatalog/lib/quality-calculator';
 import {

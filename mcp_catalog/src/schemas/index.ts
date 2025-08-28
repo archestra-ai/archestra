@@ -154,7 +154,7 @@ export const ArchestraMcpServerManifestSchema = DxtManifestSchema.extend({
 });
 
 export const ArchestraMcpServerManifestWithScoreBreakdownSchema = ArchestraMcpServerManifestSchema.extend({
-  score_breakdown: ArchestraScoreBreakdownSchema,
+  score_breakdown: ArchestraScoreBreakdownSchema.nullable(),
 });
 
 export const ApiErrorResponseSchema = z.object({

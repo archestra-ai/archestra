@@ -94,10 +94,18 @@ export function loadServers(name?: string): ArchestraMcpServerManifest[] {
   // If a specific name is requested, try to load just that evaluation file
   if (name) {
     const evaluationPath = path.join(MCP_SERVERS_EVALUATIONS_DIR, `${name}.json`);
-
-    if (fs.existsSync(evaluationPath)) {
+    // Normalize and ensure containment within evaluations directory
+    const resolvedEvaluationPath = path.resolve(evaluationPath);
+    const resolvedEvaluationsDir = path.resolve(MCP_SERVERS_EVALUATIONS_DIR);
+    if (!resolvedEvaluationPath.startsWith(resolvedEvaluationsDir + path.sep)) {
+      console.warn(
+        'Attempted path traversal or out-of-bounds access detected for evaluation file: %s',
+        resolvedEvaluationPath
+      );
+      // Do not proceed if the path is outside the data directory
+    } else if (fs.existsSync(resolvedEvaluationPath)) {
       try {
-        const content = fs.readFileSync(evaluationPath, 'utf-8');
+        const content = fs.readFileSync(resolvedEvaluationPath, 'utf-8');
         const evaluation = JSON.parse(content) as ArchestraMcpServerManifest;
         // Use server_overridden if it exists, otherwise use server
         if (evaluation.server_overridden) {
@@ -310,9 +318,20 @@ export function loadServersFromSameRepo(targetServer: ArchestraMcpServerManifest
 
       // Try to load the evaluation file for this server
       const evaluationPath = path.join(MCP_SERVERS_EVALUATIONS_DIR, `${urlName}.json`);
-      if (fs.existsSync(evaluationPath)) {
+      // Normalize and ensure containment within evaluations directory
+      const resolvedEvaluationPath = path.resolve(evaluationPath);
+      const resolvedEvaluationsDir = path.resolve(MCP_SERVERS_EVALUATIONS_DIR);
+      if (!resolvedEvaluationPath.startsWith(resolvedEvaluationsDir + path.sep)) {
+        console.warn(
+          'Attempted path traversal or out-of-bounds access detected for evaluation file: %s',
+          resolvedEvaluationPath
+        );
+        // Skip this server if path is unsafe
+        continue;
+      }
+      if (fs.existsSync(resolvedEvaluationPath)) {
         try {
-          const content = fs.readFileSync(evaluationPath, 'utf-8');
+          const content = fs.readFileSync(resolvedEvaluationPath, 'utf-8');
           const evaluation = JSON.parse(content) as ArchestraMcpServerManifest;
           // Use server_overridden if it exists, otherwise use server
           if (evaluation.server_overridden) {

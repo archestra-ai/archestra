@@ -124,7 +124,7 @@ const searchRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hasMore: offset + limit < totalCount,
         };
       } catch (error) {
-        fastify.log.error('Search API error:', error);
+        fastify.log.error(`Search API error: ${error}`);
         return reply.status(500).send({ error: 'Internal server error' });
       }
     }

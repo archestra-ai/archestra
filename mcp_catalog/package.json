@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "prettier": "prettier --write .",
     "catalog:evaluate": "npx tsx src/scripts/evaluate-catalog.ts",
     "catalog:validate": "npx tsx src/scripts/validate-catalog.ts"
   },

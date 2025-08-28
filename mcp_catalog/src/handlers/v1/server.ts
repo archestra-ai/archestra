@@ -11,6 +11,9 @@ const ServerResponseSchema = ArchestraMcpServerManifestWithScoreBreakdownSchema.
   detail_page_url: z.string(),
 });
 
+// Register schema for OpenAPI generation
+z.globalRegistry.add(ServerResponseSchema, { id: 'ServerResponse' });
+
 const serverRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/server/:name',

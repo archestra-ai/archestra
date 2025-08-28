@@ -18,10 +18,9 @@
     "@fastify/swagger-ui": "^5.2.3",
     "fastify": "^5.5.0",
     "fastify-type-provider-zod": "^5.0.3",
-    "zod": "^3.25.67"
+    "zod": "^4.0.17"
   },
   "devDependencies": {
-    "@anthropic-ai/dxt": "^0.2.6",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/node": "^24.2.0",
     "husky": "^9.1.7",

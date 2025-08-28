@@ -5,7 +5,7 @@ import {
   DxtManifestServerSchema,
   DxtUserConfigurationOptionSchema,
   McpServerConfigSchema,
-} from '@anthropic-ai/dxt';
+} from './dxt';
 
 export const McpServerCategorySchema = z.enum([
   'Aggregators',
@@ -119,7 +119,7 @@ export const ArchestraMcpServerProtocolFeaturesSchema = z.object({
   implementing_oauth2: z.boolean(),
 });
 
-export const ArchestraMcpServerManifestSchema = DxtManifestSchema.omit({ repository: true }).extend({
+export const ArchestraMcpServerManifestSchema = DxtManifestSchema.extend({
   /**
    * Machine-readable name (used for CLI, APIs)
    *
@@ -160,3 +160,11 @@ export const ArchestraMcpServerManifestWithScoreBreakdownSchema = ArchestraMcpSe
 export const ApiErrorResponseSchema = z.object({
   error: z.string(),
 });
+
+// Register schemas for OpenAPI generation
+z.globalRegistry.add(McpServerCategorySchema, { id: 'McpServerCategory' });
+z.globalRegistry.add(ArchestraMcpServerManifestSchema, { id: 'ArchestraMcpServerManifest' });
+z.globalRegistry.add(ArchestraMcpServerManifestWithScoreBreakdownSchema, {
+  id: 'ArchestraMcpServerManifestWithScoreBreakdown',
+});
+z.globalRegistry.add(ApiErrorResponseSchema, { id: 'ApiErrorResponse' });

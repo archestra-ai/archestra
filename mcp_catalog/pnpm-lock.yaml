@@ -22,10 +22,10 @@ importers:
         version: 5.5.0
       fastify-type-provider-zod:
         specifier: ^5.0.3
-        version: 5.0.3(@fastify/swagger@9.5.1)(fastify@5.5.0)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 5.0.3(@fastify/swagger@9.5.1)(fastify@5.5.0)(openapi-types@12.1.3)(zod@4.1.4)
       zod:
-        specifier: ^3.25.67
-        version: 3.25.76
+        specifier: ^4.0.17
+        version: 4.1.4
     devDependencies:
       '@anthropic-ai/dxt':
         specifier: ^0.2.6
@@ -1346,6 +1346,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.1.4:
+    resolution: {integrity: sha512-2YqJuWkU6IIK9qcE4k1lLLhyZ6zFw7XVRdQGpV97jEIZwTrscUw+DY31Xczd8nwaoksyJUIxCojZXwckJovWxA==}
+
 snapshots:
 
   '@anthropic-ai/dxt@0.2.6':
@@ -1999,13 +2002,13 @@ snapshots:
 
   fastify-plugin@5.0.1: {}
 
-  fastify-type-provider-zod@5.0.3(@fastify/swagger@9.5.1)(fastify@5.5.0)(openapi-types@12.1.3)(zod@3.25.76):
+  fastify-type-provider-zod@5.0.3(@fastify/swagger@9.5.1)(fastify@5.5.0)(openapi-types@12.1.3)(zod@4.1.4):
     dependencies:
       '@fastify/error': 4.2.0
       '@fastify/swagger': 9.5.1
       fastify: 5.5.0
       openapi-types: 12.1.3
-      zod: 3.25.76
+      zod: 4.1.4
 
   fastify@5.5.0:
     dependencies:
@@ -2586,3 +2589,5 @@ snapshots:
   yoctocolors-cjs@2.1.3: {}
 
   zod@3.25.76: {}
+
+  zod@4.1.4: {}

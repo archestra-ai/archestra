@@ -6,13 +6,15 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@archestra/types': path.resolve(__dirname, './src/types.ts'),
+      '@constants': path.resolve(__dirname, './src/constants.ts'),
+      '@lib/*': path.resolve(__dirname, './src/lib/*'),
+      '@schemas': path.resolve(__dirname, './src/schemas/index.ts'),
     },
   },
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['./setup-tests.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

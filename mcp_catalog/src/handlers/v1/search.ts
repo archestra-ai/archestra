@@ -21,6 +21,10 @@ const SearchResponseSchema = z.object({
   hasMore: z.boolean(),
 });
 
+// Register schemas for OpenAPI generation
+z.globalRegistry.add(SearchQuerySchema, { id: 'SearchQuery' });
+z.globalRegistry.add(SearchResponseSchema, { id: 'SearchResponse' });
+
 const searchRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/search',

@@ -109,7 +109,7 @@ export function loadServers(name?: string): ArchestraMcpServerManifest[] {
         }
         evaluationsMap.set(evaluation.name, evaluation);
       } catch (error) {
-        console.warn(`Failed to load evaluation file for ${name}:`, error);
+        console.warn('Failed to load evaluation file for %s:', name, error);
       }
     }
   } else {

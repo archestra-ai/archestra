@@ -9,7 +9,7 @@
   "tabWidth": 2,
   "importOrder": [
     "<THIRD_PARTY_MODULES>",
-    "^@(components|constants|mcpCatalog|lib)(.*)$",
+    "^@(api|archestra/types|constants|lib|schemas|)(.*)$",
     "^[./](?!.*\\.(css|scss|sass|less|styl)$)",
     "^[./].*\\.(css|scss|sass|less|styl)$"
   ],

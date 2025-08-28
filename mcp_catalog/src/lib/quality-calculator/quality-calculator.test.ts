@@ -1,4 +1,4 @@
-import type { ArchestraMcpServerManifest } from '@mcpCatalog/types';
+import type { ArchestraMcpServerManifest } from '@archestra/types';
 
 import {
   calculateBadgeUsageScore,

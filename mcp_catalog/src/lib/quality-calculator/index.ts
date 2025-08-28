@@ -1,4 +1,4 @@
-import { ArchestraMcpServerManifest, ArchestraScoreBreakdown } from '@mcpCatalog/types';
+import { ArchestraMcpServerManifest, ArchestraScoreBreakdown } from '@archestra/types';
 
 /**
  * Calculate MCP Protocol Implementation Score (40 points max)

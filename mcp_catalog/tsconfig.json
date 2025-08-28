@@ -17,7 +17,11 @@
     /* Aliasing */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@api/*": ["src/api/*"],
+      "@archestra/types": ["src/types.ts"],
+      "@constants": ["src/constants.ts"],
+      "@lib/*": ["src/lib/*"],
+      "@schemas": ["src/schemas.ts"]
     }
   },
   "include": ["src/**/*"],

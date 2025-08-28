@@ -1119,6 +1119,7 @@ export type CompleteMcpServerOauthData = {
     refresh_token?: string;
     expiry_date?: string;
     code?: string;
+    id_token?: string;
   };
   path?: never;
   query?: never;

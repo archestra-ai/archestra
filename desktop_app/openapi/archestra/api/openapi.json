@@ -3127,6 +3127,9 @@
                   },
                   "code": {
                     "type": "string"
+                  },
+                  "id_token": {
+                    "type": "string"
                   }
                 },
                 "required": ["service", "state"]

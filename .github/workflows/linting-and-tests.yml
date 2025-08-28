@@ -3,6 +3,9 @@ name: Linting and Tests
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   lint-pr-title:
     name: PR Title Linter
@@ -53,6 +56,8 @@ jobs:
   verify-codegend-code-is-up-to-date:
     name: Verify generated code is up to date
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to commit generated code for review
     defaults:
       run:
         working-directory: ./desktop_app
@@ -75,13 +80,15 @@ jobs:
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             git add .
-            git commit -m "chore: update generated code"
+            git commit -m "chore: update desktop_app generated code"
             git push --no-verify
           fi
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to commit generated code for review
     defaults:
       run:
         working-directory: ./desktop_app
@@ -104,7 +111,7 @@ jobs:
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             git add .
-            git commit -m "chore: update database migrations"
+            git commit -m "chore: update desktop_app database migrations"
             git push --no-verify
           fi
 
@@ -155,6 +162,8 @@ jobs:
   verify-mcp-catalog-has-no-pending-openapi-schema-changes:
     name: Verify MCP Catalog has no pending OpenAPI schema changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to commit generated code for review
     defaults:
       run:
         working-directory: ./mcp_catalog
@@ -172,25 +181,13 @@ jobs:
       - name: Codegen
         run: pnpm openapi:generate
 
-      - name: Check for changes
+      - name: Check for changes and commit if needed
         run: |
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "❌ OpenAPI schema has uncommitted changes!"
-            echo ""
-            echo "The OpenAPI schema is out of sync with the API implementation."
-            echo "To fix this, run the following commands locally:"
-            echo ""
-            echo "  cd app"
-            echo "  npm run openapi:generate"
-            echo "  git add app/mcp-catalog/api/docs/openapi.json"
-            echo "  git commit -m 'chore: update OpenAPI schema'"
-            echo ""
-            echo "Then push your changes."
-            echo ""
-            echo "Changes detected:"
-            git diff --name-only
-            exit 1
+            git add .
+            git commit -m "chore: update MCP Catalog OpenAPI schema"
+            git push --no-verify
           fi
 
   oauth-proxy-linting-and-tests:

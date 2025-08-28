@@ -53,8 +53,10 @@ export function isLinkedInAuthenticatedPage(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     // Check if we're on LinkedIn and likely authenticated (on feed or profile pages)
+    const hostname = parsedUrl.hostname;
+    const isLinkedInHost = hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com');
     return (
-      parsedUrl.hostname.includes('linkedin.com') &&
+      isLinkedInHost &&
       (parsedUrl.pathname.startsWith('/feed') ||
         parsedUrl.pathname.startsWith('/in/') ||
         parsedUrl.pathname.startsWith('/mynetwork') ||
@@ -71,9 +73,11 @@ export function isLinkedInAuthenticatedPage(url: string): boolean {
  */
 export function isLinkedInLoginPage(url: string): boolean {
   try {
+    const hostname = parsedUrl.hostname;
+    const isLinkedInHost = hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com');
     const parsedUrl = new URL(url);
     return (
-      parsedUrl.hostname.includes('linkedin.com') &&
+      isLinkedInHost &&
       (parsedUrl.pathname.includes('/login') ||
         parsedUrl.pathname.includes('/signin') ||
         parsedUrl.pathname === '/' ||

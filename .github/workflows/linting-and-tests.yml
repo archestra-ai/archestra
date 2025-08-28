@@ -162,9 +162,6 @@ jobs:
   oauth-proxy-linting-and-tests:
     name: OAuth Proxy Linting and Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: oauth_proxy
     steps:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -191,7 +188,7 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
-          context: .
+          context: ./oauth_proxy
           file: ./oauth_proxy/Dockerfile
           push: false
           tags: oauth-proxy:test

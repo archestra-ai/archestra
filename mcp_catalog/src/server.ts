@@ -52,7 +52,7 @@ async function start() {
 
   // Register Swagger UI
   await app.register(fastifySwaggerUI, {
-    routePrefix: '/api/v1/docs',
+    routePrefix: '/v1/docs',
     uiConfig: {
       docExpansion: 'full',
       deepLinking: false,

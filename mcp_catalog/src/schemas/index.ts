@@ -162,6 +162,22 @@ export const ApiErrorResponseSchema = z.object({
 });
 
 // Register schemas for OpenAPI generation
+// Register dependent schemas first
+z.globalRegistry.add(McpServerConfigSchema, { id: 'McpServerConfig' });
+z.globalRegistry.add(MCPDependencySchema, { id: 'MCPDependency' });
+z.globalRegistry.add(ArchestraOauthSchema, { id: 'ArchestraOauth' });
+z.globalRegistry.add(ArchestraBrowserBasedSchema, { id: 'ArchestraBrowserBased' });
+z.globalRegistry.add(ArchestraClientConfigPermutationsSchema, { id: 'ArchestraClientConfigPermutations' });
+z.globalRegistry.add(ArchestraConfigSchema, { id: 'ArchestraConfig' });
+z.globalRegistry.add(ArchestraScoreBreakdownSchema, { id: 'ArchestraScoreBreakdown' });
+z.globalRegistry.add(ArchestraMcpServerGitHubRepoInfoSchema, { id: 'ArchestraMcpServerGitHubRepoInfo' });
+z.globalRegistry.add(ArchestraMcpServerGitHubRepoStatsSchema, { id: 'ArchestraMcpServerGitHubRepoStats' });
+z.globalRegistry.add(ArchestraMcpServerFullGitHubInfoSchema, { id: 'ArchestraMcpServerFullGitHubInfo' });
+z.globalRegistry.add(ArchestraMcpServerProtocolFeaturesSchema, { id: 'ArchestraMcpServerProtocolFeatures' });
+z.globalRegistry.add(DxtManifestServerSchema, { id: 'DxtManifestServer' });
+z.globalRegistry.add(DxtUserConfigurationOptionSchema, { id: 'DxtUserConfigurationOption' });
+
+// Register main schemas
 z.globalRegistry.add(McpServerCategorySchema, { id: 'McpServerCategory' });
 z.globalRegistry.add(ArchestraMcpServerManifestSchema, { id: 'ArchestraMcpServerManifest' });
 z.globalRegistry.add(ArchestraMcpServerManifestWithScoreBreakdownSchema, {

@@ -271,8 +271,8 @@ export default class SandboxedMcpServer {
   /**
    * Stream a request to the MCP server container
    */
-  async streamToContainer(request: any, responseStream: RawReplyDefaultExpression) {
-    await this.podmanContainer.streamToContainer(request, responseStream);
+  async streamToContainer(request: any, responseStream: RawReplyDefaultExpression, headers?: Record<string, string>) {
+    await this.podmanContainer.streamToContainer(request, responseStream, headers);
   }
 
   /**

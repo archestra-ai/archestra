@@ -260,3 +260,60 @@ jiraProvider: OAuthProviderDefinition = {
   },
 };
 ```
+
+### Bearer Token Authentication (New Method)
+
+Some APIs require OAuth tokens to be passed as Bearer tokens in HTTP headers instead of environment variables. This is now supported via the `authHeaderPattern` configuration:
+
+```typescript
+// desktop_app/src/backend/server/plugins/oauth/providers/linkedin.ts
+export const linkedinProvider: OAuthProviderDefinition = {
+  name: 'linkedin',
+  authorizationUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+  scopes: ['openid', 'profile', 'email', 'w_member_social'],
+  usePKCE: true,
+  clientId: 'your-public-client-id',
+
+  // NEW: Configure Bearer token authentication
+  authHeaderPattern: {
+    header: 'Authorization',
+    pattern: 'Bearer {token}', // {token} gets replaced with the actual OAuth token
+  },
+
+  metadata: {
+    displayName: 'LinkedIn',
+    supportsRefresh: true,
+  },
+};
+```
+
+With this configuration:
+
+1. The OAuth token is stored in the database as usual
+2. When the MCP server makes requests, the system automatically adds the header:
+   ```
+   Authorization: Bearer <actual_oauth_token>
+   ```
+3. The MCP server receives these headers in the `_meta.headers` field of the JSON-RPC request
+
+You can use any header name and pattern:
+
+```typescript
+// Example: API Key authentication
+authHeaderPattern: {
+  header: 'X-API-Key',
+  pattern: '{token}' // Results in: X-API-Key: <actual_token>
+}
+
+// Example: Custom header format
+authHeaderPattern: {
+  header: 'X-Company-Auth',
+  pattern: 'Token={token}' // Results in: X-Company-Auth: Token=<actual_token>
+}
+```
+
+**Note**: A provider can use ONE of these token passing methods:
+
+- `tokenEnvVarPattern` - Pass tokens as environment variables (default)
+- `authHeaderPattern` - Pass tokens as HTTP headers (for Bearer auth)
+- `tokenHandler` - Custom handler for special cases (like file-based credentials)

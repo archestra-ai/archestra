@@ -943,7 +943,11 @@ export default class PodmanContainer {
    *
    * https://docs.podman.io/en/latest/_static/api.html#tag/containers/operation/ContainerAttachLibpod
    */
-  async streamToContainer(requestBody: any, responseStream: RawReplyDefaultExpression) {
+  async streamToContainer(
+    requestBody: any,
+    responseStream: RawReplyDefaultExpression,
+    headers?: Record<string, string>
+  ) {
     // Log the original request
     log.info(`MCP request:`, {
       method: requestBody.method,
@@ -972,8 +976,13 @@ export default class PodmanContainer {
       // For requests with IDs, we need to track the response
       const requestId = originalId !== undefined ? originalId.toString() : uuidv4();
 
+      // Add headers to the request if provided
+      // MCP servers can access these through the request context
+      const requestWithHeaders =
+        headers && Object.keys(headers).length > 0 ? { ...requestBody, _meta: { headers } } : requestBody;
+
       // Prepare the JSON-RPC request with newline (MCP servers expect line-delimited JSON)
-      const jsonRequest = JSON.stringify(requestBody) + '\n';
+      const jsonRequest = JSON.stringify(requestWithHeaders) + '\n';
       log.info(`Sending JSON-RPC request: ${jsonRequest}`);
 
       // Set up response handler

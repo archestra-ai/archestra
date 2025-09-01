@@ -12,6 +12,7 @@ import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServe
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/sandboxedMcp';
 import { ErrorResponseSchema } from '@backend/schemas';
+import { getOAuthProvider, hasOAuthProvider } from '@backend/server/plugins/oauth/providers';
 import log from '@backend/utils/logger';
 
 /**
@@ -132,7 +133,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!sandboxedMcpServer) {
         return reply.code(404).send({ error: 'MCP server not found' });
       }
-      const { name: mcpServerName } = sandboxedMcpServer.mcpServer;
+      const { name: mcpServerName, oauthProvider, oauthAccessToken } = sandboxedMcpServer.mcpServer;
+
+      // Prepare additional headers for MCP server if OAuth provider uses header auth
+      let additionalHeaders: Record<string, string> = {};
+      if (oauthProvider && oauthAccessToken && hasOAuthProvider(oauthProvider)) {
+        const provider = getOAuthProvider(oauthProvider);
+        if (provider.authHeaderPattern) {
+          const headerValue = provider.authHeaderPattern.pattern.replace('{token}', oauthAccessToken);
+          additionalHeaders[provider.authHeaderPattern.header] = headerValue;
+        }
+      }
 
       // Create MCP request log entry
       const requestId = uuidv4();
@@ -201,8 +212,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return originalEnd(chunk, encoding);
         };
 
-        // Stream the request to the container!
-        await sandboxedMcpServer.streamToContainer(body, reply.raw);
+        // Stream the request to the container with additional headers if needed!
+        await sandboxedMcpServer.streamToContainer(body, reply.raw, additionalHeaders);
 
         // Return undefined when hijacking to prevent Fastify from sending response
         return;

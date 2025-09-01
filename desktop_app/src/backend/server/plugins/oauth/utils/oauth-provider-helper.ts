@@ -146,14 +146,26 @@ export function validateProvider(provider: OAuthProviderDefinition): void {
     throw new Error(`Provider ${provider.name} must have a client ID`);
   }
 
-  // Must have either custom handler or env var pattern
-  if (!provider.tokenHandler && !provider.tokenEnvVarPattern) {
-    throw new Error(`Provider ${provider.name} must have either tokenHandler or tokenEnvVarPattern configured`);
+  // Must have either custom handler, env var pattern, or auth header pattern
+  if (!provider.tokenHandler && !provider.tokenEnvVarPattern && !provider.authHeaderPattern) {
+    throw new Error(
+      `Provider ${provider.name} must have either tokenHandler, tokenEnvVarPattern, or authHeaderPattern configured`
+    );
   }
 
   // If using env var pattern, must have at least access token var
   if (provider.tokenEnvVarPattern && !provider.tokenEnvVarPattern.accessToken) {
     throw new Error(`Provider ${provider.name} tokenEnvVarPattern must define accessToken variable`);
+  }
+
+  // If using auth header pattern, must have header and pattern defined
+  if (provider.authHeaderPattern) {
+    if (!provider.authHeaderPattern.header) {
+      throw new Error(`Provider ${provider.name} authHeaderPattern must define header`);
+    }
+    if (!provider.authHeaderPattern.pattern || !provider.authHeaderPattern.pattern.includes('{token}')) {
+      throw new Error(`Provider ${provider.name} authHeaderPattern.pattern must include {token} placeholder`);
+    }
   }
 
   // Validate usePKCE is defined (required field)

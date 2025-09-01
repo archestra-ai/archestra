@@ -127,6 +127,36 @@ export interface OAuthProviderDefinition {
   };
 
   /**
+   * Optional header authentication pattern.
+   * Used to pass tokens as HTTP headers instead of environment variables.
+   * The pattern should include a placeholder {token} that will be replaced with the actual token.
+   *
+   * @example
+   * ```typescript
+   * authHeaderPattern: {
+   *   header: 'Authorization',
+   *   pattern: 'Bearer {token}'
+   * }
+   * // Results in: Authorization: Bearer <actual_token>
+   * ```
+   *
+   * @example
+   * ```typescript
+   * authHeaderPattern: {
+   *   header: 'X-API-Key',
+   *   pattern: '{token}'
+   * }
+   * // Results in: X-API-Key: <actual_token>
+   * ```
+   */
+  authHeaderPattern?: {
+    /** The header name (e.g., 'Authorization', 'X-API-Key') */
+    header: string;
+    /** The pattern for the header value with {token} placeholder */
+    pattern: string;
+  };
+
+  /**
    * Optional browser-based authentication configuration.
    * Some providers (like Slack) support extracting tokens directly from their web interface.
    */

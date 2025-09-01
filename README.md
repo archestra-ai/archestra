@@ -38,7 +38,7 @@ Archestra is an enterprise-grade platform that enables non-technical users to sa
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! Whether it's bug reports, feature requests, documentation improvements, or code contributions, please see our [contribution guidelines](https://www.archestra.ai/docs/contributing).
+We welcome contributions from the community! [Contribution guideline](https://www.archestra.ai/docs/contributing).
 
 ---
 

@@ -36,6 +36,10 @@ Archestra is an enterprise-grade platform that enables non-technical users to sa
 - 🎯 **Enterprise Ready** - Built for non-technical users with enterprise-level security and compliance
 - 🔧 **Extensible Tool System** - Support most of MCP servers: GitHub, Gmail, Slack, PostgreSQL, filesystem, and more
 
+## 🤝 Contributing
+
+We welcome contributions from the community! Whether it's bug reports, feature requests, documentation improvements, or code contributions, please see our [contribution guidelines](https://www.archestra.ai/docs/contributing).
+
 ---
 
 <div align="center">

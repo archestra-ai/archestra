@@ -28,7 +28,7 @@ export const McpServerInstallSchema = z.object({
     .regex(/^[A-Za-z0-9-\s]{1,63}$/, 'Name can only contain letters, numbers, spaces, and dashes (-)'),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
-  oauthProvider: z.enum(['google', 'slack', 'slack-browser', 'linkedin-browser']).optional(),
+  oauthProvider: z.enum(['google', 'slack', 'slack-browser', 'linkedin-browser']).nullable(),
   oauthAccessToken: z.string().optional(),
   oauthRefreshToken: z.string().optional(),
   oauthExpiryDate: z.string().nullable().optional(),

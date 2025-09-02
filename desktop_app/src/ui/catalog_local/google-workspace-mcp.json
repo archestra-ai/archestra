@@ -1,0 +1,51 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "iskhakov__google_workspace_mcp",
+  "display_name": "google_workspace_mcp",
+  "version": "1.0.0",
+  "description": "Control Gmail, Google Calendar, Docs, Sheets, Slides, Chat, Forms, Tasks, Search & Drive with AI - Comprehensive Google Workspace / G Suite MCP Server",
+  "author": {
+    "name": "iskhakov"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+  "server_overridden": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/iskhakov/google_workspace_mcp", "workspace-mcp"],
+
+      "env": {}
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {}
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    }
+  },
+  "github_info": {
+    "owner": "iskhakov",
+    "repo": "google_workspace_mcp",
+    "url": "https://github.com/iskhakov/google_workspace_mcp",
+    "name": "google_workspace_mcp",
+    "path": null,
+    "stars": 390,
+    "contributors": 16,
+    "issues": 17,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6cb5b05da1c5469db3c34ab1bf0b83d4f950d3ba"
+  }
+}

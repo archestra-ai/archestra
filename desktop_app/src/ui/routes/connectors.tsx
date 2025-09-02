@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Filter, Package, Search } from 'lucide-react';
 import { useState } from 'react';
 
+import { type LocalMcpServerManifest } from '@ui/catalog_local';
 import AlphaDisclaimerMessage from '@ui/components/ConnectorCatalog/AlphaDisclaimerMessage';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
@@ -16,7 +17,9 @@ export const Route = createFileRoute('/connectors')({
 });
 
 function ConnectorCatalogPage() {
-  const [selectedServerForInstall, setSelectedServerForInstall] = useState<ArchestraMcpServerManifest | null>(null);
+  const [selectedServerForInstall, setSelectedServerForInstall] = useState<
+    ArchestraMcpServerManifest | LocalMcpServerManifest | null
+  >(null);
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
 
   const {
@@ -34,7 +37,7 @@ function ConnectorCatalogPage() {
   const { installedMcpServers, installMcpServer: _installMcpServer, uninstallMcpServer } = useMcpServersStore();
 
   const installMcpServer = async (
-    mcpServer: ArchestraMcpServerManifest,
+    mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest,
     userConfigValues?: McpServerUserConfigValues,
     useBrowserAuth: boolean = false
   ) => {
@@ -69,7 +72,7 @@ function ConnectorCatalogPage() {
     _installMcpServer(mcpServer.archestra_config.oauth?.required || false, installData);
   };
 
-  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest) => {
+  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
     // If server has user_config, show the dialog
     if (mcpServer.user_config && Object.keys(mcpServer.user_config).length > 0) {
       setSelectedServerForInstall(mcpServer);
@@ -80,12 +83,12 @@ function ConnectorCatalogPage() {
     }
   };
 
-  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
+  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
     // For OAuth install, skip the config dialog and go straight to OAuth flow
     await installMcpServer(mcpServer);
   };
 
-  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
+  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
     // For any server that supports browser-based authentication
     // Directly install with browser auth flag
     await installMcpServer(mcpServer, undefined, true);

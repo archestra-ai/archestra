@@ -13,9 +13,11 @@ import {
   Settings,
   Star,
   Users,
+  Wrench,
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { type LocalMcpServerManifest } from '@ui/catalog_local';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
@@ -26,10 +28,10 @@ import { useMcpServersStore, useSandboxStore } from '@ui/stores';
 import McpServerDetailsDialog from './McpServerDetailsDialog';
 
 interface McpServerProps {
-  server: ArchestraMcpServerManifest;
-  onInstallClick: (server: ArchestraMcpServerManifest) => void;
-  onOAuthInstallClick?: (server: ArchestraMcpServerManifest) => void;
-  onBrowserInstallClick?: (server: ArchestraMcpServerManifest) => void;
+  server: ArchestraMcpServerManifest | LocalMcpServerManifest;
+  onInstallClick: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
+  onOAuthInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
+  onBrowserInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
   onUninstallClick: (serverId: string) => void;
 }
 
@@ -178,6 +180,12 @@ export default function McpServer({
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1.5">
+            {'isLocalDeveloper' in server && server.isLocalDeveloper && (
+              <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20">
+                <Wrench className="h-3 w-3 mr-1" />
+                Developer
+              </Badge>
+            )}
             {category && (
               <Badge variant="secondary" className="text-xs">
                 {category}

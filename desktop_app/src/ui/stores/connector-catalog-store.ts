@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { type LocalMcpServerManifest, localCatalogServers } from '@ui/catalog_local';
 import {
   type ArchestraMcpServerManifest,
   getMcpServerCategories,
@@ -12,7 +13,7 @@ import {
 const CATALOG_PAGE_SIZE = 24;
 
 interface ConnectorCatalogState {
-  connectorCatalog: ArchestraMcpServerManifest[];
+  connectorCatalog: LocalMcpServerManifest[];
   loadingConnectorCatalog: boolean;
   errorFetchingConnectorCatalog: string | null;
 
@@ -81,10 +82,34 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
       const { data } = await searchMcpServerCatalog({ query: params });
 
       if (data) {
+        // Filter local catalog servers based on search and category
+        let filteredLocalServers = localCatalogServers;
+
+        if (catalogSearchQuery) {
+          const query = catalogSearchQuery.toLowerCase();
+          filteredLocalServers = filteredLocalServers.filter(
+            (server) =>
+              server.name.toLowerCase().includes(query) ||
+              server.display_name.toLowerCase().includes(query) ||
+              server.description.toLowerCase().includes(query)
+          );
+        }
+
+        if (catalogSelectedCategory && catalogSelectedCategory !== 'all') {
+          filteredLocalServers = filteredLocalServers.filter((server) => server.category === catalogSelectedCategory);
+        }
+
+        // Merge local and remote servers
+        // Local servers appear first when not appending (initial load or filter change)
+        const remoteServers = data.servers || [];
+        const mergedServers = append
+          ? [...get().connectorCatalog, ...remoteServers]
+          : [...filteredLocalServers, ...remoteServers];
+
         set({
-          connectorCatalog: append ? [...get().connectorCatalog, ...(data.servers || [])] : data.servers || [],
+          connectorCatalog: mergedServers,
           catalogHasMore: data.hasMore || false,
-          catalogTotalCount: data.totalCount || 0,
+          catalogTotalCount: (data.totalCount || 0) + filteredLocalServers.length,
           catalogOffset: append ? get().catalogOffset + CATALOG_PAGE_SIZE : CATALOG_PAGE_SIZE,
         });
       }

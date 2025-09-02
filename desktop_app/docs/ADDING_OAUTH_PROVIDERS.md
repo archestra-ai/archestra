@@ -261,7 +261,7 @@ jiraProvider: OAuthProviderDefinition = {
 };
 ```
 
-### Bearer Token Authentication (New Method)
+### Bearer Token Authentication
 
 Some APIs require OAuth tokens to be passed as Bearer tokens in HTTP headers instead of environment variables. This is now supported via the `authHeaderPattern` configuration:
 

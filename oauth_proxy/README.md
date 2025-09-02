@@ -62,13 +62,6 @@ cp .env.example .env
 Edit `.env` file with your OAuth credentials:
 
 ```env
-# Server
-PORT=8080
-LOG_LEVEL=info
-
-# CORS
-CORS_ORIGIN=http://localhost:3000,https://localhost:3000
-
 # Google OAuth
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret

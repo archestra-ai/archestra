@@ -7,9 +7,9 @@ import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
 import config from '@backend/config';
+import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
-import McpServerSandboxManager from '@backend/sandbox/manager';
 
 interface StreamRequestBody {
   model: string;
@@ -51,7 +51,7 @@ const createModelInstance = async (model: string, provider?: string) => {
 };
 
 const llmRoutes: FastifyPluginAsync = async (fastify) => {
-  // Note: MCP connections are now managed by McpServerSandboxManager
+  // Note: Tools are aggregated from both sandboxed servers and Archestra MCP server
   // Based on this doc: https://ai-sdk.dev/docs/ai-sdk-core/generating-text
   fastify.post<{ Body: StreamRequestBody }>(
     '/api/llm/stream',
@@ -66,12 +66,12 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice } = request.body;
 
       try {
-        // Get tools from sandbox manager
+        // Get tools from tool aggregator (includes both sandboxed and Archestra tools)
         let tools = {};
         if (requestedTools && requestedTools.length > 0) {
-          tools = McpServerSandboxManager.getToolsById(requestedTools);
+          tools = toolAggregator.getToolsById(requestedTools);
         } else {
-          tools = McpServerSandboxManager.getAllTools();
+          tools = toolAggregator.getAllTools();
         }
 
         const modelInstance = await createModelInstance(model, provider);

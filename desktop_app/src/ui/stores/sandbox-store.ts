@@ -35,7 +35,7 @@ export const useSandboxStore = create<SandboxStore>((set, _get) => ({
     const { updateMcpServer } = useMcpServersStore.getState();
     const { setAvailableTools } = useToolsStore.getState();
 
-    const { mcpServers: sandboxedMcpServers, ...statusSummary } = payload;
+    const { mcpServers: sandboxedMcpServers, allAvailableTools: aggregatedTools, ...statusSummary } = payload as any;
 
     set({
       statusSummary,
@@ -47,11 +47,14 @@ export const useSandboxStore = create<SandboxStore>((set, _get) => ({
      * 1. MCP server statuses based on the latest update we just received
      * 2. Available tools
      */
-    const allAvailableTools = Object.entries(sandboxedMcpServers).flatMap(([_mcpServerId, { tools }]) => tools);
+    // Use aggregated tools if available (includes Archestra tools), otherwise fall back to sandboxed tools only
+    const allAvailableTools =
+      aggregatedTools ||
+      Object.entries(sandboxedMcpServers).flatMap(([_mcpServerId, server]) => (server as any).tools || []);
     setAvailableTools(allAvailableTools);
 
-    Object.entries(sandboxedMcpServers).forEach(([mcpServerId, { container }]) => {
-      updateMcpServer(mcpServerId, container);
+    Object.entries(sandboxedMcpServers).forEach(([mcpServerId, server]) => {
+      updateMcpServer(mcpServerId, (server as any).container);
     });
   },
 }));

@@ -1,20 +1,78 @@
 import { type DynamicToolUIPart, type TextUIPart, UIMessage } from 'ai';
+import { Edit2, RefreshCw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 import ThinkBlock from '@ui/components/ThinkBlock';
 import ToolInvocation from '@ui/components/ToolInvocation';
 import { AIResponse } from '@ui/components/kibo/ai-response';
+import { Button } from '@ui/components/ui/button';
+import { Textarea } from '@ui/components/ui/textarea';
 import { ToolCallStatus } from '@ui/types';
 
 interface AssistantMessageProps {
   message: UIMessage;
+  messageIndex: number;
+  isEditing: boolean;
+  editingContent: string;
+  onEditStart: () => void;
+  onEditCancel: () => void;
+  onEditSave: () => void;
+  onEditChange: (content: string) => void;
+  onDelete: () => void;
+  onRegenerate: () => void;
+  isRegenerating?: boolean;
 }
 
 const THINK_TAG_LENGTH = '<think>'.length;
 const THINK_END_TAG_LENGTH = '</think>'.length;
 
-export default function AssistantMessage({ message }: AssistantMessageProps) {
+export default function AssistantMessage({
+  message,
+  messageIndex,
+  isEditing,
+  editingContent,
+  onEditStart,
+  onEditCancel,
+  onEditSave,
+  onEditChange,
+  onDelete,
+  onRegenerate,
+  isRegenerating = false,
+}: AssistantMessageProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   if (!message.parts) {
     return null;
+  }
+
+  // Extract text content for editing
+  let fullTextContent = '';
+  if (message.parts) {
+    fullTextContent = message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => (part as TextUIPart).text)
+      .join('');
+  }
+
+  if (isEditing) {
+    return (
+      <div className="space-y-2">
+        <Textarea
+          value={editingContent}
+          onChange={(e) => onEditChange(e.target.value)}
+          className="min-h-[100px] resize-none"
+          autoFocus
+        />
+        <div className="flex gap-2">
+          <Button size="sm" onClick={onEditSave}>
+            Save
+          </Button>
+          <Button size="sm" variant="outline" onClick={onEditCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // Process parts in order to maintain sequence
@@ -123,5 +181,29 @@ export default function AssistantMessage({ message }: AssistantMessageProps) {
     orderedElements.push(<AIResponse key={`text-final`}>{accumulatedText.trim()}</AIResponse>);
   }
 
-  return <div className="relative space-y-2">{orderedElements}</div>;
+  return (
+    <div className="relative group" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+      <div className="space-y-2 pr-24">{orderedElements}</div>
+      {isHovered && (
+        <div className="absolute top-0 right-0 flex gap-1">
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditStart()} title="Edit message">
+            <Edit2 className="h-3 w-3" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+            title="Regenerate message"
+          >
+            <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onDelete} title="Delete message">
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }

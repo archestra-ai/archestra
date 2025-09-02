@@ -2,6 +2,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 
 import config from '@backend/config';
+import toolAggregator from '@backend/llms/toolAggregator';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { SandboxStatusSummarySchema } from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
@@ -122,7 +123,21 @@ class WebSocketService {
 
   private periodicallyEmitSandboxStatusSummaryUpdates() {
     this.sandboxStatusInterval = setInterval(() => {
-      this.broadcast({ type: 'sandbox-status-update', payload: McpServerSandboxManager.statusSummary });
+      // Get the base status summary from sandbox manager
+      const statusSummary = McpServerSandboxManager.statusSummary;
+
+      // Get all aggregated tools (includes both sandboxed and Archestra tools)
+      const allTools = toolAggregator.getAllAvailableTools();
+
+      // Create an enhanced payload that includes all tools
+      // We'll add a new field for all aggregated tools while keeping the existing structure
+      const enhancedPayload = {
+        ...statusSummary,
+        // Add all aggregated tools as a separate field
+        allAvailableTools: allTools,
+      };
+
+      this.broadcast({ type: 'sandbox-status-update', payload: enhancedPayload as any });
     }, 1000);
   }
 }

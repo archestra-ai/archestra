@@ -11,18 +11,78 @@ const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-ar
 
 interface ChatHistoryProps {
   messages: UIMessage[];
+  editingMessageId: string | null;
+  editingContent: string;
+  onEditStart: (messageId: string, content: string) => void;
+  onEditCancel: () => void;
+  onEditSave: (messageId: string) => void;
+  onEditChange: (content: string) => void;
+  onDeleteMessage: (messageId: string) => void;
+  onRegenerateMessage: (messageIndex: number) => void;
+  isRegenerating?: boolean;
 }
 
 interface MessageProps {
   message: UIMessage;
+  messageIndex: number;
+  editingMessageId: string | null;
+  editingContent: string;
+  onEditStart: (messageId: string, content: string) => void;
+  onEditCancel: () => void;
+  onEditSave: (messageId: string) => void;
+  onEditChange: (content: string) => void;
+  onDeleteMessage: (messageId: string) => void;
+  onRegenerateMessage: (messageIndex: number) => void;
+  isRegenerating?: boolean;
 }
 
-const Message = ({ message }: MessageProps) => {
+const Message = ({
+  message,
+  messageIndex,
+  editingMessageId,
+  editingContent,
+  onEditStart,
+  onEditCancel,
+  onEditSave,
+  onEditChange,
+  onDeleteMessage,
+  onRegenerateMessage,
+  isRegenerating,
+}: MessageProps) => {
+  const isEditing = editingMessageId === message.id;
+
+  // Extract text content for editing
+  let textContent = '';
+  if (message.parts) {
+    textContent = message.parts
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text)
+      .join('');
+  }
+
+  const commonProps = {
+    message,
+    messageIndex,
+    isEditing,
+    editingContent: isEditing ? editingContent : '',
+    onEditStart: () => onEditStart(message.id, textContent),
+    onEditCancel,
+    onEditSave: () => onEditSave(message.id),
+    onEditChange,
+    onDelete: () => onDeleteMessage(message.id),
+  };
+
   switch (message.role) {
     case 'user':
-      return <UserMessage message={message} />;
+      return <UserMessage {...commonProps} />;
     case 'assistant':
-      return <AssistantMessage message={message} />;
+      return (
+        <AssistantMessage
+          {...commonProps}
+          onRegenerate={() => onRegenerateMessage(messageIndex)}
+          isRegenerating={isRegenerating}
+        />
+      );
     case 'system':
       return <OtherMessage message={message} />;
     default:
@@ -43,7 +103,18 @@ const getMessageClassName = (message: UIMessage) => {
   }
 };
 
-export default function ChatHistory({ messages }: ChatHistoryProps) {
+export default function ChatHistory({
+  messages,
+  editingMessageId,
+  editingContent,
+  onEditStart,
+  onEditCancel,
+  onEditSave,
+  onEditChange,
+  onDeleteMessage,
+  onRegenerateMessage,
+  isRegenerating,
+}: ChatHistoryProps) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollAreaRef = useRef<HTMLElement | null>(null);
   const isScrollingRef = useRef(false);
@@ -109,11 +180,23 @@ export default function ChatHistory({ messages }: ChatHistoryProps) {
   return (
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
       <div className="p-4 space-y-4 max-w-full overflow-hidden">
-        {messages.map((message) => (
+        {messages.map((message, index) => (
           <div key={message.id} className={cn('p-3 rounded-lg overflow-hidden min-w-0', getMessageClassName(message))}>
             <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
             <div className="overflow-hidden min-w-0">
-              <Message message={message} />
+              <Message
+                message={message}
+                messageIndex={index}
+                editingMessageId={editingMessageId}
+                editingContent={editingContent}
+                onEditStart={onEditStart}
+                onEditCancel={onEditCancel}
+                onEditSave={onEditSave}
+                onEditChange={onEditChange}
+                onDeleteMessage={onDeleteMessage}
+                onRegenerateMessage={onRegenerateMessage}
+                isRegenerating={isRegenerating}
+              />
             </div>
           </div>
         ))}

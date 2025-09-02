@@ -13,6 +13,7 @@
  * The forge.config.ts defines this as a build target, producing server-process.js
  * which main.ts spawns as a child process with ELECTRON_RUN_AS_NODE=1
  */
+import ArchestraMcpClient from '@backend/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';
@@ -28,6 +29,15 @@ const startup = async () => {
   // Start WebSocket and Fastify servers first so they're ready for MCP connections
   WebSocketServer.start();
   await startFastifyServer();
+
+  // Connect to the Archestra MCP server after Fastify is running
+  try {
+    await ArchestraMcpClient.connect();
+    log.info('Archestra MCP client connected successfully');
+  } catch (error) {
+    log.error('Failed to connect Archestra MCP client:', error);
+    // Continue anyway - the app can work without Archestra tools
+  }
 
   // Now start the sandbox manager which will connect MCP clients
   McpServerSandboxManager.onSandboxStartupSuccess = () => {
@@ -61,6 +71,10 @@ const cleanup = async () => {
     // Stop the WebSocket server
     log.info('Stopping WebSocket server...');
     WebSocketServer.stop();
+
+    // Disconnect from Archestra MCP server
+    log.info('Disconnecting Archestra MCP client...');
+    await ArchestraMcpClient.disconnect();
 
     // Stop the sandbox and all MCP servers
     log.info('Turning off sandbox...');

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import PromptCard from '@ui/components/Chat/PromptCard';
 import { promptTemplates } from '@ui/data/prompt-templates';
-import { useMemoryStore } from '@ui/stores';
+import { useChatStore, useMemoryStore } from '@ui/stores';
 
 interface PromptCollectionProps {
   onPromptSelect: (prompt: string) => void;
@@ -10,6 +10,7 @@ interface PromptCollectionProps {
 
 export default function PromptCollection({ onPromptSelect }: PromptCollectionProps) {
   const { memories, isLoading, fetchMemories } = useMemoryStore();
+  const { chats } = useChatStore();
 
   // Ensure memory is fetched on mount
   useEffect(() => {
@@ -22,9 +23,11 @@ export default function PromptCollection({ onPromptSelect }: PromptCollectionPro
   const isMemoryEmpty = memories.length === 0;
 
   // Filter templates based on memory state
+  // If no memories exist, show ONLY the Personal Assistant Setup
+  // If memories exist, show all templates EXCEPT the Personal Assistant Setup
   const templatesToShow = isMemoryEmpty
     ? promptTemplates.filter((template) => template.id === 'initial-setup')
-    : promptTemplates;
+    : promptTemplates.filter((template) => template.id !== 'initial-setup');
 
   // Show loading state if memory is still being fetched
   if (isLoading && memories.length === 0) {

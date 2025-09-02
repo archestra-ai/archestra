@@ -18,12 +18,15 @@ export const promptTemplates: PromptTemplate[] = [
     category: 'Setup',
     prompt: `I'd like to set up my personal AI assistant. Please, read memories first and ask me a series of questions if memories don't have such a data:
 
-1. My current role
-2. My email
-3. My closest colleagues
+1. My name.
+2. My current role in the company
+3. My email
 4. My current project name and short description
 
-Please ask these questions one by one, and then summarize what the summary in the memory.`,
+Please ask these questions one by one, and save in memory.
+
+Once you're done with questions, query my emails to get my tone of voice. If no email MCP is installed, search for emails MCP's and propose to install one.
+`,
   },
   {
     id: 'linkedin-cleaner',

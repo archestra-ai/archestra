@@ -38,13 +38,6 @@ export type ArchestraMcpServerManifest = {
       };
     };
   };
-  server_docker?: {
-    command: string;
-    args?: Array<string>;
-    env?: {
-      [key: string]: string;
-    };
-  };
   tools?: Array<{
     name: string;
     description?: string;
@@ -132,7 +125,7 @@ export type ArchestraMcpServerManifest = {
       };
     } | null;
     oauth: {
-      provider: 'google' | 'slack';
+      provider: 'google' | 'slack' | 'linkedin';
       required: boolean;
     };
     browser_based?: {
@@ -192,6 +185,7 @@ export type ArchestraMcpServerManifest = {
       };
     };
   };
+  server_docker?: unknown;
   user_config_overridden?: {
     [key: string]: {
       type: 'string' | 'number' | 'boolean' | 'directory' | 'file';

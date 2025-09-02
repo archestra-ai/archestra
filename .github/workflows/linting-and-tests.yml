@@ -4,22 +4,6 @@ on:
   workflow_call:
 
 jobs:
-  lint-pr-title:
-    name: PR Title Linter
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Lint PR title
-        uses: grafana/shared-workflows/actions/lint-pr-title@19d8fb5687bb386849f7f53673c5f429e6387cf5 # v1.2.0
-        with:
-          config-path: "${{ github.workspace }}/.github/commitlint.config.js"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   desktop-app-linting-and-tests:
     name: Desktop App Linting and Tests
     runs-on: ubuntu-latest

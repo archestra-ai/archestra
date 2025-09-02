@@ -356,11 +356,32 @@
               "payload": {
                 "type": "object",
                 "properties": {
-                  "content": {
-                    "type": "string"
+                  "memories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "name", "value", "createdAt", "updatedAt"]
+                    }
                   }
                 },
-                "required": ["content"]
+                "required": ["memories"]
               }
             },
             "required": ["type", "payload"]
@@ -1514,11 +1535,33 @@
               "payload": {
                 "type": "object",
                 "properties": {
-                  "content": {
-                    "type": "string"
+                  "memories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["id", "name", "value", "createdAt", "updatedAt"],
+                      "additionalProperties": false
+                    }
                   }
                 },
-                "required": ["content"],
+                "required": ["memories"],
                 "additionalProperties": false
               }
             },

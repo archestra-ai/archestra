@@ -278,36 +278,6 @@ export const createArchestraMcpServer = () => {
     }
   );
 
-  archestraMcpServer.tool('clear_memories', 'Delete all stored memory entries', async () => {
-    try {
-      const count = await MemoryModel.deleteAllMemories();
-
-      // Emit WebSocket event for memory update
-      websocketService.broadcast({
-        type: 'memory-updated',
-        payload: { memories: [] },
-      });
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Cleared ${count} memory ${count === 1 ? 'entry' : 'entries'}.`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error clearing memories: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          },
-        ],
-      };
-    }
-  });
-
   return archestraMcpServer.server;
 };
 

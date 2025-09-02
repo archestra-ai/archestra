@@ -88,7 +88,13 @@ export type WebSocketMessageInput =
   | {
       type: 'memory-updated';
       payload: {
-        content: string;
+        memories: Array<{
+          id: number;
+          name: string;
+          value: string;
+          createdAt: string;
+          updatedAt: string;
+        }>;
       };
     };
 
@@ -422,7 +428,13 @@ export type WebSocketMessage =
   | {
       type: 'memory-updated';
       payload: {
-        content: string;
+        memories: Array<{
+          id: number;
+          name: string;
+          value: string;
+          createdAt: string;
+          updatedAt: string;
+        }>;
       };
     };
 

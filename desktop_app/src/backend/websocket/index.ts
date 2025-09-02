@@ -20,7 +20,15 @@ const ChatTitleUpdatedPayloadSchema = z.object({
 });
 
 const MemoryUpdatedPayloadSchema = z.object({
-  content: z.string(),
+  memories: z.array(
+    z.object({
+      id: z.number(),
+      name: z.string(),
+      value: z.string(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+  ),
 });
 
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [

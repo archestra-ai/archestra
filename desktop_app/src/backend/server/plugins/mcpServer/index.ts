@@ -46,7 +46,7 @@ const CatalogServerManifestSchema = z.object({
   author: z.string().optional(),
   license: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  archestra_config: z.record(z.unknown()).optional(),
+  archestra_config: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Schema for catalog search response

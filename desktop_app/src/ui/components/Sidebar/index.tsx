@@ -2,11 +2,13 @@ import { Link, useLocation } from '@tanstack/react-router';
 import { Bot, ChevronRight, Download, MessageCircle, Settings } from 'lucide-react';
 import * as React from 'react';
 
+import MemoryIndicator from '@ui/components/MemoryIndicator';
 import { SiteHeader } from '@ui/components/SiteHeader';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
   Sidebar as SidebarBase,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -132,6 +134,9 @@ export default function Sidebar({ children }: SidebarProps) {
               </SidebarGroup>
               {isChat && <McpServerWithToolsSidebarSection />}
             </SidebarContent>
+            <SidebarFooter className="p-2 border-t">
+              <MemoryIndicator />
+            </SidebarFooter>
           </SidebarBase>
           {children}
         </div>

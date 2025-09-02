@@ -43,6 +43,7 @@ export type SandboxStatusSummaryInput = {
       tools: Array<AvailableToolInput>;
     };
   };
+  allAvailableTools?: Array<AvailableToolInput>;
 };
 
 export type PodmanContainerStatusSummaryInput = {
@@ -83,6 +84,12 @@ export type WebSocketMessageInput =
   | {
       type: 'ollama-model-download-progress';
       payload: OllamaModelDownloadProgressInput;
+    }
+  | {
+      type: 'memory-updated';
+      payload: {
+        content: string;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -202,7 +209,7 @@ export type McpServerInstallInput = {
   displayName: string;
   serverConfig: McpServerConfigInput;
   userConfigValues?: McpServerUserConfigValuesInput;
-  oauthProvider?: 'google' | 'slack' | 'slack-browser' | 'linkedin-browser';
+  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;
@@ -269,6 +276,50 @@ export type AvailableToolInput = {
   };
 };
 
+export type MemoryEntryInput = {
+  id: number;
+  name: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemoryListResponseInput = {
+  memories: Array<MemoryEntryInput>;
+};
+
+export type MemoryResponseInput = {
+  memory: MemoryEntryInput | null;
+};
+
+export type LegacyMemoryResponseInput = {
+  content: string;
+};
+
+export type CreateMemoryInput = {
+  /**
+   * Name/key for the memory entry
+   */
+  name: string;
+  /**
+   * Value/content of the memory entry
+   */
+  value: string;
+};
+
+export type DeleteResponseInput = {
+  success: boolean;
+  deleted?: boolean;
+  count?: number;
+};
+
+export type WriteMemoryInput = {
+  /**
+   * Markdown content to store as memory
+   */
+  content: string;
+};
+
 export type OllamaRequiredModelStatusInput = {
   model: string;
   reason: string;
@@ -326,6 +377,7 @@ export type SandboxStatusSummary = {
       tools: Array<AvailableTool>;
     };
   };
+  allAvailableTools?: Array<AvailableTool>;
 };
 
 export type PodmanContainerStatusSummary = {
@@ -366,6 +418,12 @@ export type WebSocketMessage =
   | {
       type: 'ollama-model-download-progress';
       payload: OllamaModelDownloadProgress;
+    }
+  | {
+      type: 'memory-updated';
+      payload: {
+        content: string;
+      };
     };
 
 export type ChatWithMessages = {
@@ -485,7 +543,7 @@ export type McpServerInstall = {
   displayName: string;
   serverConfig: McpServerConfig;
   userConfigValues?: McpServerUserConfigValues;
-  oauthProvider?: 'google' | 'slack' | 'slack-browser' | 'linkedin-browser';
+  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;
@@ -550,6 +608,50 @@ export type AvailableTool = {
      */
     reversible: boolean | null;
   };
+};
+
+export type MemoryEntry = {
+  id: number;
+  name: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemoryListResponse = {
+  memories: Array<MemoryEntry>;
+};
+
+export type MemoryResponse = {
+  memory: MemoryEntry | null;
+};
+
+export type LegacyMemoryResponse = {
+  content: string;
+};
+
+export type CreateMemory = {
+  /**
+   * Name/key for the memory entry
+   */
+  name: string;
+  /**
+   * Value/content of the memory entry
+   */
+  value: string;
+};
+
+export type DeleteResponse = {
+  success: boolean;
+  deleted?: boolean;
+  count?: number;
+};
+
+export type WriteMemory = {
+  /**
+   * Markdown content to store as memory
+   */
+  content: string;
 };
 
 export type OllamaRequiredModelStatus = {
@@ -1058,6 +1160,128 @@ export type GetAvailableToolsResponses = {
 };
 
 export type GetAvailableToolsResponse = GetAvailableToolsResponses[keyof GetAvailableToolsResponses];
+
+export type DeleteAllMemoriesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/memories';
+};
+
+export type DeleteAllMemoriesResponses = {
+  /**
+   * Default Response
+   */
+  200: DeleteResponse;
+};
+
+export type DeleteAllMemoriesResponse = DeleteAllMemoriesResponses[keyof DeleteAllMemoriesResponses];
+
+export type GetAllMemoriesData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/memories';
+};
+
+export type GetAllMemoriesResponses = {
+  /**
+   * Default Response
+   */
+  200: MemoryListResponse;
+};
+
+export type GetAllMemoriesResponse = GetAllMemoriesResponses[keyof GetAllMemoriesResponses];
+
+export type DeleteMemoryData = {
+  body?: never;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: '/api/memories/{name}';
+};
+
+export type DeleteMemoryResponses = {
+  /**
+   * Default Response
+   */
+  200: DeleteResponse;
+};
+
+export type DeleteMemoryResponse = DeleteMemoryResponses[keyof DeleteMemoryResponses];
+
+export type GetMemoryByNameData = {
+  body?: never;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: '/api/memories/{name}';
+};
+
+export type GetMemoryByNameResponses = {
+  /**
+   * Default Response
+   */
+  200: MemoryResponse;
+};
+
+export type GetMemoryByNameResponse = GetMemoryByNameResponses[keyof GetMemoryByNameResponses];
+
+export type SetMemoryData = {
+  body: {
+    value: string;
+  };
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: '/api/memories/{name}';
+};
+
+export type SetMemoryResponses = {
+  /**
+   * Default Response
+   */
+  200: MemoryEntry;
+};
+
+export type SetMemoryResponse = SetMemoryResponses[keyof SetMemoryResponses];
+
+export type GetMemoryData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/memory';
+};
+
+export type GetMemoryResponses = {
+  /**
+   * Default Response
+   */
+  200: LegacyMemoryResponse;
+};
+
+export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
+
+export type UpdateMemoryData = {
+  body?: WriteMemoryInput;
+  path?: never;
+  query?: never;
+  url: '/api/memory';
+};
+
+export type UpdateMemoryResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+  };
+};
+
+export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
 
 export type StartMcpServerOauthData = {
   body: {

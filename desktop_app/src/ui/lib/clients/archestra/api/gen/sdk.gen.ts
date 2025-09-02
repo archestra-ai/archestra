@@ -13,13 +13,19 @@ import type {
   ConnectExternalMcpClientResponses,
   CreateChatData,
   CreateChatResponses,
+  DeleteAllMemoriesData,
+  DeleteAllMemoriesResponses,
   DeleteChatData,
   DeleteChatErrors,
   DeleteChatResponses,
   DeleteCloudProviderData,
   DeleteCloudProviderResponses,
+  DeleteMemoryData,
+  DeleteMemoryResponses,
   DisconnectExternalMcpClientData,
   DisconnectExternalMcpClientResponses,
+  GetAllMemoriesData,
+  GetAllMemoriesResponses,
   GetAvailableCloudProvidersData,
   GetAvailableCloudProvidersResponses,
   GetAvailableToolsData,
@@ -45,6 +51,10 @@ import type {
   GetMcpServerLogsResponses,
   GetMcpServersData,
   GetMcpServersResponses,
+  GetMemoryByNameData,
+  GetMemoryByNameResponses,
+  GetMemoryData,
+  GetMemoryResponses,
   GetOllamaRequiredModelsStatusData,
   GetOllamaRequiredModelsStatusResponses,
   GetSupportedExternalMcpClientsData,
@@ -56,6 +66,8 @@ import type {
   InstallMcpServerResponses,
   OauthCallbackData,
   OauthCallbackResponses,
+  SetMemoryData,
+  SetMemoryResponses,
   StartMcpServerOauthData,
   StartMcpServerOauthErrors,
   StartMcpServerOauthResponses,
@@ -64,6 +76,8 @@ import type {
   UpdateChatData,
   UpdateChatErrors,
   UpdateChatResponses,
+  UpdateMemoryData,
+  UpdateMemoryResponses,
   UpdateUserData,
   UpdateUserResponses,
 } from './types.gen';
@@ -362,6 +376,94 @@ export const getAvailableTools = <ThrowOnError extends boolean = false>(
   return (options?.client ?? _heyApiClient).get<GetAvailableToolsResponses, unknown, ThrowOnError>({
     url: '/api/mcp_server/tools',
     ...options,
+  });
+};
+
+/**
+ * Delete all memory entries for the current user
+ */
+export const deleteAllMemories = <ThrowOnError extends boolean = false>(
+  options?: Options<DeleteAllMemoriesData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).delete<DeleteAllMemoriesResponses, unknown, ThrowOnError>({
+    url: '/api/memories',
+    ...options,
+  });
+};
+
+/**
+ * Get all memory entries for the current user
+ */
+export const getAllMemories = <ThrowOnError extends boolean = false>(
+  options?: Options<GetAllMemoriesData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).get<GetAllMemoriesResponses, unknown, ThrowOnError>({
+    url: '/api/memories',
+    ...options,
+  });
+};
+
+/**
+ * Delete a specific memory entry by name
+ */
+export const deleteMemory = <ThrowOnError extends boolean = false>(
+  options: Options<DeleteMemoryData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<DeleteMemoryResponses, unknown, ThrowOnError>({
+    url: '/api/memories/{name}',
+    ...options,
+  });
+};
+
+/**
+ * Get a specific memory entry by name
+ */
+export const getMemoryByName = <ThrowOnError extends boolean = false>(
+  options: Options<GetMemoryByNameData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).get<GetMemoryByNameResponses, unknown, ThrowOnError>({
+    url: '/api/memories/{name}',
+    ...options,
+  });
+};
+
+/**
+ * Create or update a memory entry
+ */
+export const setMemory = <ThrowOnError extends boolean = false>(options: Options<SetMemoryData, ThrowOnError>) => {
+  return (options.client ?? _heyApiClient).put<SetMemoryResponses, unknown, ThrowOnError>({
+    url: '/api/memories/{name}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Get the current user memory (legacy format)
+ */
+export const getMemory = <ThrowOnError extends boolean = false>(options?: Options<GetMemoryData, ThrowOnError>) => {
+  return (options?.client ?? _heyApiClient).get<GetMemoryResponses, unknown, ThrowOnError>({
+    url: '/api/memory',
+    ...options,
+  });
+};
+
+/**
+ * Update the current user memory (legacy format)
+ */
+export const updateMemory = <ThrowOnError extends boolean = false>(
+  options?: Options<UpdateMemoryData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, unknown, ThrowOnError>({
+    url: '/api/memory',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
   });
 };
 

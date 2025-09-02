@@ -1,5 +1,4 @@
-import { Brain, Briefcase, Inbox, Mail } from 'lucide-react';
-import { type LucideIcon } from 'lucide-react';
+import { Brain, Briefcase, Inbox, type LucideIcon, Mail } from 'lucide-react';
 
 export interface PromptTemplate {
   id: string;
@@ -17,17 +16,14 @@ export const promptTemplates: PromptTemplate[] = [
     description: 'Help me get to know you better to provide personalized assistance',
     icon: Brain,
     category: 'Setup',
-    prompt: `I'd like to set up my personal AI assistant. Please ask me a series of questions to understand:
+    prompt: `I'd like to set up my personal AI assistant. Please, read memories first and ask me a series of questions if memories don't have such a data:
 
-1. My professional background and current role
-2. My main goals and priorities
-3. My preferred communication style
-4. My typical work schedule and time zone
-5. Any specific tools or platforms I use regularly
-6. Areas where I need the most assistance
-7. My preferences for task management and reminders
+1. My current role
+2. My email
+3. My closest colleagues
+4. My current project name and short description
 
-Please ask these questions one by one, and then summarize what you've learned about me so I can confirm or adjust the information.`,
+Please ask these questions one by one, and then summarize what the summary in the memory.`,
   },
   {
     id: 'linkedin-cleaner',

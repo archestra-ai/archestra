@@ -63,7 +63,14 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
 
     try {
       const { data } = await getAvailableTools();
-      set({ availableTools: data });
+      if (data) {
+        // Select all tools by default
+        const allToolIds = new Set(data.map((tool) => tool.id));
+        set({
+          availableTools: data,
+          selectedToolIds: allToolIds,
+        });
+      }
     } catch {
       set({ errorLoadingAvailableTools: new Error('Failed to fetch available tools') });
     } finally {
@@ -72,7 +79,12 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
   },
 
   setAvailableTools: (tools: Tool[]) => {
-    set({ availableTools: tools });
+    // Select all tools by default
+    const allToolIds = new Set(tools.map((tool) => tool.id));
+    set({
+      availableTools: tools,
+      selectedToolIds: allToolIds,
+    });
   },
 
   getAvailableToolsMap: () => {

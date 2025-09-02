@@ -1,0 +1,227 @@
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+
+import MemoryModel, { CreateMemorySchema } from '@backend/models/memory';
+
+// Schema for API responses
+const MemoryEntrySchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  value: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const MemoryListResponseSchema = z.object({
+  memories: z.array(MemoryEntrySchema),
+});
+
+const MemoryResponseSchema = z.object({
+  memory: MemoryEntrySchema.nullable(),
+});
+
+const LegacyMemoryResponseSchema = z.object({
+  content: z.string(),
+});
+
+const DeleteResponseSchema = z.object({
+  success: z.boolean(),
+  deleted: z.boolean().optional(),
+  count: z.number().optional(),
+});
+
+// Legacy schema for backward compatibility
+const WriteMemorySchema = z.object({
+  content: z.string().describe('Markdown content to store as memory'),
+});
+
+// Register schemas in global registry for OpenAPI spec
+z.globalRegistry.add(MemoryEntrySchema, { id: 'MemoryEntry' });
+z.globalRegistry.add(MemoryListResponseSchema, { id: 'MemoryListResponse' });
+z.globalRegistry.add(MemoryResponseSchema, { id: 'MemoryResponse' });
+z.globalRegistry.add(LegacyMemoryResponseSchema, { id: 'LegacyMemoryResponse' });
+z.globalRegistry.add(CreateMemorySchema, { id: 'CreateMemory' });
+z.globalRegistry.add(DeleteResponseSchema, { id: 'DeleteResponse' });
+z.globalRegistry.add(WriteMemorySchema, { id: 'WriteMemory' });
+
+const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // Get all memories (new endpoint)
+  fastify.get(
+    '/api/memories',
+    {
+      schema: {
+        operationId: 'getAllMemories',
+        description: 'Get all memory entries for the current user',
+        tags: ['Memory'],
+        response: {
+          200: MemoryListResponseSchema,
+        },
+      },
+    },
+    async (_request, _reply) => {
+      const memories = await MemoryModel.getAllMemories();
+      return { memories };
+    }
+  );
+
+  // Get specific memory by name (new endpoint)
+  fastify.get(
+    '/api/memories/:name',
+    {
+      schema: {
+        operationId: 'getMemoryByName',
+        description: 'Get a specific memory entry by name',
+        tags: ['Memory'],
+        params: z.object({
+          name: z.string(),
+        }),
+        response: {
+          200: MemoryResponseSchema,
+        },
+      },
+    },
+    async ({ params }, _reply) => {
+      const memory = await MemoryModel.getMemory(params.name);
+      return { memory };
+    }
+  );
+
+  // Create or update memory (new endpoint)
+  fastify.put(
+    '/api/memories/:name',
+    {
+      schema: {
+        operationId: 'setMemory',
+        description: 'Create or update a memory entry',
+        tags: ['Memory'],
+        params: z.object({
+          name: z.string(),
+        }),
+        body: z.object({
+          value: z.string(),
+        }),
+        response: {
+          200: MemoryEntrySchema,
+        },
+      },
+    },
+    async ({ params, body }, _reply) => {
+      const memory = await MemoryModel.setMemory(params.name, body.value);
+
+      // Emit WebSocket event for memory update
+      const websocketService = (await import('@backend/websocket')).default;
+      websocketService.broadcast({
+        type: 'memory-updated',
+        payload: { memories: await MemoryModel.getAllMemories() },
+      });
+
+      return memory;
+    }
+  );
+
+  // Delete specific memory (new endpoint)
+  fastify.delete(
+    '/api/memories/:name',
+    {
+      schema: {
+        operationId: 'deleteMemory',
+        description: 'Delete a specific memory entry by name',
+        tags: ['Memory'],
+        params: z.object({
+          name: z.string(),
+        }),
+        response: {
+          200: DeleteResponseSchema,
+        },
+      },
+    },
+    async ({ params }, _reply) => {
+      const deleted = await MemoryModel.deleteMemory(params.name);
+
+      // Emit WebSocket event for memory update
+      const websocketService = (await import('@backend/websocket')).default;
+      websocketService.broadcast({
+        type: 'memory-updated',
+        payload: { memories: await MemoryModel.getAllMemories() },
+      });
+
+      return { success: true, deleted };
+    }
+  );
+
+  // Delete all memories (new endpoint)
+  fastify.delete(
+    '/api/memories',
+    {
+      schema: {
+        operationId: 'deleteAllMemories',
+        description: 'Delete all memory entries for the current user',
+        tags: ['Memory'],
+        response: {
+          200: DeleteResponseSchema,
+        },
+      },
+    },
+    async (_request, _reply) => {
+      const count = await MemoryModel.deleteAllMemories();
+
+      // Emit WebSocket event for memory update
+      const websocketService = (await import('@backend/websocket')).default;
+      websocketService.broadcast({
+        type: 'memory-updated',
+        payload: { memories: [] },
+      });
+
+      return { success: true, count };
+    }
+  );
+
+  // Legacy endpoints for backward compatibility
+  fastify.get(
+    '/api/memory',
+    {
+      schema: {
+        operationId: 'getMemory',
+        description: 'Get the current user memory (legacy format)',
+        tags: ['Memory'],
+        response: {
+          200: LegacyMemoryResponseSchema,
+        },
+      },
+    },
+    async (_request, _reply) => {
+      const content = await MemoryModel.getMemories();
+      return { content };
+    }
+  );
+
+  fastify.put(
+    '/api/memory',
+    {
+      schema: {
+        operationId: 'updateMemory',
+        description: 'Update the current user memory (legacy format)',
+        tags: ['Memory'],
+        body: WriteMemorySchema,
+        response: {
+          200: z.object({ success: z.boolean() }),
+        },
+      },
+    },
+    async ({ body }, _reply) => {
+      await MemoryModel.writeMemories(body.content);
+
+      // Emit WebSocket event for memory update
+      const websocketService = (await import('@backend/websocket')).default;
+      const memories = await MemoryModel.getAllMemories();
+      websocketService.broadcast({
+        type: 'memory-updated',
+        payload: { memories },
+      });
+
+      return { success: true };
+    }
+  );
+};
+
+export default memoryRoutes;

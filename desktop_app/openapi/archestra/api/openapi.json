@@ -218,6 +218,12 @@
               },
               "required": ["container", "tools"]
             }
+          },
+          "allAvailableTools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AvailableToolInput"
+            }
           }
         },
         "required": ["status", "runtime", "mcpServers"]
@@ -336,6 +342,25 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/OllamaModelDownloadProgressInput"
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["memory-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["content"]
               }
             },
             "required": ["type", "payload"]
@@ -847,8 +872,16 @@
             "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
           },
           "oauthProvider": {
-            "type": "string",
-            "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
           },
           "oauthAccessToken": {
             "type": "string"
@@ -868,7 +901,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig"]
+        "required": ["displayName", "serverConfig", "oauthProvider"]
       },
       "McpServerContainerLogsInput": {
         "type": "object",
@@ -982,6 +1015,105 @@
           }
         },
         "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"]
+      },
+      "MemoryEntryInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "value", "createdAt", "updatedAt"]
+      },
+      "MemoryListResponseInput": {
+        "type": "object",
+        "properties": {
+          "memories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryEntryInput"
+            }
+          }
+        },
+        "required": ["memories"]
+      },
+      "MemoryResponseInput": {
+        "type": "object",
+        "properties": {
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryEntryInput"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["memory"]
+      },
+      "LegacyMemoryResponseInput": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["content"]
+      },
+      "CreateMemoryInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Name/key for the memory entry",
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "description": "Value/content of the memory entry",
+            "type": "string"
+          }
+        },
+        "required": ["name", "value"]
+      },
+      "DeleteResponseInput": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": ["success"]
+      },
+      "WriteMemoryInput": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "Markdown content to store as memory",
+            "type": "string"
+          }
+        },
+        "required": ["content"]
       },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
@@ -1237,6 +1369,12 @@
               "required": ["container", "tools"],
               "additionalProperties": false
             }
+          },
+          "allAvailableTools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AvailableTool"
+            }
           }
         },
         "required": ["status", "runtime", "mcpServers"],
@@ -1361,6 +1499,27 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/OllamaModelDownloadProgress"
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["memory-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["content"],
+                "additionalProperties": false
               }
             },
             "required": ["type", "payload"],
@@ -1882,8 +2041,16 @@
             "$ref": "#/components/schemas/McpServerUserConfigValues"
           },
           "oauthProvider": {
-            "type": "string",
-            "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
           },
           "oauthAccessToken": {
             "type": "string"
@@ -1903,7 +2070,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig"],
+        "required": ["displayName", "serverConfig", "oauthProvider"],
         "additionalProperties": false
       },
       "McpServerContainerLogs": {
@@ -2020,6 +2187,112 @@
           }
         },
         "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"],
+        "additionalProperties": false
+      },
+      "MemoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "value", "createdAt", "updatedAt"],
+        "additionalProperties": false
+      },
+      "MemoryListResponse": {
+        "type": "object",
+        "properties": {
+          "memories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryEntry"
+            }
+          }
+        },
+        "required": ["memories"],
+        "additionalProperties": false
+      },
+      "MemoryResponse": {
+        "type": "object",
+        "properties": {
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryEntry"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["memory"],
+        "additionalProperties": false
+      },
+      "LegacyMemoryResponse": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+      },
+      "CreateMemory": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Name/key for the memory entry",
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "description": "Value/content of the memory entry",
+            "type": "string"
+          }
+        },
+        "required": ["name", "value"],
+        "additionalProperties": false
+      },
+      "DeleteResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": ["success"],
+        "additionalProperties": false
+      },
+      "WriteMemory": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "Markdown content to store as memory",
+            "type": "string"
+          }
+        },
+        "required": ["content"],
         "additionalProperties": false
       },
       "OllamaRequiredModelStatus": {
@@ -2981,6 +3254,193 @@
                   "items": {
                     "$ref": "#/components/schemas/AvailableTool"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memories": {
+      "get": {
+        "operationId": "getAllMemories",
+        "tags": ["Memory"],
+        "description": "Get all memory entries for the current user",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAllMemories",
+        "tags": ["Memory"],
+        "description": "Delete all memory entries for the current user",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memories/{name}": {
+      "get": {
+        "operationId": "getMemoryByName",
+        "tags": ["Memory"],
+        "description": "Get a specific memory entry by name",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setMemory",
+        "tags": ["Memory"],
+        "description": "Create or update a memory entry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": ["value"]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryEntry"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMemory",
+        "tags": ["Memory"],
+        "description": "Delete a specific memory entry by name",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory": {
+      "get": {
+        "operationId": "getMemory",
+        "tags": ["Memory"],
+        "description": "Get the current user memory (legacy format)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyMemoryResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateMemory",
+        "tags": ["Memory"],
+        "description": "Update the current user memory (legacy format)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteMemoryInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success"],
+                  "additionalProperties": false
                 }
               }
             }

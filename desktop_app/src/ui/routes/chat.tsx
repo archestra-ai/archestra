@@ -57,8 +57,9 @@ function ChatPage() {
             model: currentModel || 'llama3.1:8b',
             sessionId: id || currentChatSessionId,
             provider: provider,
+            // Send selected tools if any, otherwise undefined (backend will use all tools)
             requestedTools: currentSelectedToolIds.size > 0 ? Array.from(currentSelectedToolIds) : undefined,
-            toolChoice: currentSelectedToolIds.size > 0 ? 'auto' : undefined,
+            toolChoice: 'auto', // Always enable tool usage
           },
         };
       },
@@ -189,9 +190,8 @@ function ChatPage() {
   };
 
   const handlePromptSelect = (prompt: string) => {
-    setLocalInput(prompt);
-    // Optionally auto-submit the prompt
-    // sendMessage({ text: prompt });
+    // Directly send the prompt when a tile is clicked
+    sendMessage({ text: prompt });
   };
 
   if (!currentChat) {

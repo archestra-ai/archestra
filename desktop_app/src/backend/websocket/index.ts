@@ -19,6 +19,10 @@ const ChatTitleUpdatedPayloadSchema = z.object({
   title: z.string(),
 });
 
+const MemoryUpdatedPayloadSchema = z.object({
+  content: z.string(),
+});
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
   z.object({ type: z.literal('sandbox-status-update'), payload: SandboxStatusSummarySchema }),
@@ -26,6 +30,7 @@ export const WebSocketMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('ollama-model-download-progress'),
     payload: OllamaModelDownloadProgressWebsocketPayloadSchema,
   }),
+  z.object({ type: z.literal('memory-updated'), payload: MemoryUpdatedPayloadSchema }),
 ]);
 
 // type ChatTitleUpdatedPayload = z.infer<typeof ChatTitleUpdatedPayloadSchema>;

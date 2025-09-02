@@ -181,7 +181,10 @@ export default function ChatHistory({
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
       <div className="p-4 space-y-4 max-w-full overflow-hidden">
         {messages.map((message, index) => (
-          <div key={message.id} className={cn('p-3 rounded-lg overflow-hidden min-w-0', getMessageClassName(message))}>
+          <div
+            key={message.id || `message-${index}`}
+            className={cn('p-3 rounded-lg overflow-hidden min-w-0', getMessageClassName(message))}
+          >
             <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
             <div className="overflow-hidden min-w-0">
               <Message

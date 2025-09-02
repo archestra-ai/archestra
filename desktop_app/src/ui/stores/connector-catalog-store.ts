@@ -82,21 +82,25 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
       const { data } = await searchMcpServerCatalog({ query: params });
 
       if (data) {
-        // Filter local catalog servers based on search and category
-        let filteredLocalServers = localCatalogServers;
+        let filteredLocalServers: LocalMcpServerManifest[] = [];
 
-        if (catalogSearchQuery) {
-          const query = catalogSearchQuery.toLowerCase();
-          filteredLocalServers = filteredLocalServers.filter(
-            (server) =>
-              server.name.toLowerCase().includes(query) ||
-              server.display_name.toLowerCase().includes(query) ||
-              server.description.toLowerCase().includes(query)
-          );
-        }
+        // Only include local catalog servers in development mode
+        if (import.meta.env.DEV) {
+          filteredLocalServers = localCatalogServers;
 
-        if (catalogSelectedCategory && catalogSelectedCategory !== 'all') {
-          filteredLocalServers = filteredLocalServers.filter((server) => server.category === catalogSelectedCategory);
+          if (catalogSearchQuery) {
+            const query = catalogSearchQuery.toLowerCase();
+            filteredLocalServers = filteredLocalServers.filter(
+              (server) =>
+                server.name.toLowerCase().includes(query) ||
+                server.display_name.toLowerCase().includes(query) ||
+                server.description.toLowerCase().includes(query)
+            );
+          }
+
+          if (catalogSelectedCategory && catalogSelectedCategory !== 'all') {
+            filteredLocalServers = filteredLocalServers.filter((server) => server.category === catalogSelectedCategory);
+          }
         }
 
         // Merge local and remote servers

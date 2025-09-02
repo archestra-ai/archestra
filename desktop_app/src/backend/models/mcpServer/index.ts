@@ -34,6 +34,14 @@ export const McpServerInstallSchema = z.object({
   oauthExpiryDate: z.string().nullable().optional(),
 });
 
+// Interface for catalog search parameters
+interface CatalogSearchParams {
+  q?: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export default class McpServerModel {
   static async create(data: typeof mcpServersTable.$inferInsert) {
     return db.insert(mcpServersTable).values(data).returning();
@@ -167,6 +175,44 @@ export default class McpServerModel {
 
     // Sync all connected external MCP clients after uninstalling
     await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+  }
+
+  /**
+   * Search the MCP server catalog
+   * This method acts as a proxy to the external catalog API
+   */
+  static async searchCatalog(params: CatalogSearchParams) {
+    // Get the catalog URL from environment or use default
+    const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
+
+    // Build query string
+    const queryParams = new URLSearchParams();
+    if (params.q) queryParams.append('q', params.q);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.offset) queryParams.append('offset', params.offset.toString());
+
+    const url = `${catalogUrl}/search?${queryParams.toString()}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Archestra-Desktop/1.0',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Catalog API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      log.error('Failed to fetch from catalog API:', error);
+      throw error;
+    }
   }
 }
 

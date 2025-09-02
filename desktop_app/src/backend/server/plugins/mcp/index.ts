@@ -278,6 +278,96 @@ export const createArchestraMcpServer = () => {
     }
   );
 
+  archestraMcpServer.tool(
+    'search_mcp_servers',
+    'Search for MCP servers in the catalog',
+    {
+      query: z.string().optional().describe('Search query to find specific MCP servers'),
+      category: z.string().optional().describe('Filter by category (e.g., "ai", "data", "productivity")'),
+      limit: z.number().int().positive().default(10).optional().describe('Number of results to return'),
+    },
+    async ({ query, category, limit }) => {
+      try {
+        // Search the catalog
+        const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
+
+        const queryParams = new URLSearchParams();
+        if (query) queryParams.append('q', query);
+        if (category) queryParams.append('category', category);
+        if (limit) queryParams.append('limit', limit.toString());
+
+        const url = `${catalogUrl}/search?${queryParams.toString()}`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Archestra-Desktop/1.0',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Catalog API returned ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const servers = data.servers || [];
+
+        if (servers.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No MCP servers found matching your search criteria.',
+              },
+            ],
+          };
+        }
+
+        // Format the results
+        const formattedResults = servers
+          .map((server: any) => {
+            const parts = [
+              `**${server.display_name}** (${server.name})`,
+              server.description,
+              `Category: ${server.category}`,
+            ];
+
+            if (server.tags && server.tags.length > 0) {
+              parts.push(`Tags: ${server.tags.join(', ')}`);
+            }
+
+            if (server.author) {
+              parts.push(`Author: ${server.author}`);
+            }
+
+            return parts.join('\n');
+          })
+          .join('\n\n---\n\n');
+
+        const resultText = `Found ${servers.length} MCP server${servers.length === 1 ? '' : 's'}${data.totalCount > servers.length ? ` (showing first ${servers.length} of ${data.totalCount} total)` : ''}:\n\n${formattedResults}`;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: resultText,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error searching MCP servers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
   return archestraMcpServer.server;
 };
 

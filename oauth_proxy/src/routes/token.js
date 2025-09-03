@@ -1,5 +1,7 @@
+import { isValidOAuthEndpoint, getSupportedProviders } from '../config/providers.js';
+
 export default async function tokenRoutes(fastify) {
-  // Generic token exchange endpoint
+  // Secure token exchange endpoint - validates endpoints against provider allowlist
   fastify.post('/oauth/token', {
     schema: {
       body: {
@@ -10,9 +12,12 @@ export default async function tokenRoutes(fastify) {
             type: 'string',
             enum: ['authorization_code', 'refresh_token']
           },
-          provider: { type: 'string' },
-          token_endpoint: { 
-            type: 'string', 
+          provider: { 
+            type: 'string',
+            enum: getSupportedProviders() // Only allow trusted providers
+          },
+          token_endpoint: {
+            type: 'string',
             format: 'uri',
             maxLength: 2048,
           },
@@ -62,6 +67,14 @@ export default async function tokenRoutes(fastify) {
   }, async (request, reply) => {
     const { grant_type, provider, token_endpoint, ...params } = request.body;
 
+    // SECURITY: Validate that token endpoint is allowed for this provider
+    if (!isValidOAuthEndpoint(token_endpoint, provider)) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: `Token endpoint not allowed for provider ${provider}`,
+      });
+    }
+
     // Get client credentials from environment variables
     const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
     const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
@@ -82,15 +95,17 @@ export default async function tokenRoutes(fastify) {
         ...params, // Desktop app provides all other needed parameters
       };
 
-      fastify.log.info(`Making token request to ${token_endpoint} for provider ${provider}`);
+      fastify.log.info(`Making secure token request to ${token_endpoint} for provider ${provider}`);
 
-      // Make request to whatever endpoint the desktop app specified
+      // Make request to the validated endpoint only
       const response = await fetch(token_endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams(requestParams),
+        // Add timeout for security
+        signal: AbortSignal.timeout(30000),
       });
 
       const responseData = await response.json();
@@ -113,7 +128,7 @@ export default async function tokenRoutes(fastify) {
     }
   });
 
-  // Generic token revocation endpoint
+  // Secure token revocation endpoint - validates endpoints against provider allowlist
   fastify.post('/oauth/revoke', {
     schema: {
       body: {
@@ -121,8 +136,11 @@ export default async function tokenRoutes(fastify) {
         required: ['token', 'provider'],
         properties: {
           token: { type: 'string' },
-          provider: { type: 'string' },
-          revoke_endpoint: {
+          provider: { 
+            type: 'string',
+            enum: getSupportedProviders() // Only allow trusted providers
+          },
+          revocation_endpoint: {
             type: 'string',
             format: 'uri',
             maxLength: 2048,
@@ -139,11 +157,20 @@ export default async function tokenRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { token, provider, revoke_endpoint } = request.body;
+    const { token, provider, revocation_endpoint } = request.body;
 
     // Skip revocation if no endpoint provided (some providers don't support it)
-    if (!revoke_endpoint) {
+    if (!revocation_endpoint) {
+      fastify.log.info(`No revocation endpoint provided for provider ${provider}, skipping`);
       return reply.send({ success: true });
+    }
+
+    // SECURITY: Validate that revocation endpoint is allowed for this provider
+    if (!isValidOAuthEndpoint(revocation_endpoint, provider)) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: `Revocation endpoint not allowed for provider ${provider}`,
+      });
     }
 
     // Get client credentials from environment variables
@@ -157,14 +184,16 @@ export default async function tokenRoutes(fastify) {
         token,
       };
 
-      fastify.log.info(`Revoking token at ${revoke_endpoint} for provider ${provider}`);
+      fastify.log.info(`Revoking token at ${revocation_endpoint} for provider ${provider}`);
 
-      const response = await fetch(revoke_endpoint, {
+      const response = await fetch(revocation_endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams(requestParams),
+        // Add timeout for security
+        signal: AbortSignal.timeout(30000),
       });
 
       if (!response.ok) {
@@ -188,7 +217,9 @@ export default async function tokenRoutes(fastify) {
   fastify.get('/health', async (request, reply) => {
     return {
       status: 'ok',
-      service: 'OAuth Proxy - Generic Token Exchange Service',
+      service: 'OAuth Proxy - Secure Token Exchange Service',
+      supportedProviders: getSupportedProviders(),
+      security: 'Provider-based endpoint validation prevents SSRF attacks',
       timestamp: new Date().toISOString(),
     };
   });

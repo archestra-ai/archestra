@@ -23,18 +23,27 @@ export async function buildApp() {
   await app.register(tokenRoutes);
   await app.register(callbackRoutes);
 
-  // Root endpoint
-  app.get('/', async () => ({
-    service: 'OAuth Proxy - Generic Token Exchange Service',
-    version: '2.0.0',
-    description: 'Generic OAuth proxy that injects client secrets for any provider endpoints specified by desktop app',
-    endpoints: {
-      'POST /oauth/token': 'Generic token exchange (requires token_endpoint from desktop app)',
-      'POST /oauth/revoke': 'Generic token revocation (requires revoke_endpoint from desktop app)',
-      'GET /callback/:provider': 'OAuth callback handler (redirects to desktop app via deep link)',
-      'GET /health': 'Health check endpoint',
-    }
-  }));
+  // Root endpoint  
+  app.get('/', async () => {
+    const { getSupportedProviders } = await import('./config/providers.js');
+    
+    return {
+      service: 'OAuth Proxy - Secure Token Exchange Service',
+      version: '2.1.0',
+      description: 'Secure OAuth proxy with provider-based endpoint validation',
+      security: {
+        ssrfProtection: 'Provider-based endpoint validation prevents SSRF attacks',
+        allowedProviders: getSupportedProviders(),
+        endpointValidation: 'Only trusted OAuth provider endpoints are allowed',
+      },
+      endpoints: {
+        'POST /oauth/token': 'Secure token exchange (validates endpoints against provider allowlist)',
+        'POST /oauth/revoke': 'Secure token revocation (validates endpoints against provider allowlist)', 
+        'GET /callback/:provider': 'OAuth callback handler (redirects to desktop app via deep link)',
+        'GET /health': 'Health check and supported providers list',
+      }
+    };
+  });
 
   return app;
 }

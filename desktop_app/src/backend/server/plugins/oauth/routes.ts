@@ -198,17 +198,17 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const provider = await getOAuthProviderWithDiscovery(providerName, pendingInstall.installData.id);
           const oauthProxyUrl = getOAuthProxyUrl();
 
-          // Exchange code for tokens via OAuth proxy with discovered endpoint
+          // Exchange code for tokens via OAuth proxy with validated endpoint
           const tokenUrl = `${oauthProxyUrl}/oauth/token`;
           fastify.log.info(
-            `Exchanging OAuth token at: ${tokenUrl} using discovered endpoint: ${provider.tokenEndpoint}`
+            `Exchanging OAuth token at: ${tokenUrl} using validated endpoint: ${provider.tokenEndpoint}`
           );
 
-          // Build token request parameters - desktop app handles ALL provider-specific logic
+          // Build token request parameters - OAuth proxy validates endpoint against provider allowlist
           const tokenRequestParams: Record<string, any> = {
             grant_type: 'authorization_code',
-            provider: providerName,
-            token_endpoint: provider.tokenEndpoint,
+            provider: providerName, // Proxy validates token_endpoint is allowed for this provider
+            token_endpoint: provider.tokenEndpoint, // Desktop app provides the trusted endpoint
             code: body.code,
             redirect_uri: pendingInstall.redirectUri,
           };

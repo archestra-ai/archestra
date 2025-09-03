@@ -1,7 +1,6 @@
 import ArchestraMcpClient, { type McpTools } from '@backend/archestraMcp';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { type AvailableTool } from '@backend/sandbox/schemas';
-import log from '@backend/utils/logger';
 
 /**
  * ToolAggregator combines tools from multiple sources:
@@ -68,7 +67,6 @@ class ToolAggregator {
       allTools.push(...ArchestraMcpClient.availableToolsList);
     }
 
-    log.debug(`Aggregated ${allTools.length} available tools for UI`);
     return allTools;
   }
 

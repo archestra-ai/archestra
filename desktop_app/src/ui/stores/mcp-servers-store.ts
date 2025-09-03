@@ -59,6 +59,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
     oauthAccessToken: null,
     oauthRefreshToken: null,
     oauthExpiryDate: null,
+    oauthDiscoveryMetadata: null,
     state: 'initializing',
     startupPercentage: 0,
     message: null,

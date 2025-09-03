@@ -61,6 +61,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: true
+          # we need to check out the specific branch of the PR, not the base branch
+          # see https://github.com/EndBug/add-and-commit/issues/430#issuecomment-1261190596
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -86,9 +89,6 @@ jobs:
           message: "chore: update generated code"
           committer_name: GitHub Actions
           committer_email: 41898282+github-actions[bot]@users.noreply.github.com
-          # tell the gh action which branch to push to
-          # see https://github.com/EndBug/add-and-commit/issues/656
-          push: ${{ github.head_ref }}
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations
@@ -103,6 +103,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: true
+          # we need to check out the specific branch of the PR, not the base branch
+          # see https://github.com/EndBug/add-and-commit/issues/430#issuecomment-1261190596
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -165,9 +168,6 @@ jobs:
           message: "chore: update database migrations"
           committer_name: GitHub Actions
           committer_email: 41898282+github-actions[bot]@users.noreply.github.com
-          # tell the gh action which branch to push to
-          # see https://github.com/EndBug/add-and-commit/issues/656
-          push: ${{ github.head_ref }}
 
   zizmor:
     name: Zizmor GitHub Actions static analysis

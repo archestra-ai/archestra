@@ -51,6 +51,8 @@ jobs:
   verify-codegend-code-is-up-to-date:
     name: Verify generated code is up to date
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: ./desktop_app
@@ -59,23 +61,42 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      - name: Generate a token
+        id: generate-token
+        uses: ./.github/actions/generate-release-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Check for codegen'd changes
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           pnpm codegen:all
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "❌ Generated code is not up to date - please run 'pnpm codegen:all' and commit the changes"
-            exit 1
+            echo "Generated code is not up to date - committing changes"
+
+            # Configure git with the generated token
+            git remote set-url origin https://x-access-token:${{ env.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+            git add .
+            git commit -m "chore: update generated code"
+            git push --no-verify
+          else
+            echo "Generated code is up to date"
           fi
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: ./desktop_app
@@ -85,17 +106,27 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Generate a token
+        id: generate-token
+        uses: ./.github/actions/generate-release-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Verify no pending database migrations
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           # Run db generate with timeout to prevent hanging on interactive prompts
           set +e  # Don't exit on command failure
 
           echo "Running pnpm db generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
 
-          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration
+          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
+          # user input to continue
           if timeout 15s pnpm db generate > /tmp/db_generate_output.txt 2>&1; then
             # Command completed successfully within timeout
             output=$(cat /tmp/db_generate_output.txt)
@@ -130,9 +161,16 @@ jobs:
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "❌ New migration files were generated - there are pending database migrations that need to be committed"
-            echo "Run 'pnpm db generate' locally and commit the resulting migration files"
-            exit 1
+            echo "New migration files were generated - committing changes"
+
+            # Configure git with the generated token
+            git remote set-url origin https://x-access-token:${{ env.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+            git add .
+            git commit -m "chore: update database migrations"
+            git push --no-verify
+          else
+            echo "No new migration files were generated"
           fi
 
   zizmor:

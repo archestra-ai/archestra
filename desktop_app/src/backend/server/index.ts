@@ -14,6 +14,7 @@ import memoryRoutes from '@backend/server/plugins/memory';
 import oauthPlugin from '@backend/server/plugins/oauth';
 import ollamaMetadataRoutes from '@backend/server/plugins/ollama/metadata';
 import ollamaProxyRoutes from '@backend/server/plugins/ollama/proxy';
+import sandboxRoutes from '@backend/server/plugins/sandbox';
 import userRoutes from '@backend/server/plugins/user';
 import { electronLogStream } from '@backend/utils/fastify-logger-stream';
 import log from '@backend/utils/logger';
@@ -58,6 +59,7 @@ export const startFastifyServer = async () => {
   await app.register(oauthPlugin);
   await app.register(ollamaMetadataRoutes);
   await app.register(ollamaProxyRoutes);
+  await app.register(sandboxRoutes);
   await app.register(userRoutes);
 
   await app.register(archestraMcpServerPlugin);

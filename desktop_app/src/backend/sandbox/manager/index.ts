@@ -213,6 +213,75 @@ class McpServerSandboxManager {
     );
   }
 
+  /**
+   * Restart the entire sandbox (podman machine + all MCP servers)
+   */
+  async restart() {
+    log.info('Restarting Archestra MCP Sandbox...');
+
+    try {
+      // Stop all MCP servers first
+      const stopPromises = Array.from(this.mcpServerIdToSandboxedMcpServerMap.keys()).map(async (serverId) => {
+        try {
+          await this.stopServer(serverId);
+        } catch (error) {
+          log.error(`Failed to stop MCP server ${serverId} during restart:`, error);
+        }
+      });
+
+      await Promise.allSettled(stopPromises);
+
+      // Stop the podman machine
+      this.turnOffSandbox();
+
+      // Wait a moment for shutdown to complete
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Start everything back up
+      this.start();
+
+      log.info('Sandbox restart initiated successfully');
+    } catch (error) {
+      log.error('Failed to restart sandbox:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean/purge all data (uninstall all MCP servers + reset podman machine)
+   */
+  async reset() {
+    log.info('Resetting Archestra MCP Sandbox (purging all data)...');
+
+    try {
+      // Get all installed servers before removing them
+      const installedServers = await McpServerModel.getAll();
+
+      // Uninstall all MCP servers
+      const uninstallPromises = installedServers.map(async (server) => {
+        try {
+          await McpServerModel.uninstallMcpServer(server.id);
+          log.info(`Uninstalled MCP server: ${server.displayName} (${server.id})`);
+        } catch (error) {
+          log.error(`Failed to uninstall MCP server ${server.displayName} (${server.id}):`, error);
+        }
+      });
+
+      await Promise.allSettled(uninstallPromises);
+
+      // Stop the podman machine
+      this.turnOffSandbox();
+
+      // Clear the sandbox map
+      this.mcpServerIdToSandboxedMcpServerMap.clear();
+
+      log.info('Sandbox reset completed successfully');
+    } catch (error) {
+      log.error('Failed to reset sandbox:', error);
+      throw error;
+    }
+  }
+
   get statusSummary(): SandboxStatusSummary {
     return {
       status: this.status,

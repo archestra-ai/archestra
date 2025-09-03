@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Loader2, Server, Settings, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
 import { Button } from '@ui/components/ui/button';
@@ -67,14 +67,21 @@ export default function McpServers(_props: McpServersProps) {
 
   const overallSandboxStatus = getOverallSandboxStatus();
 
+  const HeaderTitle = ({ children }: React.PropsWithChildren) => {
+    return (
+      <CardTitle className="flex items-center gap-2">
+        <Server className="h-5 w-5" />
+        MCP Server Sandbox
+        {children}
+      </CardTitle>
+    );
+  };
+
   if (!sandboxIsRunning) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="h-5 w-5" />
-            Sandbox Environment
-          </CardTitle>
+          <HeaderTitle />
         </CardHeader>
         <CardContent className="space-y-4">
           <DetailedProgressBar
@@ -95,13 +102,9 @@ export default function McpServers(_props: McpServersProps) {
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Server className="h-5 w-5" />
-                  MCP Servers & Tools
-                  {loadingInstalledMcpServers && <Loader2 className="h-4 w-4 animate-spin" />}
-                </CardTitle>
-              </div>
+              <HeaderTitle>
+                {sandboxIsRunning && loadingInstalledMcpServers && <Loader2 className="h-4 w-4 animate-spin" />}
+              </HeaderTitle>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"

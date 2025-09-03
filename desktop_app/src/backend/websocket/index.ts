@@ -150,7 +150,7 @@ class WebSocketService {
         allAvailableTools: allTools,
       };
 
-      this.broadcast({ type: 'sandbox-status-update', payload: enhancedPayload as any });
+      this.broadcast({ type: 'sandbox-status-update', payload: enhancedPayload });
     }, 1000);
   }
 }

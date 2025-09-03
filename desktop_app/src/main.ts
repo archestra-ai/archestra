@@ -82,28 +82,25 @@ function resolveIconFilename(): string | undefined {
   return undefined;
 }
 
-function getWindowIcon(): string | NativeImage | undefined {
-  const primary = resolveIconFilename();
-  if (!primary) return undefined;
-  const primaryImg = nativeImage.createFromPath(primary);
-  if (!primaryImg.isEmpty()) return primaryImg; // valid
-
-  // Try explicit PNG fallback in same directory
+// Load an icon path into a NativeImage with PNG fallback in same directory
+function loadIconWithFallback(primaryPath: string | undefined): string | NativeImage | undefined {
+  if (!primaryPath) return undefined;
+  const img = nativeImage.createFromPath(primaryPath);
+  if (!img.isEmpty()) return img;
   try {
-    const dir = path.dirname(primary);
-    const pngFallback = path.join(dir, 'icon.png');
-    if (fs.existsSync(pngFallback)) {
-      const pngImg = nativeImage.createFromPath(pngFallback);
-      if (!pngImg.isEmpty()) {
-        return pngImg;
-      }
+    const pngPath = path.join(path.dirname(primaryPath), 'icon.png');
+    if (fs.existsSync(pngPath)) {
+      const pngImg = nativeImage.createFromPath(pngPath);
+      if (!pngImg.isEmpty()) return pngImg;
     }
   } catch (err) {
-    log.warn('[ICON] PNG fallback check failed', err);
+    log.warn('[ICON] Fallback load failed', err);
   }
+  return primaryPath; // let Electron attempt raw path
+}
 
-  // Last resort: return file path (Electron may still load it)
-  return primary;
+function getWindowIcon(): string | NativeImage | undefined {
+  return loadIconWithFallback(resolveIconFilename());
 }
 
 const createWindow = () => {
@@ -309,19 +306,8 @@ app.on('ready', async () => {
     const iconPath = resolveIconFilename();
     if (iconPath && app.dock) {
       try {
-        let img = nativeImage.createFromPath(iconPath);
-        if (img.isEmpty()) {
-          const pngPath = path.join(path.dirname(iconPath), 'icon.png');
-          if (fs.existsSync(pngPath)) {
-            const pngImg = nativeImage.createFromPath(pngPath);
-            if (!pngImg.isEmpty()) {
-              img = pngImg;
-              log.info('[ICON] Dock using PNG fallback');
-            }
-          }
-        }
-        app.dock.setIcon(img);
-        log.info('[ICON] macOS dock icon set');
+        const img = loadIconWithFallback(iconPath);
+        if (img) app.dock.setIcon(img as NativeImage | string);
       } catch (err) {
         log.warn('Failed to set macOS dock icon', err);
       }

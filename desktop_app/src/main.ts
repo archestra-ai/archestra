@@ -1,8 +1,9 @@
 import * as Sentry from '@sentry/electron/main';
 import chokidar from 'chokidar';
-import { BrowserWindow, app, ipcMain, shell } from 'electron';
+import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import { ChildProcess, fork } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
@@ -14,6 +15,14 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+// Ensure app name early (affects menu label on macOS in dev)
+try {
+  app.setName(config.build.productName);
+  process.title = config.build.productName;
+} catch {
+  // ignore
 }
 
 // Register protocol for OAuth callbacks
@@ -48,6 +57,55 @@ updateElectronApp({
 let serverProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+// Resolve icon path for both dev and packaged builds
+function resolveIconFilename(): string | undefined {
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const repoRoot = process.cwd();
+  const projectIconsDir = path.join(repoRoot, 'icons');
+  const siblingIconsFromBuild = path.join(__dirname, '../../icons');
+  const packagedIconsDir = path.join(process.resourcesPath, 'icons');
+
+  const candidates: string[] = isMac ? ['icon.icns', 'icon.png'] : isWin ? ['icon.ico', 'icon.png'] : ['icon.png'];
+  const searchDirs = app.isPackaged
+    ? [packagedIconsDir, projectIconsDir, siblingIconsFromBuild]
+    : [projectIconsDir, siblingIconsFromBuild, packagedIconsDir];
+
+  for (const dir of searchDirs) {
+    for (const file of candidates) {
+      const full = path.join(dir, file);
+      if (fs.existsSync(full)) {
+        return full;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getWindowIcon(): string | NativeImage | undefined {
+  const primary = resolveIconFilename();
+  if (!primary) return undefined;
+  const primaryImg = nativeImage.createFromPath(primary);
+  if (!primaryImg.isEmpty()) return primaryImg; // valid
+
+  // Try explicit PNG fallback in same directory
+  try {
+    const dir = path.dirname(primary);
+    const pngFallback = path.join(dir, 'icon.png');
+    if (fs.existsSync(pngFallback)) {
+      const pngImg = nativeImage.createFromPath(pngFallback);
+      if (!pngImg.isEmpty()) {
+        return pngImg;
+      }
+    }
+  } catch (err) {
+    log.warn('[ICON] PNG fallback check failed', err);
+  }
+
+  // Last resort: return file path (Electron may still load it)
+  return primary;
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -61,6 +119,8 @@ const createWindow = () => {
       symbolColor: '#ffffff',
       height: 36,
     },
+    title: config.build.productName,
+    icon: getWindowIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -243,6 +303,30 @@ app.on('ready', async () => {
   }
   await startBackendServer();
   createWindow();
+
+  // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
+  if (process.platform === 'darwin') {
+    const iconPath = resolveIconFilename();
+    if (iconPath && app.dock) {
+      try {
+        let img = nativeImage.createFromPath(iconPath);
+        if (img.isEmpty()) {
+          const pngPath = path.join(path.dirname(iconPath), 'icon.png');
+          if (fs.existsSync(pngPath)) {
+            const pngImg = nativeImage.createFromPath(pngPath);
+            if (!pngImg.isEmpty()) {
+              img = pngImg;
+              log.info('[ICON] Dock using PNG fallback');
+            }
+          }
+        }
+        app.dock.setIcon(img);
+        log.info('[ICON] macOS dock icon set');
+      } catch (err) {
+        log.warn('Failed to set macOS dock icon', err);
+      }
+    }
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

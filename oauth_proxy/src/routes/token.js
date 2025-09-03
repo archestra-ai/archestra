@@ -1,5 +1,26 @@
 import { isValidOAuthEndpoint, getSupportedProviders } from '../config/providers.js';
 
+/**
+ * Validate provider name to prevent environment variable injection attacks
+ * @param {string} provider - The provider name to validate
+ * @returns {string} - The validated, normalized provider name
+ * @throws {Error} - If provider is not supported
+ */
+function validateProvider(provider) {
+  if (!provider || typeof provider !== 'string') {
+    throw new Error('Provider must be a valid string');
+  }
+
+  const supportedProviders = getSupportedProviders();
+  const normalizedProvider = provider.toLowerCase();
+  
+  if (!supportedProviders.includes(normalizedProvider)) {
+    throw new Error(`Unsupported provider: ${provider}`);
+  }
+  
+  return normalizedProvider;
+}
+
 export default async function tokenRoutes(fastify) {
   // Secure token exchange endpoint - validates endpoints against provider allowlist
   fastify.post('/oauth/token', {
@@ -67,22 +88,33 @@ export default async function tokenRoutes(fastify) {
   }, async (request, reply) => {
     const { grant_type, provider, token_endpoint, ...params } = request.body;
 
-    // SECURITY: Validate that token endpoint is allowed for this provider
-    if (!isValidOAuthEndpoint(token_endpoint, provider)) {
+    // SECURITY: Validate provider to prevent environment variable injection
+    let validatedProvider;
+    try {
+      validatedProvider = validateProvider(provider);
+    } catch (error) {
       return reply.code(400).send({
         error: 'invalid_request',
-        error_description: `Token endpoint not allowed for provider ${provider}`,
+        error_description: error.message,
       });
     }
 
-    // Get client credentials from environment variables
-    const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
-    const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
+    // SECURITY: Validate that token endpoint is allowed for this provider
+    if (!isValidOAuthEndpoint(token_endpoint, validatedProvider)) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: `Token endpoint not allowed for provider ${validatedProvider}`,
+      });
+    }
+
+    // Get client credentials from environment variables (using validated provider)
+    const clientId = process.env[`${validatedProvider.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${validatedProvider.toUpperCase()}_CLIENT_SECRET`];
     
     if (!clientSecret) {
       return reply.code(400).send({
         error: 'invalid_client',
-        error_description: `Client secret not configured for provider: ${provider}`,
+        error_description: `Client secret not configured for provider: ${validatedProvider}`,
       });
     }
 
@@ -95,7 +127,7 @@ export default async function tokenRoutes(fastify) {
         ...params, // Desktop app provides all other needed parameters
       };
 
-      fastify.log.info(`Making secure token request to ${token_endpoint} for provider ${provider}`);
+      fastify.log.info(`Making secure token request to ${token_endpoint} for provider ${validatedProvider}`);
 
       // Make request to the validated endpoint only
       const response = await fetch(token_endpoint, {
@@ -115,7 +147,7 @@ export default async function tokenRoutes(fastify) {
         return reply.code(response.status).send(responseData);
       }
 
-      fastify.log.info(`Token exchange successful for provider ${provider}`);
+      fastify.log.info(`Token exchange successful for provider ${validatedProvider}`);
       return reply.send(responseData);
       
     } catch (error) {
@@ -159,23 +191,34 @@ export default async function tokenRoutes(fastify) {
   }, async (request, reply) => {
     const { token, provider, revocation_endpoint } = request.body;
 
+    // SECURITY: Validate provider to prevent environment variable injection
+    let validatedProvider;
+    try {
+      validatedProvider = validateProvider(provider);
+    } catch (error) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: error.message,
+      });
+    }
+
     // Skip revocation if no endpoint provided (some providers don't support it)
     if (!revocation_endpoint) {
-      fastify.log.info(`No revocation endpoint provided for provider ${provider}, skipping`);
+      fastify.log.info(`No revocation endpoint provided for provider ${validatedProvider}, skipping`);
       return reply.send({ success: true });
     }
 
     // SECURITY: Validate that revocation endpoint is allowed for this provider
-    if (!isValidOAuthEndpoint(revocation_endpoint, provider)) {
+    if (!isValidOAuthEndpoint(revocation_endpoint, validatedProvider)) {
       return reply.code(400).send({
         error: 'invalid_request',
-        error_description: `Revocation endpoint not allowed for provider ${provider}`,
+        error_description: `Revocation endpoint not allowed for provider ${validatedProvider}`,
       });
     }
 
-    // Get client credentials from environment variables
-    const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
-    const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
+    // Get client credentials from environment variables (using validated provider)
+    const clientId = process.env[`${validatedProvider.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${validatedProvider.toUpperCase()}_CLIENT_SECRET`];
 
     try {
       const requestParams = {
@@ -184,7 +227,7 @@ export default async function tokenRoutes(fastify) {
         token,
       };
 
-      fastify.log.info(`Revoking token at ${revocation_endpoint} for provider ${provider}`);
+      fastify.log.info(`Revoking token at ${revocation_endpoint} for provider ${validatedProvider}`);
 
       const response = await fetch(revocation_endpoint, {
         method: 'POST',

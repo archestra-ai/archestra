@@ -1,6 +1,3 @@
--- Drop the old memories table
-DROP TABLE IF EXISTS `memories`;
-
 CREATE TABLE `memory_entries` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,

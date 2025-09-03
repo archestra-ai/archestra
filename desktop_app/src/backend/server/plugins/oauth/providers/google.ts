@@ -2,7 +2,6 @@ import { OAuthProviderDefinition } from '../provider-interface';
 
 export const googleProvider: OAuthProviderDefinition = {
   name: 'google',
-  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   scopes: [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.send',
@@ -26,10 +25,22 @@ export const googleProvider: OAuthProviderDefinition = {
     prompt: 'consent',
   },
 
+  // OAuth discovery configuration
+  discoveryConfig: {
+    baseUrl: 'https://accounts.google.com',
+    enabled: true,
+    fallbackEndpoints: {
+      authorization: 'https://accounts.google.com/o/oauth2/v2/auth',
+      token: 'https://oauth2.googleapis.com/token',
+      revocation: 'https://oauth2.googleapis.com/revoke',
+    },
+  },
+
   metadata: {
     displayName: 'Google',
     documentationUrl: 'https://developers.google.com/identity/protocols/oauth2',
     supportsRefresh: true,
-    notes: 'Token is written to ~/.google_workspace_mcp/credentials/{email}.json at container startup',
+    notes:
+      'Uses OAuth discovery with fallback endpoints. Token is written to ~/.google_workspace_mcp/credentials/{email}.json at container startup',
   },
 };

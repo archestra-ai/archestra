@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_servers` ADD `oauth_discovery_metadata` text;

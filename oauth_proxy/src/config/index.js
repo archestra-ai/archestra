@@ -8,22 +8,6 @@ export const config = {
     host: '0.0.0.0',
   },
   
-  providers: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      tokenEndpoint: 'https://oauth2.googleapis.com/token',
-      revokeEndpoint: 'https://oauth2.googleapis.com/revoke',
-    },
-    
-    slack: {
-      clientId: process.env.SLACK_CLIENT_ID,
-      clientSecret: process.env.SLACK_CLIENT_SECRET,
-      tokenEndpoint: 'https://slack.com/api/oauth.v2.access',
-      revokeEndpoint: 'https://slack.com/api/auth.revoke',
-    },
-  },
-  
   cors: {
     origin: (origin, callback) => {
       // If CORS_ORIGIN is set, use that (comma-separated list)
@@ -55,16 +39,20 @@ export const config = {
 
 // Validate required configuration
 export function validateConfig() {
-  const errors = [];
+  const warnings = [];
   
-  for (const [name, provider] of Object.entries(config.providers)) {
-    if (!provider.clientId || !provider.clientSecret) {
-      console.warn(`Warning: ${name.toUpperCase()} OAuth credentials not configured`);
+  // Check for common OAuth client secrets
+  const providers = ['google', 'slack'];
+  for (const provider of providers) {
+    const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
+    
+    if (!clientId || !clientSecret) {
+      warnings.push(`${provider.toUpperCase()} OAuth credentials not configured`);
     }
   }
   
-  if (errors.length > 0) {
-    console.error('Configuration errors:', errors);
-    process.exit(1);
+  if (warnings.length > 0) {
+    console.warn('Configuration warnings:', warnings.join(', '));
   }
 }

@@ -1,36 +1,40 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
-import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
-import { config } from './config/index.js';
-import { initializeProviders, getAllProviders } from './providers/index.js';
+import { config, validateConfig } from './config/index.js';
 import tokenRoutes from './routes/token.js';
 import callbackRoutes from './routes/callback.js';
-import providersRoute from './routes/providers.js';
 
 export async function buildApp() {
-  // Initialize providers
-  initializeProviders();
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL || 'info'
+    }
+  });
 
-  // Create Fastify instance
-  const app = Fastify();
+  // Validate configuration
+  validateConfig();
 
-  // Register other plugins
+  // Register plugins
   await app.register(cors, config.cors);
   await app.register(formbody);
 
   // Register routes
   await app.register(tokenRoutes);
   await app.register(callbackRoutes);
-  await app.register(providersRoute);
 
-  // Root endpoint - API documentation
-  app.get('/', async (request, reply) => {
-    const providers = getAllProviders();
-    
-    return "What are you doing here little fella? ;)";
-  });
+  // Root endpoint
+  app.get('/', async () => ({
+    service: 'OAuth Proxy - Generic Token Exchange Service',
+    version: '2.0.0',
+    description: 'Generic OAuth proxy that injects client secrets for any provider endpoints specified by desktop app',
+    endpoints: {
+      'POST /oauth/token': 'Generic token exchange (requires token_endpoint from desktop app)',
+      'POST /oauth/revoke': 'Generic token revocation (requires revoke_endpoint from desktop app)',
+      'GET /callback/:provider': 'OAuth callback handler (redirects to desktop app via deep link)',
+      'GET /health': 'Health check endpoint',
+    }
+  }));
 
   return app;
 }

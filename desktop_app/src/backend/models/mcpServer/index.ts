@@ -55,6 +55,13 @@ export default class McpServerModel {
     return db.select().from(mcpServersTable).where(eq(mcpServersTable.id, id));
   }
 
+  static async update(
+    id: (typeof mcpServersTable.$inferSelect)['id'],
+    data: Partial<typeof mcpServersTable.$inferInsert>
+  ) {
+    return db.update(mcpServersTable).set(data).where(eq(mcpServersTable.id, id)).returning();
+  }
+
   static async startServerAndSyncAllConnectedExternalMcpClients(mcpServer: McpServer) {
     await McpServerSandboxManager.startServer(mcpServer);
     await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();

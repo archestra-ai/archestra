@@ -1,24 +1,27 @@
-import { getProvider, getAllProviders } from '../providers/index.js';
-
 export default async function tokenRoutes(fastify) {
-  // Token exchange/refresh endpoint
+  // Generic token exchange endpoint
   fastify.post('/oauth/token', {
     schema: {
       body: {
         type: 'object',
-        required: ['grant_type', 'provider'],
+        required: ['grant_type', 'provider', 'token_endpoint'],
         properties: {
           grant_type: { 
             type: 'string',
             enum: ['authorization_code', 'refresh_token']
           },
           provider: { type: 'string' },
+          token_endpoint: { 
+            type: 'string', 
+            format: 'uri',
+            maxLength: 2048,
+          },
           
           // For authorization_code grant
           code: { 
             type: 'string',
             minLength: 1,
-            maxLength: 2048, // Reasonable limit for auth codes
+            maxLength: 2048,
           },
           redirect_uri: { 
             type: 'string',
@@ -27,12 +30,12 @@ export default async function tokenRoutes(fastify) {
           },
           code_verifier: { 
             type: 'string',
-            minLength: 43, // PKCE spec requirement
-            maxLength: 128, // PKCE spec requirement
-            pattern: '^[A-Za-z0-9-._~]+$', // Base64url characters only
+            minLength: 43,
+            maxLength: 128,
+            pattern: '^[A-Za-z0-9-._~]+$',
           },
           
-          // For refresh_token grant
+          // For refresh_token grant  
           refresh_token: { type: 'string' },
         },
       },
@@ -57,69 +60,52 @@ export default async function tokenRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { grant_type, provider, ...params } = request.body;
+    const { grant_type, provider, token_endpoint, ...params } = request.body;
 
-    // Validate provider
-    const validProviders = getAllProviders();
-    if (!validProviders.includes(provider.toLowerCase())) {
+    // Get client credentials from environment variables
+    const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
+    
+    if (!clientSecret) {
       return reply.code(400).send({
-        error: 'invalid_request',
-        error_description: `Invalid provider. Valid providers are: ${validProviders.join(', ')}`,
+        error: 'invalid_client',
+        error_description: `Client secret not configured for provider: ${provider}`,
       });
     }
 
     try {
-      // Get the provider instance
-      const oauthProvider = getProvider(provider);
+      // Build request parameters - desktop app handles all provider-specific logic
+      const requestParams = {
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type,
+        ...params, // Desktop app provides all other needed parameters
+      };
 
-      let response;
-      
-      // Handle different grant types
-      switch (grant_type) {
-        case 'authorization_code':
-          if (!params.code) {
-            return reply.code(400).send({
-              error: 'invalid_request',
-              error_description: 'Missing required parameter: code',
-            });
-          }
-          
-          response = await oauthProvider.exchangeCode(params);
-          break;
+      fastify.log.info(`Making token request to ${token_endpoint} for provider ${provider}`);
 
-        case 'refresh_token':
-          if (!params.refresh_token) {
-            return reply.code(400).send({
-              error: 'invalid_request',
-              error_description: 'Missing required parameter: refresh_token',
-            });
-          }
-          
-          response = await oauthProvider.refreshToken(params);
-          break;
+      // Make request to whatever endpoint the desktop app specified
+      const response = await fetch(token_endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(requestParams),
+      });
 
-        default:
-          return reply.code(400).send({
-            error: 'unsupported_grant_type',
-            error_description: `Grant type '${grant_type}' is not supported`,
-          });
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        fastify.log.error(`Token exchange failed with status ${response.status}:`, responseData);
+        return reply.code(response.status).send(responseData);
       }
 
-      // Return the token response
-      return reply.send(response);
+      fastify.log.info(`Token exchange successful for provider ${provider}`);
+      return reply.send(responseData);
       
     } catch (error) {
-      fastify.log.error(error);
+      fastify.log.error('Token exchange error:', error);
       
-      // Handle provider errors
-      if (error.statusCode) {
-        return reply.code(error.statusCode || 400).send({
-          error: error.error || 'invalid_request',
-          error_description: error.error_description || 'Token exchange failed',
-        });
-      }
-      
-      // Handle other errors
       return reply.code(400).send({
         error: 'invalid_request',
         error_description: 'Token exchange failed',
@@ -127,7 +113,7 @@ export default async function tokenRoutes(fastify) {
     }
   });
 
-  // Token revocation endpoint
+  // Generic token revocation endpoint
   fastify.post('/oauth/revoke', {
     schema: {
       body: {
@@ -136,6 +122,11 @@ export default async function tokenRoutes(fastify) {
         properties: {
           token: { type: 'string' },
           provider: { type: 'string' },
+          revoke_endpoint: {
+            type: 'string',
+            format: 'uri',
+            maxLength: 2048,
+          },
         },
       },
       response: {
@@ -148,16 +139,43 @@ export default async function tokenRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { token, provider } = request.body;
+    const { token, provider, revoke_endpoint } = request.body;
+
+    // Skip revocation if no endpoint provided (some providers don't support it)
+    if (!revoke_endpoint) {
+      return reply.send({ success: true });
+    }
+
+    // Get client credentials from environment variables
+    const clientId = process.env[`${provider.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${provider.toUpperCase()}_CLIENT_SECRET`];
 
     try {
-      const oauthProvider = getProvider(provider);
-      await oauthProvider.revokeToken({ token });
+      const requestParams = {
+        client_id: clientId,
+        client_secret: clientSecret,
+        token,
+      };
+
+      fastify.log.info(`Revoking token at ${revoke_endpoint} for provider ${provider}`);
+
+      const response = await fetch(revoke_endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(requestParams),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        fastify.log.error(`Token revocation failed with status ${response.status}:`, errorData);
+      }
       
       return reply.send({ success: true });
       
     } catch (error) {
-      fastify.log.error(error);
+      fastify.log.error('Token revocation error:', error);
       
       return reply.code(400).send({
         error: 'invalid_request',
@@ -166,10 +184,11 @@ export default async function tokenRoutes(fastify) {
     }
   });
 
-  // Health check
+  // Health check endpoint
   fastify.get('/health', async (request, reply) => {
     return {
       status: 'ok',
+      service: 'OAuth Proxy - Generic Token Exchange Service',
       timestamp: new Date().toISOString(),
     };
   });

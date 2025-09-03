@@ -65,39 +65,32 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
-
-      - name: Generate a token
-        id: generate-token
-        uses: ./.github/actions/generate-release-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          persist-credentials: true
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Check for codegen'd changes
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+        id: codegen-changes
         run: |
           pnpm codegen:all
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             echo "Generated code is not up to date - committing changes"
-
-            # Configure git identity and remote
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
-
-            git add .
-            git commit -m "chore: update generated code"
-            git push origin HEAD:${{ github.head_ref || github.ref_name }} --no-verify
+            echo "codegen-changes=true" >> $GITHUB_OUTPUT
           else
             echo "Generated code is up to date"
+            echo "codegen-changes=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Add and commit generated code
+        if: steps.codegen-changes.outputs.codegen-changes == 'true'
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
+        with:
+          message: "chore: update generated code"
+          committer_name: GitHub Actions
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations
@@ -111,21 +104,13 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: false
-
-      - name: Generate a token
-        id: generate-token
-        uses: ./.github/actions/generate-release-token
-        with:
-          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
-          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+          persist-credentials: true
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Verify no pending database migrations
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+        id: db-migration-check
         run: |
           # Run db generate with timeout to prevent hanging on interactive prompts
           set +e  # Don't exit on command failure
@@ -169,18 +154,19 @@ jobs:
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             echo "New migration files were generated - committing changes"
-
-            # Configure git identity and remote
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
-
-            git add .
-            git commit -m "chore: update database migrations"
-            git push origin HEAD:${{ github.head_ref || github.ref_name }} --no-verify
+            echo "db-migration-check=true" >> $GITHUB_OUTPUT
           else
             echo "No new migration files were generated"
+            echo "db-migration-check=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Add and commit database migration changes
+        if: steps.db-migration-check.outputs.db-migration-check == 'true'
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
+        with:
+          message: "chore: update database migrations"
+          committer_name: GitHub Actions
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
 
   zizmor:
     name: Zizmor GitHub Actions static analysis

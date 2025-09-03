@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-alpha](https://github.com/archestra-ai/archestra/compare/mcp_server_docker_image-v0.0.2-alpha...mcp_server_docker_image-v0.0.3-alpha) (2025-09-03)
+
+
+### Features
+
+* World, meet Archestra 🤖❤️ ([c64e429](https://github.com/archestra-ai/archestra/commit/c64e429c1d124cda89406f7676b2168f0e2d3ff9))
+
 ## [0.0.2-alpha](https://github.com/archestra-ai/archestra/compare/mcp_server_docker_image-v0.0.1-alpha...mcp_server_docker_image-v0.0.2-alpha) (2025-08-27)
 
 ### Bug Fixes

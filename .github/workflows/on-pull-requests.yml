@@ -26,6 +26,9 @@ jobs:
       security-events: write
       id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/linting-and-tests.yml
+    secrets:
+      ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
   build-desktop-application:
     name: Build desktop application

@@ -2,6 +2,11 @@ name: Linting and Tests
 
 on:
   workflow_call:
+    secrets:
+      ARCHESTRA_RELEASER_GITHUB_APP_ID:
+        required: true
+      ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY:
+        required: true
 
 jobs:
   lint-pr-title:

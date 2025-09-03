@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.3-alpha](https://github.com/archestra-ai/archestra/compare/v0.0.2-alpha...v0.0.3-alpha) (2025-09-03)
+
+
+### Features
+
+* add provider discovery and simplify adding new provider ([#268](https://github.com/archestra-ai/archestra/issues/268)) ([a2df241](https://github.com/archestra-ai/archestra/commit/a2df241d8b805dfc355ed2a6006d0af130ca6725))
+* local catalog for developers ([#264](https://github.com/archestra-ai/archestra/issues/264)) ([713fcb6](https://github.com/archestra-ai/archestra/commit/713fcb68373a1c23893873e7407d84e7dc95abc4))
+* Memory, default agents, onboarding in a chat ([#261](https://github.com/archestra-ai/archestra/issues/261)) ([0283b46](https://github.com/archestra-ai/archestra/commit/0283b46696da7731755235423b126a250145f958))
+
+
+### Bug Fixes
+
+* catalog connector installation 🐛 (`body/oauthProvider Invalid option: expected one of "google"|"slack"|"slack-browser"|"linkedin-browser"`) ([0aea4d0](https://github.com/archestra-ai/archestra/commit/0aea4d0e08d111858059117c8a93ee36af3474af))
+* db migrations (sorry) ([#266](https://github.com/archestra-ai/archestra/issues/266)) ([c7cfeab](https://github.com/archestra-ai/archestra/commit/c7cfeabbc3a7113165d0c35fc7b43234f6cb2a8d))
+* db migrations again ([#267](https://github.com/archestra-ai/archestra/issues/267)) ([9ddc07c](https://github.com/archestra-ai/archestra/commit/9ddc07c3e70aa14ec58fa1ad59ffa68eb72e36ba))
+
 ## [0.0.2-alpha](https://github.com/archestra-ai/archestra/compare/v0.0.1-alpha...v0.0.2-alpha) (2025-08-27)
 
 

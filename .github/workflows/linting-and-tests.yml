@@ -94,7 +94,7 @@ jobs:
 
             git add .
             git commit -m "chore: update generated code"
-            git push --no-verify
+            git push origin HEAD:${{ github.head_ref || github.ref_name }} --no-verify
           else
             echo "Generated code is up to date"
           fi
@@ -177,7 +177,7 @@ jobs:
 
             git add .
             git commit -m "chore: update database migrations"
-            git push --no-verify
+            git push origin HEAD:${{ github.head_ref || github.ref_name }} --no-verify
           else
             echo "No new migration files were generated"
           fi

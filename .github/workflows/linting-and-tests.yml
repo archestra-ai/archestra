@@ -88,7 +88,7 @@ jobs:
             echo "Generated code is not up to date - committing changes"
 
             # Configure git with the generated token
-            git remote set-url origin https://x-access-token:${{ env.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
 
             git add .
             git commit -m "chore: update generated code"
@@ -169,7 +169,7 @@ jobs:
             echo "New migration files were generated - committing changes"
 
             # Configure git with the generated token
-            git remote set-url origin https://x-access-token:${{ env.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
 
             git add .
             git commit -m "chore: update database migrations"

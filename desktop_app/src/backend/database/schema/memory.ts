@@ -19,7 +19,6 @@ export const memoryTable = sqliteTable(
     updatedAt: text()
       .notNull()
       .default(sql`(current_timestamp)`),
-    foo: text().notNull().default(''),
   },
   (table) => ({
     // Ensure unique name per user

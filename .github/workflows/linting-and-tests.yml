@@ -87,7 +87,9 @@ jobs:
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             echo "Generated code is not up to date - committing changes"
 
-            # Configure git with the generated token
+            # Configure git identity and remote
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
 
             git add .
@@ -168,7 +170,9 @@ jobs:
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
             echo "New migration files were generated - committing changes"
 
-            # Configure git with the generated token
+            # Configure git identity and remote
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
 
             git add .

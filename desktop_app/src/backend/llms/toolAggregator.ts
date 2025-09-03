@@ -27,7 +27,6 @@ class ToolAggregator {
       allTools[toolId] = tool;
     }
 
-    log.debug(`Aggregated ${Object.keys(allTools).length} tools from all sources`);
     return allTools;
   }
 
@@ -52,7 +51,6 @@ class ToolAggregator {
       }
     }
 
-    log.debug(`Selected ${Object.keys(selected).length} out of ${toolIds.length} requested tools`);
     return selected;
   }
 

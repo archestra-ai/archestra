@@ -41,19 +41,18 @@ jobs:
           - platform: macos-latest
             os: macos
             arch: x64
-          # NOTE: uncomment these out when we're ready to produce build artifacts for Windows and Linux
-          # - platform: windows-11-arm
-          #   os: windows
-          #   arch: arm64
-          # - platform: windows-latest
-          #   os: windows
-          #   arch: x64
-          # - platform: ubuntu-latest
-          #   os: linux
-          #   arch: x64
-          # - platform: ubuntu-24.04-arm
-          #   os: linux
-          #   arch: arm64
+          - platform: windows-11-arm
+            os: windows
+            arch: arm64
+          - platform: windows-latest
+            os: windows
+            arch: x64
+          - platform: ubuntu-latest
+            os: linux
+            arch: x64
+          - platform: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
     permissions:
       # publisher requires write permissions to the repo's contents to create new releases
       # https://www.electronforge.io/config/publishers/github#authentication

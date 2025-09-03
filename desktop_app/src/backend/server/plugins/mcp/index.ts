@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { FastifyPluginAsync } from 'fastify';
 import { streamableHttp } from 'fastify-mcp';
-import { z } from 'zod-v3';
+import { z } from 'zod';
 
 import McpServerModel from '@backend/models/mcpServer';
 import MemoryModel from '@backend/models/memory';

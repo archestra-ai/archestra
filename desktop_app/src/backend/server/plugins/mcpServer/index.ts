@@ -29,37 +29,6 @@ z.globalRegistry.add(McpServerInstallSchema, { id: 'McpServerInstall' });
 z.globalRegistry.add(McpServerContainerLogsSchema, { id: 'McpServerContainerLogs' });
 z.globalRegistry.add(AvailableToolSchema, { id: 'AvailableTool' });
 
-// Schema for catalog search parameters
-const CatalogSearchParamsSchema = z.object({
-  q: z.string().optional().describe('Search query'),
-  category: z.string().optional().describe('Filter by category'),
-  limit: z.number().int().positive().default(24).optional().describe('Number of results to return'),
-  offset: z.number().int().min(0).default(0).optional().describe('Offset for pagination'),
-});
-
-// Schema for catalog server manifest (simplified version)
-const CatalogServerManifestSchema = z.object({
-  name: z.string(),
-  display_name: z.string(),
-  description: z.string(),
-  category: z.string(),
-  author: z.string().optional(),
-  license: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  archestra_config: z.record(z.string(), z.unknown()).optional(),
-});
-
-// Schema for catalog search response
-const CatalogSearchResponseSchema = z.object({
-  servers: z.array(CatalogServerManifestSchema).describe('Array of MCP server manifests'),
-  hasMore: z.boolean().describe('Whether there are more results available'),
-  totalCount: z.number().int().describe('Total number of matching servers'),
-});
-
-z.globalRegistry.add(CatalogServerManifestSchema, { id: 'CatalogServerManifest' });
-z.globalRegistry.add(CatalogSearchParamsSchema, { id: 'CatalogSearchParams' });
-z.globalRegistry.add(CatalogSearchResponseSchema, { id: 'CatalogSearchResponse' });
-
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/api/mcp_server',
@@ -76,31 +45,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_request, reply) => {
       const servers = await McpServerModel.getInstalledMcpServers();
       return reply.send(servers);
-    }
-  );
-
-  fastify.get(
-    '/api/mcp_server/catalog/search',
-    {
-      schema: {
-        operationId: 'searchMcpServerCatalog',
-        description: 'Search for MCP servers in the catalog',
-        tags: ['MCP Server'],
-        querystring: CatalogSearchParamsSchema,
-        response: {
-          200: CatalogSearchResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async ({ query }, reply) => {
-      try {
-        const response = await McpServerModel.searchCatalog(query);
-        return reply.send(response);
-      } catch (error: any) {
-        log.error('Failed to search MCP server catalog:', error);
-        return reply.code(500).send({ error: 'Failed to search catalog' });
-      }
     }
   );
 

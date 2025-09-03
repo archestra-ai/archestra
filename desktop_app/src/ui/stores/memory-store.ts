@@ -5,8 +5,6 @@ import {
   deleteMemory as apiDeleteMemory,
   setMemory as apiSetMemory,
   getAllMemories,
-  getMemory as getLegacyMemory,
-  updateMemory as updateLegacyMemory,
 } from '@ui/lib/clients/archestra/api/gen';
 import websocketService from '@ui/lib/websocket';
 
@@ -34,8 +32,6 @@ interface MemoryActions {
   setEditingMemory: (memory: MemoryEntry | null) => void;
   setBlinking: (blinking: boolean) => void;
   initializeStore: () => void;
-  // Legacy methods for backward compatibility
-  updateMemory: (content: string) => Promise<void>;
 }
 
 type MemoryStore = MemoryState & MemoryActions;
@@ -139,22 +135,6 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
     set({ isBlinking: blinking });
   },
 
-  // Legacy method for backward compatibility
-  updateMemory: async (content: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      await updateLegacyMemory({ body: { content } });
-      // Refresh memories after legacy update
-      await get().fetchMemories();
-    } catch (error) {
-      console.error('Failed to update memory (legacy):', error);
-      set({ error: 'Failed to save memory' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-
   initializeStore: () => {
     // Fetch initial memories
     get().fetchMemories();
@@ -170,9 +150,3 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
 
 // Initialize the memory store on mount
 useMemoryStore.getState().initializeStore();
-
-// Helper to get content in legacy format
-export const getMemoryContent = (memories: MemoryEntry[]): string => {
-  if (memories.length === 0) return '';
-  return memories.map((m) => `**${m.name}**: ${m.value}`).join('\n');
-};

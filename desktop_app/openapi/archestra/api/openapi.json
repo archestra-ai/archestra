@@ -861,6 +861,17 @@
               }
             ]
           },
+          "oauthDiscoveryMetadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           }
@@ -873,6 +884,7 @@
           "oauthAccessToken",
           "oauthRefreshToken",
           "oauthExpiryDate",
+          "oauthDiscoveryMetadata",
           "createdAt"
         ]
       },
@@ -2051,6 +2063,17 @@
               }
             ]
           },
+          "oauthDiscoveryMetadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           }
@@ -2063,6 +2086,7 @@
           "oauthAccessToken",
           "oauthRefreshToken",
           "oauthExpiryDate",
+          "oauthDiscoveryMetadata",
           "createdAt"
         ],
         "additionalProperties": false

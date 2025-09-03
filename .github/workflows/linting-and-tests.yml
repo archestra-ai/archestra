@@ -51,6 +51,8 @@ jobs:
   verify-codegend-code-is-up-to-date:
     name: Verify generated code is up to date
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: ./desktop_app
@@ -59,25 +61,40 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: true
+          # we need to check out the specific branch of the PR, not the base branch
+          # see https://github.com/EndBug/add-and-commit/issues/430#issuecomment-1261190596
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
-      - name: Codegen
-        run: pnpm codegen:all
-
-      - name: Check for changes and commit if needed
+      - name: Check for codegen'd changes
+        id: codegen-changes
         run: |
+          pnpm codegen:all
+
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            git add .
-            git commit -m "chore: update generated code"
-            git push --no-verify
+            echo "Generated code is not up to date - committing changes"
+            echo "codegen-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "Generated code is up to date"
+            echo "codegen-changes=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Add and commit generated code
+        if: steps.codegen-changes.outputs.codegen-changes == 'true'
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
+        with:
+          message: "chore: update generated code"
+          committer_name: GitHub Actions
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: ./desktop_app
@@ -86,21 +103,71 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: true
+          # we need to check out the specific branch of the PR, not the base branch
+          # see https://github.com/EndBug/add-and-commit/issues/430#issuecomment-1261190596
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
 
       - name: Verify no pending database migrations
-        run: pnpm db:generate
-
-      - name: Check for changes and commit if needed
+        id: db-migration-check
         run: |
+          # Run db generate with timeout to prevent hanging on interactive prompts
+          set +e  # Don't exit on command failure
+
+          echo "Running pnpm db generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
+
+          # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
+          # user input to continue
+          if timeout 15s pnpm db generate > /tmp/db_generate_output.txt 2>&1; then
+            # Command completed successfully within timeout
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "Output from pnpm db generate:"
+            echo "$output"
+
+            # Check if there's an interactive prompt in the output (shouldn't happen if it completed)
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "❌ Interactive prompt detected - there are pending database migrations that need to be committed"
+              echo "Run 'pnpm db generate' locally, make your choices, and commit the resulting migration files"
+              exit 1
+            fi
+          else
+            # Command timed out or failed
+            exit_code=$?
+            output=$(cat /tmp/db_generate_output.txt 2>/dev/null || echo "No output captured")
+
+            echo "Output from pnpm db generate (before timeout/failure):"
+            echo "$output"
+
+            if [ $exit_code -eq 124 ]; then
+              # Timeout occurred - likely waiting for interactive input
+              echo "❌ Command timed out - likely waiting for interactive input about pending database migrations"
+              echo "Run 'pnpm db generate' locally, make your choices, and commit the resulting migration files"
+            else
+              echo "❌ pnpm db generate failed with exit code $exit_code"
+            fi
+            exit 1
+          fi
+
+          set -e  # Re-enable exit on error
+
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            git add .
-            git commit -m "chore: update database migrations"
-            git push --no-verify
+            echo "New migration files were generated - committing changes"
+            echo "db-migration-check=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new migration files were generated"
+            echo "db-migration-check=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Add and commit database migration changes
+        if: steps.db-migration-check.outputs.db-migration-check == 'true'
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
+        with:
+          message: "chore: update database migrations"
+          committer_name: GitHub Actions
+          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
 
   zizmor:
     name: Zizmor GitHub Actions static analysis

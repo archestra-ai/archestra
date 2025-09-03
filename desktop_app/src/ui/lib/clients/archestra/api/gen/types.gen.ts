@@ -207,6 +207,7 @@ export type McpServerInput = {
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiryDate: string | null;
+  oauthDiscoveryMetadata: string | null;
   createdAt: string;
 };
 
@@ -547,6 +548,7 @@ export type McpServer = {
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiryDate: string | null;
+  oauthDiscoveryMetadata: string | null;
   createdAt: string;
 };
 

@@ -136,21 +136,19 @@ class WebSocketService {
 
   private periodicallyEmitSandboxStatusSummaryUpdates() {
     this.sandboxStatusInterval = setInterval(() => {
-      // Get the base status summary from sandbox manager
-      const statusSummary = McpServerSandboxManager.statusSummary;
-
-      // Get all aggregated tools (includes both sandboxed and Archestra tools)
-      const allTools = toolAggregator.getAllAvailableTools();
-
-      // Create an enhanced payload that includes all tools
-      // We'll add a new field for all aggregated tools while keeping the existing structure
-      const enhancedPayload = {
-        ...statusSummary,
-        // Add all aggregated tools as a separate field
-        allAvailableTools: allTools,
-      };
-
-      this.broadcast({ type: 'sandbox-status-update', payload: enhancedPayload as any });
+      this.broadcast({
+        type: 'sandbox-status-update',
+        /**
+         * Create an enhanced payload that includes all tools
+         * We'll add a new field for all aggregated tools while keeping the existing structure
+         */
+        payload: {
+          // Get the base status summary from sandbox manager
+          ...McpServerSandboxManager.statusSummary,
+          // Get all aggregated tools (includes both sandboxed and Archestra tools) -- add as a separate field
+          allAvailableTools: toolAggregator.getAllAvailableTools(),
+        },
+      });
     }, 1000);
   }
 }

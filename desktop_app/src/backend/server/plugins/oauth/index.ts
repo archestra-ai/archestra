@@ -16,17 +16,19 @@ const oauthPlugin: FastifyPluginAsyncZod = async (fastify) => {
   await fastify.register(oauthRoutes);
 };
 
-// Re-export everything from providers and provider-interface for use in other parts of the app
+// Re-export database-free functions from provider-registry
 export {
   getOAuthProvider,
-  getOAuthProviderWithDiscovery,
   hasOAuthProvider,
   getOAuthProviderNames,
   oauthProviders,
   googleProvider,
   slackProvider,
   slackBrowserProvider,
-} from './providers';
+} from './provider-registry';
+
+// Re-export database-dependent functions from providers for server use only
+export { getOAuthProviderWithDiscovery } from './providers';
 export type {
   OAuthProviderDefinition,
   OAuthProviderRegistry,

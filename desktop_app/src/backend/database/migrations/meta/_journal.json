@@ -64,6 +64,13 @@
       "when": 1756893590028,
       "tag": "0008_furry_may_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1756908251189,
+      "tag": "0009_thin_rumiko_fujikawa",
+      "breakpoints": true
     }
   ]
 }

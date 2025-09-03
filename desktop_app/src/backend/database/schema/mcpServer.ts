@@ -53,6 +53,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    * OAuth token expiry date (as returned by provider, typically a timestamp or ISO date)
    */
   oauthExpiryDate: text('oauth_expiry_date'),
+  /**
+   * OAuth discovery metadata (JSON) - stores discovered OAuth server metadata per RFC 8414
+   */
+  oauthDiscoveryMetadata: text('oauth_discovery_metadata'),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -70,6 +74,7 @@ export const McpServerSchema = z.object({
   oauthAccessToken: z.string().nullable(),
   oauthRefreshToken: z.string().nullable(),
   oauthExpiryDate: z.string().nullable(),
+  oauthDiscoveryMetadata: z.string().nullable(),
   createdAt: z.string(),
 });
 

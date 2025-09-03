@@ -3,7 +3,6 @@ import { buildSlackTokenExtractionScript, isSlackWorkspacePage } from '../utils/
 
 export const slackBrowserProvider: OAuthProviderDefinition = {
   name: 'slack-browser',
-  authorizationUrl: '', // Not used for browser auth
   scopes: [], // Not used for browser auth
   usePKCE: false, // Not used for browser auth
   clientId: 'browser-auth', // Placeholder
@@ -102,6 +101,12 @@ export const slackBrowserProvider: OAuthProviderDefinition = {
 
       return null;
     },
+  },
+
+  // Discovery config (disabled for browser auth)
+  discoveryConfig: {
+    baseUrl: 'https://slack.com',
+    enabled: false, // Browser auth doesn't use OAuth discovery
   },
 
   metadata: {

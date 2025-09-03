@@ -2,7 +2,6 @@ import { OAuthProviderDefinition } from '../provider-interface';
 
 export const slackProvider: OAuthProviderDefinition = {
   name: 'slack',
-  authorizationUrl: 'https://slack.com/oauth/v2/authorize',
   scopes: [
     'channels:read',
     'channels:history',
@@ -33,6 +32,17 @@ export const slackProvider: OAuthProviderDefinition = {
     user_scope: 'identity.basic,identity.email,identity.team,identity.avatar',
   },
 
+  // OAuth discovery configuration
+  discoveryConfig: {
+    baseUrl: 'https://slack.com',
+    enabled: true,
+    fallbackEndpoints: {
+      authorization: 'https://slack.com/oauth/v2/authorize',
+      token: 'https://slack.com/api/oauth.v2.access',
+      revocation: 'https://slack.com/api/auth.revoke',
+    },
+  },
+
   // Slack supports browser-based auth as an alternative
   requiresSpecialAuth: true,
 
@@ -40,6 +50,7 @@ export const slackProvider: OAuthProviderDefinition = {
     displayName: 'Slack',
     documentationUrl: 'https://api.slack.com/authentication/oauth-v2',
     supportsRefresh: false,
-    notes: 'Tokens do not expire. Supports both OAuth and browser-based authentication.',
+    notes:
+      'Uses OAuth discovery with fallback endpoints. Tokens do not expire. Supports both OAuth and browser-based authentication.',
   },
 };

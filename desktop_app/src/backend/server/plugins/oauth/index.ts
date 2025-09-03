@@ -19,6 +19,7 @@ const oauthPlugin: FastifyPluginAsyncZod = async (fastify) => {
 // Re-export everything from providers and provider-interface for use in other parts of the app
 export {
   getOAuthProvider,
+  getOAuthProviderWithDiscovery,
   hasOAuthProvider,
   getOAuthProviderNames,
   oauthProviders,

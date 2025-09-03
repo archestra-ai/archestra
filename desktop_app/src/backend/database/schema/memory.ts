@@ -5,7 +5,7 @@ import { createSelectSchema } from 'drizzle-zod';
 import { userTable } from './user';
 
 export const memoryTable = sqliteTable(
-  'memory_entries',
+  'renamed_table',
   {
     id: int().primaryKey({ autoIncrement: true }),
     userId: int()

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Filter, Package, Search } from 'lucide-react';
+import { AlertCircle, Filter, Package, Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { type LocalMcpServerManifest } from '@ui/catalog_local';
@@ -30,6 +30,7 @@ function ConnectorCatalogPage() {
     catalogHasMore,
     catalogTotalCount,
     loadingConnectorCatalog,
+    errorFetchingConnectorCatalog,
     setCatalogSearchQuery,
     setCatalogSelectedCategory,
     loadMoreCatalogServers,
@@ -166,7 +167,7 @@ function ConnectorCatalogPage() {
         </div>
       )}
 
-      {!loadingConnectorCatalog && connectorCatalog.length === 0 && (
+      {!errorFetchingConnectorCatalog && !loadingConnectorCatalog && connectorCatalog.length === 0 && (
         <div className="text-center py-16">
           <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p className="text-muted-foreground">No servers found matching your criteria</p>
@@ -186,15 +187,30 @@ function ConnectorCatalogPage() {
         ))}
       </div>
 
-      {/* Infinite scroll loader */}
-      {catalogHasMore && (
+      {/* Error state */}
+      {errorFetchingConnectorCatalog && (
+        <div className="flex flex-col items-center justify-center py-8 gap-3">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm text-destructive">Failed to load servers</p>
+          <button onClick={() => loadMoreCatalogServers()} className="text-sm text-primary hover:underline">
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/*
+        Infinite scroll loader - this is disabled if there is an error fetching the catalog
+
+        otherwise this can result in an infinite loop (aka DDoS 😅)
+      */}
+      {catalogHasMore && !errorFetchingConnectorCatalog && (
         <div
           ref={(node) => {
             if (!node) return;
 
             const observer = new IntersectionObserver(
               (entries) => {
-                if (entries[0].isIntersecting && !loadingConnectorCatalog) {
+                if (entries[0].isIntersecting && !loadingConnectorCatalog && !errorFetchingConnectorCatalog) {
                   loadMoreCatalogServers();
                 }
               },

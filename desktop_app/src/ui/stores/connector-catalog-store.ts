@@ -1,11 +1,7 @@
 import { create } from 'zustand';
 
 import { type LocalMcpServerManifest, localCatalogServers } from '@ui/catalog_local';
-import {
-  type ArchestraMcpServerManifest,
-  getMcpServerCategories,
-  searchMcpServerCatalog,
-} from '@ui/lib/clients/archestra/catalog/gen';
+import { getMcpServerCategories, searchMcpServerCatalog } from '@ui/lib/clients/archestra/catalog/gen';
 
 /**
  * NOTE: ideally should be divisible by 3 to make it look nice in the UI (as we tend to have 3 "columns" of servers)

@@ -68,6 +68,8 @@ jobs:
 
       - name: Generate a token
         id: generate-token
+        # Only generate app token if secrets are available (not for PRs from forks)
+        if: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID != '' }}
         uses: ./.github/actions/generate-release-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
@@ -106,7 +108,10 @@ jobs:
 
       - name: Build desktop application
         env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          # Use app token if available, fallback to GITHUB_TOKEN for PRs from forks
+          # For PRs from forks, this workflow is only run in "dry-run" mode anyhow.. just to ensure the app build
+          # succeeds
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

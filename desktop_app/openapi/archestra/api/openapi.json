@@ -904,18 +904,6 @@
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
           },
-          "oauthProvider": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "oauthAccessToken": {
             "type": "string"
           },
@@ -934,7 +922,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig", "oauthProvider"]
+        "required": ["displayName", "serverConfig"]
       },
       "McpServerContainerLogsInput": {
         "type": "object",
@@ -2107,18 +2095,6 @@
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValues"
           },
-          "oauthProvider": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "oauthAccessToken": {
             "type": "string"
           },
@@ -2137,7 +2113,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig", "oauthProvider"],
+        "required": ["displayName", "serverConfig"],
         "additionalProperties": false
       },
       "McpServerContainerLogs": {

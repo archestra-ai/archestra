@@ -216,7 +216,6 @@ export type McpServerInstallInput = {
   displayName: string;
   serverConfig: McpServerConfigInput;
   userConfigValues?: McpServerUserConfigValuesInput;
-  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;
@@ -557,7 +556,6 @@ export type McpServerInstall = {
   displayName: string;
   serverConfig: McpServerConfig;
   userConfigValues?: McpServerUserConfigValues;
-  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;

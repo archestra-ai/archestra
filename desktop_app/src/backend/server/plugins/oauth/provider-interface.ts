@@ -41,8 +41,14 @@ export interface OAuthProviderDefinition {
   /** Provider name (lowercase, no spaces) */
   name: string;
 
-  /** OAuth authorization endpoint URL */
-  authorizationUrl: string;
+  /** OAuth authorization endpoint URL (can be populated by discovery) */
+  authorizationUrl?: string;
+
+  /** OAuth token endpoint URL (can be populated by discovery) */
+  tokenEndpoint?: string;
+
+  /** OAuth revocation endpoint URL (can be populated by discovery) */
+  revocationEndpoint?: string;
 
   /** OAuth scopes required by the provider */
   scopes: string[];
@@ -156,6 +162,22 @@ export interface OAuthProviderDefinition {
     navigationRules?: (url: string) => boolean;
     /** Optional workspace detection pattern */
     workspacePattern?: RegExp;
+  };
+
+  /**
+   * OAuth discovery configuration for RFC 8414 compliance
+   */
+  discoveryConfig?: {
+    /** Base URL for OAuth discovery (e.g., 'https://accounts.google.com') */
+    baseUrl: string;
+    /** Whether discovery is enabled for this provider */
+    enabled: boolean;
+    /** Fallback endpoints if discovery fails */
+    fallbackEndpoints?: {
+      authorization: string;
+      token: string;
+      revocation?: string;
+    };
   };
 }
 

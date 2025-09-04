@@ -28,7 +28,6 @@ z.globalRegistry.add(McpRequestLogFilterStatusSchema, { id: 'McpRequestLogFilter
  * NOTE: for some reason, it fails to output these 👇 two components in the openapi spec because of this:
  *
  * ❯ pnpm tsx openapi/archestra/api/generate-openapi.ts
- *   [dotenv@17.2.1] injecting env (0) from .env -- tip: 📡 observe env with Radar: https://dotenvx.com/radar
  *   TypeError: Cannot read properties of undefined (reading 'type')
  *       at resolveLocalRef (./node_modules/@fastify/swagger/lib/util/resolve-local-ref.js:7:18)
  *       at plainJsonObjectToOpenapi3 (./node_modules/@fastify/swagger/lib/spec/openapi/utils.js:134:43)

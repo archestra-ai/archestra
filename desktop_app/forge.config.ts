@@ -36,7 +36,7 @@ const forgeConfig: ForgeConfig = {
      */
     extraResource:
       process.platform === 'darwin'
-        ? [`./resources/bin/mac/${process.arch}`]
+        ? [`./resources/bin/mac/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
         : process.platform === 'win32'
           ? [`./resources/bin/windows/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
           : [`./resources/bin/linux/${process.arch === 'x64' ? 'x86_64' : process.arch}`],
@@ -45,6 +45,8 @@ const forgeConfig: ForgeConfig = {
     appBundleId,
 
     /**
+     * Only enable signing/notarization in CI or when explicitly requested
+     *
      * For the full list of configuration options for `osxSign`, see the following resources:
      * https://js.electronforge.io/modules/_electron_forge_shared_types.InternalOptions.html#OsxSignOptions
      * https://github.com/electron/osx-sign
@@ -59,30 +61,42 @@ const forgeConfig: ForgeConfig = {
      * https://developer.apple.com/documentation/bundleresources/entitlements
      * https://developer.apple.com/documentation/security/hardened_runtime
      */
-    osxSign: {},
-    /**
-     * We are currently using the "app-specific password" method for "notarizing" the macOS app
-     *
-     * https://www.electronforge.io/guides/code-signing/code-signing-macos#option-1-using-an-app-specific-password
-     */
-    osxNotarize: {
-      /**
-       * Apple ID associated with your Apple Developer account
-       * (aka the email address you used to create your Apple account)
-       */
-      appleId: process.env.APPLE_ID || '',
-      /**
-       * App-specific password
-       *
-       * Was generated following the instructions here https://support.apple.com/en-us/102654
-       */
-      appleIdPassword: process.env.APPLE_PASSWORD || '',
-      /**
-       * The Apple Team ID you want to notarize under. You can find Team IDs for team you belong to by going to
-       * https://developer.apple.com/account/#/membership
-       */
-      teamId: process.env.APPLE_TEAM_ID || '',
-    },
+    ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
+      ? {
+          osxSign: {},
+          /**
+           * We are currently using the "app-specific password" method for "notarizing" the macOS app
+           *
+           * https://www.electronforge.io/guides/code-signing/code-signing-macos#option-1-using-an-app-specific-password
+           */
+          osxNotarize: {
+            /**
+             * Apple ID associated with your Apple Developer account
+             * (aka the email address you used to create your Apple account)
+             */
+            appleId: process.env.APPLE_ID,
+            /**
+             * App-specific password
+             *
+             * Was generated following the instructions here https://support.apple.com/en-us/102654
+             */
+            appleIdPassword: process.env.APPLE_PASSWORD,
+            /**
+             * The Apple Team ID you want to notarize under. You can find Team IDs for team you belong to by going to
+             * https://developer.apple.com/account/#/membership
+             */
+            teamId: process.env.APPLE_TEAM_ID,
+          },
+        }
+      : {
+          /**
+           * Explicitly disable signing when credentials are not available (e.g., for PRs from forks)
+           * This prevents the default ad-hoc signing that causes failures
+           *
+           * By not setting osxSign at all (undefined), Electron Packager skips signing entirely
+           */
+          osxSign: undefined,
+        }),
   },
   // https://github.com/WiseLibs/better-sqlite3/issues/1171#issuecomment-2186895668
   rebuildConfig: {

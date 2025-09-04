@@ -19,6 +19,7 @@ describe('ArchestraMcpServer', () => {
       oauthAccessToken: null,
       oauthRefreshToken: null,
       oauthExpiryDate: null,
+      oauthDiscoveryMetadata: null,
       startupPercentage: 100,
       state: 'running',
       message: null,

@@ -4,7 +4,7 @@
   
   **Enterprise MCP Platform for AI Agents**
 
-  **[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/archestra/kubecon)**
+  **[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
   
   <br />
   

@@ -861,6 +861,17 @@
               }
             ]
           },
+          "oauthDiscoveryMetadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           }
@@ -873,6 +884,7 @@
           "oauthAccessToken",
           "oauthRefreshToken",
           "oauthExpiryDate",
+          "oauthDiscoveryMetadata",
           "createdAt"
         ]
       },
@@ -893,10 +905,10 @@
             "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
           },
           "oauthProvider": {
+            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
             "anyOf": [
               {
-                "type": "string",
-                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+                "type": "string"
               },
               {
                 "nullable": true,
@@ -922,7 +934,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig", "oauthProvider"]
+        "required": ["displayName", "serverConfig"]
       },
       "McpServerContainerLogsInput": {
         "type": "object",
@@ -2051,6 +2063,17 @@
               }
             ]
           },
+          "oauthDiscoveryMetadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           }
@@ -2063,6 +2086,7 @@
           "oauthAccessToken",
           "oauthRefreshToken",
           "oauthExpiryDate",
+          "oauthDiscoveryMetadata",
           "createdAt"
         ],
         "additionalProperties": false
@@ -2084,10 +2108,10 @@
             "$ref": "#/components/schemas/McpServerUserConfigValues"
           },
           "oauthProvider": {
+            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
             "anyOf": [
               {
-                "type": "string",
-                "enum": ["google", "slack", "slack-browser", "linkedin-browser"]
+                "type": "string"
               },
               {
                 "nullable": true,
@@ -2113,7 +2137,7 @@
             ]
           }
         },
-        "required": ["displayName", "serverConfig", "oauthProvider"],
+        "required": ["displayName", "serverConfig"],
         "additionalProperties": false
       },
       "McpServerContainerLogs": {

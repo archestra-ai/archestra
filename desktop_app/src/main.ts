@@ -1,8 +1,9 @@
 import * as Sentry from '@sentry/electron/main';
 import chokidar from 'chokidar';
-import { BrowserWindow, app, ipcMain, shell } from 'electron';
+import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import { ChildProcess, fork } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
@@ -14,6 +15,14 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+// Ensure app name early (affects menu label on macOS in dev)
+try {
+  app.setName(config.build.productName);
+  process.title = config.build.productName;
+} catch {
+  // ignore
 }
 
 // Register protocol for OAuth callbacks
@@ -48,6 +57,52 @@ updateElectronApp({
 let serverProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+// Resolve icon path for both dev and packaged builds
+function resolveIconFilename(): string | undefined {
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const repoRoot = process.cwd();
+  const projectIconsDir = path.join(repoRoot, 'icons');
+  const siblingIconsFromBuild = path.join(__dirname, '../../icons');
+  const packagedIconsDir = path.join(process.resourcesPath, 'icons');
+
+  const candidates: string[] = isMac ? ['icon.icns', 'icon.png'] : isWin ? ['icon.ico', 'icon.png'] : ['icon.png'];
+  const searchDirs = app.isPackaged
+    ? [packagedIconsDir, projectIconsDir, siblingIconsFromBuild]
+    : [projectIconsDir, siblingIconsFromBuild, packagedIconsDir];
+
+  for (const dir of searchDirs) {
+    for (const file of candidates) {
+      const full = path.join(dir, file);
+      if (fs.existsSync(full)) {
+        return full;
+      }
+    }
+  }
+  return undefined;
+}
+
+// Load an icon path into a NativeImage with PNG fallback in same directory
+function loadIconWithFallback(primaryPath: string | undefined): string | NativeImage | undefined {
+  if (!primaryPath) return undefined;
+  const img = nativeImage.createFromPath(primaryPath);
+  if (!img.isEmpty()) return img;
+  try {
+    const pngPath = path.join(path.dirname(primaryPath), 'icon.png');
+    if (fs.existsSync(pngPath)) {
+      const pngImg = nativeImage.createFromPath(pngPath);
+      if (!pngImg.isEmpty()) return pngImg;
+    }
+  } catch (err) {
+    log.warn('[ICON] Fallback load failed', err);
+  }
+  return primaryPath; // let Electron attempt raw path
+}
+
+function getWindowIcon(): string | NativeImage | undefined {
+  return loadIconWithFallback(resolveIconFilename());
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -61,6 +116,8 @@ const createWindow = () => {
       symbolColor: '#ffffff',
       height: 36,
     },
+    title: config.build.productName,
+    icon: getWindowIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -243,6 +300,19 @@ app.on('ready', async () => {
   }
   await startBackendServer();
   createWindow();
+
+  // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
+  if (process.platform === 'darwin') {
+    const iconPath = resolveIconFilename();
+    if (iconPath && app.dock) {
+      try {
+        const img = loadIconWithFallback(iconPath);
+        if (img) app.dock.setIcon(img as NativeImage | string);
+      } catch (err) {
+        log.warn('Failed to set macOS dock icon', err);
+      }
+    }
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

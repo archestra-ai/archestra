@@ -7,7 +7,7 @@ import { ErrorResponseSchema } from '@backend/schemas';
 import log from '@backend/utils/logger';
 
 import { TokenResponse } from './provider-interface';
-import { getOAuthProvider } from './providers';
+import { getOAuthProviderWithDiscovery } from './providers';
 import { getOAuthProxyUrl } from './utils/oauth-config';
 import { getAuthorizationParams, handleProviderTokens, validateProvider } from './utils/oauth-provider-helper';
 import { generateCodeChallenge, generateCodeVerifier, generateState } from './utils/pkce';
@@ -62,9 +62,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body: { catalogName, installData } }, reply) => {
       try {
-        // Get OAuth provider configuration
+        // Get OAuth provider configuration with discovery
         const providerName = installData.oauthProvider || 'google';
-        const provider = getOAuthProvider(providerName);
+        const provider = await getOAuthProviderWithDiscovery(providerName, installData.id);
 
         // Validate provider configuration
         validateProvider(provider);
@@ -193,24 +193,40 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         try {
-          // Call the OAuth proxy to exchange code for tokens
+          // Get the OAuth provider configuration with discovery
           const providerName = service || pendingInstall.installData.oauthProvider || 'google';
+          const provider = await getOAuthProviderWithDiscovery(providerName, pendingInstall.installData.id);
           const oauthProxyUrl = getOAuthProxyUrl();
 
-          // Exchange code for tokens via OAuth proxy
+          // Exchange code for tokens via OAuth proxy with validated endpoint
           const tokenUrl = `${oauthProxyUrl}/oauth/token`;
-          fastify.log.info(`Exchanging OAuth token at: ${tokenUrl}`);
+          fastify.log.info(
+            `Exchanging OAuth token at: ${tokenUrl} using validated endpoint: ${provider.tokenEndpoint}`
+          );
+
+          // Build token request parameters - OAuth proxy validates endpoint against provider allowlist
+          const tokenRequestParams: Record<string, any> = {
+            grant_type: 'authorization_code',
+            provider: providerName, // Proxy validates token_endpoint is allowed for this provider
+            token_endpoint: provider.tokenEndpoint, // Desktop app provides the trusted endpoint
+            code: body.code,
+            redirect_uri: pendingInstall.redirectUri,
+          };
+
+          // Add PKCE verifier if provider supports it
+          if (provider.usePKCE) {
+            tokenRequestParams.code_verifier = pendingInstall.codeVerifier;
+          }
+
+          // Add any provider-specific authorization parameters that might be needed for token exchange
+          if (provider.authorizationParams) {
+            Object.assign(tokenRequestParams, provider.authorizationParams);
+          }
 
           const tokenResponse = await fetch(tokenUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              grant_type: 'authorization_code',
-              provider: service || pendingInstall.installData.oauthProvider || 'google',
-              code: body.code,
-              code_verifier: pendingInstall.codeVerifier,
-              redirect_uri: pendingInstall.redirectUri,
-            }),
+            body: JSON.stringify(tokenRequestParams),
           }).catch((fetchError) => {
             fastify.log.error('Fetch error details:', fetchError);
             fastify.log.error('Fetch error stack:', fetchError.stack);
@@ -251,7 +267,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const { installData } = pendingInstall;
         const providerName = service || installData.oauthProvider || 'google';
-        const provider = getOAuthProvider(providerName);
+        const provider = await getOAuthProviderWithDiscovery(providerName, installData.id);
 
         // Handle tokens using the provider's configuration
         const tokens: TokenResponse = {

@@ -207,6 +207,7 @@ export type McpServerInput = {
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiryDate: string | null;
+  oauthDiscoveryMetadata: string | null;
   createdAt: string;
 };
 
@@ -215,7 +216,10 @@ export type McpServerInstallInput = {
   displayName: string;
   serverConfig: McpServerConfigInput;
   userConfigValues?: McpServerUserConfigValuesInput;
-  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
+  /**
+   * OAuth provider name (e.g., google, slack-browser, linkedin-browser)
+   */
+  oauthProvider?: string | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;
@@ -547,6 +551,7 @@ export type McpServer = {
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiryDate: string | null;
+  oauthDiscoveryMetadata: string | null;
   createdAt: string;
 };
 
@@ -555,7 +560,10 @@ export type McpServerInstall = {
   displayName: string;
   serverConfig: McpServerConfig;
   userConfigValues?: McpServerUserConfigValues;
-  oauthProvider: ('google' | 'slack' | 'slack-browser' | 'linkedin-browser') | null;
+  /**
+   * OAuth provider name (e.g., google, slack-browser, linkedin-browser)
+   */
+  oauthProvider?: string | null;
   oauthAccessToken?: string;
   oauthRefreshToken?: string;
   oauthExpiryDate?: string | null;

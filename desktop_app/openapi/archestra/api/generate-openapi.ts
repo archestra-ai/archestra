@@ -95,4 +95,7 @@ async function generateOpenAPISpec() {
   await app.close();
 }
 
-generateOpenAPISpec().catch(console.error);
+generateOpenAPISpec().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

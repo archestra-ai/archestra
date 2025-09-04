@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     # Only run on issue comments, not PR comments
     if: ${{ !github.event.issue.pull_request }}
-    
+
     steps:
       - name: Check for bounty command
         uses: actions/github-script@v7
@@ -22,25 +22,25 @@ jobs:
           script: |
             const comment = context.payload.comment.body;
             const commenter = context.payload.comment.user.login;
-            
+
             // List of authorized users who can assign bounties
             const authorizedUsers = [
               'Matvey-Kuk',
               'joeyorlando',
               'iskhakov'
             ];
-            
+
             // Check if the commenter is authorized
             if (!authorizedUsers.includes(commenter)) {
               console.log(`User ${commenter} is not authorized to assign bounties`);
               return;
             }
-            
+
             const bountyMatch = comment.match(/^\/bounty-bot\s+(\d+)$/);
-            
+
             if (bountyMatch) {
               const bountyAmount = bountyMatch[1];
-              
+
               // Post the bounty confirmation comment
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -48,7 +48,7 @@ jobs:
                 issue_number: context.issue.number,
                 body: `${bountyAmount}$ Bounty assigned to this issue! Read more here: https://archestra.ai/docs/bounty`
               });
-              
+
               // Add bounty label to the issue
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,

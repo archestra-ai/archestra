@@ -92,8 +92,10 @@ const forgeConfig: ForgeConfig = {
           /**
            * Explicitly disable signing when credentials are not available (e.g., for PRs from forks)
            * This prevents the default ad-hoc signing that causes failures
+           *
+           * By not setting osxSign at all (undefined), Electron Packager skips signing entirely
            */
-          osxSign: false,
+          osxSign: undefined,
         }),
   },
   // https://github.com/WiseLibs/better-sqlite3/issues/1171#issuecomment-2186895668

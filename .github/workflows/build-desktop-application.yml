@@ -108,15 +108,12 @@ jobs:
 
       - name: Build desktop application
         env:
-          # Use app token if available, fallback to GITHUB_TOKEN for PRs from forks
-          #
-          # For PRs from forks, this workflow is only run in "dry-run" mode anyhow.. just to ensure the app build
-          # succeeds
+          # Use app token if available, fallback to GITHUB_TOKEN for fork PRs
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          # These will be empty for fork PRs, which is fine - forge.config.ts handles it
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          ENABLE_CODESIGNING: ${{ inputs.dry_run == false }}
         run: pnpm run publish${{ inputs.dry_run && ' --dry-run' || '' }}
 
       # https://brunoscheufler.com/blog/2023-11-12-setting-up-hosted-macos-github-actions-workflows-for-electron-builds

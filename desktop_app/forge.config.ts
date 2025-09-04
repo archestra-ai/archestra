@@ -61,7 +61,7 @@ const forgeConfig: ForgeConfig = {
      * https://developer.apple.com/documentation/bundleresources/entitlements
      * https://developer.apple.com/documentation/security/hardened_runtime
      */
-    ...(process.env.ENABLE_CODESIGNING
+    ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
           osxSign: {},
           /**
@@ -74,21 +74,27 @@ const forgeConfig: ForgeConfig = {
              * Apple ID associated with your Apple Developer account
              * (aka the email address you used to create your Apple account)
              */
-            appleId: process.env.APPLE_ID || '',
+            appleId: process.env.APPLE_ID,
             /**
              * App-specific password
              *
              * Was generated following the instructions here https://support.apple.com/en-us/102654
              */
-            appleIdPassword: process.env.APPLE_PASSWORD || '',
+            appleIdPassword: process.env.APPLE_PASSWORD,
             /**
              * The Apple Team ID you want to notarize under. You can find Team IDs for team you belong to by going to
              * https://developer.apple.com/account/#/membership
              */
-            teamId: process.env.APPLE_TEAM_ID || '',
+            teamId: process.env.APPLE_TEAM_ID,
           },
         }
-      : {}),
+      : {
+          /**
+           * Explicitly disable signing when credentials are not available (e.g., for PRs from forks)
+           * This prevents the default ad-hoc signing that causes failures
+           */
+          osxSign: false,
+        }),
   },
   // https://github.com/WiseLibs/better-sqlite3/issues/1171#issuecomment-2186895668
   rebuildConfig: {

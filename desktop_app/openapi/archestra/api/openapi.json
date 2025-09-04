@@ -904,6 +904,18 @@
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
           },
+          "oauthProvider": {
+            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "oauthAccessToken": {
             "type": "string"
           },
@@ -2094,6 +2106,18 @@
           },
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValues"
+          },
+          "oauthProvider": {
+            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
           },
           "oauthAccessToken": {
             "type": "string"

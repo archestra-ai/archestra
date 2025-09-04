@@ -61,7 +61,7 @@ const forgeConfig: ForgeConfig = {
      * https://developer.apple.com/documentation/bundleresources/entitlements
      * https://developer.apple.com/documentation/security/hardened_runtime
      */
-    ...(process.env.CI || process.env.ENABLE_CODESIGNING
+    ...(process.env.ENABLE_CODESIGNING
       ? {
           osxSign: {},
           /**

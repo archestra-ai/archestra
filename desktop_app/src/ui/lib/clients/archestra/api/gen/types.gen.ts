@@ -1414,6 +1414,66 @@ export type GetOllamaRequiredModelsStatusResponses = {
 export type GetOllamaRequiredModelsStatusResponse =
   GetOllamaRequiredModelsStatusResponses[keyof GetOllamaRequiredModelsStatusResponses];
 
+export type RestartSandboxData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/sandbox/restart';
+};
+
+export type RestartSandboxErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type RestartSandboxError = RestartSandboxErrors[keyof RestartSandboxErrors];
+
+export type RestartSandboxResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type RestartSandboxResponse = RestartSandboxResponses[keyof RestartSandboxResponses];
+
+export type ResetSandboxData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/sandbox/reset';
+};
+
+export type ResetSandboxErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type ResetSandboxError = ResetSandboxErrors[keyof ResetSandboxErrors];
+
+export type ResetSandboxResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type ResetSandboxResponse = ResetSandboxResponses[keyof ResetSandboxResponses];
+
 export type GetUserData = {
   body?: never;
   path?: never;

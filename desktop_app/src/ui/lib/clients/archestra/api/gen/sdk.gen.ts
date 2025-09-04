@@ -66,6 +66,12 @@ import type {
   InstallMcpServerResponses,
   OauthCallbackData,
   OauthCallbackResponses,
+  ResetSandboxData,
+  ResetSandboxErrors,
+  ResetSandboxResponses,
+  RestartSandboxData,
+  RestartSandboxErrors,
+  RestartSandboxResponses,
   SetMemoryData,
   SetMemoryResponses,
   StartMcpServerOauthData,
@@ -523,6 +529,30 @@ export const getOllamaRequiredModelsStatus = <ThrowOnError extends boolean = fal
 ) => {
   return (options?.client ?? _heyApiClient).get<GetOllamaRequiredModelsStatusResponses, unknown, ThrowOnError>({
     url: '/api/ollama/required-models',
+    ...options,
+  });
+};
+
+/**
+ * Restart the Archestra MCP Sandbox (podman machine + all MCP servers)
+ */
+export const restartSandbox = <ThrowOnError extends boolean = false>(
+  options?: Options<RestartSandboxData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).post<RestartSandboxResponses, RestartSandboxErrors, ThrowOnError>({
+    url: '/api/sandbox/restart',
+    ...options,
+  });
+};
+
+/**
+ * Clean/purge all data (uninstall all MCP servers + reset podman machine)
+ */
+export const resetSandbox = <ThrowOnError extends boolean = false>(
+  options?: Options<ResetSandboxData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).post<ResetSandboxResponses, ResetSandboxErrors, ThrowOnError>({
+    url: '/api/sandbox/reset',
     ...options,
   });
 };

@@ -5,6 +5,15 @@ import McpServerSandboxManager from '@backend/sandbox/manager';
 import { ErrorResponseSchema } from '@backend/schemas';
 import log from '@backend/utils/logger';
 
+// Define response schema
+const SandboxActionResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
+// Register schemas in global registry for OpenAPI generation
+z.globalRegistry.add(SandboxActionResponseSchema, { id: 'SandboxActionResponse' });
+
 const sandboxRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     '/api/sandbox/restart',
@@ -14,10 +23,7 @@ const sandboxRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: 'Restart the Archestra MCP Sandbox (podman machine + all MCP servers)',
         tags: ['Sandbox'],
         response: {
-          200: z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
+          200: SandboxActionResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -46,10 +52,7 @@ const sandboxRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: 'Clean/purge all data (uninstall all MCP servers + reset podman machine)',
         tags: ['Sandbox'],
         response: {
-          200: z.object({
-            success: z.boolean(),
-            message: z.string(),
-          }),
+          200: SandboxActionResponseSchema,
           500: ErrorResponseSchema,
         },
       },

@@ -16,7 +16,7 @@ import { Label } from '@ui/components/ui/label';
 import { Textarea } from '@ui/components/ui/textarea';
 import { useMcpServersStore } from '@ui/stores';
 
-interface SettingsDialogProps {
+interface AddCustomServerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -63,7 +63,7 @@ const defaultFormData: FormData = {
   env: '',
 };
 
-export default function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+export default function AddCustomServerDialog({ open, onOpenChange }: AddCustomServerDialogProps) {
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 

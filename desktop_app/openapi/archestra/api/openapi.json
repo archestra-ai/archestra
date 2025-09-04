@@ -1163,6 +1163,18 @@
         },
         "required": ["model", "reason", "installed"]
       },
+      "SandboxActionResponseInput": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["success", "message"]
+      },
       "UserInput": {
         "type": "object",
         "properties": {
@@ -2376,6 +2388,19 @@
           }
         },
         "required": ["model", "reason", "installed"],
+        "additionalProperties": false
+      },
+      "SandboxActionResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["success", "message"],
         "additionalProperties": false
       },
       "User": {
@@ -3731,6 +3756,78 @@
                     }
                   },
                   "required": ["models"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sandbox/restart": {
+      "post": {
+        "operationId": "restartSandbox",
+        "tags": ["Sandbox"],
+        "description": "Restart the Archestra MCP Sandbox (podman machine + all MCP servers)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxActionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sandbox/reset": {
+      "post": {
+        "operationId": "resetSandbox",
+        "tags": ["Sandbox"],
+        "description": "Clean/purge all data (uninstall all MCP servers + reset podman machine)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxActionResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }

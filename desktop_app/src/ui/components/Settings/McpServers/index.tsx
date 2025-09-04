@@ -1,4 +1,14 @@
-import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Loader2, Server, Settings, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Plus,
+  Server,
+  Settings,
+  XCircle,
+} from 'lucide-react';
 import React, { useState } from 'react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
@@ -7,13 +17,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@ui/components/ui/card
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import { useMcpServersStore, useSandboxStore, useToolsStore } from '@ui/stores';
 
+import AddCustomServerDialog from './AddCustomServerDialog';
 import McpServer from './McpServer';
-import SettingsDialog from './SettingsDialog';
+import SandboxManagementDialog from './SandboxManagementDialog';
 
 interface McpServersProps {}
 
 export default function McpServers(_props: McpServersProps) {
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [sandboxManagementDialogOpen, setSandboxManagementDialogOpen] = useState(false);
+  const [addServerDialogOpen, setAddServerDialogOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
 
   const {
@@ -112,10 +124,23 @@ export default function McpServers(_props: McpServersProps) {
                   className="h-8 w-8 cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSettingsDialogOpen(true);
+                    setSandboxManagementDialogOpen(true);
                   }}
+                  title="Sandbox Management"
                 >
                   <Settings className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddServerDialogOpen(true);
+                  }}
+                  title="Add Custom MCP Server"
+                >
+                  <Plus className="h-4 w-4" />
                 </Button>
                 {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
               </div>
@@ -166,7 +191,8 @@ export default function McpServers(_props: McpServersProps) {
         </CollapsibleContent>
       </Collapsible>
 
-      <SettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
+      <SandboxManagementDialog open={sandboxManagementDialogOpen} onOpenChange={setSandboxManagementDialogOpen} />
+      <AddCustomServerDialog open={addServerDialogOpen} onOpenChange={setAddServerDialogOpen} />
     </Card>
   );
 }

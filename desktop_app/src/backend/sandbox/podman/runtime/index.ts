@@ -427,6 +427,52 @@ export default class PodmanRuntime {
   }
 
   /**
+   * This method will remove the archesta podman machine.
+   * https://docs.podman.io/en/v5.2.2/markdown/podman-machine-rm.1.html
+   *
+   * @param force - Force removal of the machine, even if it is running
+   */
+  async removeArchestraMachine(force: boolean = true): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const command = ['machine', 'rm'];
+
+      if (force) {
+        command.push('--force');
+      }
+
+      command.push(this.ARCHESTRA_MACHINE_NAME);
+
+      let stderrOutput = '';
+
+      this.runCommand({
+        command,
+        pipes: {
+          onStderr: (data) => {
+            stderrOutput += data;
+          },
+          onExit: (code) => {
+            if (code === 0) {
+              this.machineStartupPercentage = 0;
+              this.machineStartupMessage = 'Podman machine removed successfully';
+              this.machineStartupError = null;
+              log.info(`Podman machine ${this.ARCHESTRA_MACHINE_NAME} removed successfully`);
+              resolve();
+            } else {
+              const errorMessage = `Failed to remove podman machine: ${stderrOutput}`;
+              log.error(errorMessage);
+              reject(new Error(errorMessage));
+            }
+          },
+          onError: (error) => {
+            log.error('Error removing podman machine:', error);
+            reject(error);
+          },
+        },
+      });
+    });
+  }
+
+  /**
    * Get the socket address from the running podman machine.
    * This is needed to avoid conflicts with Docker/Orbstack.
    *

@@ -11,24 +11,7 @@ interface ArchestraMcpServerProps {
   archestraMcpServer: ConnectedMcpServer;
 }
 
-export default function ArchestraMcpServer({ archestraMcpServer }: ArchestraMcpServerProps) {
-  const getStatusBadge = () => {
-    switch (state) {
-      case 'running':
-        return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            Running
-          </Badge>
-        );
-      case 'initializing':
-        return <Badge variant="destructive">Error</Badge>;
-      case 'error':
-        return <Badge variant="outline">Loading...</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
+export default function ArchestraMcpServer({ archestraMcpServer: _archestraMcpServer }: ArchestraMcpServerProps) {
   return (
     <Card>
       <CardHeader>

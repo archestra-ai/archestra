@@ -203,8 +203,39 @@ export default class SandboxedMcpServer {
     }
 
     try {
-      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerProxyUrl));
+      // Check if this MCP server has OAuth tokens
+      const headers: Record<string, string> = {};
+      
+      if (this.mcpServer.oauthTokens?.access_token) {
+        log.info(`Using OAuth authentication for MCP server ${this.mcpServerId}`);
+        
+        // Check if tokens are expired and refresh if needed
+        try {
+          const { ensureValidTokens } = await import('@backend/server/plugins/mcp-oauth');
+          const { getServerConfig } = await import('@backend/server/plugins/mcp-oauth');
+          
+          // Get server config based on provider (this needs to be determined from the server)
+          // For now, we'll try to use the stored access token directly
+          // TODO: Implement proper token refresh logic with provider configs
+          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+        } catch (error) {
+          log.warn(`Failed to ensure valid OAuth tokens for ${this.mcpServerId}:`, error);
+          // Fall back to using existing token
+          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+        }
+      }
+
+      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerProxyUrl), {
+        requestInit: {
+          headers
+        }
+      });
+      
       this.mcpClient = await experimental_createMCPClient({ transport });
+      
+      if (this.mcpServer.oauthTokens?.access_token) {
+        log.info(`✅ MCP client connected with OAuth authentication for ${this.mcpServerId}`);
+      }
     } catch (error) {
       log.error(`Failed to connect MCP client for ${this.mcpServerId}:`, error);
     }

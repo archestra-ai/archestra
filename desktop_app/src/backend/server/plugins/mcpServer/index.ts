@@ -311,6 +311,78 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(toolAggregator.getAllAvailableTools());
     }
   );
+
+  // Simple OAuth install endpoint - mirrors connectMcpServer from linear-mcp-oauth-minimal.ts
+  fastify.post(
+    '/api/mcp_server/oauth_install',
+    {
+      schema: {
+        operationId: 'installMcpServerWithOauth',
+        description: 'Install MCP server with OAuth authentication',
+        tags: ['MCP Server'],
+        body: z.object({
+          provider: z.string(),
+          installData: McpServerInstallSchema,
+        }),
+        response: {
+          200: z.object({
+            server: McpServerSchema,
+          }),
+        },
+      },
+    },
+    async ({ body }, reply) => {
+      const { provider, installData } = body;
+
+      try {
+        // Get the server configuration for this provider
+        const { getServerConfig, connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
+        const config = getServerConfig(provider);
+        
+        if (!config) {
+          return reply.code(400).send({ error: `Unknown OAuth provider: ${provider}` });
+        }
+
+        // Generate server ID
+        const serverId = installData.id || uuidv4();
+        
+        // Perform OAuth and get tokens
+        const { client, accessToken } = await connectMcpServer(config, serverId);
+        
+        // Close the test connection
+        await client.close();
+        
+        // Get tokens from the provider for installation
+        const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
+        const oauthProvider = new McpOAuthProvider(config, serverId);
+        await oauthProvider.init();
+        
+        const tokens = await oauthProvider.tokens();
+        const clientInfo = await oauthProvider.clientInformation();
+
+        if (!tokens) {
+          return reply.code(500).send({ error: 'Failed to obtain OAuth tokens' });
+        }
+
+        // Install MCP server with OAuth tokens
+        const server = await McpServerModel.installMcpServer({
+          id: serverId,
+          displayName: installData.displayName,
+          serverConfig: installData.serverConfig,
+          userConfigValues: installData.userConfigValues,
+          oauthTokens: tokens,
+          oauthClientInfo: clientInfo,
+        });
+
+        return reply.send({ server });
+      } catch (error) {
+        log.error('OAuth install failed:', error);
+        return reply.code(500).send({ 
+          error: error instanceof Error ? error.message : 'OAuth install failed' 
+        });
+      }
+    }
+  );
 };
 
 export default mcpServerRoutes;

@@ -128,7 +128,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
           env: Object.fromEntries(envPairs.map(({ key, value }) => [key, value])),
         },
         userConfigValues: {},
-        oauthProvider: null,
+        // OAuth fields are now optional and handled separately
       });
 
       onOpenChange(false);

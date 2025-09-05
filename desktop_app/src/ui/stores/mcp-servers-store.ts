@@ -6,7 +6,7 @@ import {
   type McpServer,
   getMcpServers,
   installMcpServer,
-  startMcpServerOauth,
+  installMcpServerWithOauth,
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
 import { ConnectedMcpServer } from '@ui/types';
@@ -178,8 +178,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       }
 
       /**
-       * If OAuth is required for installation of this MCP server, we start the OAuth flow
-       * rather than directly "installing" the MCP server
+       * If OAuth is required, use the new simple oauth_install endpoint
        */
       if (requiresOAuth) {
         // Show confirmation dialog before starting OAuth flow
@@ -197,31 +196,30 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         );
 
         if (!userConfirmed) {
-          // User cancelled the OAuth flow
           console.log('User cancelled OAuth flow');
           set({ installingMcpServerId: null });
           return;
         }
 
-        // Start OAuth flow with installation data
-        const { data } = await startMcpServerOauth({
-          body: {
-            catalogName: id || '',
-            installData: installData!,
-          },
-        });
+        try {
+          // Call the simple OAuth install endpoint using typed client
+          const { data: result, error } = await installMcpServerWithOauth({
+            body: {
+              provider,
+              installData: installData!,
+            },
+          });
 
-        if (data?.authUrl) {
-          // Store the state for OAuth callback
-          sessionStorage.setItem('oauth_state', data.state);
+          if (error) {
+            throw new Error(error || 'OAuth install failed');
+          }
 
-          // Open the OAuth URL in the default browser
-          console.log('Opening OAuth URL:', data.authUrl);
-          window.electronAPI.openExternal(data.authUrl);
-
-          // The OAuth callback will handle the rest of the installation
-          // Navigate to the OAuth callback page to wait for completion
-          window.location.href = '/oauth-callback';
+          if (result?.server) {
+            get().addMcpServerToInstalledMcpServers(result.server);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          set({ errorInstallingMcpServer: errorMessage });
         }
       } else {
         const { data: newlyInstalledMcpServer, error } = await installMcpServer({ body: installData });

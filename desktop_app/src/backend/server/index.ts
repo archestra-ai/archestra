@@ -11,7 +11,7 @@ import archestraMcpServerPlugin from '@backend/server/plugins/mcp';
 import mcpRequestLogRoutes from '@backend/server/plugins/mcpRequestLog';
 import mcpServerRoutes from '@backend/server/plugins/mcpServer';
 import memoryRoutes from '@backend/server/plugins/memory';
-import oauthPlugin from '@backend/server/plugins/oauth';
+// OAuth functionality now integrated into MCP system via mcp-oauth plugin
 import ollamaMetadataRoutes from '@backend/server/plugins/ollama/metadata';
 import ollamaProxyRoutes from '@backend/server/plugins/ollama/proxy';
 import userRoutes from '@backend/server/plugins/user';
@@ -55,7 +55,6 @@ export const startFastifyServer = async () => {
   await app.register(mcpRequestLogRoutes);
   await app.register(mcpServerRoutes);
   await app.register(memoryRoutes);
-  await app.register(oauthPlugin);
   await app.register(ollamaMetadataRoutes);
   await app.register(ollamaProxyRoutes);
   await app.register(userRoutes);

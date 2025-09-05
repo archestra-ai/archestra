@@ -10,6 +10,12 @@ import {
   McpServerUserConfigValuesSchema,
   mcpServersTable,
 } from '@backend/database/schema/mcpServer';
+import {
+  AuthorizationServerMetadataSchema,
+  OAuthClientInformationSchema,
+  OAuthProtectedResourceMetadataSchema,
+  OAuthTokensSchema,
+} from '@backend/database/schema/oauth';
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
 import log from '@backend/utils/logger';
@@ -28,10 +34,16 @@ export const McpServerInstallSchema = z.object({
     .regex(/^[A-Za-z0-9-\s]{1,63}$/, 'Name can only contain letters, numbers, spaces, and dashes (-)'),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
-  // oauthProvider: z.string().nullable().describe('OAuth provider name (e.g., google, slack-browser, linkedin-browser)'),
-  oauthAccessToken: z.string().optional(),
-  oauthRefreshToken: z.string().optional(),
-  oauthExpiryDate: z.string().nullable().optional(),
+  /** OAuth provider name (e.g., google, slack, github) */
+  oauthProvider: z.string().optional(),
+  /** Complete OAuth tokens object from MCP SDK */
+  oauthTokens: OAuthTokensSchema.optional(),
+  /** OAuth client information from MCP SDK */
+  oauthClientInfo: OAuthClientInformationSchema.optional(),
+  /** OAuth server metadata from MCP SDK discovery */
+  oauthServerMetadata: AuthorizationServerMetadataSchema.optional(),
+  /** OAuth protected resource metadata from MCP SDK */
+  oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
 });
 
 // Interface for catalog search parameters
@@ -96,9 +108,10 @@ export default class McpServerModel {
     serverConfig,
     userConfigValues,
     oauthProvider,
-    oauthAccessToken,
-    oauthRefreshToken,
-    oauthExpiryDate,
+    oauthTokens,
+    oauthClientInfo,
+    oauthServerMetadata,
+    oauthResourceMetadata,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -116,45 +129,26 @@ export default class McpServerModel {
       throw new Error(`MCP server ${id} is already installed`);
     }
 
-    // Handle OAuth tokens - add them to environment variables based on provider
+    // OAuth tokens are now handled directly by the MCP client transport layer
+    // No need to add tokens to environment variables - they're used for HTTP auth headers
     let finalServerConfig = serverConfig;
-    if (oauthAccessToken && oauthProvider) {
-      // Import the provider configuration to get token mapping
-      const { getOAuthProvider, hasOAuthProvider } = await import('@backend/server/plugins/oauth');
-      const { handleProviderTokens } = await import('@backend/server/plugins/oauth/utils/oauth-provider-helper');
-
-      // Validate OAuth provider exists
-      if (!hasOAuthProvider(oauthProvider)) {
-        throw new Error(
-          `Invalid OAuth provider: ${oauthProvider}. Available providers: ${Object.keys((await import('@backend/server/plugins/oauth')).oauthProviders).join(', ')}`
-        );
-      }
-
-      if (hasOAuthProvider(oauthProvider)) {
-        const provider = getOAuthProvider(oauthProvider);
-
-        // Create token response in standard format
-        const tokens = {
-          access_token: oauthAccessToken,
-          refresh_token: oauthRefreshToken || undefined,
-          expires_in: oauthExpiryDate
-            ? Math.floor((new Date(oauthExpiryDate).getTime() - Date.now()) / 1000)
-            : undefined,
-        };
-
-        // Use the provider's token handler to get the correct env vars
-        const tokenEnvVars = await handleProviderTokens(provider, tokens, id);
-
-        // Merge OAuth env variables with existing ones (including those from server_docker)
-        if (tokenEnvVars) {
-          finalServerConfig = {
-            ...serverConfig,
-            env: {
-              ...serverConfig.env, // Keep existing env vars
-              ...tokenEnvVars, // Add/override with OAuth tokens
-            },
-          };
+    
+    if (oauthTokens && oauthProvider) {
+      // Validate that we have a valid OAuth provider configuration
+      try {
+        const { getServerConfig } = await import('@backend/server/plugins/mcp-oauth');
+        const config = getServerConfig(oauthProvider);
+        
+        if (!config) {
+          throw new Error(
+            `Invalid OAuth provider: ${oauthProvider}. Available providers: ${(await import('@backend/server/plugins/mcp-oauth')).getAvailableProviders().join(', ')}`
+          );
         }
+        
+        log.info(`OAuth provider ${oauthProvider} validated for server ${id}`);
+      } catch (error) {
+        log.warn(`OAuth provider validation failed for ${oauthProvider}:`, error);
+        // Continue with installation - OAuth will be handled at runtime
       }
     }
 
@@ -166,9 +160,10 @@ export default class McpServerModel {
         name: displayName,
         serverConfig: finalServerConfig,
         userConfigValues: userConfigValues,
-        oauthAccessToken: oauthAccessToken || null,
-        oauthRefreshToken: oauthRefreshToken || null,
-        oauthExpiryDate: oauthExpiryDate || null,
+        oauthTokens: oauthTokens || null,
+        oauthClientInfo: oauthClientInfo || null,
+        oauthServerMetadata: oauthServerMetadata || null,
+        oauthResourceMetadata: oauthResourceMetadata || null,
         createdAt: now.toISOString(),
       })
       .returning();

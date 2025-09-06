@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, Clock, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
+import { ScrollArea, ScrollBar } from '@ui/components/ui/scroll-area';
 import { cn } from '@ui/lib/utils/tailwind';
 import { ToolCallStatus } from '@ui/types';
 
@@ -83,7 +84,10 @@ export default function ToolInvocation({
           {Object.keys(args).length > 0 && (
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-1">Arguments:</div>
-              <pre className="text-xs bg-black/5 dark:bg-white/5 p-2 rounded overflow-x-auto">{formatJson(args)}</pre>
+              <ScrollArea className="rounded overflow-x-auto">
+                <pre className="text-xs bg-black/5 dark:bg-white/5 p-2  rounded">{formatJson(args)}</pre>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             </div>
           )}
 

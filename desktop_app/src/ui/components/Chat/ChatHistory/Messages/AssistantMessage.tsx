@@ -183,7 +183,7 @@ export default function AssistantMessage({
 
   return (
     <div className="relative group" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-      <div className="space-y-2 pr-24">{orderedElements}</div>
+      <div className="gap-y-2 grid grid-cols-1 pr-24">{orderedElements}</div>
       {isHovered && (
         <div className="absolute top-0 right-0 flex gap-1">
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditStart()} title="Edit message">

@@ -1,6 +1,5 @@
 import { type TextUIPart, UIMessage } from 'ai';
 import { Edit2, Trash2 } from 'lucide-react';
-import { useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
@@ -22,7 +21,6 @@ interface UserMessageProps {
  */
 export default function UserMessage({
   message,
-  messageIndex,
   isEditing,
   editingContent,
   onEditStart,
@@ -31,8 +29,6 @@ export default function UserMessage({
   onEditChange,
   onDelete,
 }: UserMessageProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
   // Extract text content from parts array (UIMessage in ai SDK v5 uses parts)
   let textContent = '';
 
@@ -65,18 +61,17 @@ export default function UserMessage({
   }
 
   return (
-    <div className="relative group" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-      <div className="text-sm whitespace-pre-wrap pr-20">{textContent}</div>
-      {isHovered && (
-        <div className="absolute top-0 right-0 flex gap-1">
-          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEditStart} title="Edit message">
-            <Edit2 className="h-3 w-3" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onDelete} title="Delete message">
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        </div>
-      )}
+    <div className="relative group">
+      <div className="text-sm whitespace-pre-wrap pr-20 min-h-6 pt-0.5">{textContent}</div>
+
+      <div className="absolute hidden group-hover:flex top-0 right-0  gap-1">
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEditStart} title="Edit message">
+          <Edit2 className="h-3 w-3" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onDelete} title="Delete message">
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
     </div>
   );
 }

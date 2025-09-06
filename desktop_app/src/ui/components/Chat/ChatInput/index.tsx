@@ -27,10 +27,18 @@ interface ChatInputProps {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e?: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
+  isSubmitting?: boolean;
   stop: () => void;
 }
 
-export default function ChatInput({ input, handleInputChange, handleSubmit, isLoading, stop }: ChatInputProps) {
+export default function ChatInput({
+  input,
+  handleInputChange,
+  handleSubmit,
+  isLoading,
+  isSubmitting = false,
+  stop,
+}: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
@@ -128,7 +136,11 @@ export default function ChatInput({ input, handleInputChange, handleSubmit, isLo
               </TooltipContent>
             </Tooltip>
           </AIInputTools>
-          <AIInputSubmit onClick={isLoading ? stop : undefined} disabled={!input.trim() && !isLoading} />
+
+          <AIInputSubmit
+            onClick={isLoading ? stop : undefined}
+            disabled={!input.trim() && !isLoading && !isSubmitting}
+          />
         </AIInputToolbar>
       </AIInput>
     </TooltipProvider>

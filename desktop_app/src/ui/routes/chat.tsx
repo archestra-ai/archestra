@@ -77,6 +77,10 @@ function ChatPage() {
   const isLoading = status === 'streaming';
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
 
+  // Track pre-generation loading state (between submission and streaming start)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
+
   // Use the message actions hook
   const {
     editingMessageId,
@@ -133,6 +137,18 @@ function ChatPage() {
   // Track if we've already processed the reordering
   const [hasReordered, setHasReordered] = useState(false);
 
+  useEffect(() => {
+    if (isLoading) {
+      setIsSubmitting(false);
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (status === 'ready' || status === 'error') {
+      setIsSubmitting(false);
+    }
+  }, [status]);
+
   // Watch for new assistant message and restore order
   useEffect(() => {
     if (!regenerationContext || status !== 'ready' || hasReordered) return;
@@ -184,12 +200,16 @@ function ChatPage() {
   const handleSubmit = (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (localInput.trim()) {
+      setIsSubmitting(true);
+      setSubmissionStartTime(Date.now());
       sendMessage({ text: localInput });
       setLocalInput('');
     }
   };
 
   const handlePromptSelect = (prompt: string) => {
+    setIsSubmitting(true);
+    setSubmissionStartTime(Date.now());
     // Directly send the prompt when a tile is clicked
     sendMessage({ text: prompt });
   };
@@ -221,6 +241,8 @@ function ChatPage() {
             onDeleteMessage={deleteMessage}
             onRegenerateMessage={handleRegenerateMessage}
             isRegenerating={regeneratingIndex !== null || isLoading}
+            isSubmitting={isSubmitting}
+            submissionStartTime={submissionStartTime}
           />
         </div>
       )}
@@ -232,6 +254,7 @@ function ChatPage() {
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isLoading={isLoading}
+          isSubmitting={isSubmitting}
           stop={stop}
         />
       </div>

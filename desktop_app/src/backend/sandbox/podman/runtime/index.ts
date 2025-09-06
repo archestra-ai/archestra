@@ -229,6 +229,17 @@ export default class PodmanRuntime {
   }
 
   /**
+   * Helper method to handle errors consistently by setting the error state
+   * and then calling the error callback
+   */
+  private handleMachineError(error: Error) {
+    this.machineStartupError = error.message;
+    this.machineStartupPercentage = 0;
+    this.machineStartupMessage = error.message;
+    this.onMachineInstallationError(error);
+  }
+
+  /**
    * Output looks like this:
    * ❯ ./podman-remote-static-v5.5.2 machine start archestra-ai-machine
    * Starting machine "archestra-ai-machine"
@@ -274,15 +285,12 @@ export default class PodmanRuntime {
             // Call the success callback - socket setup will happen there first
             this.onMachineInstallationSuccess();
           } else {
-            const errorMessage = `Podman machine start failed with code ${code} and signal ${signal}. Error: ${stderrOutput}`;
-
-            this.machineStartupPercentage = 0;
-            this.machineStartupMessage = errorMessage;
-
-            this.onMachineInstallationError(new Error(errorMessage));
+            this.handleMachineError(
+              new Error(`Podman machine start failed with code ${code} and signal ${signal}. Error: ${stderrOutput}`)
+            );
           }
         },
-        onError: this.onMachineInstallationError,
+        onError: this.handleMachineError.bind(this),
       },
     });
   }
@@ -339,15 +347,10 @@ export default class PodmanRuntime {
             // Call the success callback - socket setup will happen there first
             this.onMachineInstallationSuccess();
           } else {
-            const errorMessage = `Podman machine init failed with code ${code} and signal ${signal}`;
-
-            this.machineStartupPercentage = 0;
-            this.machineStartupMessage = errorMessage;
-
-            this.onMachineInstallationError(new Error(errorMessage));
+            this.handleMachineError(new Error(`Podman machine init failed with code ${code} and signal ${signal}`));
           }
         },
-        onError: this.onMachineInstallationError,
+        onError: this.handleMachineError.bind(this),
       },
     });
   }
@@ -371,7 +374,7 @@ export default class PodmanRuntime {
           attemptToParseOutputAsJson: true,
           callback: (installedPodmanMachines) => {
             if (!Array.isArray(installedPodmanMachines)) {
-              this.onMachineInstallationError(
+              this.handleMachineError(
                 new Error(`Podman machine ls returned non-array data: ${installedPodmanMachines}`)
               );
               return;
@@ -400,7 +403,7 @@ export default class PodmanRuntime {
             }
           },
         },
-        onError: this.onMachineInstallationError,
+        onError: this.handleMachineError.bind(this),
       },
     });
   }
@@ -421,7 +424,7 @@ export default class PodmanRuntime {
             this.machineStartupError = null;
           }
         },
-        onError: this.onMachineInstallationError,
+        onError: this.handleMachineError.bind(this),
       },
     });
   }

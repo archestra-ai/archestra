@@ -107,7 +107,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@sentry/electron": "^6.11.0",
+    "@sentry/electron": "^7.0.0",
     "@shikijs/transformers": "^3.10.0",
     "@tanstack/react-router": "^1.131.27",
     "@tanstack/react-router-devtools": "^1.131.27",

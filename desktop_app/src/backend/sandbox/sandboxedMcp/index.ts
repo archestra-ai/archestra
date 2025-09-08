@@ -36,16 +36,19 @@ export type { AvailableTool } from '@backend/sandbox/schemas';
 export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
 
 /**
- * SandboxedMcpServer represents an MCP server running in a podman container.
+ * SandboxedMcpServer represents an MCP server connection - either running in a local podman container
+ * or connected to a remote MCP service via OAuth.
  */
 export default class SandboxedMcpServer {
   mcpServer: McpServer;
 
   private mcpServerId: string;
   private mcpServerProxyUrl: string;
+  private mcpServerUrl: string; // URL used for MCP client connection (proxy for local, remote_url for remote)
+  private isRemoteServer: boolean;
 
-  private podmanSocketPath: string;
-  private podmanContainer: PodmanContainer;
+  private podmanSocketPath?: string;
+  private podmanContainer?: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
   private analysisUpdateInterval: NodeJS.Timeout | null = null;
@@ -61,13 +64,32 @@ export default class SandboxedMcpServer {
     }
   > = new Map();
 
-  constructor(mcpServer: McpServer, podmanSocketPath: string) {
+  constructor(mcpServer: McpServer, podmanSocketPath?: string) {
     this.mcpServer = mcpServer;
     this.mcpServerId = mcpServer.id;
     this.mcpServerProxyUrl = `http://${proxyMcpServerHost}:${proxyMcpServerPort}/mcp_proxy/${this.mcpServerId}`;
 
-    this.podmanSocketPath = podmanSocketPath;
-    this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
+    // Determine if this is a remote server
+    this.isRemoteServer = mcpServer.serverType === 'remote';
+
+    if (this.isRemoteServer) {
+      // For remote servers, connect directly to the remote URL
+      const remoteUrl = mcpServer.remoteUrl;
+      if (!remoteUrl) {
+        throw new Error(`Remote server ${mcpServer.id} missing remoteUrl field`);
+      }
+      this.mcpServerUrl = remoteUrl;
+      log.info(`Creating SandboxedMcpServer for remote server: ${mcpServer.name} at ${remoteUrl}`);
+    } else {
+      // For local servers, use the proxy URL and set up container
+      if (!podmanSocketPath) {
+        throw new Error(`Local server ${mcpServer.id} requires podmanSocketPath`);
+      }
+      this.mcpServerUrl = this.mcpServerProxyUrl;
+      this.podmanSocketPath = podmanSocketPath;
+      this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
+      log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
+    }
 
     // Try to fetch cached tools on initialization
     this.fetchCachedTools();
@@ -225,7 +247,8 @@ export default class SandboxedMcpServer {
         }
       }
 
-      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerProxyUrl), {
+      // Use the appropriate URL: remote_url for remote servers, proxy URL for local servers
+      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerUrl), {
         requestInit: {
           headers,
         },
@@ -281,18 +304,34 @@ export default class SandboxedMcpServer {
   }
 
   async start() {
-    this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath);
+    if (this.isRemoteServer) {
+      // For remote servers, skip container operations
+      log.info(`Starting remote MCP server: ${this.mcpServer.name}`);
+      await this.createMcpClient();
+      await this.fetchTools();
+    } else {
+      // For local servers, use existing container startup logic
+      log.info(`Starting local MCP server: ${this.mcpServer.name}`);
+      this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
 
-    await this.podmanContainer.startOrCreateContainer();
-    await this.pingMcpServerContainerUntilHealthy();
-    await this.createMcpClient();
-    await this.fetchTools();
+      await this.podmanContainer.startOrCreateContainer();
+      await this.pingMcpServerContainerUntilHealthy();
+      await this.createMcpClient();
+      await this.fetchTools();
+    }
   }
 
   async stop() {
     this.stopPeriodicAnalysisUpdates();
 
-    await this.podmanContainer.stopContainer();
+    if (this.isRemoteServer) {
+      // For remote servers, just close the MCP client
+      log.info(`Stopping remote MCP server: ${this.mcpServer.name}`);
+    } else {
+      // For local servers, stop the container
+      log.info(`Stopping local MCP server: ${this.mcpServer.name}`);
+      await this.podmanContainer!.stopContainer();
+    }
 
     if (this.mcpClient) {
       await this.mcpClient.close();
@@ -300,20 +339,33 @@ export default class SandboxedMcpServer {
   }
 
   /**
-   * Stream a request to the MCP server container
+   * Stream a request to the MCP server (container for local, direct for remote)
    */
   async streamToContainer(request: any, responseStream: RawReplyDefaultExpression) {
-    await this.podmanContainer.streamToContainer(request, responseStream);
+    if (this.isRemoteServer) {
+      // For remote servers, we can't stream directly - this would need to be handled differently
+      throw new Error(`Streaming not supported for remote MCP server ${this.mcpServerId}`);
+    } else {
+      await this.podmanContainer!.streamToContainer(request, responseStream);
+    }
   }
 
   /**
-   * Get the last N lines of logs from the MCP server container
+   * Get the last N lines of logs from the MCP server
    */
   async getMcpServerLogs(lines: number = 100) {
-    return {
-      logs: await this.podmanContainer.getRecentLogs(lines),
-      containerName: this.podmanContainer.containerName,
-    };
+    if (this.isRemoteServer) {
+      // Remote servers don't have container logs
+      return {
+        logs: ['Remote MCP servers do not have container logs'],
+        containerName: `remote-${this.mcpServerId}`,
+      };
+    } else {
+      return {
+        logs: await this.podmanContainer!.getRecentLogs(lines),
+        containerName: this.podmanContainer!.containerName,
+      };
+    }
   }
 
   /**
@@ -374,9 +426,24 @@ export default class SandboxedMcpServer {
   }
 
   get statusSummary(): SandboxedMcpServerStatusSummary {
-    return {
-      container: this.podmanContainer.statusSummary,
-      tools: this.availableToolsList,
-    };
+    if (this.isRemoteServer) {
+      // For remote servers, create a mock container status
+      return {
+        container: {
+          name: `remote-${this.mcpServerId}`,
+          status: this.mcpClient ? 'running' : 'not_created',
+          progressPercentage: this.mcpClient ? 100 : 0,
+          message: this.mcpClient ? 'Connected to remote MCP server' : 'Not connected',
+          isError: false,
+        },
+        tools: this.availableToolsList,
+      };
+    } else {
+      // For local servers, use existing container status
+      return {
+        container: this.podmanContainer!.statusSummary,
+        tools: this.availableToolsList,
+      };
+    }
   }
 }

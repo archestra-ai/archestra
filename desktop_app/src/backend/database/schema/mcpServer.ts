@@ -92,6 +92,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    * Type of MCP server (local container or remote service)
    */
   serverType: text('server_type').notNull().default('local').$type<McpServerType>(),
+  /**
+   * Remote URL for remote MCP servers (null for local servers)
+   */
+  remoteUrl: text('remote_url'),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -112,6 +116,7 @@ export const McpServerSchema = z.object({
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
   status: McpServerStatusSchema,
   serverType: McpServerTypeSchema,
+  remoteUrl: z.string().nullable(),
   createdAt: z.string(),
 });
 

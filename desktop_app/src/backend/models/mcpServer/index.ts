@@ -165,12 +165,8 @@ export default class McpServerModel {
     const isRemoteServer = serverType === 'remote' || !!remote_url;
     const finalServerType = isRemoteServer ? 'remote' : (serverType || 'local');
     
-    // If remote_url is provided, store it in serverConfig
+    // Remote URL is now stored as a separate column
     if (remote_url) {
-      finalServerConfig = {
-        ...finalServerConfig,
-        remote_url: remote_url,
-      };
       log.info(`Remote URL detected: ${remote_url}, setting serverType to 'remote'`);
     }
     
@@ -182,6 +178,7 @@ export default class McpServerModel {
         serverConfig: finalServerConfig,
         userConfigValues: userConfigValues,
         serverType: finalServerType,
+        remoteUrl: remote_url || null,
         status: status || 'installed', // Default to 'installed' for regular installs
         oauthTokens: oauthTokens || null,
         oauthClientInfo: oauthClientInfo || null,

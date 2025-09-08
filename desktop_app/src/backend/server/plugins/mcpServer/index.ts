@@ -370,8 +370,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           serverConfig: installData.serverConfig,
           userConfigValues: installData.userConfigValues || null,
           serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
+          remoteUrl: remoteUrl, // Store remote_url in separate column
           status: 'oauth_pending',
-          remote_url: remoteUrl, // Pass remote_url as separate field
           oauthTokens: null,
           oauthClientInfo: null,
           oauthServerMetadata: null,

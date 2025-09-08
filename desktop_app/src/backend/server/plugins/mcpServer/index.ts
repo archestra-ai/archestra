@@ -407,12 +407,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthClientInfo: clientInfo,
           });
 
-          // For remote servers, skip container creation and sync external clients
+          // For remote servers, start the remote server immediately
           // For local servers, start container as usual
           if (isRemoteServer) {
-            log.info(`Remote server ${server.name} installed successfully - skipping container creation`);
-            // TODO: Test remote connection here when we implement remote connection logic
-            // Import ExternalMcpClientModel for remote server handling
+            log.info(`Remote server ${server.name} installed successfully - starting remote server`);
+            // Import McpServerSandboxManager to start the remote server
+            const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
+            await McpServerSandboxManager.startServer(server);
+            // Also sync external clients
             const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
             await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
           } else {

@@ -54,11 +54,7 @@ export const useSandboxStore = create<SandboxStore>((set, _get) => ({
     setAvailableTools(allAvailableTools);
 
     Object.entries(sandboxedMcpServers).forEach(([mcpServerId, server]) => {
-      const container = (server as any).container;
-      updateMcpServer(mcpServerId, {
-        ...container,
-        state: container.status, // Map backend container.status to frontend state
-      });
+      updateMcpServer(mcpServerId, (server as any).container);
     });
   },
 }));

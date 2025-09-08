@@ -35,7 +35,7 @@ export const McpServerInstallSchema = z.object({
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
   /** OAuth provider name (e.g., google, slack, github) */
-  oauthProvider: z.string().optional(),
+  oauthProvider: z.string().optional().nullable(),
   /** Complete OAuth tokens object from MCP SDK */
   oauthTokens: OAuthTokensSchema.optional(),
   /** OAuth client information from MCP SDK */

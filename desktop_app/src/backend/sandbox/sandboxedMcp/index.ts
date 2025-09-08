@@ -431,10 +431,10 @@ export default class SandboxedMcpServer {
       return {
         container: {
           name: `remote-${this.mcpServerId}`,
-          status: this.mcpClient ? 'running' : 'not_created',
-          progressPercentage: this.mcpClient ? 100 : 0,
+          state: this.mcpClient ? 'running' : 'not_created',
+          startupPercentage: this.mcpClient ? 100 : 0,
           message: this.mcpClient ? 'Connected to remote MCP server' : 'Not connected',
-          isError: false,
+          error: null,
         },
         tools: this.availableToolsList,
       };

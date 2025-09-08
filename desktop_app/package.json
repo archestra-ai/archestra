@@ -65,7 +65,7 @@
     "@types/ws": "^8.18.1",
     "chokidar": "^4.0.3",
     "drizzle-kit": "^0.31.4",
-    "electron": "37.3.1",
+    "electron": "38.0.0",
     "husky": "^9.1.7",
     "jsdom": "^26.1.0",
     "lint-staged": "^16.1.5",

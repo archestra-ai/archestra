@@ -1,14 +1,14 @@
 /**
  * OAuth Flow Implementation using MCP SDK
- * 
+ *
  * Based on performOAuth from linear-mcp-oauth-minimal.ts
  * Handles OAuth authentication flow using @modelcontextprotocol/sdk/client/auth.js
  */
-
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 import log from '@backend/utils/logger';
+
 import { type ServerConfig } from './configs';
 import { McpOAuthProvider } from './provider';
 
@@ -32,7 +32,7 @@ export async function performOAuth(provider: McpOAuthProvider, config: ServerCon
     log.info('🔄 OAuth requires authorization - authorization code will be captured automatically');
 
     // Wait a moment for the browser flow to complete
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Now try with the captured authorization code
     if (provider.authorizationCode) {
@@ -67,7 +67,10 @@ export async function performOAuth(provider: McpOAuthProvider, config: ServerCon
 /**
  * Refresh OAuth tokens using MCP SDK
  */
-export async function refreshOAuthTokens(provider: McpOAuthProvider, config: ServerConfig): Promise<OAuthTokens | null> {
+export async function refreshOAuthTokens(
+  provider: McpOAuthProvider,
+  config: ServerConfig
+): Promise<OAuthTokens | null> {
   log.info('🔄 Refreshing OAuth tokens...');
 
   try {
@@ -111,10 +114,10 @@ export function areTokensExpired(tokens: OAuthTokens, bufferMinutes: number = 5)
   }
 
   // Calculate expiry time (expires_in is in seconds)
-  const expiryTime = Date.now() + (tokens.expires_in * 1000);
+  const expiryTime = Date.now() + tokens.expires_in * 1000;
   const bufferTime = bufferMinutes * 60 * 1000; // Convert minutes to milliseconds
-  
-  return (expiryTime - bufferTime) <= Date.now();
+
+  return expiryTime - bufferTime <= Date.now();
 }
 
 /**
@@ -122,7 +125,7 @@ export function areTokensExpired(tokens: OAuthTokens, bufferMinutes: number = 5)
  */
 export async function ensureValidTokens(provider: McpOAuthProvider, config: ServerConfig): Promise<string> {
   const tokens = await provider.tokens();
-  
+
   if (!tokens || !tokens.access_token) {
     throw new Error('No OAuth tokens available');
   }
@@ -130,7 +133,7 @@ export async function ensureValidTokens(provider: McpOAuthProvider, config: Serv
   // Check if tokens are expired or will expire soon
   if (areTokensExpired(tokens)) {
     log.info('🔄 Tokens expired or expiring soon, attempting refresh...');
-    
+
     const refreshedTokens = await refreshOAuthTokens(provider, config);
     if (refreshedTokens && refreshedTokens.access_token) {
       return refreshedTokens.access_token;

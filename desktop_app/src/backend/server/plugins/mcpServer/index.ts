@@ -338,47 +338,70 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Get the server configuration for this provider
         const { getServerConfig, connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
         const config = getServerConfig(provider);
-        
+
         if (!config) {
           return reply.code(400).send({ error: `Unknown OAuth provider: ${provider}` });
         }
 
         // Generate server ID
         const serverId = installData.id || uuidv4();
-        
-        // Perform OAuth and get tokens
-        const { client, accessToken } = await connectMcpServer(config, serverId);
-        
-        // Close the test connection
-        await client.close();
-        
-        // Get tokens from the provider for installation
-        const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
-        const oauthProvider = new McpOAuthProvider(config, serverId);
-        await oauthProvider.init();
-        
-        const tokens = await oauthProvider.tokens();
-        const clientInfo = await oauthProvider.clientInformation();
 
-        if (!tokens) {
-          return reply.code(500).send({ error: 'Failed to obtain OAuth tokens' });
-        }
-
-        // Install MCP server with OAuth tokens
-        const server = await McpServerModel.installMcpServer({
+        // Create placeholder MCP server record with oauth_pending status
+        // This allows OAuth provider to save client info during the flow
+        const placeholderServer = await McpServerModel.create({
           id: serverId,
-          displayName: installData.displayName,
+          name: installData.displayName,
           serverConfig: installData.serverConfig,
-          userConfigValues: installData.userConfigValues,
-          oauthTokens: tokens,
-          oauthClientInfo: clientInfo,
+          userConfigValues: installData.userConfigValues || null,
+          status: 'oauth_pending',
+          oauthTokens: null,
+          oauthClientInfo: null,
+          oauthServerMetadata: null,
+          oauthResourceMetadata: null,
+          createdAt: new Date().toISOString(),
         });
 
-        return reply.send({ server });
+        try {
+          // Perform OAuth and get tokens
+          const { client, accessToken } = await connectMcpServer(config, serverId);
+
+          // Close the test connection
+          await client.close();
+
+          // Get tokens from the provider for installation
+          const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
+          const oauthProvider = new McpOAuthProvider(config, serverId);
+          await oauthProvider.init();
+
+          const tokens = await oauthProvider.tokens();
+          const clientInfo = await oauthProvider.clientInformation();
+
+          if (!tokens) {
+            // Clean up placeholder record on failure
+            await McpServerModel.update(serverId, { status: 'failed' });
+            return reply.code(500).send({ error: 'Failed to obtain OAuth tokens' });
+          }
+
+          // Update server record with complete OAuth data and installed status
+          const [server] = await McpServerModel.update(serverId, {
+            status: 'installed',
+            oauthTokens: tokens,
+            oauthClientInfo: clientInfo,
+          });
+
+          // Start the MCP server container
+          await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+
+          return reply.send({ server });
+        } catch (oauthError) {
+          // Clean up placeholder record on OAuth failure
+          await McpServerModel.update(serverId, { status: 'failed' });
+          throw oauthError;
+        }
       } catch (error) {
         log.error('OAuth install failed:', error);
-        return reply.code(500).send({ 
-          error: error instanceof Error ? error.message : 'OAuth install failed' 
+        return reply.code(500).send({
+          error: error instanceof Error ? error.message : 'OAuth install failed',
         });
       }
     }

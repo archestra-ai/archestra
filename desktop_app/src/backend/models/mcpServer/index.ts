@@ -44,6 +44,8 @@ export const McpServerInstallSchema = z.object({
   oauthServerMetadata: AuthorizationServerMetadataSchema.optional(),
   /** OAuth protected resource metadata from MCP SDK */
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
+  /** Server installation status */
+  status: z.enum(['installing', 'oauth_pending', 'installed', 'failed']).optional(),
 });
 
 // Interface for catalog search parameters
@@ -112,6 +114,7 @@ export default class McpServerModel {
     oauthClientInfo,
     oauthServerMetadata,
     oauthResourceMetadata,
+    status,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -132,19 +135,19 @@ export default class McpServerModel {
     // OAuth tokens are now handled directly by the MCP client transport layer
     // No need to add tokens to environment variables - they're used for HTTP auth headers
     let finalServerConfig = serverConfig;
-    
+
     if (oauthTokens && oauthProvider) {
       // Validate that we have a valid OAuth provider configuration
       try {
         const { getServerConfig } = await import('@backend/server/plugins/mcp-oauth');
         const config = getServerConfig(oauthProvider);
-        
+
         if (!config) {
           throw new Error(
             `Invalid OAuth provider: ${oauthProvider}. Available providers: ${(await import('@backend/server/plugins/mcp-oauth')).getAvailableProviders().join(', ')}`
           );
         }
-        
+
         log.info(`OAuth provider ${oauthProvider} validated for server ${id}`);
       } catch (error) {
         log.warn(`OAuth provider validation failed for ${oauthProvider}:`, error);
@@ -160,6 +163,7 @@ export default class McpServerModel {
         name: displayName,
         serverConfig: finalServerConfig,
         userConfigValues: userConfigValues,
+        status: status || 'installed', // Default to 'installed' for regular installs
         oauthTokens: oauthTokens || null,
         oauthClientInfo: oauthClientInfo || null,
         oauthServerMetadata: oauthServerMetadata || null,

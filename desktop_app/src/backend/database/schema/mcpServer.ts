@@ -2,15 +2,21 @@ import { sql } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 
+/**
+ * MCP Server Status Enum
+ */
+export const McpServerStatusSchema = z.enum(['installing', 'oauth_pending', 'installed', 'failed']);
+export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
+
 import {
-  AuthorizationServerMetadataSchema,
-  OAuthClientInformationSchema,
-  OAuthProtectedResourceMetadataSchema,
-  OAuthTokensSchema,
   type AuthorizationServerMetadata,
+  AuthorizationServerMetadataSchema,
   type OAuthClientInformation,
+  OAuthClientInformationSchema,
   type OAuthProtectedResourceMetadata,
+  OAuthProtectedResourceMetadataSchema,
   type OAuthTokens,
+  OAuthTokensSchema,
 } from './oauth';
 
 /**
@@ -72,6 +78,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    * Stores resource-specific OAuth metadata (resource identifier, required scopes, etc.)
    */
   oauthResourceMetadata: text('oauth_resource_metadata', { mode: 'json' }).$type<OAuthProtectedResourceMetadata>(),
+  /**
+   * Current status of the MCP server installation/OAuth flow
+   */
+  status: text().notNull().default('installing').$type<McpServerStatus>(),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -90,6 +100,7 @@ export const McpServerSchema = z.object({
   oauthClientInfo: OAuthClientInformationSchema.nullable(),
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
+  status: McpServerStatusSchema,
   createdAt: z.string(),
 });
 

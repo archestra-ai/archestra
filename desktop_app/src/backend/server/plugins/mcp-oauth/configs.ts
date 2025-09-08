@@ -1,6 +1,6 @@
 /**
  * MCP OAuth Server Configurations
- * 
+ *
  * Based on SERVER_CONFIGS from linear-mcp-oauth-minimal.ts
  * Defines OAuth provider configurations for MCP servers
  */
@@ -11,16 +11,16 @@
 export interface ServerConfig {
   name: string;
   server_url: string;
-  auth_server_url?: string;  // Optional, defaults to server_url
+  auth_server_url?: string; // Optional, defaults to server_url
   resource_metadata_url?: string;
   client_id: string;
-  client_secret?: string;  // Optional for public clients
+  client_secret?: string; // Optional for public clients
   redirect_uris: string[];
   scopes: string[];
   description?: string;
-  well_known_url?: string;  // Optional specific well-known URL for this provider
-  default_scopes: string[];  // Fallback scopes when discovery fails
-  supports_resource_metadata: boolean;  // Whether to attempt resource metadata discovery
+  well_known_url?: string; // Optional specific well-known URL for this provider
+  default_scopes: string[]; // Fallback scopes when discovery fails
+  supports_resource_metadata: boolean; // Whether to attempt resource metadata discovery
 }
 
 /**
@@ -28,82 +28,82 @@ export interface ServerConfig {
  */
 export const SERVER_CONFIGS: Record<string, ServerConfig> = {
   google: {
-    name: "Google OAuth",
-    server_url: "https://accounts.google.com",
-    resource_metadata_url: "https://accounts.google.com/.well-known/openid-configuration",
-    client_id: "354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com",
+    name: 'Google OAuth',
+    server_url: 'https://accounts.google.com',
+    resource_metadata_url: 'https://accounts.google.com/.well-known/openid-configuration',
+    client_id: '354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com',
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["openid", "email", "profile"],
-    description: "Google OAuth (OpenID Connect)",
-    well_known_url: "https://accounts.google.com/.well-known/openid-configuration",
-    default_scopes: ["openid", "email", "profile"],
-    supports_resource_metadata: false
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['openid', 'email', 'profile'],
+    description: 'Google OAuth (OpenID Connect)',
+    well_known_url: 'https://accounts.google.com/.well-known/openid-configuration',
+    default_scopes: ['openid', 'email', 'profile'],
+    supports_resource_metadata: false,
   },
   github: {
-    name: "GitHub Copilot MCP",
-    server_url: "https://api.githubcopilot.com/mcp/",
-    client_id: "Ov23li3CnHLM7PNQ2Xiv",
+    name: 'GitHub Copilot MCP',
+    server_url: 'https://api.githubcopilot.com/mcp/',
+    client_id: 'Ov23li3CnHLM7PNQ2Xiv',
     client_secret: process.env.GITHUB_CLIENT_SECRET,
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "GitHub Copilot MCP Server",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'GitHub Copilot MCP Server',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
   },
   linear: {
-    name: "Linear MCP",
-    server_url: "https://mcp.linear.app/mcp",
-    client_id: "", // Will use dynamic registration
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "Linear MCP Server (dynamic registration)",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
+    name: 'Linear MCP',
+    server_url: 'https://mcp.linear.app/mcp',
+    client_id: '', // Will use dynamic registration
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'Linear MCP Server (dynamic registration)',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
   },
   huggingface: {
-    name: "HuggingFace MCP",
-    server_url: "https://huggingface.co/mcp",
-    client_id: "", // Will use dynamic registration
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "HF MCP Server (dynamic registration)",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
+    name: 'HuggingFace MCP',
+    server_url: 'https://huggingface.co/mcp',
+    client_id: '', // Will use dynamic registration
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'HF MCP Server (dynamic registration)',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
   },
   slack: {
-    name: "Slack MCP",
-    server_url: "https://slack.com/oauth",
-    client_id: process.env.SLACK_CLIENT_ID || "",
-    client_secret: process.env.SLACK_CLIENT_SECRET || "",
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["channels:read", "chat:write", "users:read"],
-    description: "Slack MCP Server",
-    default_scopes: ["channels:read", "chat:write", "users:read"],
-    supports_resource_metadata: false
+    name: 'Slack MCP',
+    server_url: 'https://slack.com/oauth',
+    client_id: process.env.SLACK_CLIENT_ID || '',
+    client_secret: process.env.SLACK_CLIENT_SECRET || '',
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['channels:read', 'chat:write', 'users:read'],
+    description: 'Slack MCP Server',
+    default_scopes: ['channels:read', 'chat:write', 'users:read'],
+    supports_resource_metadata: false,
   },
   notion: {
-    name: "Notion MCP",
-    server_url: "https://api.notion.com/v1/oauth",
-    client_id: process.env.NOTION_CLIENT_ID || "",
-    client_secret: process.env.NOTION_CLIENT_SECRET || "",
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "Notion MCP Server",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: false
+    name: 'Notion MCP',
+    server_url: 'https://api.notion.com/v1/oauth',
+    client_id: process.env.NOTION_CLIENT_ID || '',
+    client_secret: process.env.NOTION_CLIENT_SECRET || '',
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'Notion MCP Server',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: false,
   },
   trello: {
-    name: "Trello MCP",
-    server_url: "https://api.trello.com/1/oauth",
-    client_id: process.env.TRELLO_CLIENT_ID || "",
-    client_secret: process.env.TRELLO_CLIENT_SECRET || "",
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "Trello MCP Server",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: false
-  }
+    name: 'Trello MCP',
+    server_url: 'https://api.trello.com/1/oauth',
+    client_id: process.env.TRELLO_CLIENT_ID || '',
+    client_secret: process.env.TRELLO_CLIENT_SECRET || '',
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'Trello MCP Server',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: false,
+  },
 };
 
 /**

@@ -15,7 +15,7 @@ export function setupProviderBrowserAuthHandlers() {
   // TODO: Migrate to new MCP OAuth system
   // Browser auth functionality needs to be reimplemented with MCP OAuth
   log.info('[Browser Auth] Provider browser auth handlers disabled - awaiting MCP OAuth migration');
-  
+
   // Temporary stub handlers to prevent crashes
   ipcMain.handle('provider-browser-auth', async (_event, providerName: string) => {
     throw new Error(`Browser auth for ${providerName} not yet implemented in MCP OAuth system`);

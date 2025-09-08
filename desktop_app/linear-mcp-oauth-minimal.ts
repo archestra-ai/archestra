@@ -8,17 +8,17 @@
 import {
   OAuthClientProvider,
   auth,
+  discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
-  discoverAuthorizationServerMetadata
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
+  AuthorizationServerMetadata,
   OAuthClientInformation,
   OAuthClientMetadata,
-  OAuthTokens,
   OAuthProtectedResourceMetadata,
-  AuthorizationServerMetadata
+  OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
@@ -33,16 +33,16 @@ import * as path from 'path';
 interface ServerConfig {
   name: string;
   server_url: string;
-  auth_server_url?: string;  // Optional, defaults to server_url
+  auth_server_url?: string; // Optional, defaults to server_url
   resource_metadata_url?: string;
   client_id: string;
-  client_secret?: string;  // Optional for public clients
+  client_secret?: string; // Optional for public clients
   redirect_uris: string[];
   scopes: string[];
   description?: string;
-  well_known_url?: string;  // Optional specific well-known URL for this provider
-  default_scopes: string[];  // Fallback scopes when discovery fails
-  supports_resource_metadata: boolean;  // Whether to attempt resource metadata discovery
+  well_known_url?: string; // Optional specific well-known URL for this provider
+  default_scopes: string[]; // Fallback scopes when discovery fails
+  supports_resource_metadata: boolean; // Whether to attempt resource metadata discovery
 }
 
 /**
@@ -50,49 +50,49 @@ interface ServerConfig {
  */
 const SERVER_CONFIGS: Record<string, ServerConfig> = {
   google: {
-    name: "Google OAuth",
-    server_url: "https://accounts.google.com",
-    resource_metadata_url: "https://accounts.google.com/.well-known/openid-configuration",
-    client_id: "354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com",
+    name: 'Google OAuth',
+    server_url: 'https://accounts.google.com',
+    resource_metadata_url: 'https://accounts.google.com/.well-known/openid-configuration',
+    client_id: '354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com',
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["openid", "email", "profile"],
-    description: "Google OAuth (OpenID Connect)",
-    well_known_url: "https://accounts.google.com/.well-known/openid-configuration",
-    default_scopes: ["openid", "email", "profile"],
-    supports_resource_metadata: false
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['openid', 'email', 'profile'],
+    description: 'Google OAuth (OpenID Connect)',
+    well_known_url: 'https://accounts.google.com/.well-known/openid-configuration',
+    default_scopes: ['openid', 'email', 'profile'],
+    supports_resource_metadata: false,
   },
   github: {
-    name: "GitHub Copilot MCP",
-    server_url: "https://api.githubcopilot.com/mcp/",
-    client_id: "Ov23li3CnHLM7PNQ2Xiv",
+    name: 'GitHub Copilot MCP',
+    server_url: 'https://api.githubcopilot.com/mcp/',
+    client_id: 'Ov23li3CnHLM7PNQ2Xiv',
     client_secret: process.env.GITHUB_CLIENT_SECRET,
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "GitHub Copilot MCP Server",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'GitHub Copilot MCP Server',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
   },
   linear: {
-    name: "Linear MCP",
-    server_url: "https://mcp.linear.app/mcp",
-    client_id: "", // Will use dynamic registration
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "Linear MCP Server (dynamic registration)",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
+    name: 'Linear MCP',
+    server_url: 'https://mcp.linear.app/mcp',
+    client_id: '', // Will use dynamic registration
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'Linear MCP Server (dynamic registration)',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
   },
   huggingface: {
-    name: "HuggingFace MCP",
-    server_url: "https://huggingface.co/mcp",
-    client_id: "", // Will use dynamic registration
-    redirect_uris: ["http://localhost:8080/oauth/callback"],
-    scopes: ["read", "write"],
-    description: "HF MCP Server (dynamic registration)",
-    default_scopes: ["read", "write"],
-    supports_resource_metadata: true
-  }
+    name: 'HuggingFace MCP',
+    server_url: 'https://huggingface.co/mcp',
+    client_id: '', // Will use dynamic registration
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['read', 'write'],
+    description: 'HF MCP Server (dynamic registration)',
+    default_scopes: ['read', 'write'],
+    supports_resource_metadata: true,
+  },
 };
 
 /**
@@ -131,7 +131,6 @@ async function discoverScopes(config: ServerConfig): Promise<string[]> {
 
     console.log('⚠️  No scopes discovered, using configured default scopes');
     return config.default_scopes;
-
   } catch (error) {
     console.log('⚠️  Failed to discover scopes:', (error as Error).message);
     console.log('⚠️  Using configured default scopes');
@@ -169,7 +168,7 @@ class GenericMcpOAuthProvider implements OAuthClientProvider {
     console.log('🔑 Server Key:', this.serverKey);
     console.log('⚙️  Config:', this.config.name);
     console.log('🎯 Using configured scopes:', this.config.scopes.join(', '));
-    
+
     // Try to discover actual scopes from the server
     try {
       const discoveredScopes = await discoverScopes(this.config);
@@ -396,7 +395,7 @@ async function performOAuth(provider: GenericMcpOAuthProvider, config: ServerCon
     console.log('🔄 OAuth requires authorization - authorization code will be captured automatically');
 
     // Wait a moment for the browser flow to complete
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Now try with the captured authorization code
     if (provider.authorizationCode) {
@@ -443,8 +442,8 @@ async function connectMcpServer(config: ServerConfig) {
     console.log('🔌 Testing MCP connection...');
     const transport = new StreamableHTTPClientTransport(new URL(config.server_url), {
       requestInit: {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
     });
 
     const client = new Client({ name: 'linear-mcp-minimal', version: '1.0.0' }, { capabilities: { sampling: {} } });

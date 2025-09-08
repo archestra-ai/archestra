@@ -1,6 +1,6 @@
 /**
  * MCP OAuth Plugin
- * 
+ *
  * Clean OAuth implementation using MCP SDK's built-in OAuth functionality
  * Based on architecture from linear-mcp-oauth-minimal.ts
  */

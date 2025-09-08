@@ -1,14 +1,14 @@
 /**
  * MCP OAuth Connection Implementation
- * 
+ *
  * Based on connectMcpServer from linear-mcp-oauth-minimal.ts
  * Handles complete OAuth flow and MCP server connection
  */
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import log from '@backend/utils/logger';
+
 import { type ServerConfig, validateServerConfig } from './configs';
 import { performOAuth } from './oauth-flow';
 import { McpOAuthProvider } from './provider';
@@ -16,10 +16,13 @@ import { McpOAuthProvider } from './provider';
 /**
  * Complete OAuth + MCP connection function
  */
-export async function connectMcpServer(config: ServerConfig, serverId: string): Promise<{ client: Client; accessToken: string }> {
+export async function connectMcpServer(
+  config: ServerConfig,
+  serverId: string
+): Promise<{ client: Client; accessToken: string }> {
   // Validate configuration
   validateServerConfig(config);
-  
+
   const provider = new McpOAuthProvider(config, serverId);
   await provider.init();
 
@@ -31,8 +34,8 @@ export async function connectMcpServer(config: ServerConfig, serverId: string): 
     log.info('🔌 Testing MCP connection...');
     const transport = new StreamableHTTPClientTransport(new URL(config.server_url), {
       requestInit: {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
     });
 
     const client = new Client({ name: 'archestra-mcp-client', version: '1.0.0' }, { capabilities: { sampling: {} } });
@@ -41,7 +44,10 @@ export async function connectMcpServer(config: ServerConfig, serverId: string): 
     log.info('✅ MCP connected!');
 
     const tools = await client.listTools();
-    log.info(`🛠️  Found ${tools.tools.length} tools:`, tools.tools.map(t => t.name));
+    log.info(
+      `🛠️  Found ${tools.tools.length} tools:`,
+      tools.tools.map((t) => t.name)
+    );
 
     return { client, accessToken };
   } catch (error) {
@@ -56,8 +62,8 @@ export async function connectMcpServer(config: ServerConfig, serverId: string): 
 export function createAuthenticatedTransport(serverUrl: string, accessToken: string): StreamableHTTPClientTransport {
   return new StreamableHTTPClientTransport(new URL(serverUrl), {
     requestInit: {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    }
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
   });
 }
 

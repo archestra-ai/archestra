@@ -1,21 +1,20 @@
 /**
  * MCP OAuth Provider Implementation
- * 
+ *
  * Based on GenericMcpOAuthProvider from linear-mcp-oauth-minimal.ts
  * Implements OAuthClientProvider interface from @modelcontextprotocol/sdk/client/auth.js
  */
-
 import {
   OAuthClientProvider,
+  discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
-  discoverAuthorizationServerMetadata
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import {
+  AuthorizationServerMetadata,
   OAuthClientInformation,
   OAuthClientMetadata,
-  OAuthTokens,
   OAuthProtectedResourceMetadata,
-  AuthorizationServerMetadata
+  OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
@@ -25,6 +24,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import log from '@backend/utils/logger';
+
 import { type ServerConfig } from './configs';
 
 /**
@@ -71,7 +71,6 @@ async function discoverScopes(config: ServerConfig): Promise<string[]> {
 
     log.info('⚠️  No scopes discovered, using configured default scopes');
     return config.default_scopes;
-
   } catch (error) {
     log.info('⚠️  Failed to discover scopes:', (error as Error).message);
     log.info('⚠️  Using configured default scopes');
@@ -104,7 +103,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     log.info('🔑 Server Key:', this.serverKey);
     log.info('⚙️  Config:', this.config.name);
     log.info('🎯 Using configured scopes:', this.config.scopes.join(', '));
-    
+
     // Try to discover actual scopes from the server
     try {
       const discoveredScopes = await discoverScopes(this.config);
@@ -157,35 +156,51 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     // Priority 2: Try to load cached dynamic registration from database
     try {
+      log.info(`🔍 Looking for cached client info for server ID: ${this.serverId}`);
       const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const server = await McpServerModel.getById(this.serverId);
-      
+
+      log.info(`📊 Database query result:`, { 
+        found: !!server?.[0], 
+        hasOAuthClientInfo: !!server?.[0]?.oauthClientInfo,
+        clientInfo: server?.[0]?.oauthClientInfo 
+      });
+
       if (server?.[0]?.oauthClientInfo) {
         log.info('🔑 Using cached dynamic client registration from database');
-        return {
+        const clientInfo = {
           client_id: server[0].oauthClientInfo.client_id,
           ...(server[0].oauthClientInfo.client_secret && { client_secret: server[0].oauthClientInfo.client_secret }),
         };
+        log.info('🔑 Loaded client info:', { client_id: clientInfo.client_id, has_secret: !!clientInfo.client_secret });
+        return clientInfo;
       }
     } catch (error) {
       log.warn('Failed to load client info from database:', error);
     }
 
     // Priority 3: Return undefined to trigger dynamic registration
-    log.info('🔄 Will use dynamic client registration');
+    log.info('🔄 Will use dynamic client registration (no cached client found)');
     return undefined;
   }
 
   async saveClientInformation(clientInfo: OAuthClientInformation): Promise<void> {
     try {
+      log.info('💾 Saving client registration to database for server:', this.serverId);
+      log.info('💾 Client info to save:', { client_id: clientInfo.client_id, has_secret: !!clientInfo.client_secret });
+      
       // Save to database instead of local file
       const { default: McpServerModel } = await import('@backend/models/mcpServer');
-      await McpServerModel.update(this.serverId, {
+      const result = await McpServerModel.update(this.serverId, {
         oauthClientInfo: clientInfo,
       });
-      log.info('✅ Client registered and saved to database:', clientInfo.client_id);
+      
+      log.info('✅ Client registered and saved to database:', { 
+        client_id: clientInfo.client_id,
+        updated_rows: result.length 
+      });
     } catch (error) {
-      log.error('Failed to save client information to database:', error);
+      log.error('❌ Failed to save client information to database:', error);
       throw error;
     }
   }
@@ -195,7 +210,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
       // Load tokens from database
       const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const server = await McpServerModel.getById(this.serverId);
-      
+
       if (server?.[0]?.oauthTokens) {
         log.info('🎫 Using cached tokens from database');
         return {
@@ -209,7 +224,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     } catch (error) {
       log.warn('Failed to load tokens from database:', error);
     }
-    
+
     return undefined;
   }
 
@@ -347,7 +362,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
         // File doesn't exist
       }
     }
-    
+
     // Clear OAuth data from database
     try {
       const { default: McpServerModel } = await import('@backend/models/mcpServer');

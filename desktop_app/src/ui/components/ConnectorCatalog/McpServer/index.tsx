@@ -52,16 +52,17 @@ export default function McpServer({
     description,
     github_info: gitHubInfo,
     category,
-    archestra_config: {
-      oauth: { required: requiresOAuthSetup },
-      browser_based: { required: requiresBrowserBasedSetup } = {},
-    },
+    archestra_config,
     programming_language: programmingLanguage,
     quality_score: qualityScore,
     tools,
     prompts,
     license,
   } = server;
+
+  // Safely extract OAuth and browser-based config with null checks
+  const requiresOAuthSetup = archestra_config?.oauth?.required ?? false;
+  const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);
@@ -142,13 +143,13 @@ export default function McpServer({
         <CardContent className="space-y-4">
           {/* Enhanced Metadata */}
           <div className="flex flex-wrap gap-3 text-xs">
-            {gitHubInfo.stars > 0 && (
+            {gitHubInfo?.stars > 0 && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Star className="h-3 w-3" />
                 <span>{gitHubInfo.stars.toLocaleString()}</span>
               </div>
             )}
-            {gitHubInfo.contributors > 0 && (
+            {gitHubInfo?.contributors > 0 && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Users className="h-3 w-3" />
                 <span>{gitHubInfo.contributors}</span>
@@ -169,7 +170,7 @@ export default function McpServer({
           </div>
 
           {/* Repository info */}
-          {gitHubInfo.owner && gitHubInfo.repo && (
+          {gitHubInfo?.owner && gitHubInfo?.repo && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <GitFork className="h-3 w-3" />
               <span className="truncate" title={`${gitHubInfo.owner}/${gitHubInfo.repo}`}>

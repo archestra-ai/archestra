@@ -72,16 +72,6 @@ export const SERVER_CONFIGS: Record<string, ServerConfig> = {
     default_scopes: ['read', 'write'],
     supports_resource_metadata: true,
   },
-  huggingface: {
-    name: 'HuggingFace MCP',
-    server_url: 'https://huggingface.co/mcp',
-    client_id: '', // Will use dynamic registration
-    redirect_uris: ['http://localhost:8080/oauth/callback'],
-    scopes: ['read', 'write'],
-    description: 'HF MCP Server (dynamic registration)',
-    default_scopes: ['read', 'write'],
-    supports_resource_metadata: true,
-  },
   slack: {
     name: 'Slack MCP',
     server_url: 'https://slack.com/oauth/v2/',

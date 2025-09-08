@@ -80,7 +80,6 @@ async function discoverScopes(config: ServerConfig): Promise<string[]> {
 
 /**
  * MCP OAuth Client Provider for Archestra
- * Based on GenericMcpOAuthProvider from linear-mcp-oauth-minimal.ts
  */
 export class McpOAuthProvider implements OAuthClientProvider {
   private storageDir: string;

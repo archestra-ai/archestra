@@ -5,6 +5,7 @@
  * Supports any MCP server with OAuth metadata discovery
  * Experimantal - TODO: Remove after refactoring completed
  */
+// Load environment variables from .env file
 import {
   OAuthClientProvider,
   auth,
@@ -22,10 +23,13 @@ import {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
+import { config } from 'dotenv';
 import * as fs from 'fs/promises';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
+
+config();
 
 /**
  * Server configuration interface
@@ -65,6 +69,10 @@ const SERVER_CONFIGS: Record<string, ServerConfig> = {
   github: {
     name: 'GitHub Copilot MCP',
     server_url: 'https://api.githubcopilot.com/mcp/',
+    // server_url: 'https://github.com/login/oauth/',
+    // auth_server_url: 'https://github.com/login/oauth/',
+    // resource_metadata_url: 'https://github.com/login/oauth/.well-known/openid-configuration',
+    // well_known_url: 'https://github.com/login/oauth/.well-known/openid-configuration',
     client_id: 'Ov23li3CnHLM7PNQ2Xiv',
     client_secret: process.env.GITHUB_CLIENT_SECRET,
     redirect_uris: ['http://localhost:8080/oauth/callback'],
@@ -93,6 +101,18 @@ const SERVER_CONFIGS: Record<string, ServerConfig> = {
     default_scopes: ['read', 'write'],
     supports_resource_metadata: true,
   },
+  slack: {
+    name: 'Slack OAuth',
+    server_url: 'https://slack.com',
+    auth_server_url: 'https://slack.com',
+    client_id: process.env.SLACK_CLIENT_ID,
+    client_secret: process.env.SLACK_CLIENT_SECRET,
+    redirect_uris: ['http://localhost:8080/oauth/callback'],
+    scopes: ['channels:read', 'chat:write', 'users:read'],
+    description: 'Slack OAuth Integration',
+    default_scopes: ['channels:read', 'chat:write', 'users:read'],
+    supports_resource_metadata: false,
+  },
 };
 
 /**
@@ -118,8 +138,18 @@ async function discoverScopes(config: ServerConfig): Promise<string[]> {
 
     // Try authorization server metadata discovery
     try {
-      const wellKnownUrl = config.well_known_url || `${config.server_url}/.well-known/oauth-authorization-server`;
+      const wellKnownUrl =
+        config.well_known_url ||
+        `${config.auth_server_url || config.server_url}/.well-known/oauth-authorization-server`;
+      console.log('🔍 Trying authorization server metadata at:', wellKnownUrl);
       const authServerMetadata = await discoverAuthorizationServerMetadata(wellKnownUrl);
+
+      console.log('🔍 Authorization server metadata:', {
+        issuer: authServerMetadata?.issuer,
+        authorization_endpoint: authServerMetadata?.authorization_endpoint,
+        token_endpoint: authServerMetadata?.token_endpoint,
+        scopes_supported: authServerMetadata?.scopes_supported,
+      });
 
       if (authServerMetadata?.scopes_supported && authServerMetadata.scopes_supported.length > 0) {
         console.log('✅ Found authorization server scopes:', authServerMetadata.scopes_supported);
@@ -239,14 +269,29 @@ class GenericMcpOAuthProvider implements OAuthClientProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     try {
       const data = await fs.readFile(path.join(this.storageDir, 'tokens.json'), 'utf-8');
-      console.log('🎫 Using cached tokens');
-      return JSON.parse(data);
-    } catch {
+      const parsedTokens = JSON.parse(data);
+      console.log('🎫 Using cached tokens:', {
+        hasAccessToken: !!parsedTokens.access_token,
+        tokenType: parsedTokens.token_type,
+        hasRefreshToken: !!parsedTokens.refresh_token,
+        expiresIn: parsedTokens.expires_in,
+        scope: parsedTokens.scope,
+      });
+      return parsedTokens;
+    } catch (error) {
+      console.log('🔍 No cached tokens found:', (error as Error).message);
       return undefined;
     }
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
+    console.log('💾 Saving tokens:', {
+      hasAccessToken: !!tokens.access_token,
+      tokenType: tokens.token_type,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresIn: tokens.expires_in,
+      scope: tokens.scope,
+    });
     await fs.writeFile(path.join(this.storageDir, 'tokens.json'), JSON.stringify(tokens, null, 2));
     console.log('✅ Tokens saved');
   }
@@ -376,12 +421,59 @@ class GenericMcpOAuthProvider implements OAuthClientProvider {
 }
 
 /**
+ * Intercept fetch to log GitHub token requests/responses
+ */
+function interceptFetch() {
+  const originalFetch = global.fetch;
+  global.fetch = async (url: RequestInfo | URL, options?: RequestInit) => {
+    const urlString = typeof url === 'string' ? url : url.toString();
+
+    // Log token endpoint requests
+    if (urlString.includes('token') || urlString.includes('github.com') || urlString.includes('oauth')) {
+      console.log('🌐 HTTP Request:', {
+        url: urlString,
+        method: options?.method || 'GET',
+        headers: options?.headers,
+        body: options?.body,
+      });
+    }
+
+    const response = await originalFetch(url, options);
+
+    // Log token endpoint responses
+    if (urlString.includes('token') || urlString.includes('github.com') || urlString.includes('oauth')) {
+      const responseClone = response.clone();
+      const responseText = await responseClone.text();
+
+      console.log('🌐 HTTP Response:', {
+        url: urlString,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: responseText,
+      });
+    }
+
+    return response;
+  };
+}
+
+/**
  * Handle OAuth authentication flow
  */
 async function performOAuth(provider: GenericMcpOAuthProvider, config: ServerConfig): Promise<string> {
   console.log('🔐 Starting OAuth with MCP SDK...');
 
+  // Intercept fetch to log GitHub responses
+  interceptFetch();
+
   // First attempt: try with existing tokens
+  console.log('🔍 Attempting initial auth with config:', {
+    serverUrl: config.server_url,
+    scope: config.scopes.join(' '),
+    hasResourceMetadataUrl: !!config.resource_metadata_url,
+  });
+
   let authResult = await auth(provider, {
     serverUrl: config.server_url,
     scope: config.scopes.join(' '),
@@ -400,14 +492,28 @@ async function performOAuth(provider: GenericMcpOAuthProvider, config: ServerCon
     // Now try with the captured authorization code
     if (provider.authorizationCode) {
       console.log('🔐 Using captured authorization code for token exchange...');
-      authResult = await auth(provider, {
+      console.log('🔍 Token exchange config:', {
         serverUrl: config.server_url,
         scope: config.scopes.join(' '),
-        authorizationCode: provider.authorizationCode,
-        resourceMetadataUrl: config.resource_metadata_url ? new URL(config.resource_metadata_url) : undefined,
+        authorizationCode: provider.authorizationCode.substring(0, 20) + '...',
+        hasResourceMetadataUrl: !!config.resource_metadata_url,
+        authServerUrl: config.auth_server_url,
       });
 
-      console.log('✅ OAuth result (with code):', authResult);
+      try {
+        authResult = await auth(provider, {
+          serverUrl: config.server_url,
+          scope: config.scopes.join(' '),
+          authorizationCode: provider.authorizationCode,
+          resourceMetadataUrl: config.resource_metadata_url ? new URL(config.resource_metadata_url) : undefined,
+        });
+
+        console.log('✅ OAuth result (with code):', authResult);
+      } catch (error) {
+        console.log('❌ Auth function threw error:', error);
+        console.log('❌ Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
     } else {
       throw new Error('No authorization code captured');
     }

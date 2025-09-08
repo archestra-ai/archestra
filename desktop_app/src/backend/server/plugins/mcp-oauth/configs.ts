@@ -5,6 +5,17 @@
  * Defines OAuth provider configurations for MCP servers
  */
 
+// Debug logging for environment variables
+console.log('🔍 Environment variables debug:', {
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '***PRESENT***' : 'MISSING',
+  GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET ? '***PRESENT***' : 'MISSING',
+  SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET ? '***PRESENT***' : 'MISSING',
+  OAUTH_PROXY_URL: process.env.OAUTH_PROXY_URL || 'MISSING',
+  NODE_ENV: process.env.NODE_ENV,
+  processTitle: process.title,
+  cwd: process.cwd(),
+});
+
 /**
  * Server configuration interface
  */
@@ -73,35 +84,14 @@ export const SERVER_CONFIGS: Record<string, ServerConfig> = {
   },
   slack: {
     name: 'Slack MCP',
-    server_url: 'https://slack.com/oauth',
+    server_url: 'https://slack.com/oauth/v2/',
+    well_known_url: 'https://slack.com/.well-known/openid-configuration',
     client_id: process.env.SLACK_CLIENT_ID || '',
     client_secret: process.env.SLACK_CLIENT_SECRET || '',
     redirect_uris: ['http://localhost:8080/oauth/callback'],
     scopes: ['channels:read', 'chat:write', 'users:read'],
     description: 'Slack MCP Server',
     default_scopes: ['channels:read', 'chat:write', 'users:read'],
-    supports_resource_metadata: false,
-  },
-  notion: {
-    name: 'Notion MCP',
-    server_url: 'https://api.notion.com/v1/oauth',
-    client_id: process.env.NOTION_CLIENT_ID || '',
-    client_secret: process.env.NOTION_CLIENT_SECRET || '',
-    redirect_uris: ['http://localhost:8080/oauth/callback'],
-    scopes: ['read', 'write'],
-    description: 'Notion MCP Server',
-    default_scopes: ['read', 'write'],
-    supports_resource_metadata: false,
-  },
-  trello: {
-    name: 'Trello MCP',
-    server_url: 'https://api.trello.com/1/oauth',
-    client_id: process.env.TRELLO_CLIENT_ID || '',
-    client_secret: process.env.TRELLO_CLIENT_SECRET || '',
-    redirect_uris: ['http://localhost:8080/oauth/callback'],
-    scopes: ['read', 'write'],
-    description: 'Trello MCP Server',
-    default_scopes: ['read', 'write'],
     supports_resource_metadata: false,
   },
 };

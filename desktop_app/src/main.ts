@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/electron/main';
 import chokidar from 'chokidar';
+import { config as dotenvConfig } from 'dotenv';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import { ChildProcess, fork } from 'node:child_process';
@@ -7,6 +8,9 @@ import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
 import log from '@backend/utils/logger';
+
+// Load environment variables from .env file
+dotenvConfig();
 
 import config from './config';
 import { setupProviderBrowserAuthHandlers } from './main-browser-auth';

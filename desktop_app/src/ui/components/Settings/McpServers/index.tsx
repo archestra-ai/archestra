@@ -170,7 +170,7 @@ export default function McpServers(_props: McpServersProps) {
             ) : (
               <div className="space-y-3">
                 {installedMcpServers.map((server) => (
-                  <McpServer key={server.name} mcpServer={server} />
+                  <McpServer key={server.id} mcpServer={server} />
                 ))}
               </div>
             )}

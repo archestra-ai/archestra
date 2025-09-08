@@ -25,6 +25,8 @@ import { Separator } from '@ui/components/ui/separator';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useMcpServersStore, useSandboxStore } from '@ui/stores';
 
+import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
+
 import McpServerDetailsDialog from './McpServerDetailsDialog';
 
 interface McpServerProps {
@@ -134,6 +136,7 @@ export default function McpServer({
               >
                 <Info className="h-4 w-4" />
               </Button>
+              <ReportIssueWithCatalogEntry catalogId={name} />
               {isInstalled && <CheckCircle className="h-5 w-5 text-green-500" />}
             </div>
           </div>

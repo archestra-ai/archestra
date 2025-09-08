@@ -22,29 +22,7 @@ export default function AlphaDisclaimerMessage(_props: AlphaDisclaimerMessagePro
             MCP Catalog
           </a>{' '}
           is currently in alpha-stage. While testing out any of the connectors, if you experience <em>any</em> issues,
-          feel free to{' '}
-          <a
-            href="https://github.com/archestra-ai/website/issues/new"
-            className="underline hover:no-underline font-medium"
-            onClick={(e) => {
-              e.preventDefault();
-              window.electronAPI.openExternal('https://github.com/archestra-ai/website/issues/new');
-            }}
-          >
-            open an issue
-          </a>{' '}
-          or{' '}
-          <a
-            href="https://github.com/archestra-ai/website/tree/main/app/app/mcp-catalog"
-            className="underline hover:no-underline font-medium"
-            onClick={(e) => {
-              e.preventDefault();
-              window.electronAPI.openExternal('https://github.com/archestra-ai/website/tree/main/app/app/mcp-catalog');
-            }}
-          >
-            pull-request
-          </a>{' '}
-          🙂
+          feel free to open an issue by simply clicking the git icon on the catalog entry. 🙂
         </p>
       </AlertDescription>
     </Alert>

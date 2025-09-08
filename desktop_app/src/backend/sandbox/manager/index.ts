@@ -98,9 +98,15 @@ class McpServerSandboxManager {
   }
 
   async startServer(mcpServer: McpServer) {
-    const { id, name } = mcpServer;
-    log.info(`Starting MCP server: id="${id}", name="${name}"`);
+    const { id, name, serverType } = mcpServer;
+    log.info(`Starting MCP server: id="${id}", name="${name}", type="${serverType}"`);
 
+    // Handle remote servers differently
+    if (serverType === 'remote') {
+      return await this.startRemoteServer(mcpServer);
+    }
+
+    // Handle local containerized servers (existing logic)
     if (!this.socketPath) {
       throw new Error('Socket path is not initialized');
     }
@@ -117,6 +123,64 @@ class McpServerSandboxManager {
     log.info(`Registered sandboxed MCP server ${id} in map`);
 
     await sandboxedMcpServer.start();
+  }
+
+  /**
+   * Handle remote MCP server connection using StreamableHTTPClientTransport
+   * Based on the pattern from linear-mcp-oauth-minimal.ts
+   */
+  private async startRemoteServer(mcpServer: McpServer) {
+    const { id, name, serverConfig, oauthTokens } = mcpServer;
+    const remoteUrl = serverConfig.remote_url;
+
+    if (!remoteUrl) {
+      throw new Error(`Remote server ${name} missing remote_url in config`);
+    }
+
+    if (!oauthTokens?.access_token) {
+      throw new Error(`Remote server ${name} missing OAuth access token`);
+    }
+
+    log.info(`Connecting to remote MCP server: ${name} at ${remoteUrl}`);
+
+    try {
+      // Import MCP SDK components
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+
+      // Create transport with OAuth authentication
+      const transport = new StreamableHTTPClientTransport(new URL(remoteUrl), {
+        requestInit: {
+          headers: { 
+            Authorization: `Bearer ${oauthTokens.access_token}` 
+          },
+        },
+      });
+
+      // Create MCP client
+      const client = new Client(
+        { name: 'archestra-desktop', version: '1.0.0' }, 
+        { capabilities: { sampling: {} } }
+      );
+
+      // Test the connection
+      await client.connect(transport);
+      log.info(`✅ Successfully connected to remote MCP server: ${name}`);
+
+      // Get available tools
+      const tools = await client.listTools();
+      log.info(`🛠️ Remote server ${name} has ${tools.tools.length} tools`);
+
+      // Store the client for later use (similar to how we store SandboxedMcpServer)
+      // For now we'll close it since we don't have remote client management yet
+      await client.close();
+      
+      log.info(`Remote server ${name} connection test successful`);
+
+    } catch (error) {
+      log.error(`Failed to connect to remote MCP server ${name}:`, error);
+      throw error;
+    }
   }
 
   async stopServer(mcpServerId: string) {

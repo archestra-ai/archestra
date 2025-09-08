@@ -46,6 +46,10 @@ export const McpServerInstallSchema = z.object({
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
   /** Server installation status */
   status: z.enum(['installing', 'oauth_pending', 'installed', 'failed']).optional(),
+  /** Server type (local container or remote service) */
+  serverType: z.enum(['local', 'remote']).optional(),
+  /** Remote URL for remote MCP servers */
+  remote_url: z.string().optional(),
 });
 
 // Interface for catalog search parameters
@@ -115,6 +119,8 @@ export default class McpServerModel {
     oauthServerMetadata,
     oauthResourceMetadata,
     status,
+    serverType,
+    remote_url,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -156,6 +162,18 @@ export default class McpServerModel {
     }
 
     const now = new Date();
+    const isRemoteServer = serverType === 'remote' || !!remote_url;
+    const finalServerType = isRemoteServer ? 'remote' : (serverType || 'local');
+    
+    // If remote_url is provided, store it in serverConfig
+    if (remote_url) {
+      finalServerConfig = {
+        ...finalServerConfig,
+        remote_url: remote_url,
+      };
+      log.info(`Remote URL detected: ${remote_url}, setting serverType to 'remote'`);
+    }
+    
     const [server] = await db
       .insert(mcpServersTable)
       .values({
@@ -163,6 +181,7 @@ export default class McpServerModel {
         name: displayName,
         serverConfig: finalServerConfig,
         userConfigValues: userConfigValues,
+        serverType: finalServerType,
         status: status || 'installed', // Default to 'installed' for regular installs
         oauthTokens: oauthTokens || null,
         oauthClientInfo: oauthClientInfo || null,
@@ -172,7 +191,15 @@ export default class McpServerModel {
       })
       .returning();
 
-    await this.startServerAndSyncAllConnectedExternalMcpClients(server);
+    // Only start container for local servers
+    if (isRemoteServer) {
+      log.info(`Remote server ${server.name} installed - skipping container startup`);
+      // Just sync external clients for remote servers
+      await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+    } else {
+      // Start container for local servers
+      await this.startServerAndSyncAllConnectedExternalMcpClients(server);
+    }
 
     return server;
   }

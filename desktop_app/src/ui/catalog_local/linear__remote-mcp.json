@@ -25,7 +25,7 @@
   "display_name": "Linear MCP",
   "version": "1.0.0",
   "description": "Remote MCP server for Linear - issue tracking and project management",
-  "remote_url": "https://mcp.linear.app/sse",
+  "remote_url": "https://mcp.linear.app/mcp",
   "remote_mcp_docs_url": "https://linear.app/docs/mcp",
   "tools": [],
   "prompts": [],

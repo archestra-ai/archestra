@@ -346,6 +346,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Generate server ID
         const serverId = installData.id || uuidv4();
 
+        // Check if this is a remote server (has remote_url from catalog)
+        const isRemoteServer = !!installData.remote_url;
+        const remoteUrl = installData.remote_url;
+
+        log.info(`Installing ${isRemoteServer ? 'remote' : 'local'} MCP server: ${installData.displayName}`);
+        log.info('Install data keys:', Object.keys(installData));
+        log.info('Remote URL detection:', { 
+          hasRemoteUrl: !!installData.remote_url, 
+          remoteUrl: installData.remote_url,
+          isRemoteServer 
+        });
+        
+        if (isRemoteServer) {
+          log.info(`Remote URL: ${remoteUrl}`);
+        }
+
         // Create placeholder MCP server record with oauth_pending status
         // This allows OAuth provider to save client info during the flow
         const placeholderServer = await McpServerModel.create({
@@ -353,7 +369,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: installData.displayName,
           serverConfig: installData.serverConfig,
           userConfigValues: installData.userConfigValues || null,
+          serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
           status: 'oauth_pending',
+          remote_url: remoteUrl, // Pass remote_url as separate field
           oauthTokens: null,
           oauthClientInfo: null,
           oauthServerMetadata: null,
@@ -389,8 +407,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthClientInfo: clientInfo,
           });
 
-          // Start the MCP server container
-          await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+          // For remote servers, skip container creation and sync external clients
+          // For local servers, start container as usual
+          if (isRemoteServer) {
+            log.info(`Remote server ${server.name} installed successfully - skipping container creation`);
+            // TODO: Test remote connection here when we implement remote connection logic
+            // Import ExternalMcpClientModel for remote server handling
+            const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
+            await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+          } else {
+            // Start the MCP server container for local servers
+            await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+          }
 
           return reply.send({ server });
         } catch (oauthError) {

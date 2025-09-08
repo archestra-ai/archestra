@@ -8,6 +8,12 @@ import { z } from 'zod';
 export const McpServerStatusSchema = z.enum(['installing', 'oauth_pending', 'installed', 'failed']);
 export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
 
+/**
+ * MCP Server Type Enum
+ */
+export const McpServerTypeSchema = z.enum(['local', 'remote']);
+export type McpServerType = z.infer<typeof McpServerTypeSchema>;
+
 import {
   type AuthorizationServerMetadata,
   AuthorizationServerMetadataSchema,
@@ -82,6 +88,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    * Current status of the MCP server installation/OAuth flow
    */
   status: text().notNull().default('installing').$type<McpServerStatus>(),
+  /**
+   * Type of MCP server (local container or remote service)
+   */
+  serverType: text('server_type').notNull().default('local').$type<McpServerType>(),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -101,6 +111,7 @@ export const McpServerSchema = z.object({
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
   status: McpServerStatusSchema,
+  serverType: McpServerTypeSchema,
   createdAt: z.string(),
 });
 

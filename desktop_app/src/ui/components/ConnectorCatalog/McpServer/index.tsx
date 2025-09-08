@@ -18,14 +18,13 @@ import {
 import { useState } from 'react';
 
 import { type LocalMcpServerManifest } from '@ui/catalog_local';
+import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
 import { Separator } from '@ui/components/ui/separator';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useMcpServersStore, useSandboxStore } from '@ui/stores';
-
-import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 
 import McpServerDetailsDialog from './McpServerDetailsDialog';
 

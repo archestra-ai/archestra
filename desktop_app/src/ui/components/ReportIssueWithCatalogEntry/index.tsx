@@ -22,7 +22,9 @@ export default function ReportIssueWithCatalogEntry({ catalogId }: ReportIssueWi
 
     try {
       // Check if there's an existing open issue
-      const searchQuery = encodeURIComponent(`is:issue "${issueTitle}" in:title repo:archestra-ai/archestra state:open`);
+      const searchQuery = encodeURIComponent(
+        `is:issue "${issueTitle}" in:title repo:archestra-ai/archestra state:open`
+      );
       const response = await fetch(`https://api.github.com/search/issues?q=${searchQuery}`);
 
       if (response.ok) {

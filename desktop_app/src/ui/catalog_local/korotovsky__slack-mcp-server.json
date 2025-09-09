@@ -8,15 +8,12 @@
     "name": "korotovsky"
   },
   "server": {
-    "type": "binary",
+    "type": "node",
     "entry_point": "slack-mcp-server",
     "mcp_config": {
-      "command": "./slack-mcp-server",
-      "args": [],
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
       "env": {
-        "SLACK_MCP_XOXC_TOKEN": "${user_config.slack_mcp_xoxc_token}",
-        "SLACK_MCP_XOXD_TOKEN": "${user_config.slack_mcp_xoxd_token}",
-        "SLACK_MCP_OAUTH_TOKEN": "${user_config.slack_mcp_oauth_token}",
         "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
       }
     }
@@ -100,15 +97,17 @@
   "quality_score": 72,
   "oauth_config": {
     "name": "Slack MCP",
-    "server_url": "https://slack.com/oauth/v2/",
-    "well_known_url": "https://slack.com/.well-known/openid-configuration",
+    "server_url": "https://slack.com/oauth/v2/authorize",
+    "token_endpoint": "https://slack.com/api/oauth.v2.access",
     "client_id": "process.env.SLACK_CLIENT_ID",
     "client_secret": "process.env.SLACK_CLIENT_SECRET",
-    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "redirect_uris": ["https://1c38cd52a1cf.ngrok-free.app/oauth/callback", "http://localhost:8080/oauth/callback"],
     "scopes": ["channels:read", "chat:write", "users:read"],
     "description": "Slack MCP Server",
     "default_scopes": ["channels:read", "chat:write", "users:read"],
-    "supports_resource_metadata": false
+    "supports_resource_metadata": false,
+    "generic_oauth": true,
+    "access_token_env_var": "SLACK_MCP_XOXP_TOKEN"
   },
   "archestra_config": {
     "client_config_permutations": {

@@ -202,13 +202,45 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         }
 
         try {
-          // Call the simple OAuth install endpoint using typed client
-          const { data: result, error } = await installMcpServerWithOauth({
-            body: {
-              provider,
-              installData: installData!,
-            },
-          });
+          // Check if this is a generic OAuth flow
+          const isGenericOAuth = (installData as any).oauthConfig?.generic_oauth;
+          
+          if (isGenericOAuth) {
+            // Use the generic OAuth start endpoint
+            const response = await fetch('/api/mcp_server/start_oauth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ installData: installData! }),
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Generic OAuth start failed');
+            }
+            
+            const result = await response.json();
+            
+            // For generic OAuth, the response includes authUrl - open it in browser
+            if (result.authUrl) {
+              window.open(result.authUrl, '_blank');
+            }
+            
+            // Update the server in our store with oauth_pending status
+            if (result.server) {
+              const newServer: ConnectedMcpServer = result.server;
+              set((state) => ({
+                mcpServers: [newServer, ...state.mcpServers],
+                installingMcpServerId: null,
+              }));
+            }
+            return;
+          } else {
+            // Use the regular MCP OAuth endpoint
+            const { data: result, error } = await installMcpServerWithOauth({
+              body: {
+                installData: installData!,
+              },
+            });
 
           if (error) {
             throw new Error(error || 'OAuth install failed');
@@ -216,6 +248,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
           if (result?.server) {
             get().addMcpServerToInstalledMcpServers(result.server);
+          }
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);

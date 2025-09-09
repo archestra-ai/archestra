@@ -1,7 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { resolveOAuthConfig } from '@backend/utils/env-resolver';
 
 import {
   McpServerConfigSchema,
@@ -29,6 +28,7 @@ z.globalRegistry.add(McpServerSchema, { id: 'McpServer' });
 z.globalRegistry.add(McpServerInstallSchema, { id: 'McpServerInstall' });
 z.globalRegistry.add(McpServerContainerLogsSchema, { id: 'McpServerContainerLogs' });
 z.globalRegistry.add(AvailableToolSchema, { id: 'AvailableTool' });
+
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -332,15 +332,39 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
+      log.info('OAuth install request body:', JSON.stringify(body, null, 2));
       const { installData } = body;
 
       try {
+        log.info('OAuth install request received:', { 
+          installDataKeys: Object.keys(installData),
+          hasOauthConfig: !!installData.oauthConfig,
+          displayName: installData.displayName 
+        });
+
         if (!installData.oauthConfig) {
+          log.warn('OAuth install rejected: oauthConfig missing');
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
         
         // Use OAuth config from frontend
+        const { resolveOAuthConfig } = await import('@backend/utils/env-resolver');
         const config = resolveOAuthConfig(installData.oauthConfig);
+        
+        log.info('Resolved OAuth config:', { 
+          configName: config.name,
+          isGenericOAuth: !!config.generic_oauth,
+          hasClientId: !!config.client_id,
+          serverUrl: config.server_url 
+        });
+        
+        // Check if this uses generic OAuth flow - redirect to generic OAuth endpoint
+        if (config.generic_oauth) {
+          log.info('Redirecting to generic OAuth endpoint for:', config.name);
+          return reply.code(400).send({ 
+            error: 'Generic OAuth servers should use /api/mcp_server/start_oauth endpoint' 
+          });
+        }
 
         // Generate server ID
         const serverId = installData.id || uuidv4();
@@ -436,6 +460,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     }
   );
+
 };
 
 export default mcpServerRoutes;

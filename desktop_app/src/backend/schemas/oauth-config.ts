@@ -19,6 +19,9 @@ export const OAuthServerConfigSchema = z.object({
   well_known_url: z.string().url().optional(), // Optional specific well-known URL for this provider
   default_scopes: z.array(z.string()), // Fallback scopes when discovery fails
   supports_resource_metadata: z.boolean(), // Whether to attempt resource metadata discovery
+  generic_oauth: z.boolean().optional(), // Use generic OAuth 2.0 flow instead of MCP SDK
+  token_endpoint: z.string().url().optional(), // Token endpoint for generic OAuth
+  access_token_env_var: z.string().optional(), // Environment variable name to store access token
 });
 
 export type OAuthServerConfig = z.infer<typeof OAuthServerConfigSchema>;

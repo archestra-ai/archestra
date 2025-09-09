@@ -16,6 +16,8 @@ export interface LocalMcpServerManifest extends ArchestraMcpServerManifest {
     well_known_url?: string;
     default_scopes: string[];
     supports_resource_metadata: boolean;
+    generic_oauth?: boolean;
+    token_endpoint?: string;
   };
 }
 

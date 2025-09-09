@@ -169,7 +169,6 @@ function buildAuthorizationUrl(config: OAuthServerConfig, state: string): string
   return authUrl.toString();
 }
 
-
 /**
  * Start callback server on port 8080
  */

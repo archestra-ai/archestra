@@ -63,47 +63,6 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
     }
   };
 
-  const regenerateMessage = async (messageIndex: number) => {
-    // Get all messages up to (but not including) the assistant message to regenerate
-    const contextMessages = messages.slice(0, messageIndex);
-
-    // Get the last user message before this assistant message
-    let lastUserMessage: UIMessage | null = null;
-    for (let i = messageIndex - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        lastUserMessage = messages[i];
-        break;
-      }
-    }
-
-    if (!lastUserMessage) {
-      console.error('No user message found before assistant message');
-      return;
-    }
-
-    // Extract text content from the last user message
-    let userText = '';
-    if (lastUserMessage.parts) {
-      userText = lastUserMessage.parts
-        .filter((part) => part.type === 'text')
-        .map((part) => (part as any).text)
-        .join('');
-    }
-
-    // Remove the current assistant message temporarily
-    const messagesWithoutCurrent = [...messages.slice(0, messageIndex), ...messages.slice(messageIndex + 1)];
-    setMessages(messagesWithoutCurrent);
-
-    // Set context messages for regeneration
-    setMessages(contextMessages);
-
-    // Trigger regeneration with the last user message
-    sendMessage({ text: userText });
-
-    // After regeneration completes, we'll need to restore following messages
-    // This will be handled by the streaming completion callback
-  };
-
   const saveMessagesToDatabase = async (sessionId: string, messages: UIMessage[]) => {
     // For now, we'll rely on the automatic saving that happens after streaming completes
     // The backend saves messages via the onFinish callback in the streaming response
@@ -119,6 +78,5 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
     cancelEdit,
     saveEdit,
     deleteMessage,
-    regenerateMessage,
   };
 }

@@ -9,6 +9,8 @@ import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
 import { ToolCallStatus } from '@ui/types';
 
+import RegenerationSkeleton from './RegenerationSkeleton';
+
 interface AssistantMessageProps {
   message: UIMessage;
   messageIndex: number;
@@ -183,7 +185,9 @@ export default function AssistantMessage({
 
   return (
     <div className="relative group" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-      <div className="gap-y-2 grid grid-cols-1 pr-24">{orderedElements}</div>
+      <div className="gap-y-2 grid grid-cols-1 pr-24">
+        {isRegenerating ? <RegenerationSkeleton /> : orderedElements}
+      </div>
       {isHovered && (
         <div className="absolute top-0 right-0 flex gap-1">
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditStart()} title="Edit message">

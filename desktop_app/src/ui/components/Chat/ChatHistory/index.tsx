@@ -21,6 +21,7 @@ interface ChatHistoryProps {
   onDeleteMessage: (messageId: string) => void;
   onRegenerateMessage: (messageIndex: number) => void;
   isRegenerating?: boolean;
+  regeneratingIndex?: number | null;
   isSubmitting?: boolean;
   submissionStartTime?: number;
 }
@@ -37,6 +38,7 @@ interface MessageProps {
   onDeleteMessage: (messageId: string) => void;
   onRegenerateMessage: (messageIndex: number) => void;
   isRegenerating?: boolean;
+  regeneratingIndex?: number | null;
 }
 
 const Message = ({
@@ -50,7 +52,7 @@ const Message = ({
   onEditChange,
   onDeleteMessage,
   onRegenerateMessage,
-  isRegenerating,
+  regeneratingIndex,
 }: MessageProps) => {
   const isEditing = editingMessageId === message.id;
 
@@ -83,7 +85,7 @@ const Message = ({
         <AssistantMessage
           {...commonProps}
           onRegenerate={() => onRegenerateMessage(messageIndex)}
-          isRegenerating={isRegenerating}
+          isRegenerating={regeneratingIndex === messageIndex}
         />
       );
     case 'system':
@@ -117,6 +119,7 @@ export default function ChatHistory({
   onDeleteMessage,
   onRegenerateMessage,
   isRegenerating,
+  regeneratingIndex,
   isSubmitting,
   submissionStartTime,
 }: ChatHistoryProps) {
@@ -204,6 +207,7 @@ export default function ChatHistory({
                 onDeleteMessage={onDeleteMessage}
                 onRegenerateMessage={onRegenerateMessage}
                 isRegenerating={isRegenerating}
+                regeneratingIndex={regeneratingIndex}
               />
             </div>
           </div>

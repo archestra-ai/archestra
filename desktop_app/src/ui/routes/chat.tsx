@@ -76,66 +76,44 @@ function ChatPage() {
 
   const isLoading = status === 'streaming';
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
+  const [fullMessagesBackup, setFullMessagesBackup] = useState<UIMessage[]>([]);
 
   // Track pre-generation loading state (between submission and streaming start)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
 
   // Use the message actions hook
-  const {
-    editingMessageId,
-    editingContent,
-    setEditingContent,
-    startEdit,
-    cancelEdit,
-    saveEdit,
-    deleteMessage,
-    regenerateMessage: regenerateFromHook,
-  } = useMessageActions({
-    messages,
-    setMessages,
-    sendMessage,
-    sessionId: currentChatSessionId,
-  });
+  const { editingMessageId, editingContent, setEditingContent, startEdit, cancelEdit, saveEdit, deleteMessage } =
+    useMessageActions({
+      messages,
+      setMessages,
+      sendMessage,
+      sessionId: currentChatSessionId,
+    });
 
-  // Store context for regeneration
-  const [regenerationContext, setRegenerationContext] = useState<{
-    index: number;
-    followingMessages: UIMessage[];
-    messagesBeforeTarget: UIMessage[];
-  } | null>(null);
-
-  // Custom regenerate that keeps following messages
+  // Handle regeneration for specific message index
   const handleRegenerateMessage = async (messageIndex: number) => {
-    if (messageIndex < 0 || messageIndex >= messages.length) return;
-
     const messageToRegenerate = messages[messageIndex];
-    if (messageToRegenerate.role !== 'assistant') return;
+
+    if (!messageToRegenerate || messageToRegenerate.role !== 'assistant') {
+      console.error('Can only regenerate assistant messages');
+      return;
+    }
 
     setRegeneratingIndex(messageIndex);
 
-    // Store the context for regeneration
-    const messagesBeforeTarget = messages.slice(0, messageIndex);
-    const followingMessages = messages.slice(messageIndex + 1);
+    // Store the full messages array for display purposes
+    setFullMessagesBackup(messages);
 
-    setRegenerationContext({
-      index: messageIndex,
-      followingMessages,
-      messagesBeforeTarget,
-    });
+    // Create a truncated conversation for the API call only
+    const conversationUpToAssistant = messages.slice(0, messageIndex + 1);
 
-    // Set messages to only include up to (but not including) the assistant message to regenerate
-    // This will make the last message a user message, which allows regenerate() to work
-    setMessages(messagesBeforeTarget);
+    // Temporarily set messages to truncated version for API call
+    setMessages(conversationUpToAssistant);
 
-    // Small delay to ensure state updates are processed
-    setTimeout(() => {
-      regenerate();
-    }, 50);
+    // Use the built-in regenerate function which will regenerate the last assistant message
+    regenerate();
   };
-
-  // Track if we've already processed the reordering
-  const [hasReordered, setHasReordered] = useState(false);
 
   useEffect(() => {
     if (isLoading) {
@@ -147,40 +125,40 @@ function ChatPage() {
     if (status === 'ready' || status === 'error') {
       setIsSubmitting(false);
     }
-  }, [status]);
 
-  // Watch for new assistant message and restore order
-  useEffect(() => {
-    if (!regenerationContext || status !== 'ready' || hasReordered) return;
-
-    // Check if a new assistant message was added at the end
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === 'assistant' && messages.length > regenerationContext.messagesBeforeTarget.length) {
-      // Mark that we're reordering to prevent duplicate processing
-      setHasReordered(true);
-
-      // We have a new assistant message, now reorder
-      setTimeout(() => {
-        setMessages((currentMessages) => {
-          const newAssistantMessage = currentMessages[currentMessages.length - 1];
-
-          // Build the correctly ordered message array
-          const reorderedMessages = [
-            ...regenerationContext.messagesBeforeTarget,
-            newAssistantMessage,
-            ...regenerationContext.followingMessages,
-          ];
-
-          return reorderedMessages;
-        });
-
-        // Clear regeneration state
-        setRegenerationContext(null);
-        setRegeneratingIndex(null);
-        setHasReordered(false);
-      }, 50);
+    // Handle error case during regeneration - restore backup messages
+    if (status === 'error' && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
+      setMessages(fullMessagesBackup);
+      setFullMessagesBackup([]);
+      setRegeneratingIndex(null);
     }
-  }, [messages, status, regenerationContext, hasReordered]);
+  }, [status, regeneratingIndex, fullMessagesBackup]);
+
+  // Clear regenerating state and merge new message when streaming finishes
+  useEffect(() => {
+    if (status === 'ready' && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
+      // Get the new regenerated message (last message in the current truncated array)
+      const newRegeneratedMessage = messages[messages.length - 1];
+
+      if (newRegeneratedMessage && regeneratingIndex < fullMessagesBackup.length) {
+        // Create new array with the regenerated message replaced
+        const updatedMessages = [...fullMessagesBackup];
+        updatedMessages[regeneratingIndex] = newRegeneratedMessage;
+
+        // Set the complete updated messages array
+        setMessages(updatedMessages);
+      } else {
+        // Fallback: restore backup if something went wrong
+        setMessages(fullMessagesBackup);
+      }
+
+      setFullMessagesBackup([]);
+      setRegeneratingIndex(null);
+    } else if (status === 'ready' && regeneratingIndex !== null) {
+      // No backup to restore, just clear the regenerating state
+      setRegeneratingIndex(null);
+    }
+  }, [status, regeneratingIndex, fullMessagesBackup, messages]);
 
   // Load messages from database when chat changes
   useEffect(() => {
@@ -231,7 +209,7 @@ function ChatPage() {
       ) : (
         <div className="flex-1 min-h-0 overflow-hidden max-w-full">
           <ChatHistory
-            messages={messages}
+            messages={regeneratingIndex !== null && fullMessagesBackup.length > 0 ? fullMessagesBackup : messages}
             editingMessageId={editingMessageId}
             editingContent={editingContent}
             onEditStart={startEdit}
@@ -241,6 +219,7 @@ function ChatPage() {
             onDeleteMessage={deleteMessage}
             onRegenerateMessage={handleRegenerateMessage}
             isRegenerating={regeneratingIndex !== null || isLoading}
+            regeneratingIndex={regeneratingIndex}
             isSubmitting={isSubmitting}
             submissionStartTime={submissionStartTime}
           />

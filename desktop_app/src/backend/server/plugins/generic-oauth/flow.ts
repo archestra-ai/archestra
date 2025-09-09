@@ -81,7 +81,7 @@ async function storeTokens(serverId: string, tokens: GenericOAuthTokens): Promis
 }
 
 /**
- * Store OAuth tokens in database and optionally inject access token into environment variable
+ * Store OAuth tokens in database and optionally inject access token into environment variable and files
  */
 async function storeTokensWithEnvVar(serverId: string, tokens: GenericOAuthTokens, config: OAuthServerConfig): Promise<void> {
   const { default: McpServerModel } = await import('@backend/models/mcpServer');
@@ -98,24 +98,37 @@ async function storeTokensWithEnvVar(serverId: string, tokens: GenericOAuthToken
     oauthTokens: mcpTokens,
   };
   
-  // If access_token_env_var is specified, inject the token into the server's environment variables
-  if (config.access_token_env_var) {
-    // Get current server configuration
-    const servers = await McpServerModel.getById(serverId);
-    const currentServer = servers?.[0];
-    
-    if (currentServer) {
-      // Create a copy of the current serverConfig and update the environment variables
-      const updatedServerConfig = {
-        ...currentServer.serverConfig,
-        env: {
-          ...currentServer.serverConfig.env,
-          [config.access_token_env_var]: tokens.access_token,
-        },
+  // Get current server configuration to check if we need to update serverConfig
+  const servers = await McpServerModel.getById(serverId);
+  const currentServer = servers?.[0];
+  
+  if (currentServer && (config.access_token_env_var || currentServer.serverConfig.inject_file)) {
+    // Create a copy of the current serverConfig
+    const updatedServerConfig = {
+      ...currentServer.serverConfig,
+    };
+
+    // Update environment variables if access_token_env_var is specified
+    if (config.access_token_env_var) {
+      updatedServerConfig.env = {
+        ...currentServer.serverConfig.env,
+        [config.access_token_env_var]: tokens.access_token,
       };
-      
-      updateData.serverConfig = updatedServerConfig;
     }
+
+    // Process file injection if inject_file is specified
+    if (currentServer.serverConfig.inject_file) {
+      updatedServerConfig.inject_file = {};
+      
+      // Process each file to be injected
+      for (const [filename, content] of Object.entries(currentServer.serverConfig.inject_file)) {
+        // Replace ${access_token} placeholder with actual token
+        const processedContent = content.replace(/\$\{access_token\}/g, tokens.access_token);
+        updatedServerConfig.inject_file[filename] = processedContent;
+      }
+    }
+    
+    updateData.serverConfig = updatedServerConfig;
   }
   
   await McpServerModel.update(serverId, updateData);

@@ -15,6 +15,9 @@
       "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
       "env": {
         "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
+      },
+      "inject_file": {
+        "/tmp/slack_token.json": "{\"access_token\": \"${access_token}\", \"additional\": \"blahblah\"}"
       }
     }
   },

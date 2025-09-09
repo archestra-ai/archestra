@@ -34,6 +34,7 @@ export const McpServerConfigSchema = z.strictObject({
   command: z.string(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
 });
 
 export const McpServerUserConfigValuesSchema = z.record(

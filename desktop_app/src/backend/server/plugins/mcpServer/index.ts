@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import { resolveOAuthConfig } from '@backend/utils/env-resolver';
 
 import {
   McpServerConfigSchema,
@@ -321,7 +322,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: 'Install MCP server with OAuth authentication',
         tags: ['MCP Server'],
         body: z.object({
-          provider: z.string(),
           installData: McpServerInstallSchema,
         }),
         response: {
@@ -332,16 +332,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      const { provider, installData } = body;
+      const { installData } = body;
 
       try {
-        // Get the server configuration for this provider
-        const { getServerConfig, connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
-        const config = getServerConfig(provider);
-
-        if (!config) {
-          return reply.code(400).send({ error: `Unknown OAuth provider: ${provider}` });
+        if (!installData.oauthConfig) {
+          return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
+        
+        // Use OAuth config from frontend
+        const config = resolveOAuthConfig(installData.oauthConfig);
 
         // Generate server ID
         const serverId = installData.id || uuidv4();
@@ -381,6 +380,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Perform OAuth and get tokens
+          const { connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
           const { client, accessToken } = await connectMcpServer(config, serverId);
 
           // Close the test connection

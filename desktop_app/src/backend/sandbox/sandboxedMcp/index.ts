@@ -234,7 +234,6 @@ export default class SandboxedMcpServer {
         // Check if tokens are expired and refresh if needed
         try {
           const { ensureValidTokens } = await import('@backend/server/plugins/mcp-oauth');
-          const { getServerConfig } = await import('@backend/server/plugins/mcp-oauth');
 
           // Get server config based on provider (this needs to be determined from the server)
           // For now, we'll try to use the stored access token directly

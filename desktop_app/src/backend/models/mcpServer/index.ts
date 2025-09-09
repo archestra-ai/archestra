@@ -18,6 +18,7 @@ import {
 } from '@backend/database/schema/oauth';
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
+import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
 export const McpServerInstallSchema = z.object({
@@ -34,8 +35,8 @@ export const McpServerInstallSchema = z.object({
     .regex(/^[A-Za-z0-9-\s]{1,63}$/, 'Name can only contain letters, numbers, spaces, and dashes (-)'),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
-  /** OAuth provider name (e.g., google, slack, github) */
-  oauthProvider: z.string().optional().nullable(),
+  /** OAuth server configuration object from frontend */
+  oauthConfig: OAuthServerConfigSchema.optional(),
   /** Complete OAuth tokens object from MCP SDK */
   oauthTokens: OAuthTokensSchema.optional(),
   /** OAuth client information from MCP SDK */
@@ -113,7 +114,7 @@ export default class McpServerModel {
     displayName,
     serverConfig,
     userConfigValues,
-    oauthProvider,
+    oauthConfig,
     oauthTokens,
     oauthClientInfo,
     oauthServerMetadata,
@@ -142,24 +143,7 @@ export default class McpServerModel {
     // No need to add tokens to environment variables - they're used for HTTP auth headers
     let finalServerConfig = serverConfig;
 
-    if (oauthTokens && oauthProvider) {
-      // Validate that we have a valid OAuth provider configuration
-      try {
-        const { getServerConfig } = await import('@backend/server/plugins/mcp-oauth');
-        const config = getServerConfig(oauthProvider);
-
-        if (!config) {
-          throw new Error(
-            `Invalid OAuth provider: ${oauthProvider}. Available providers: ${(await import('@backend/server/plugins/mcp-oauth')).getAvailableProviders().join(', ')}`
-          );
-        }
-
-        log.info(`OAuth provider ${oauthProvider} validated for server ${id}`);
-      } catch (error) {
-        log.warn(`OAuth provider validation failed for ${oauthProvider}:`, error);
-        // Continue with installation - OAuth will be handled at runtime
-      }
-    }
+    // OAuth validation is now handled by the frontend-provided oauthConfig
 
     const now = new Date();
     const isRemoteServer = serverType === 'remote' || !!remote_url;

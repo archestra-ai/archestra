@@ -25,7 +25,7 @@ import * as path from 'path';
 
 import log from '@backend/utils/logger';
 
-import { type ServerConfig } from './configs';
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 
 /**
  * Generate server-specific storage key
@@ -38,7 +38,7 @@ function getServerStorageKey(serverUrl: string): string {
 /**
  * Discover OAuth scopes from MCP server metadata or OAuth endpoint
  */
-async function discoverScopes(config: ServerConfig): Promise<string[]> {
+async function discoverScopes(config: OAuthServerConfig): Promise<string[]> {
   log.info('🔍 Discovering OAuth scopes for server:', config.server_url);
 
   try {
@@ -83,12 +83,12 @@ async function discoverScopes(config: ServerConfig): Promise<string[]> {
  */
 export class McpOAuthProvider implements OAuthClientProvider {
   private storageDir: string;
-  private config: ServerConfig;
+  private config: OAuthServerConfig;
   private serverKey: string;
   public authorizationCode?: string;
   private serverId: string;
 
-  constructor(config: ServerConfig, serverId: string) {
+  constructor(config: OAuthServerConfig, serverId: string) {
     this.config = config;
     this.serverId = serverId;
     this.serverKey = getServerStorageKey(config.server_url);

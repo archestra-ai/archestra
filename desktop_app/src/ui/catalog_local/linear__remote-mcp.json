@@ -1,7 +1,7 @@
 {
   "name": "linear__remote-mcp",
 
-  "oauth_configs": {
+  "oauth_config": {
     "name": "Linear MCP",
     "server_url": "https://mcp.linear.app/mcp",
     "client_id": "",

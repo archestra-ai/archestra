@@ -9,7 +9,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 import log from '@backend/utils/logger';
 
-import { type ServerConfig, validateServerConfig } from './configs';
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import { performOAuth } from './oauth-flow';
 import { McpOAuthProvider } from './provider';
 
@@ -17,11 +17,10 @@ import { McpOAuthProvider } from './provider';
  * Complete OAuth + MCP connection function
  */
 export async function connectMcpServer(
-  config: ServerConfig,
+  config: OAuthServerConfig,
   serverId: string
 ): Promise<{ client: Client; accessToken: string }> {
-  // Validate configuration
-  validateServerConfig(config);
+  // Configuration is validated by Zod schema
 
   const provider = new McpOAuthProvider(config, serverId);
   await provider.init();
@@ -70,7 +69,7 @@ export function createAuthenticatedTransport(serverUrl: string, accessToken: str
 /**
  * Test OAuth connection without persisting
  */
-export async function testOAuthConnection(config: ServerConfig, serverId: string): Promise<boolean> {
+export async function testOAuthConnection(config: OAuthServerConfig, serverId: string): Promise<boolean> {
   try {
     const { client } = await connectMcpServer(config, serverId);
     await client.close();

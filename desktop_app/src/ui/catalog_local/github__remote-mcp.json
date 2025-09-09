@@ -1,13 +1,14 @@
 {
   "name": "github__remote-mcp",
 
-  "oauth_configs": {
-    "name": "github MCP",
+  "oauth_config": {
+    "name": "GitHub Copilot MCP",
     "server_url": "https://api.githubcopilot.com/mcp/",
-    "client_id": "",
+    "client_id": "Ov23li3CnHLM7PNQ2Xiv",
+    "client_secret": "process.env.GITHUB_CLIENT_SECRET",
     "redirect_uris": ["http://localhost:8080/oauth/callback"],
     "scopes": ["read", "write"],
-    "description": "github MCP Server (dynamic registration)",
+    "description": "GitHub Copilot MCP Server",
     "default_scopes": ["read", "write"],
     "supports_resource_metadata": true
   },

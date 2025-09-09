@@ -9,13 +9,13 @@ import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 import log from '@backend/utils/logger';
 
-import { type ServerConfig } from './configs';
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import { McpOAuthProvider } from './provider';
 
 /**
  * Handle OAuth authentication flow using MCP SDK
  */
-export async function performOAuth(provider: McpOAuthProvider, config: ServerConfig): Promise<string> {
+export async function performOAuth(provider: McpOAuthProvider, config: OAuthServerConfig): Promise<string> {
   log.info('🔐 Starting OAuth with MCP SDK...');
 
   // First attempt: try with existing tokens
@@ -69,7 +69,7 @@ export async function performOAuth(provider: McpOAuthProvider, config: ServerCon
  */
 export async function refreshOAuthTokens(
   provider: McpOAuthProvider,
-  config: ServerConfig
+  config: OAuthServerConfig
 ): Promise<OAuthTokens | null> {
   log.info('🔄 Refreshing OAuth tokens...');
 
@@ -123,7 +123,7 @@ export function areTokensExpired(tokens: OAuthTokens, bufferMinutes: number = 5)
 /**
  * Ensure valid OAuth tokens, refreshing if necessary
  */
-export async function ensureValidTokens(provider: McpOAuthProvider, config: ServerConfig): Promise<string> {
+export async function ensureValidTokens(provider: McpOAuthProvider, config: OAuthServerConfig): Promise<string> {
   const tokens = await provider.tokens();
 
   if (!tokens || !tokens.access_token) {

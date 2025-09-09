@@ -61,7 +61,7 @@ export default function McpServer({
   } = server;
 
   // Safely extract OAuth and browser-based config with null checks
-  const requiresOAuthSetup = archestra_config?.oauth?.required ?? false;
+  const requiresOAuthSetup = !!(server as LocalMcpServerManifest).oauth_config;
   const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
 
   // Determine installation state

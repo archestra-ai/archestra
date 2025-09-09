@@ -7,14 +7,6 @@
 
 export { McpOAuthProvider } from './provider';
 export { performOAuth, refreshOAuthTokens, ensureValidTokens, areTokensExpired } from './oauth-flow';
-export {
-  SERVER_CONFIGS,
-  getServerConfig,
-  getAvailableProviders,
-  showAvailableServers,
-  validateServerConfig,
-  type ServerConfig,
-} from './configs';
 
 // Main OAuth connection function for MCP servers
 export { connectMcpServer } from './connection';

@@ -1389,6 +1389,23 @@ export type InstallMcpServerWithOauthData = {
   url: '/api/mcp_server/oauth_install';
 };
 
+export type InstallMcpServerWithOauthErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type InstallMcpServerWithOauthError = InstallMcpServerWithOauthErrors[keyof InstallMcpServerWithOauthErrors];
+
 export type InstallMcpServerWithOauthResponses = {
   /**
    * Default Response

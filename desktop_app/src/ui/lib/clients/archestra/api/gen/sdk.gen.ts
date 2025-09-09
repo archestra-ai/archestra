@@ -65,6 +65,7 @@ import type {
   InstallMcpServerErrors,
   InstallMcpServerResponses,
   InstallMcpServerWithOauthData,
+  InstallMcpServerWithOauthErrors,
   InstallMcpServerWithOauthResponses,
   ResetSandboxData,
   ResetSandboxErrors,
@@ -427,7 +428,11 @@ export const getAvailableTools = <ThrowOnError extends boolean = false>(
 export const installMcpServerWithOauth = <ThrowOnError extends boolean = false>(
   options: Options<InstallMcpServerWithOauthData, ThrowOnError>
 ) => {
-  return (options.client ?? _heyApiClient).post<InstallMcpServerWithOauthResponses, unknown, ThrowOnError>({
+  return (options.client ?? _heyApiClient).post<
+    InstallMcpServerWithOauthResponses,
+    InstallMcpServerWithOauthErrors,
+    ThrowOnError
+  >({
     url: '/api/mcp_server/oauth_install',
     ...options,
     headers: {

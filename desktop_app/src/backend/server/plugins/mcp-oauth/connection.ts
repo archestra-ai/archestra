@@ -7,9 +7,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
-import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import { performOAuth } from './oauth-flow';
 import { McpOAuthProvider } from './provider';
 

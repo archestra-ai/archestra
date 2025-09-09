@@ -2,12 +2,7 @@ import { setSocketPath } from '@backend/clients/libpod/client';
 import McpServerModel, { type McpServer } from '@backend/models/mcpServer';
 import PodmanRuntime from '@backend/sandbox/podman/runtime';
 import SandboxedMcpServer, { type McpTools } from '@backend/sandbox/sandboxedMcp';
-import {
-  type AvailableTool,
-  type SandboxStatus,
-  type SandboxStatusSummary,
-  SandboxStatusSummarySchema,
-} from '@backend/sandbox/schemas';
+import { type AvailableTool, type SandboxStatus, type SandboxStatusSummary } from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
 
 // Re-export for backward compatibility
@@ -246,6 +241,84 @@ class McpServerSandboxManager {
     return Array.from(this.mcpServerIdToSandboxedMcpServerMap.values()).flatMap(
       (sandboxedMcpServer) => sandboxedMcpServer.availableToolsList
     );
+  }
+
+  /**
+   * Restart the entire sandbox (podman machine + all MCP servers)
+   */
+  async restart() {
+    log.info('Restarting Archestra MCP Sandbox...');
+
+    try {
+      // Stop all MCP servers first
+      const stopPromises = Array.from(this.mcpServerIdToSandboxedMcpServerMap.keys()).map(async (serverId) => {
+        try {
+          await this.stopServer(serverId);
+        } catch (error) {
+          log.error(`Failed to stop MCP server ${serverId} during restart:`, error);
+        }
+      });
+
+      await Promise.allSettled(stopPromises);
+
+      // Stop the podman machine
+      this.turnOffSandbox();
+
+      // Wait a moment for shutdown to complete
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Start everything back up
+      this.start();
+
+      log.info('Sandbox restart initiated successfully');
+    } catch (error) {
+      log.error('Failed to restart sandbox:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean/purge all data (uninstall all MCP servers + reset podman machine)
+   */
+  async reset() {
+    log.info('Resetting Archestra MCP Sandbox (purging all data)...');
+
+    try {
+      // Get all installed servers before removing them
+      const installedServers = await McpServerModel.getAll();
+
+      // Uninstall all MCP servers
+      const uninstallPromises = installedServers.map(async (server) => {
+        try {
+          await McpServerModel.uninstallMcpServer(server.id);
+          log.info(`Uninstalled MCP server: ${server.name} (${server.id})`);
+        } catch (error) {
+          log.error(`Failed to uninstall MCP server ${server.name} (${server.id}):`, error);
+        }
+      });
+
+      await Promise.allSettled(uninstallPromises);
+
+      // Clear the sandbox map and socket path
+      this.mcpServerIdToSandboxedMcpServerMap.clear();
+      this.socketPath = null;
+
+      // Remove the podman machine completely
+      log.info('Removing podman machine...');
+      await this.podmanRuntime.removeArchestraMachine(true);
+
+      // Reset the status
+      this.status = 'not_installed';
+
+      // Restart everything by calling start
+      log.info('Restarting Archestra MCP Sandbox...');
+      this.start();
+
+      log.info('Sandbox reset completed successfully');
+    } catch (error) {
+      log.error('Failed to reset sandbox:', error);
+      throw error;
+    }
   }
 
   get statusSummary(): SandboxStatusSummary {

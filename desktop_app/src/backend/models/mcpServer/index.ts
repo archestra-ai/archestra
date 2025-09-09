@@ -147,13 +147,13 @@ export default class McpServerModel {
 
     const now = new Date();
     const isRemoteServer = serverType === 'remote' || !!remote_url;
-    const finalServerType = isRemoteServer ? 'remote' : (serverType || 'local');
-    
+    const finalServerType = isRemoteServer ? 'remote' : serverType || 'local';
+
     // Remote URL is now stored as a separate column
     if (remote_url) {
       log.info(`Remote URL detected: ${remote_url}, setting serverType to 'remote'`);
     }
-    
+
     const [server] = await db
       .insert(mcpServersTable)
       .values({

@@ -1,5 +1,15 @@
-import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Loader2, Server, Settings, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Plus,
+  Server,
+  Settings,
+  XCircle,
+} from 'lucide-react';
+import React, { useState } from 'react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
 import { Button } from '@ui/components/ui/button';
@@ -7,13 +17,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@ui/components/ui/card
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import { useMcpServersStore, useSandboxStore, useToolsStore } from '@ui/stores';
 
+import AddCustomServerDialog from './AddCustomServerDialog';
 import McpServer from './McpServer';
-import SettingsDialog from './SettingsDialog';
+import SandboxManagementDialog from './SandboxManagementDialog';
 
 interface McpServersProps {}
 
 export default function McpServers(_props: McpServersProps) {
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [sandboxManagementDialogOpen, setSandboxManagementDialogOpen] = useState(false);
+  const [addServerDialogOpen, setAddServerDialogOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
 
   const {
@@ -67,14 +79,21 @@ export default function McpServers(_props: McpServersProps) {
 
   const overallSandboxStatus = getOverallSandboxStatus();
 
+  const HeaderTitle = ({ children }: React.PropsWithChildren) => {
+    return (
+      <CardTitle className="flex items-center gap-2">
+        <Server className="h-5 w-5" />
+        MCP Server Sandbox
+        {children}
+      </CardTitle>
+    );
+  };
+
   if (!sandboxIsRunning) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="h-5 w-5" />
-            Sandbox Environment
-          </CardTitle>
+          <HeaderTitle />
         </CardHeader>
         <CardContent className="space-y-4">
           <DetailedProgressBar
@@ -95,13 +114,9 @@ export default function McpServers(_props: McpServersProps) {
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Server className="h-5 w-5" />
-                  MCP Servers & Tools
-                  {loadingInstalledMcpServers && <Loader2 className="h-4 w-4 animate-spin" />}
-                </CardTitle>
-              </div>
+              <HeaderTitle>
+                {sandboxIsRunning && loadingInstalledMcpServers && <Loader2 className="h-4 w-4 animate-spin" />}
+              </HeaderTitle>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -109,10 +124,23 @@ export default function McpServers(_props: McpServersProps) {
                   className="h-8 w-8 cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSettingsDialogOpen(true);
+                    setSandboxManagementDialogOpen(true);
                   }}
+                  title="Sandbox Management"
                 >
                   <Settings className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddServerDialogOpen(true);
+                  }}
+                  title="Add Custom MCP Server"
+                >
+                  <Plus className="h-4 w-4" />
                 </Button>
                 {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
               </div>
@@ -142,7 +170,7 @@ export default function McpServers(_props: McpServersProps) {
             ) : (
               <div className="space-y-3">
                 {installedMcpServers.map((server) => (
-                  <McpServer key={server.name} mcpServer={server} />
+                  <McpServer key={server.id} mcpServer={server} />
                 ))}
               </div>
             )}
@@ -163,7 +191,8 @@ export default function McpServers(_props: McpServersProps) {
         </CollapsibleContent>
       </Collapsible>
 
-      <SettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
+      <SandboxManagementDialog open={sandboxManagementDialogOpen} onOpenChange={setSandboxManagementDialogOpen} />
+      <AddCustomServerDialog open={addServerDialogOpen} onOpenChange={setAddServerDialogOpen} />
     </Card>
   );
 }

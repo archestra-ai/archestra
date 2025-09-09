@@ -1,6 +1,6 @@
 /**
  * Environment Variable Resolution Utility
- * 
+ *
  * Resolves string references to environment variables in OAuth configuration objects
  */
 
@@ -26,7 +26,7 @@ export function resolveEnvironmentVariables<T>(obj: T): T {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map(item => resolveEnvironmentVariables(item)) as T;
+    return obj.map((item) => resolveEnvironmentVariables(item)) as T;
   }
 
   if (typeof obj === 'object') {

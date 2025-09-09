@@ -1,7 +1,7 @@
 import type { RawReplyDefaultExpression } from 'fastify';
 import fs from 'fs';
-import os from 'os';
 import path from 'node:path';
+import os from 'os';
 import { createStream } from 'rotating-file-stream';
 import type { Duplex } from 'stream';
 import { Agent, request, upgrade } from 'undici';
@@ -1121,39 +1121,40 @@ export default class PodmanContainer {
       return;
     }
 
-    log.info(`Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`);
-    
+    log.info(
+      `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+    );
+
     const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
-    
+
     try {
       // Create temp directory
       await fs.promises.mkdir(tempDir, { recursive: true });
-      
+
       // Initialize mounts array if not exists
       if (!createBody.mounts) {
         createBody.mounts = [];
       }
-      
+
       // Create each file and add it as a mount
       for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
         const hostFilePath = path.join(tempDir, path.basename(filename));
         const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
-        
+
         // Write file content to temp location
         await fs.promises.writeFile(hostFilePath, content, 'utf-8');
         log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
-        
+
         // Add as bind mount to container
         createBody.mounts.push({
           type: 'bind',
           source: hostFilePath,
           target: containerFilePath,
-          options: ['ro'] // Read-only mount
+          options: ['ro'], // Read-only mount
         });
       }
-      
+
       log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
-      
     } catch (error) {
       log.error(`Failed to setup file injection for ${this.containerName}:`, error);
       // Clean up temp directory on error

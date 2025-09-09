@@ -19,23 +19,10 @@ export type ArchestraMcpServerManifest = {
   icon?: string;
   screenshots?: Array<string>;
   server: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
+    command: string;
+    args?: Array<string>;
+    env?: {
+      [key: string]: string;
     };
   };
   tools?: Array<{
@@ -116,13 +103,11 @@ export type ArchestraMcpServerManifest = {
   quality_score: number | null;
   archestra_config?: {
     client_config_permutations: {
-      mcpServers: {
-        [key: string]: {
-          command: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
+      [key: string]: {
+        command: string;
+        args?: Array<string>;
+        env?: {
+          [key: string]: string;
         };
       };
     } | null;
@@ -167,40 +152,6 @@ export type ArchestraMcpServerManifest = {
     importance: number;
   }>;
   raw_dependencies: string | null;
-  server_overridden?: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
-    };
-  };
-  server_docker?: unknown;
-  user_config_overridden?: {
-    [key: string]: {
-      type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-      title: string;
-      description: string;
-      required?: boolean;
-      default?: string | number | boolean | Array<string>;
-      multiple?: boolean;
-      sensitive?: boolean;
-      min?: number;
-      max?: number;
-    };
-  };
 };
 
 export type ArchestraMcpServerManifestWithScoreBreakdown = {
@@ -222,23 +173,10 @@ export type ArchestraMcpServerManifestWithScoreBreakdown = {
   icon?: string;
   screenshots?: Array<string>;
   server: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
+    command: string;
+    args?: Array<string>;
+    env?: {
+      [key: string]: string;
     };
   };
   tools?: Array<{
@@ -319,13 +257,11 @@ export type ArchestraMcpServerManifestWithScoreBreakdown = {
   quality_score: number | null;
   archestra_config?: {
     client_config_permutations: {
-      mcpServers: {
-        [key: string]: {
-          command: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
+      [key: string]: {
+        command: string;
+        args?: Array<string>;
+        env?: {
+          [key: string]: string;
         };
       };
     } | null;
@@ -370,40 +306,6 @@ export type ArchestraMcpServerManifestWithScoreBreakdown = {
     importance: number;
   }>;
   raw_dependencies: string | null;
-  server_overridden?: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
-    };
-  };
-  server_docker?: unknown;
-  user_config_overridden?: {
-    [key: string]: {
-      type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
-      title: string;
-      description: string;
-      required?: boolean;
-      default?: string | number | boolean | Array<string>;
-      multiple?: boolean;
-      sensitive?: boolean;
-      min?: number;
-      max?: number;
-    };
-  };
   score_breakdown: {
     mcp_protocol: number;
     github_metrics: number;

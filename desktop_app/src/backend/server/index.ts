@@ -15,6 +15,7 @@ import memoryRoutes from '@backend/server/plugins/memory';
 // OAuth functionality now integrated into MCP system via mcp-oauth plugin
 import ollamaMetadataRoutes from '@backend/server/plugins/ollama/metadata';
 import ollamaProxyRoutes from '@backend/server/plugins/ollama/proxy';
+import sandboxRoutes from '@backend/server/plugins/sandbox';
 import userRoutes from '@backend/server/plugins/user';
 import { electronLogStream } from '@backend/utils/fastify-logger-stream';
 import log from '@backend/utils/logger';
@@ -59,6 +60,7 @@ export const startFastifyServer = async () => {
   await app.register(memoryRoutes);
   await app.register(ollamaMetadataRoutes);
   await app.register(ollamaProxyRoutes);
+  await app.register(sandboxRoutes);
   await app.register(userRoutes);
 
   await app.register(archestraMcpServerPlugin);

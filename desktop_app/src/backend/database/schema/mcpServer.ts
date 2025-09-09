@@ -2,6 +2,17 @@ import { sql } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 
+import {
+  type AuthorizationServerMetadata,
+  AuthorizationServerMetadataSchema,
+  type OAuthClientInformation,
+  OAuthClientInformationSchema,
+  type OAuthProtectedResourceMetadata,
+  OAuthProtectedResourceMetadataSchema,
+  type OAuthTokens,
+  OAuthTokensSchema,
+} from './oauth';
+
 /**
  * MCP Server Status Enum
  */
@@ -13,17 +24,6 @@ export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
  */
 export const McpServerTypeSchema = z.enum(['local', 'remote']);
 export type McpServerType = z.infer<typeof McpServerTypeSchema>;
-
-import {
-  type AuthorizationServerMetadata,
-  AuthorizationServerMetadataSchema,
-  type OAuthClientInformation,
-  OAuthClientInformationSchema,
-  type OAuthProtectedResourceMetadata,
-  OAuthProtectedResourceMetadataSchema,
-  type OAuthTokens,
-  OAuthTokensSchema,
-} from './oauth';
 
 /**
  * Borrowed from @anthropic-ai/dxt

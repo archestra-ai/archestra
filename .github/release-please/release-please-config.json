@@ -1,13 +1,12 @@
 {
-  "bootstrap-sha": "2d6eef0ca6e67cee97dbf853df47861e1e42b64f",
+  "bootstrap-sha": "4a8b6d9215bfb2ff260fdeaed225a2e48393accd",
   "changelog-path": "CHANGELOG.md",
   "changelog-type": "default",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "pull-request-footer": "",
   "include-v-in-tag": true,
-  "prerelease": true,
-  "prerelease-type": "alpha",
+  "draft": false,
   "changelog-sections": [
     {
       "section": "Features",
@@ -63,12 +62,13 @@
   "packages": {
     "desktop_app": {
       "component": "desktop_app",
-      "include-component-in-tag": false,
-      "release-type": "node"
+      "release-type": "node",
+      "prerelease": true
     },
     "mcp_server_docker_image": {
       "component": "mcp_server_docker_image",
-      "release-type": "simple"
+      "release-type": "simple",
+      "prerelease": false
     }
   },
   "plugins": [],

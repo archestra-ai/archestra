@@ -1,16 +1,15 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { resolveOAuthConfig } from '@backend/utils/env-resolver';
-import { startGenericOAuthFlow, completeGenericOAuthFlow } from './flow';
-import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 
-import {
-  McpServerSchema,
-} from '@backend/database/schema/mcpServer';
+import { McpServerSchema } from '@backend/database/schema/mcpServer';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
 import { ErrorResponseSchema } from '@backend/schemas';
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
+import { resolveOAuthConfig } from '@backend/utils/env-resolver';
 import log from '@backend/utils/logger';
+
+import { completeGenericOAuthFlow, startGenericOAuthFlow } from './flow';
 
 /**
  * Handle generic OAuth installation for providers that don't support MCP SDK
@@ -21,10 +20,10 @@ async function handleGenericOAuthInstall(
   reply: any
 ) {
   const serverId = installData.id || uuidv4();
-  
+
   try {
     log.info(`Starting generic OAuth installation for ${installData.displayName}`);
-    
+
     // Create placeholder MCP server record with oauth_pending status
     // Store the OAuth config in oauthClientInfo for retrieval during callback
     const placeholderServer = await McpServerModel.create({
@@ -36,39 +35,38 @@ async function handleGenericOAuthInstall(
       remoteUrl: installData.remote_url || null,
       status: 'oauth_pending',
       oauthTokens: null,
-      oauthClientInfo: { 
+      oauthClientInfo: {
         client_id: config.client_id,
         client_secret: config.client_secret,
-        generic_oauth_config: config 
+        generic_oauth_config: config,
       }, // Store config for callback
       oauthServerMetadata: null,
       oauthResourceMetadata: null,
       createdAt: new Date().toISOString(),
     });
-    
+
     // Start generic OAuth flow
     const authUrl = await startGenericOAuthFlow(config, serverId);
-    
+
     log.info(`Generic OAuth flow started, auth URL: ${authUrl}`);
-    
-    return reply.send({ 
+
+    return reply.send({
       server: placeholderServer[0],
       authUrl,
-      message: 'Generic OAuth flow started - complete authorization in browser'
+      message: 'Generic OAuth flow started - complete authorization in browser',
     });
-    
   } catch (error) {
     log.error('Generic OAuth install failed:', error);
-    
+
     // Clean up placeholder record on failure
     try {
       await McpServerModel.update(serverId, { status: 'failed' });
     } catch (cleanupError) {
       log.error('Failed to cleanup placeholder server:', cleanupError);
     }
-    
+
     return reply.code(500).send({
-      error: error instanceof Error ? error.message : 'Generic OAuth install failed'
+      error: error instanceof Error ? error.message : 'Generic OAuth install failed',
     });
   }
 }
@@ -100,28 +98,28 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { installData } = body;
 
       try {
-        log.info('Generic OAuth start request received:', { 
+        log.info('Generic OAuth start request received:', {
           installDataKeys: Object.keys(installData),
           hasOauthConfig: !!installData.oauthConfig,
-          displayName: installData.displayName 
+          displayName: installData.displayName,
         });
 
         if (!installData.oauthConfig) {
           log.warn('Generic OAuth start rejected: oauthConfig missing');
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
-        
+
         // Use OAuth config from frontend
         const config = resolveOAuthConfig(installData.oauthConfig);
-        
-        log.info('Generic OAuth config resolved:', { 
+
+        log.info('Generic OAuth config resolved:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
           serverUrl: config.server_url,
-          hasAccessTokenEnvVar: !!config.access_token_env_var
+          hasAccessTokenEnvVar: !!config.access_token_env_var,
         });
-        
+
         // Only handle generic OAuth flow here
         if (!config.generic_oauth) {
           log.warn('Generic OAuth start rejected: not a generic OAuth flow');
@@ -163,28 +161,28 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body }, reply) => {
       const { serverId, code, state } = body;
-      
+
       try {
         // Get the server record to find the OAuth config
         const servers = await McpServerModel.getById(serverId);
         if (!servers.length) {
           return reply.code(400).send({ error: 'Server not found' });
         }
-        
+
         const server = servers[0];
         if (server.status !== 'oauth_pending') {
           return reply.code(400).send({ error: 'Server is not in OAuth pending state' });
         }
-        
+
         // Retrieve the OAuth config from the stored client info
         const storedConfig = server.oauthClientInfo?.generic_oauth_config;
         if (!storedConfig) {
           return reply.code(400).send({ error: 'OAuth config not found in server record' });
         }
-        
+
         // Complete the generic OAuth flow
         const tokens = await completeGenericOAuthFlow(storedConfig as OAuthServerConfig, serverId, code, state);
-        
+
         // Convert generic tokens to MCP format
         const mcpTokens = {
           access_token: tokens.access_token,
@@ -192,28 +190,27 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           expires_in: tokens.expires_in,
           token_type: tokens.token_type || 'Bearer',
         };
-        
+
         // Update server record with tokens and installed status
         const [updatedServer] = await McpServerModel.update(serverId, {
           status: 'installed',
           oauthTokens: mcpTokens,
           oauthClientInfo: null, // Clear the temporary config storage
         });
-        
+
         // Start the MCP server if it's a local server
         if (server.serverType === 'local') {
           await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
         }
-        
+
         return reply.send({
           server: updatedServer,
-          message: 'Generic OAuth flow completed successfully'
+          message: 'Generic OAuth flow completed successfully',
         });
-        
       } catch (error) {
         log.error('Generic OAuth callback failed:', error);
         return reply.code(500).send({
-          error: error instanceof Error ? error.message : 'Generic OAuth callback failed'
+          error: error instanceof Error ? error.message : 'Generic OAuth callback failed',
         });
       }
     }

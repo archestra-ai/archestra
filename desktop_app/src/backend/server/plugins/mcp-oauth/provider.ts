@@ -23,9 +23,8 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 
-import log from '@backend/utils/logger';
-
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
+import log from '@backend/utils/logger';
 
 /**
  * Generate server-specific storage key
@@ -159,10 +158,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
       const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const server = await McpServerModel.getById(this.serverId);
 
-      log.info(`📊 Database query result:`, { 
-        found: !!server?.[0], 
+      log.info(`📊 Database query result:`, {
+        found: !!server?.[0],
         hasOAuthClientInfo: !!server?.[0]?.oauthClientInfo,
-        clientInfo: server?.[0]?.oauthClientInfo 
+        clientInfo: server?.[0]?.oauthClientInfo,
       });
 
       if (server?.[0]?.oauthClientInfo) {
@@ -187,16 +186,16 @@ export class McpOAuthProvider implements OAuthClientProvider {
     try {
       log.info('💾 Saving client registration to database for server:', this.serverId);
       log.info('💾 Client info to save:', { client_id: clientInfo.client_id, has_secret: !!clientInfo.client_secret });
-      
+
       // Save to database instead of local file
       const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const result = await McpServerModel.update(this.serverId, {
         oauthClientInfo: clientInfo,
       });
-      
-      log.info('✅ Client registered and saved to database:', { 
+
+      log.info('✅ Client registered and saved to database:', {
         client_id: clientInfo.client_id,
-        updated_rows: result.length 
+        updated_rows: result.length,
       });
     } catch (error) {
       log.error('❌ Failed to save client information to database:', error);

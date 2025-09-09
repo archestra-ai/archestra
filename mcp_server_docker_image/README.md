@@ -20,7 +20,7 @@ This image is used as the base for all MCP server containers in Archestra. MCP s
 docker run gcr.io/archestra-ai/mcp-server-base:v0.0.1 <command> <args>
 ```
 
-## Building Locally
+## Building locally
 
 ```bash
 docker build -t mcp-server-base .

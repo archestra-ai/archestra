@@ -61,7 +61,7 @@ const forgeConfig: ForgeConfig = {
      * https://developer.apple.com/documentation/bundleresources/entitlements
      * https://developer.apple.com/documentation/security/hardened_runtime
      */
-    ...(process.env.CI || process.env.ENABLE_CODESIGNING
+    ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
           osxSign: {},
           /**
@@ -74,21 +74,29 @@ const forgeConfig: ForgeConfig = {
              * Apple ID associated with your Apple Developer account
              * (aka the email address you used to create your Apple account)
              */
-            appleId: process.env.APPLE_ID || '',
+            appleId: process.env.APPLE_ID,
             /**
              * App-specific password
              *
              * Was generated following the instructions here https://support.apple.com/en-us/102654
              */
-            appleIdPassword: process.env.APPLE_PASSWORD || '',
+            appleIdPassword: process.env.APPLE_PASSWORD,
             /**
              * The Apple Team ID you want to notarize under. You can find Team IDs for team you belong to by going to
              * https://developer.apple.com/account/#/membership
              */
-            teamId: process.env.APPLE_TEAM_ID || '',
+            teamId: process.env.APPLE_TEAM_ID,
           },
         }
-      : {}),
+      : {
+          /**
+           * Explicitly disable signing when credentials are not available (e.g., for PRs from forks)
+           * This prevents the default ad-hoc signing that causes failures
+           *
+           * By not setting osxSign at all (undefined), Electron Packager skips signing entirely
+           */
+          osxSign: undefined,
+        }),
   },
   // https://github.com/WiseLibs/better-sqlite3/issues/1171#issuecomment-2186895668
   rebuildConfig: {
@@ -177,14 +185,21 @@ const forgeConfig: ForgeConfig = {
           owner: github.owner,
           name: github.repoName,
         },
+
         /**
-         * NOTE: because we use release-please, the following settings for the desktop app's GitHub release
-         * are configured in `.github/release-please/release-please-config.json`. release-please will be
-         * responsible for actually creating the release, and this "publisher" will simply "attach" the various
-         * platform-specific binaries to the release.
+         * The desktop app release-please generated GitHub releases have a tag prefix of `desktop_app-v<version>`,
+         * so we need to match that here.
+         *
+         * Otherwise, the electron-forge publisher will try to create a release with a tag of `v<version>` and the
+         * build assets will not get attached to the proper GitHub Release.
+         *
+         * The alternative is to set "include-component-in-tag" to "false" in the release-please config
+         * (specifically for the "desktop_app" 'component') but there is a bug that we ran into with release-please
+         * that was causing issues (https://github.com/googleapis/release-please/issues/2214)
          */
-        // prerelease: true,
-        // draft: false,
+        tagPrefix: 'desktop_app-v',
+        prerelease: true,
+        draft: false,
       } as PublisherGitHubConfig,
     },
   ],

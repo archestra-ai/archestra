@@ -11,24 +11,7 @@ interface ArchestraMcpServerProps {
   archestraMcpServer: ConnectedMcpServer;
 }
 
-export default function ArchestraMcpServer({ archestraMcpServer: { state } }: ArchestraMcpServerProps) {
-  const getStatusBadge = () => {
-    switch (state) {
-      case 'running':
-        return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            Running
-          </Badge>
-        );
-      case 'initializing':
-        return <Badge variant="destructive">Error</Badge>;
-      case 'error':
-        return <Badge variant="outline">Loading...</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
+export default function ArchestraMcpServer({ archestraMcpServer: _archestraMcpServer }: ArchestraMcpServerProps) {
   return (
     <Card>
       <CardHeader>
@@ -36,12 +19,21 @@ export default function ArchestraMcpServer({ archestraMcpServer: { state } }: Ar
           <Server className="h-5 w-5" />
           Archestra MCP Server
         </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          The Archestra MCP server runs by default when you launch Archestra. It allows you to perform Archestra actions
+          via interactions with your LLMs. Additionally, using the URL below, you can connect the Archestra MCP server
+          to any MCP client.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <Label htmlFor="server-status">Server Status</Label>
-            <div className="flex items-center gap-2">{getStatusBadge()}</div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                Running
+              </Badge>
+            </div>
           </div>
         </div>
         <div className="space-y-2">
@@ -49,7 +41,6 @@ export default function ArchestraMcpServer({ archestraMcpServer: { state } }: Ar
           <div className="flex items-center gap-2">
             <Input id="server-url" value={config.archestra.mcpUrl} readOnly className="font-mono text-sm" />
           </div>
-          <p className="text-sm text-muted-foreground">Use this URL to connect to the Archestra MCP server.</p>
         </div>
       </CardContent>
     </Card>

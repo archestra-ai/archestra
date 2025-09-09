@@ -107,14 +107,14 @@ export default function Sidebar({ children }: SidebarProps) {
                             <SidebarMenuSubItem>
                               <SidebarMenuSubButton asChild isActive={location.pathname === '/settings/mcp-servers'}>
                                 <Link to="/settings/mcp-servers">
-                                  <span>Servers</span>
+                                  <span>MCP Servers</span>
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
                               <SidebarMenuSubButton asChild isActive={location.pathname === '/settings/mcp-clients'}>
                                 <Link to="/settings/mcp-clients">
-                                  <span>Clients</span>
+                                  <span>MCP Clients</span>
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>

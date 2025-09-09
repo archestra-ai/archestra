@@ -29,7 +29,6 @@ z.globalRegistry.add(McpServerInstallSchema, { id: 'McpServerInstall' });
 z.globalRegistry.add(McpServerContainerLogsSchema, { id: 'McpServerContainerLogs' });
 z.globalRegistry.add(AvailableToolSchema, { id: 'AvailableTool' });
 
-
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/api/mcp_server',
@@ -336,33 +335,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { installData } = body;
 
       try {
-        log.info('OAuth install request received:', { 
+        log.info('OAuth install request received:', {
           installDataKeys: Object.keys(installData),
           hasOauthConfig: !!installData.oauthConfig,
-          displayName: installData.displayName 
+          displayName: installData.displayName,
         });
 
         if (!installData.oauthConfig) {
           log.warn('OAuth install rejected: oauthConfig missing');
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
-        
+
         // Use OAuth config from frontend
         const { resolveOAuthConfig } = await import('@backend/utils/env-resolver');
         const config = resolveOAuthConfig(installData.oauthConfig);
-        
-        log.info('Resolved OAuth config:', { 
+
+        log.info('Resolved OAuth config:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
-          serverUrl: config.server_url 
+          serverUrl: config.server_url,
         });
-        
+
         // Check if this uses generic OAuth flow - redirect to generic OAuth endpoint
         if (config.generic_oauth) {
           log.info('Redirecting to generic OAuth endpoint for:', config.name);
-          return reply.code(400).send({ 
-            error: 'Generic OAuth servers should use /api/mcp_server/start_oauth endpoint' 
+          return reply.code(400).send({
+            error: 'Generic OAuth servers should use /api/mcp_server/start_oauth endpoint',
           });
         }
 
@@ -375,12 +374,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         log.info(`Installing ${isRemoteServer ? 'remote' : 'local'} MCP server: ${installData.displayName}`);
         log.info('Install data keys:', Object.keys(installData));
-        log.info('Remote URL detection:', { 
-          hasRemoteUrl: !!installData.remote_url, 
+        log.info('Remote URL detection:', {
+          hasRemoteUrl: !!installData.remote_url,
           remoteUrl: installData.remote_url,
-          isRemoteServer 
+          isRemoteServer,
         });
-        
+
         if (isRemoteServer) {
           log.info(`Remote URL: ${remoteUrl}`);
         }
@@ -460,7 +459,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     }
   );
-
 };
 
 export default mcpServerRoutes;

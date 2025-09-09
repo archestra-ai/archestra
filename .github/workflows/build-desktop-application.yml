@@ -35,10 +35,10 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         include:
-          - platform: macos-latest
+          - platform: macos-latest # M1 (arm64)
             os: macos
             arch: arm64
-          - platform: macos-latest
+          - platform: macos-13 # Intel (x64)
             os: macos
             arch: x64
           - platform: windows-11-arm
@@ -68,6 +68,8 @@ jobs:
 
       - name: Generate a token
         id: generate-token
+        # Only generate app token if secrets are available (not for PRs from forks)
+        if: ${{ github.event.pull_request.head.repo.fork == false }}
         uses: ./.github/actions/generate-release-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
@@ -83,7 +85,7 @@ jobs:
       # https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications
       # https://help.apple.com/xcode/mac/current/#/dev154b28f09
       - name: Install Apple codesigning certificate
-        if: matrix.os == 'macos'
+        if: matrix.os == 'macos' && github.event.pull_request.head.repo.fork == false
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -106,7 +108,9 @@ jobs:
 
       - name: Build desktop application
         env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          # Use app token if available, fallback to GITHUB_TOKEN for fork PRs
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          # These will be empty for fork PRs, which is fine - forge.config.ts handles it
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -114,6 +118,6 @@ jobs:
 
       # https://brunoscheufler.com/blog/2023-11-12-setting-up-hosted-macos-github-actions-workflows-for-electron-builds
       - name: Clean up keychain
-        if: ${{ always() && matrix.os == 'macos' }}
+        if: ${{ always() && matrix.os == 'macos' && github.event.pull_request.head.repo.fork == false }}
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db

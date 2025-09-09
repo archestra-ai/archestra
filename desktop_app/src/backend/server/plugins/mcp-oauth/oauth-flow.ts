@@ -7,9 +7,9 @@
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
+import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
-import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import { McpOAuthProvider } from './provider';
 
 /**

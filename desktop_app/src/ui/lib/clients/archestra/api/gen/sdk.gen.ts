@@ -4,6 +4,9 @@ import { client as _heyApiClient } from './client.gen';
 import type {
   ClearMcpRequestLogsData,
   ClearMcpRequestLogsResponses,
+  CompleteGenericOAuthData,
+  CompleteGenericOAuthErrors,
+  CompleteGenericOAuthResponses,
   ConfigureCloudProviderData,
   ConfigureCloudProviderResponses,
   ConnectExternalMcpClientData,
@@ -63,8 +66,17 @@ import type {
   InstallMcpServerResponses,
   InstallMcpServerWithOauthData,
   InstallMcpServerWithOauthResponses,
+  ResetSandboxData,
+  ResetSandboxErrors,
+  ResetSandboxResponses,
+  RestartSandboxData,
+  RestartSandboxErrors,
+  RestartSandboxResponses,
   SetMemoryData,
   SetMemoryResponses,
+  StartGenericOAuthData,
+  StartGenericOAuthErrors,
+  StartGenericOAuthResponses,
   UninstallMcpServerData,
   UninstallMcpServerResponses,
   UpdateChatData,
@@ -252,6 +264,42 @@ export const disconnectExternalMcpClient = <ThrowOnError extends boolean = false
   return (options.client ?? _heyApiClient).delete<DisconnectExternalMcpClientResponses, unknown, ThrowOnError>({
     url: '/api/external_mcp_client/{clientName}/disconnect',
     ...options,
+  });
+};
+
+/**
+ * Start generic OAuth flow for MCP server installation
+ */
+export const startGenericOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<StartGenericOAuthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<StartGenericOAuthResponses, StartGenericOAuthErrors, ThrowOnError>({
+    url: '/api/mcp_server/start_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Complete generic OAuth flow with authorization code
+ */
+export const completeGenericOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteGenericOAuthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    CompleteGenericOAuthResponses,
+    CompleteGenericOAuthErrors,
+    ThrowOnError
+  >({
+    url: '/api/mcp_server/complete_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 
@@ -485,6 +533,30 @@ export const getOllamaRequiredModelsStatus = <ThrowOnError extends boolean = fal
 ) => {
   return (options?.client ?? _heyApiClient).get<GetOllamaRequiredModelsStatusResponses, unknown, ThrowOnError>({
     url: '/api/ollama/required-models',
+    ...options,
+  });
+};
+
+/**
+ * Restart the Archestra MCP Sandbox (podman machine + all MCP servers)
+ */
+export const restartSandbox = <ThrowOnError extends boolean = false>(
+  options?: Options<RestartSandboxData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).post<RestartSandboxResponses, RestartSandboxErrors, ThrowOnError>({
+    url: '/api/sandbox/restart',
+    ...options,
+  });
+};
+
+/**
+ * Clean/purge all data (uninstall all MCP servers + reset podman machine)
+ */
+export const resetSandbox = <ThrowOnError extends boolean = false>(
+  options?: Options<ResetSandboxData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).post<ResetSandboxResponses, ResetSandboxErrors, ThrowOnError>({
+    url: '/api/sandbox/reset',
     ...options,
   });
 };

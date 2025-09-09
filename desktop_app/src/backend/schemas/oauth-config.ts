@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * OAuth Server Configuration Schema
- * 
+ *
  * Based on the ServerConfig interface from mcp-oauth/configs.ts
  * This schema validates OAuth configurations passed from the frontend
  */

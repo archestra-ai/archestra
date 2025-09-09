@@ -3,6 +3,22 @@ import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/ge
 // Mark local catalog items with a special property
 export interface LocalMcpServerManifest extends ArchestraMcpServerManifest {
   isLocalDeveloper?: boolean;
+  oauth_config?: {
+    name: string;
+    server_url: string;
+    auth_server_url?: string;
+    resource_metadata_url?: string;
+    client_id: string;
+    client_secret?: string;
+    redirect_uris: string[];
+    scopes: string[];
+    description?: string;
+    well_known_url?: string;
+    default_scopes: string[];
+    supports_resource_metadata: boolean;
+    generic_oauth?: boolean;
+    token_endpoint?: string;
+  };
 }
 
 // Only load local catalog in development mode

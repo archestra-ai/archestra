@@ -4,9 +4,9 @@ import { client as _heyApiClient } from './client.gen';
 import type {
   ClearMcpRequestLogsData,
   ClearMcpRequestLogsResponses,
-  CompleteMcpServerOauthData,
-  CompleteMcpServerOauthErrors,
-  CompleteMcpServerOauthResponses,
+  CompleteGenericOAuthData,
+  CompleteGenericOAuthErrors,
+  CompleteGenericOAuthResponses,
   ConfigureCloudProviderData,
   ConfigureCloudProviderResponses,
   ConnectExternalMcpClientData,
@@ -64,8 +64,9 @@ import type {
   InstallMcpServerData,
   InstallMcpServerErrors,
   InstallMcpServerResponses,
-  OauthCallbackData,
-  OauthCallbackResponses,
+  InstallMcpServerWithOauthData,
+  InstallMcpServerWithOauthErrors,
+  InstallMcpServerWithOauthResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -74,9 +75,9 @@ import type {
   RestartSandboxResponses,
   SetMemoryData,
   SetMemoryResponses,
-  StartMcpServerOauthData,
-  StartMcpServerOauthErrors,
-  StartMcpServerOauthResponses,
+  StartGenericOAuthData,
+  StartGenericOAuthErrors,
+  StartGenericOAuthResponses,
   UninstallMcpServerData,
   UninstallMcpServerResponses,
   UpdateChatData,
@@ -268,6 +269,42 @@ export const disconnectExternalMcpClient = <ThrowOnError extends boolean = false
 };
 
 /**
+ * Start generic OAuth flow for MCP server installation
+ */
+export const startGenericOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<StartGenericOAuthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<StartGenericOAuthResponses, StartGenericOAuthErrors, ThrowOnError>({
+    url: '/api/mcp_server/start_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Complete generic OAuth flow with authorization code
+ */
+export const completeGenericOAuth = <ThrowOnError extends boolean = false>(
+  options: Options<CompleteGenericOAuthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    CompleteGenericOAuthResponses,
+    CompleteGenericOAuthErrors,
+    ThrowOnError
+  >({
+    url: '/api/mcp_server/complete_oauth',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
  * Clear MCP request logs
  */
 export const clearMcpRequestLogs = <ThrowOnError extends boolean = false>(
@@ -386,6 +423,26 @@ export const getAvailableTools = <ThrowOnError extends boolean = false>(
 };
 
 /**
+ * Install MCP server with OAuth authentication
+ */
+export const installMcpServerWithOauth = <ThrowOnError extends boolean = false>(
+  options: Options<InstallMcpServerWithOauthData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    InstallMcpServerWithOauthResponses,
+    InstallMcpServerWithOauthErrors,
+    ThrowOnError
+  >({
+    url: '/api/mcp_server/oauth_install',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
  * Delete all memory entries for the current user
  */
 export const deleteAllMemories = <ThrowOnError extends boolean = false>(
@@ -469,54 +526,6 @@ export const updateMemory = <ThrowOnError extends boolean = false>(
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
-    },
-  });
-};
-
-/**
- * Start MCP server OAuth flow
- */
-export const startMcpServerOauth = <ThrowOnError extends boolean = false>(
-  options: Options<StartMcpServerOauthData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<StartMcpServerOauthResponses, StartMcpServerOauthErrors, ThrowOnError>({
-    url: '/api/mcp_server/start_oauth',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-};
-
-/**
- * OAuth callback endpoint for provider redirects
- */
-export const oauthCallback = <ThrowOnError extends boolean = false>(
-  options: Options<OauthCallbackData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).get<OauthCallbackResponses, unknown, ThrowOnError>({
-    url: '/api/oauth/callback',
-    ...options,
-  });
-};
-
-/**
- * Complete MCP server OAuth flow and install with tokens
- */
-export const completeMcpServerOauth = <ThrowOnError extends boolean = false>(
-  options: Options<CompleteMcpServerOauthData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<
-    CompleteMcpServerOauthResponses,
-    CompleteMcpServerOauthErrors,
-    ThrowOnError
-  >({
-    url: '/api/mcp_server/complete_oauth',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
     },
   });
 };

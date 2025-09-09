@@ -62,6 +62,12 @@ function ConnectorCatalogPage() {
         useBrowserAuth && mcpServer.archestra_config?.oauth?.provider
           ? `${mcpServer.archestra_config.oauth.provider}-browser`
           : mcpServer.archestra_config?.oauth?.provider,
+      // Include OAuth config from catalog if available (new approach)
+      ...((mcpServer as LocalMcpServerManifest).oauth_config && {
+        oauthConfig: (mcpServer as LocalMcpServerManifest).oauth_config,
+      }),
+      // Include remote_url for remote MCP servers
+      ...(mcpServer.remote_url && { remote_url: mcpServer.remote_url }),
     };
 
     // Add useBrowserAuth flag for internal handling

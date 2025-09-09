@@ -268,37 +268,38 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
     - Required models list for auto-provisioning
     - Default model selection (`OLLAMA_MODEL` env var)
 - **OAuth Integration**:
-  - **Architecture**: Two-tier system with OAuth proxy (secrets) and desktop app (PKCE)
-    - OAuth Proxy: `oauth_proxy/` - Holds client secrets, exchanges codes
-    - Desktop App: Initiates OAuth flows, stores tokens as env vars
-    - Production proxy: `https://oauth-proxy-new-354887056155.europe-west1.run.app`
-  - **Extensible Provider System** (`src/backend/config/oauth-providers.ts`):
-    - Provider registry pattern with standardized configuration
-    - Supports OAuth, browser auth, and file-based credentials
-    - Provider interface: `OAuthProviderDefinition`
-    - Token mapping via `tokenEnvVarPattern` or custom `tokenHandler`
+  - **Architecture**: MCP SDK-based OAuth implementation following official spec
+    - **MCP OAuth** (`src/backend/server/plugins/mcp-oauth/`): Standard MCP OAuth flow
+    - **Generic OAuth** (`src/backend/server/plugins/generic-oauth/`): Non-MCP OAuth support
+    - Desktop App: Uses PKCE for secure authorization code flow
+  - **MCP SDK OAuth System**:
+    - Uses official MCP SDK's OAuth interfaces and types
+    - Structured OAuth objects replace individual token fields
+    - Connection testing during OAuth flow
+    - Provider configuration in `mcp-oauth/configs.ts`
   - **Supported Providers**:
-    - **Google**: OAuth with file-based credentials option
-    - **Slack**: OAuth + browser auth (`slack-browser` provider)
-    - Extensible for Jira, LinkedIn, MS Teams, etc.
+    - **Google**: OAuth with MCP SDK integration
+    - **Slack**: OAuth with environment variable mapping
+    - **GitHub**: Remote MCP server support
+    - **Linear**: Remote MCP server support
   - **Browser Authentication** (`src/main-browser-auth.ts`):
-    - Extract tokens directly from provider web UI
-    - Secure Electron BrowserWindow with sandboxing
-    - Provider-specific token extraction logic
-    - Maps to same env vars as OAuth tokens
-  - **MCP Server Catalog Integration**:
-    - Catalog defines provider in `archestra_config.oauth.provider`
-    - UI auto-detects and triggers appropriate auth flow
-    - Browser auth mapped via `useBrowserAuth` flag
+    - Currently disabled pending full MCP OAuth migration
+    - Will be updated to support MCP SDK OAuth flow
+  - **MCP Server Types**:
+    - **Local servers**: Container-based with Podman
+    - **Remote servers**: Direct MCP connection over network
+    - OAuth configuration in server catalog metadata
   - **API Endpoints**:
-    - `POST /api/mcp_server/start_oauth` - Start OAuth with PKCE
-    - `POST /api/mcp_server/complete_oauth` - Complete OAuth flow
-    - `POST /api/mcp_server/install` - Install with OAuth tokens
+    - `POST /api/mcp_server/install_with_oauth` - Install server with OAuth
+    - Generic OAuth endpoints for non-MCP providers
   - **Token Storage**:
-    - Database: `oauth_access_token`, `oauth_refresh_token`, `oauth_expiry_date`
-    - Environment vars: Provider-specific patterns (e.g., `SLACK_MCP_XOXC_TOKEN`)
-    - File-based: Custom handlers for providers like Google
-  - **Adding New Providers**: See `docs/ADDING_OAUTH_PROVIDERS.md`
+    - Database: MCP SDK OAuth objects (access_token, refresh_token, expires_at)
+    - Environment vars: Resolved using `env-resolver.ts` utility
+    - OAuth metadata stored as JSON in database
+  - **Security Considerations**:
+    - PKCE used for all OAuth flows
+    - Tokens stored encrypted in database
+    - Rate limiting recommended for OAuth endpoints
 
 ### Directory Structure
 

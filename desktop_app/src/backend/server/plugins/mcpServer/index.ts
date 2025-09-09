@@ -311,6 +311,156 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(toolAggregator.getAllAvailableTools());
     }
   );
+
+  // Simple OAuth install endpoint - mirrors connectMcpServer from linear-mcp-oauth-minimal.ts
+  fastify.post(
+    '/api/mcp_server/oauth_install',
+    {
+      schema: {
+        operationId: 'installMcpServerWithOauth',
+        description: 'Install MCP server with OAuth authentication',
+        tags: ['MCP Server'],
+        body: z.object({
+          installData: McpServerInstallSchema,
+        }),
+        response: {
+          200: z.object({
+            server: McpServerSchema,
+          }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ body }, reply) => {
+      log.info('OAuth install request body:', JSON.stringify(body, null, 2));
+      const { installData } = body;
+
+      try {
+        log.info('OAuth install request received:', {
+          installDataKeys: Object.keys(installData),
+          hasOauthConfig: !!installData.oauthConfig,
+          displayName: installData.displayName,
+        });
+
+        if (!installData.oauthConfig) {
+          log.warn('OAuth install rejected: oauthConfig missing');
+          return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
+        }
+
+        // Use OAuth config from frontend
+        const { resolveOAuthConfig } = await import('@backend/utils/env-resolver');
+        const config = resolveOAuthConfig(installData.oauthConfig);
+
+        log.info('Resolved OAuth config:', {
+          configName: config.name,
+          isGenericOAuth: !!config.generic_oauth,
+          hasClientId: !!config.client_id,
+          serverUrl: config.server_url,
+        });
+
+        // Check if this uses generic OAuth flow - redirect to generic OAuth endpoint
+        if (config.generic_oauth) {
+          log.info('Redirecting to generic OAuth endpoint for:', config.name);
+          return reply.code(400).send({
+            error: 'Generic OAuth servers should use /api/mcp_server/start_oauth endpoint',
+          });
+        }
+
+        // Generate server ID
+        const serverId = installData.id || uuidv4();
+
+        // Check if this is a remote server (has remote_url from catalog)
+        const isRemoteServer = !!installData.remote_url;
+        const remoteUrl = installData.remote_url;
+
+        log.info(`Installing ${isRemoteServer ? 'remote' : 'local'} MCP server: ${installData.displayName}`);
+        log.info('Install data keys:', Object.keys(installData));
+        log.info('Remote URL detection:', {
+          hasRemoteUrl: !!installData.remote_url,
+          remoteUrl: installData.remote_url,
+          isRemoteServer,
+        });
+
+        if (isRemoteServer) {
+          log.info(`Remote URL: ${remoteUrl}`);
+        }
+
+        // Create placeholder MCP server record with oauth_pending status
+        // This allows OAuth provider to save client info during the flow
+        const placeholderServer = await McpServerModel.create({
+          id: serverId,
+          name: installData.displayName,
+          serverConfig: installData.serverConfig,
+          userConfigValues: installData.userConfigValues || null,
+          serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
+          remoteUrl: remoteUrl, // Store remote_url in separate column
+          status: 'oauth_pending',
+          oauthTokens: null,
+          oauthClientInfo: null,
+          oauthServerMetadata: null,
+          oauthResourceMetadata: null,
+          createdAt: new Date().toISOString(),
+        });
+
+        try {
+          // Perform OAuth and get tokens
+          const { connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
+          const { client, accessToken } = await connectMcpServer(config, serverId);
+
+          // Close the test connection
+          await client.close();
+
+          // Get tokens from the provider for installation
+          const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
+          const oauthProvider = new McpOAuthProvider(config, serverId);
+          await oauthProvider.init();
+
+          const tokens = await oauthProvider.tokens();
+          const clientInfo = await oauthProvider.clientInformation();
+
+          if (!tokens) {
+            // Clean up placeholder record on failure
+            await McpServerModel.update(serverId, { status: 'failed' });
+            return reply.code(500).send({ error: 'Failed to obtain OAuth tokens' });
+          }
+
+          // Update server record with complete OAuth data and installed status
+          const [server] = await McpServerModel.update(serverId, {
+            status: 'installed',
+            oauthTokens: tokens,
+            oauthClientInfo: clientInfo,
+          });
+
+          // For remote servers, start the remote server immediately
+          // For local servers, start container as usual
+          if (isRemoteServer) {
+            log.info(`Remote server ${server.name} installed successfully - starting remote server`);
+            // Import McpServerSandboxManager to start the remote server
+            const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
+            await McpServerSandboxManager.startServer(server);
+            // Also sync external clients
+            const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
+            await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+          } else {
+            // Start the MCP server container for local servers
+            await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+          }
+
+          return reply.send({ server });
+        } catch (oauthError) {
+          // Clean up placeholder record on OAuth failure
+          await McpServerModel.update(serverId, { status: 'failed' });
+          throw oauthError;
+        }
+      } catch (error) {
+        log.error('OAuth install failed:', error);
+        return reply.code(500).send({
+          error: error instanceof Error ? error.message : 'OAuth install failed',
+        });
+      }
+    }
+  );
 };
 
 export default mcpServerRoutes;

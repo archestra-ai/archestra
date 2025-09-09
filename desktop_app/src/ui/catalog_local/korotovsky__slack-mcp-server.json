@@ -1,0 +1,198 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "korotovsky__slack-mcp-server",
+  "display_name": "slack-mcp-server",
+  "version": "1.0.0",
+  "description": "The most powerful MCP Slack Server with no permission requirements, Apps support, multiple transports Stdio and SSE, DMs, Group DMs and smart history fetch logic.",
+  "author": {
+    "name": "korotovsky"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "slack-mcp-server",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
+      "env": {
+        "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
+      },
+      "inject_file": {
+        "/tmp/slack_token.json": "{\"access_token\": \"${access_token}\", \"additional\": \"blahblah\"}"
+      }
+    }
+  },
+  "server_overridden": {
+    "type": "node",
+    "entry_point": "slack-mcp-server",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
+      "env": {
+        "SLACK_MCP_XOXC_TOKEN": "${user_config.slack_mcp_xoxc_token}",
+        "SLACK_MCP_XOXD_TOKEN": "${user_config.slack_mcp_xoxd_token}",
+        "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
+      }
+    }
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "slack_mcp_xoxc_token": {
+      "type": "string",
+      "title": "Slack 'xoxc' Token (Stealth Mode)",
+      "description": "Slack browser token (starts with 'xoxc-') for stealth mode authentication. Required if not using OAuth mode.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_mcp_xoxd_token": {
+      "type": "string",
+      "title": "Slack 'd' Cookie (Stealth Mode)",
+      "description": "Slack browser cookie 'd' (starts with 'xoxd-') for stealth mode authentication. Required if not using OAuth mode.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_mcp_oauth_token": {
+      "type": "string",
+      "title": "Slack OAuth Token",
+      "description": "Slack OAuth token (e.g., starts with 'xoxb-') for secure access. Required if not using stealth mode.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_mcp_add_message_tool": {
+      "type": "string",
+      "title": "Enable Add Message Tool",
+      "description": "Set to 'true' to enable posting messages, or provide a comma-separated list of channel IDs to restrict posting to specific channels. Disabled by default.",
+      "required": false
+    }
+  },
+  "user_config_overridden": {
+    "slack_mcp_xoxc_token": {
+      "type": "string",
+      "title": "Slack 'xoxc' Token (Stealth Mode)",
+      "description": "Slack browser token (starts with xoxc-) for operating in stealth mode. One of the authentication methods must be provided.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_mcp_xoxd_token": {
+      "type": "string",
+      "title": "Slack 'd' Cookie (Stealth Mode)",
+      "description": "Slack browser cookie 'd' (starts with xoxd-) for operating in stealth mode. Used in conjunction with the 'xoxc' token.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_bot_token": {
+      "type": "string",
+      "title": "Slack Bot Token (OAuth Mode)",
+      "description": "Slack OAuth bot token (starts with xoxb-) for operating in OAuth mode. One of the authentication methods must be provided.",
+      "sensitive": true,
+      "required": false
+    },
+    "slack_mcp_add_message_tool": {
+      "type": "string",
+      "title": "Enable 'add_message' Tool",
+      "description": "Set to 'true' to enable posting messages, or provide a comma-separated list of channel IDs to restrict posting to specific channels. Disabled by default for safety.",
+      "required": false
+    }
+  },
+  "readme": "# Slack MCP Server\n\nModel Context Protocol (MCP) server for Slack Workspaces. The most powerful MCP Slack server — supports Stdio and SSE transports, proxy settings, DMs, Group DMs, Smart History fetch (by date or count), may work via OAuth or in complete stealth mode with no permissions and scopes in Workspace 😏.\n\n> [!IMPORTANT]  \n> We need your support! Each month, over 30,000 engineers visit this repository, and more than 9,000 are already using it.\n> \n> If you appreciate the work our [contributors](https://github.com/korotovsky/slack-mcp-server/graphs/contributors) have put into this project, please consider giving the repository a star.\n\nThis feature-rich Slack MCP Server has:\n- **Stealth and OAuth Modes**: Run the server without requiring additional permissions or bot installations (stealth mode), or use secure OAuth tokens for access without needing to refresh or extract tokens from the browser (OAuth mode).\n- **Enterprise Workspaces Support**: Possibility to integrate with Enterprise Slack setups.\n- **Channel and Thread Support with `#Name` `@Lookup`**: Fetch messages from channels and threads, including activity messages, and retrieve channels using their names (e.g., #general) as well as their IDs.\n- **Smart History**: Fetch messages with pagination by date (d1, 7d, 1m) or message count.\n- **Search Messages**: Search messages in channels, threads, and DMs using various filters like date, user, and content.\n- **Safe Message Posting**: The `conversations_add_message` tool is disabled by default for safety. Enable it via an environment variable, with optional channel restrictions.\n- **DM and Group DM support**: Retrieve direct messages and group direct messages.\n- **Embedded user information**: Embed user information in messages, for better context.\n- **Cache support**: Cache users and channels for faster access.\n- **Stdio/SSE Transports & Proxy Support**: Use the server with any MCP client that supports Stdio or SSE transports, and configure it to route outgoing requests through a proxy if needed.\n\n### Analytics Demo\n\n![Analytics](images/feature-1.gif)\n\n### Add Message Demo\n\n![Add Message](images/feature-2.gif)\n\n## Tools\n\n### 1. conversations_history:\nGet messages from the channel (or DM) by channel_id, the last row/column in the response is used as 'cursor' parameter for pagination if not empty\n- **Parameters:**\n  - `channel_id` (string, required):     - `channel_id` (string): ID of the channel in format Cxxxxxxxxxx or its name starting with `#...` or `@...` aka `#general` or `@username_dm`.\n  - `include_activity_messages` (boolean, default: false): If true, the response will include activity messages such as `channel_join` or `channel_leave`. Default is boolean false.\n  - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.\n  - `limit` (string, default: \"1d\"): Limit of messages to fetch in format of maximum ranges of time (e.g. 1d - 1 day, 1w - 1 week, 30d - 30 days, 90d - 90 days which is a default limit for free tier history) or number of messages (e.g. 50). Must be empty when 'cursor' is provided.\n\n### 2. conversations_replies:\nGet a thread of messages posted to a conversation by channelID and `thread_ts`, the last row/column in the response is used as `cursor` parameter for pagination if not empty.\n- **Parameters:**\n  - `channel_id` (string, required): ID of the channel in format `Cxxxxxxxxxx` or its name starting with `#...` or `@...` aka `#general` or `@username_dm`.\n  - `thread_ts` (string, required): Unique identifier of either a thread’s parent message or a message in the thread. ts must be the timestamp in format `1234567890.123456` of an existing message with 0 or more replies.\n  - `include_activity_messages` (boolean, default: false): If true, the response will include activity messages such as 'channel_join' or 'channel_leave'. Default is boolean false.\n  - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.\n  - `limit` (string, default: \"1d\"): Limit of messages to fetch in format of maximum ranges of time (e.g. 1d - 1 day, 1w - 1 week, 30d - 30 days, 90d - 90 days which is a default limit for free tier history) or number of messages (e.g. 50). Must be empty when 'cursor' is provided.\n\n### 3. conversations_add_message\nAdd a message to a public channel, private channel, or direct message (DM, or IM) conversation by channel_id and thread_ts.\n\n> **Note:** Posting messages is disabled by default for safety. To enable, set the `SLACK_MCP_ADD_MESSAGE_TOOL` environment variable. If set to a comma-separated list of channel IDs, posting is enabled only for those specific channels. See the Environment Variables section below for details.\n\n- **Parameters:**\n  - `channel_id` (string, required): ID of the channel in format `Cxxxxxxxxxx` or its name starting with `#...` or `@...` aka `#general` or `@username_dm`.\n  - `thread_ts` (string, optional): Unique identifier of either a thread’s parent message or a message in the thread_ts must be the timestamp in format `1234567890.123456` of an existing message with 0 or more replies. Optional, if not provided the message will be added to the channel itself, otherwise it will be added to the thread.\n  - `payload` (string, required): Message payload in specified content_type format. Example: 'Hello, world!' for text/plain or '# Hello, world!' for text/markdown.\n  - `content_type` (string, default: \"text/markdown\"): Content type of the message. Default is 'text/markdown'. Allowed values: 'text/markdown', 'text/plain'.\n\n### 4. conversations_search_messages\nSearch messages in a public channel, private channel, or direct message (DM, or IM) conversation using filters. All filters are optional, if not provided then search_query is required.\n- **Parameters:**\n  - `search_query` (string, optional): Search query to filter messages. Example: 'marketing report' or full URL of Slack message e.g. 'https://slack.com/archives/C1234567890/p1234567890123456', then the tool will return a single message matching given URL, herewith all other parameters will be ignored.\n  - `filter_in_channel` (string, optional): Filter messages in a specific channel by its ID or name. Example: `C1234567890` or `#general`. If not provided, all channels will be searched.\n  - `filter_in_im_or_mpim` (string, optional): Filter messages in a direct message (DM) or multi-person direct message (MPIM) conversation by its ID or name. Example: `D1234567890` or `@username_dm`. If not provided, all DMs and MPIMs will be searched.\n  - `filter_users_with` (string, optional): Filter messages with a specific user by their ID or display name in threads and DMs. Example: `U1234567890` or `@username`. If not provided, all threads and DMs will be searched.\n  - `filter_users_from` (string, optional): Filter messages from a specific user by their ID or display name. Example: `U1234567890` or `@username`. If not provided, all users will be searched.\n  - `filter_date_before` (string, optional): Filter messages sent before a specific date in format `YYYY-MM-DD`. Example: `2023-10-01`, `July`, `Yesterday` or `Today`. If not provided, all dates will be searched.\n  - `filter_date_after` (string, optional): Filter messages sent after a specific date in format `YYYY-MM-DD`. Example: `2023-10-01`, `July`, `Yesterday` or `Today`. If not provided, all dates will be searched.\n  - `filter_date_on` (string, optional): Filter messages sent on a specific date in format `YYYY-MM-DD`. Example: `2023-10-01`, `July`, `Yesterday` or `Today`. If not provided, all dates will be searched.\n  - `filter_date_during` (string, optional): Filter messages sent during a specific period in format `YYYY-MM-DD`. Example: `July`, `Yesterday` or `Today`. If not provided, all dates will be searched.\n  - `filter_threads_only` (boolean, default: false): If true, the response will include only messages from threads. Default is boolean false.\n  - `cursor` (string, default: \"\"): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.\n  - `limit` (number, default: 20): The maximum number of items to return. Must be an integer between 1 and 100.\n\n### 5. channels_list:\nGet list of channels\n- **Parameters:**\n  - `channel_types` (string, required): Comma-separated channel types. Allowed values: `mpim`, `im`, `public_channel`, `private_channel`. Example: `public_channel,private_channel,im`\n  - `sort` (string, optional): Type of sorting. Allowed values: `popularity` - sort by number of members/participants in each channel.\n  - `limit` (number, default: 100): The maximum number of items to return. Must be an integer between 1 and 1000 (maximum 999).\n  - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.\n\n## Resources\n\nThe Slack MCP Server exposes two special directory resources for easy access to workspace metadata:\n\n### 1. `slack://<workspace>/channels` — Directory of Channels\n\nFetches a CSV directory of all channels in the workspace, including public channels, private channels, DMs, and group DMs.\n\n- **URI:** `slack://<workspace>/channels`\n- **Format:** `text/csv`\n- **Fields:**\n  - `id`: Channel ID (e.g., `C1234567890`)\n  - `name`: Channel name (e.g., `#general`, `@username_dm`)\n  - `topic`: Channel topic (if any)\n  - `purpose`: Channel purpose/description\n  - `memberCount`: Number of members in the channel\n\n### 2. `slack://<workspace>/users` — Directory of Users\n\nFetches a CSV directory of all users in the workspace.\n\n- **URI:** `slack://<workspace>/users`\n- **Format:** `text/csv`\n- **Fields:**\n  - `userID`: User ID (e.g., `U1234567890`)\n  - `userName`: Slack username (e.g., `john`)\n  - `realName`: User’s real name (e.g., `John Doe`)\n\n## Setup Guide\n\n- [Authentication Setup](docs/01-authentication-setup.md)\n- [Installation](docs/02-installation.md)\n- [Configuration and Usage](docs/03-configuration-and-usage.md)\n\n### Environment Variables (Quick Reference)\n\n| Variable                          | Required? | Default                   | Description                                                                                                                                                                                                                                                                               |\n|-----------------------------------|-----------|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| `SLACK_MCP_XOXC_TOKEN`            | Yes*      | `nil`                     | Slack browser token (`xoxc-...`)                                                                                                                                                                                                                                                          |\n| `SLACK_MCP_XOXD_TOKEN`            | Yes*      | `nil`                     | Slack browser cookie `d` (`xoxd-...`)                                                                                                                                                                                                                                                     |\n| `SLACK_MCP_XOXP_TOKEN`            | Yes*      | `nil`                     | User OAuth token (`xoxp-...`) — alternative to xoxc/xoxd                                                                                                                                                                                                                                  |\n| `SLACK_MCP_PORT`                  | No        | `13080`                   | Port for the MCP server to listen on                                                                                                                                                                                                                                                      |\n| `SLACK_MCP_HOST`                  | No        | `127.0.0.1`               | Host for the MCP server to listen on                                                                                                                                                                                                                                                      |\n| `SLACK_MCP_SSE_API_KEY`           | No        | `nil`                     | Bearer token for SSE transport                                                                                                                                                                                                                                                            |\n| `SLACK_MCP_PROXY`                 | No        | `nil`                     | Proxy URL for outgoing requests                                                                                                                                                                                                                                                           |\n| `SLACK_MCP_USER_AGENT`            | No        | `nil`                     | Custom User-Agent (for Enterprise Slack environments)                                                                                                                                                                                                                                     |\n| `SLACK_MCP_CUSTOM_TLS`            | No        | `nil`                     | Send custom TLS-handshake to Slack servers based on `SLACK_MCP_USER_AGENT` or default User-Agent. (for Enterprise Slack environments)                                                                                                                                                     |\n| `SLACK_MCP_SERVER_CA`             | No        | `nil`                     | Path to CA certificate                                                                                                                                                                                                                                                                    |\n| `SLACK_MCP_SERVER_CA_TOOLKIT`     | No        | `nil`                     | Inject HTTPToolkit CA certificate to root trust-store for MitM debugging                                                                                                                                                                                                                  |\n| `SLACK_MCP_SERVER_CA_INSECURE`    | No        | `false`                   | Trust all insecure requests (NOT RECOMMENDED)                                                                                                                                                                                                                                             |\n| `SLACK_MCP_ADD_MESSAGE_TOOL`      | No        | `nil`                     | Enable message posting via `conversations_add_message` by setting it to true for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones, while an empty value disables posting by default. |\n| `SLACK_MCP_ADD_MESSAGE_MARK`      | No        | `nil`                     | When the `conversations_add_message` tool is enabled, any new message sent will automatically be marked as read.                                                                                                                                                                          |\n| `SLACK_MCP_ADD_MESSAGE_UNFURLING` | No        | `nil`                     | Enable to let Slack unfurl posted links or set comma-separated list of domains e.g. `github.com,slack.com` to whitelist unfurling only for them. If text contains whitelisted and unknown domain unfurling will be disabled for security reasons.                                         |\n| `SLACK_MCP_USERS_CACHE`           | No        | `.users_cache.json`       | Path to the users cache file. Used to cache Slack user information to avoid repeated API calls on startup.                                                                                                                                                                                |\n| `SLACK_MCP_CHANNELS_CACHE`        | No        | `.channels_cache_v2.json` | Path to the channels cache file. Used to cache Slack channel information to avoid repeated API calls on startup.                                                                                                                                                                          |\n| `SLACK_MCP_LOG_LEVEL`             | No        | `info`                    | Log-level for stdout or stderr. Valid values are: `debug`, `info`, `warn`, `error`, `panic` and `fatal`                                                                                                                                                                                   |\n\n*You need either `xoxp` **or** both `xoxc`/`xoxd` tokens for authentication.\n\n### Limitations matrix & Cache\n\n| Users Cache        | Channels Cache     | Limitations                                                                                                                                                                                                                                                                                                                  |\n|--------------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|\n| :x:                | :x:                | No cache, No LLM context enhancement with user data, tool `channels_list` will be fully not functional. Tools `conversations_*` will have limited capabilities and you won't be able to search messages by `@userHandle` or `#channel-name`, getting messages by `@userHandle` or `#channel-name` won't be available either. |\n| :white_check_mark: | :x:                | No channels cache, tool `channels_list` will be fully not functional. Tools `conversations_*` will have limited capabilities and you won't be able to search messages by `@userHandle` or `#channel-name`, getting messages by `@userHandle` or `#channel-name` won't be available either.                                   |\n| :white_check_mark: | :white_check_mark: | No limitations, fully functional Slack MCP Server.                                                                                                                                                                                                                                                                           |\n\n### Debugging Tools\n\n```bash\n# Run the inspector with stdio transport\nnpx @modelcontextprotocol/inspector go run mcp/mcp-server.go --transport stdio\n\n# View logs\ntail -n 20 -f ~/Library/Logs/Claude/mcp*.log\n```\n\n## Security\n\n- Never share API tokens\n- Keep .env files secure and private\n\n## License\n\nLicensed under MIT - see [LICENSE](LICENSE) file. This is not an official Slack product.\n",
+  "category": "AI Tools",
+  "quality_score": 72,
+  "oauth_config": {
+    "name": "Slack MCP",
+    "server_url": "https://slack.com/oauth/v2/authorize",
+    "token_endpoint": "https://slack.com/api/oauth.v2.access",
+    "client_id": "process.env.SLACK_CLIENT_ID",
+    "client_secret": "process.env.SLACK_CLIENT_SECRET",
+    "redirect_uris": ["https://1c38cd52a1cf.ngrok-free.app/oauth/callback", "http://localhost:8080/oauth/callback"],
+    "scopes": ["channels:read", "chat:write", "users:read"],
+    "description": "Slack MCP Server",
+    "default_scopes": ["channels:read", "chat:write", "users:read"],
+    "supports_resource_metadata": false,
+    "generic_oauth": true,
+    "access_token_env_var": "SLACK_MCP_XOXP_TOKEN"
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {}
+    },
+    "oauth": {
+      "provider": "slack",
+      "required": true
+    },
+    "browser_based": {
+      "required": true
+    }
+  },
+  "github_info": {
+    "owner": "korotovsky",
+    "repo": "slack-mcp-server",
+    "url": "https://github.com/korotovsky/slack-mcp-server",
+    "name": "korotovsky__slack-mcp-server",
+    "path": null,
+    "stars": 503,
+    "contributors": 13,
+    "issues": 40,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "511a48295714af4a03137268b36ca34dbb318b02"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-16T22:15:16.067Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_logging": false,
+    "implementing_oauth2": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_roots": false,
+    "implementing_sampling": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_tools": true
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "mark3labs/mcp-go"
+    },
+    {
+      "importance": 9,
+      "name": "slack-go/slack"
+    },
+    {
+      "importance": 8,
+      "name": "rusq/slack"
+    },
+    {
+      "importance": 8,
+      "name": "rusq/slackauth"
+    },
+    {
+      "importance": 7,
+      "name": "refraction-networking/utls"
+    },
+    {
+      "importance": 7,
+      "name": "ngrok/ngrok/v2"
+    },
+    {
+      "importance": 6,
+      "name": "openai/openai-go"
+    },
+    {
+      "importance": 5,
+      "name": "uber-go/zap"
+    },
+    {
+      "importance": 4,
+      "name": "gocarina/gocsv"
+    },
+    {
+      "importance": 3,
+      "name": "google/uuid"
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/korotovsky/slack-mcp-server\n\ngo 1.24.4\n\nrequire (\n\tgithub.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/mark3labs/mcp-go v0.31.0\n\tgithub.com/mattn/go-isatty v0.0.20\n\tgithub.com/openai/openai-go v1.11.0\n\tgithub.com/refraction-networking/utls v1.8.0\n\tgithub.com/rusq/slack v0.9.6-0.20250408103104-dd80d1b6337f\n\tgithub.com/rusq/slackauth v0.6.1\n\tgithub.com/rusq/slackdump/v3 v3.1.6\n\tgithub.com/rusq/tagops v0.1.1\n\tgithub.com/slack-go/slack v0.17.1\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/takara2314/slack-go-util v0.2.0\n\tgo.uber.org/zap v1.27.0\n\tgolang.ngrok.com/ngrok/v2 v2.0.0\n\tgolang.org/x/net v0.40.0\n\tgolang.org/x/sync v0.14.0\n\tgolang.org/x/time v0.12.0\n)\n\nrequire (\n\tgithub.com/MercuryEngineering/CookieMonster v0.0.0-20180304172713-1584578b3403 // indirect\n\tgithub.com/andybalholm/brotli v1.0.6 // indirect\n\tgithub.com/atotto/clipboard v0.1.4 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/catppuccin/go v0.3.0 // indirect\n\tgithub.com/charmbracelet/bubbles v0.21.0 // indirect\n\tgithub.com/charmbracelet/bubbletea v1.3.5 // indirect\n\tgithub.com/charmbracelet/colorprofile v0.3.1 // indirect\n\tgithub.com/charmbracelet/huh v0.7.0 // indirect\n\tgithub.com/charmbracelet/huh/spinner v0.0.0-20250519092748-d6f1597485e0 // indirect\n\tgithub.com/charmbracelet/lipgloss v1.1.0 // indirect\n\tgithub.com/charmbracelet/x/ansi v0.9.2 // indirect\n\tgithub.com/charmbracelet/x/cellbuf v0.0.13 // indirect\n\tgithub.com/charmbracelet/x/exp/strings v0.0.0-20250520193441-8304e91a28cb // indirect\n\tgithub.com/charmbracelet/x/term v0.2.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/deckarep/golang-set/v2 v2.8.0 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect\n\tgithub.com/fatih/color v1.18.0 // indirect\n\tgithub.com/go-jose/go-jose/v3 v3.0.4 // indirect\n\tgithub.com/go-rod/rod v0.116.2 // indirect\n\tgithub.com/go-stack/stack v1.8.1 // indirect\n\tgithub.com/google/go-cmp v0.6.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.3 // indirect\n\tgithub.com/inconshreveable/log15 v3.0.0-testing.5+incompatible // indirect\n\tgithub.com/inconshreveable/log15/v3 v3.0.0-testing.5 // indirect\n\tgithub.com/joho/godotenv v1.5.1 // indirect\n\tgithub.com/jpillora/backoff v1.0.0 // indirect\n\tgithub.com/klauspost/compress v1.17.4 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.2.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-localereader v0.0.1 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mitchellh/hashstructure/v2 v2.0.2 // indirect\n\tgithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect\n\tgithub.com/muesli/cancelreader v0.2.2 // indirect\n\tgithub.com/muesli/termenv v0.16.0 // indirect\n\tgithub.com/playwright-community/playwright-go v0.5200.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/rogpeppe/go-internal v1.14.1 // indirect\n\tgithub.com/rusq/chttp v1.1.0 // indirect\n\tgithub.com/rusq/fsadapter v1.1.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/tidwall/gjson v1.17.0 // indirect\n\tgithub.com/tidwall/match v1.1.1 // indirect\n\tgithub.com/tidwall/pretty v1.2.1 // indirect\n\tgithub.com/tidwall/sjson v1.2.5 // indirect\n\tgithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgithub.com/ysmood/fetchup v0.3.0 // indirect\n\tgithub.com/ysmood/goob v0.4.0 // indirect\n\tgithub.com/ysmood/got v0.40.0 // indirect\n\tgithub.com/ysmood/gson v0.7.3 // indirect\n\tgithub.com/ysmood/leakless v0.9.0 // indirect\n\tgithub.com/yuin/goldmark v1.7.12 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgolang.ngrok.com/muxado/v2 v2.0.1 // indirect\n\tgolang.org/x/crypto v0.38.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/term v0.32.0 // indirect\n\tgolang.org/x/text v0.25.0 // indirect\n\tgoogle.golang.org/protobuf v1.35.1 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

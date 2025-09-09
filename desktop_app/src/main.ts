@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/electron/main';
+import { config as dotenvConfig } from 'dotenv';
 import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
@@ -16,6 +17,9 @@ import WebSocketServer from '@backend/websocket';
 
 import config from './config';
 import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
+
+// Load environment variables from .env file
+dotenvConfig();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {

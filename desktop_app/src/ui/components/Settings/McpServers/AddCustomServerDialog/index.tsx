@@ -128,7 +128,7 @@ export default function AddCustomServerDialog({ open, onOpenChange }: AddCustomS
           env: Object.fromEntries(envPairs.map(({ key, value }) => [key, value])),
         },
         userConfigValues: {},
-        oauthProvider: null,
+        // OAuth fields are now optional and handled separately
       });
 
       onOpenChange(false);

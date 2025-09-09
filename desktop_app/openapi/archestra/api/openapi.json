@@ -6,6 +6,154 @@
   },
   "components": {
     "schemas": {
+      "OAuthTokensInput": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "number"
+          },
+          "token_type": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": ["access_token"],
+        "additionalProperties": {}
+      },
+      "OAuthClientInformationInput": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          }
+        },
+        "required": ["client_id"],
+        "additionalProperties": {}
+      },
+      "AuthorizationServerMetadataInput": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string"
+          },
+          "authorization_endpoint": {
+            "type": "string"
+          },
+          "token_endpoint": {
+            "type": "string"
+          },
+          "revocation_endpoint": {
+            "type": "string"
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "OAuthProtectedResourceMetadataInput": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string"
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "OAuthServerConfigInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "server_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "auth_server_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "resource_metadata_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "redirect_uris": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "well_known_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "default_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supports_resource_metadata": {
+            "type": "boolean"
+          },
+          "generic_oauth": {
+            "type": "boolean"
+          },
+          "token_endpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "access_token_env_var": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "server_url",
+          "client_id",
+          "redirect_uris",
+          "scopes",
+          "default_scopes",
+          "supports_resource_metadata"
+        ]
+      },
       "ToolAnalysisResultInput": {
         "type": "object",
         "properties": {
@@ -778,6 +926,12 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "inject_file": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": ["command"],
@@ -828,10 +982,10 @@
               }
             ]
           },
-          "oauthAccessToken": {
+          "oauthTokens": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/OAuthTokensInput"
               },
               {
                 "nullable": true,
@@ -839,10 +993,10 @@
               }
             ]
           },
-          "oauthRefreshToken": {
+          "oauthClientInfo": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/OAuthClientInformationInput"
               },
               {
                 "nullable": true,
@@ -850,10 +1004,10 @@
               }
             ]
           },
-          "oauthExpiryDate": {
+          "oauthServerMetadata": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/AuthorizationServerMetadataInput"
               },
               {
                 "nullable": true,
@@ -861,7 +1015,26 @@
               }
             ]
           },
-          "oauthDiscoveryMetadata": {
+          "oauthResourceMetadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthProtectedResourceMetadataInput"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["installing", "oauth_pending", "installed", "failed"]
+          },
+          "serverType": {
+            "type": "string",
+            "enum": ["local", "remote"]
+          },
+          "remoteUrl": {
             "anyOf": [
               {
                 "type": "string"
@@ -881,10 +1054,13 @@
           "name",
           "serverConfig",
           "userConfigValues",
-          "oauthAccessToken",
-          "oauthRefreshToken",
-          "oauthExpiryDate",
-          "oauthDiscoveryMetadata",
+          "oauthTokens",
+          "oauthClientInfo",
+          "oauthServerMetadata",
+          "oauthResourceMetadata",
+          "status",
+          "serverType",
+          "remoteUrl",
           "createdAt"
         ]
       },
@@ -904,34 +1080,31 @@
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValuesInput"
           },
-          "oauthProvider": {
-            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
+          "oauthConfig": {
+            "$ref": "#/components/schemas/OAuthServerConfigInput"
           },
-          "oauthAccessToken": {
+          "oauthTokens": {
+            "$ref": "#/components/schemas/OAuthTokensInput"
+          },
+          "oauthClientInfo": {
+            "$ref": "#/components/schemas/OAuthClientInformationInput"
+          },
+          "oauthServerMetadata": {
+            "$ref": "#/components/schemas/AuthorizationServerMetadataInput"
+          },
+          "oauthResourceMetadata": {
+            "$ref": "#/components/schemas/OAuthProtectedResourceMetadataInput"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["installing", "oauth_pending", "installed", "failed"]
+          },
+          "serverType": {
+            "type": "string",
+            "enum": ["local", "remote"]
+          },
+          "remote_url": {
             "type": "string"
-          },
-          "oauthRefreshToken": {
-            "type": "string"
-          },
-          "oauthExpiryDate": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
           }
         },
         "required": ["displayName", "serverConfig"]
@@ -1197,6 +1370,155 @@
           }
         },
         "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+      },
+      "OAuthTokens": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "number"
+          },
+          "token_type": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": ["access_token"],
+        "additionalProperties": {}
+      },
+      "OAuthClientInformation": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          }
+        },
+        "required": ["client_id"],
+        "additionalProperties": {}
+      },
+      "AuthorizationServerMetadata": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string"
+          },
+          "authorization_endpoint": {
+            "type": "string"
+          },
+          "token_endpoint": {
+            "type": "string"
+          },
+          "revocation_endpoint": {
+            "type": "string"
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "OAuthProtectedResourceMetadata": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string"
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "OAuthServerConfig": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "server_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "auth_server_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "resource_metadata_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "redirect_uris": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "well_known_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "default_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supports_resource_metadata": {
+            "type": "boolean"
+          },
+          "generic_oauth": {
+            "type": "boolean"
+          },
+          "token_endpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "access_token_env_var": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "server_url",
+          "client_id",
+          "redirect_uris",
+          "scopes",
+          "default_scopes",
+          "supports_resource_metadata"
+        ],
+        "additionalProperties": false
       },
       "ToolAnalysisResult": {
         "type": "object",
@@ -1992,6 +2314,12 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "inject_file": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": ["command"],
@@ -2042,10 +2370,10 @@
               }
             ]
           },
-          "oauthAccessToken": {
+          "oauthTokens": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/OAuthTokens"
               },
               {
                 "nullable": true,
@@ -2053,10 +2381,10 @@
               }
             ]
           },
-          "oauthRefreshToken": {
+          "oauthClientInfo": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/OAuthClientInformation"
               },
               {
                 "nullable": true,
@@ -2064,10 +2392,10 @@
               }
             ]
           },
-          "oauthExpiryDate": {
+          "oauthServerMetadata": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/AuthorizationServerMetadata"
               },
               {
                 "nullable": true,
@@ -2075,7 +2403,26 @@
               }
             ]
           },
-          "oauthDiscoveryMetadata": {
+          "oauthResourceMetadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OAuthProtectedResourceMetadata"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["installing", "oauth_pending", "installed", "failed"]
+          },
+          "serverType": {
+            "type": "string",
+            "enum": ["local", "remote"]
+          },
+          "remoteUrl": {
             "anyOf": [
               {
                 "type": "string"
@@ -2095,10 +2442,13 @@
           "name",
           "serverConfig",
           "userConfigValues",
-          "oauthAccessToken",
-          "oauthRefreshToken",
-          "oauthExpiryDate",
-          "oauthDiscoveryMetadata",
+          "oauthTokens",
+          "oauthClientInfo",
+          "oauthServerMetadata",
+          "oauthResourceMetadata",
+          "status",
+          "serverType",
+          "remoteUrl",
           "createdAt"
         ],
         "additionalProperties": false
@@ -2119,34 +2469,31 @@
           "userConfigValues": {
             "$ref": "#/components/schemas/McpServerUserConfigValues"
           },
-          "oauthProvider": {
-            "description": "OAuth provider name (e.g., google, slack-browser, linkedin-browser)",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
+          "oauthConfig": {
+            "$ref": "#/components/schemas/OAuthServerConfig"
           },
-          "oauthAccessToken": {
+          "oauthTokens": {
+            "$ref": "#/components/schemas/OAuthTokens"
+          },
+          "oauthClientInfo": {
+            "$ref": "#/components/schemas/OAuthClientInformation"
+          },
+          "oauthServerMetadata": {
+            "$ref": "#/components/schemas/AuthorizationServerMetadata"
+          },
+          "oauthResourceMetadata": {
+            "$ref": "#/components/schemas/OAuthProtectedResourceMetadata"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["installing", "oauth_pending", "installed", "failed"]
+          },
+          "serverType": {
+            "type": "string",
+            "enum": ["local", "remote"]
+          },
+          "remote_url": {
             "type": "string"
-          },
-          "oauthRefreshToken": {
-            "type": "string"
-          },
-          "oauthExpiryDate": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
           }
         },
         "required": ["displayName", "serverConfig"],
@@ -2875,6 +3222,173 @@
         }
       }
     },
+    "/api/mcp_server/start_oauth": {
+      "post": {
+        "operationId": "startGenericOAuth",
+        "tags": ["OAuth"],
+        "description": "Start generic OAuth flow for MCP server installation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "installData": {
+                    "$ref": "#/components/schemas/McpServerInstallInput"
+                  }
+                },
+                "required": ["installData"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "$ref": "#/components/schemas/McpServer"
+                    },
+                    "authUrl": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["server", "authUrl", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp_server/complete_oauth": {
+      "post": {
+        "operationId": "completeGenericOAuth",
+        "tags": ["OAuth"],
+        "description": "Complete generic OAuth flow with authorization code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "serverId": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "required": ["serverId", "code", "state"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "$ref": "#/components/schemas/McpServer"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["server", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mcp_request_log": {
       "get": {
         "operationId": "getMcpRequestLogs",
@@ -3353,6 +3867,82 @@
         }
       }
     },
+    "/api/mcp_server/oauth_install": {
+      "post": {
+        "operationId": "installMcpServerWithOauth",
+        "tags": ["MCP Server"],
+        "description": "Install MCP server with OAuth authentication",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "installData": {
+                    "$ref": "#/components/schemas/McpServerInstallInput"
+                  }
+                },
+                "required": ["installData"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "server": {
+                      "$ref": "#/components/schemas/McpServer"
+                    }
+                  },
+                  "required": ["server"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/memories": {
       "get": {
         "operationId": "getAllMemories",
@@ -3532,201 +4122,6 @@
                     }
                   },
                   "required": ["success"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/mcp_server/start_oauth": {
-      "post": {
-        "operationId": "startMcpServerOauth",
-        "tags": ["MCP Server", "OAuth"],
-        "description": "Start MCP server OAuth flow",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "catalogName": {
-                    "type": "string"
-                  },
-                  "installData": {
-                    "$ref": "#/components/schemas/McpServerInstallInput"
-                  }
-                },
-                "required": ["catalogName", "installData"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "authUrl": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["authUrl", "state"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/oauth/callback": {
-      "get": {
-        "operationId": "oauthCallback",
-        "tags": ["OAuth"],
-        "description": "OAuth callback endpoint for provider redirects",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "code",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "state",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "error",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "query",
-            "name": "error_description",
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/api/mcp_server/complete_oauth": {
-      "post": {
-        "operationId": "completeMcpServerOauth",
-        "tags": ["MCP Server", "OAuth"],
-        "description": "Complete MCP server OAuth flow and install with tokens",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "service": {
-                    "type": "string"
-                  },
-                  "state": {
-                    "type": "string"
-                  },
-                  "access_token": {
-                    "type": "string"
-                  },
-                  "refresh_token": {
-                    "type": "string"
-                  },
-                  "expiry_date": {
-                    "type": "string"
-                  },
-                  "code": {
-                    "type": "string"
-                  }
-                },
-                "required": ["service", "state"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
                   "additionalProperties": false
                 }
               }

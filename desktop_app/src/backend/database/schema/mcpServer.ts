@@ -2,6 +2,29 @@ import { sql } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 
+import {
+  type AuthorizationServerMetadata,
+  AuthorizationServerMetadataSchema,
+  type OAuthClientInformation,
+  OAuthClientInformationSchema,
+  type OAuthProtectedResourceMetadata,
+  OAuthProtectedResourceMetadataSchema,
+  type OAuthTokens,
+  OAuthTokensSchema,
+} from './oauth';
+
+/**
+ * MCP Server Status Enum
+ */
+export const McpServerStatusSchema = z.enum(['installing', 'oauth_pending', 'installed', 'failed']);
+export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
+
+/**
+ * MCP Server Type Enum
+ */
+export const McpServerTypeSchema = z.enum(['local', 'remote']);
+export type McpServerType = z.infer<typeof McpServerTypeSchema>;
+
 /**
  * Borrowed from @anthropic-ai/dxt
  *
@@ -11,6 +34,7 @@ export const McpServerConfigSchema = z.strictObject({
   command: z.string(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
 });
 
 export const McpServerUserConfigValuesSchema = z.record(
@@ -42,21 +66,37 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    */
   userConfigValues: text({ mode: 'json' }).$type<z.infer<typeof McpServerUserConfigValuesSchema>>(),
   /**
-   * OAuth access token for servers that use OAuth authentication
+   * OAuth tokens object - matches OAuthTokens interface from MCP SDK
+   * Stores access_token, refresh_token, expires_in, token_type, scope, etc.
    */
-  oauthAccessToken: text('oauth_access_token'),
+  oauthTokens: text('oauth_tokens', { mode: 'json' }).$type<OAuthTokens>(),
   /**
-   * OAuth refresh token for servers that use OAuth authentication
+   * OAuth client information - matches OAuthClientInformation interface from MCP SDK
+   * Stores client_id, client_secret (for static registration or dynamic registration result)
    */
-  oauthRefreshToken: text('oauth_refresh_token'),
+  oauthClientInfo: text('oauth_client_info', { mode: 'json' }).$type<OAuthClientInformation>(),
   /**
-   * OAuth token expiry date (as returned by provider, typically a timestamp or ISO date)
+   * OAuth authorization server metadata - matches AuthorizationServerMetadata interface from MCP SDK
+   * Stores OAuth discovery metadata per RFC 8414 (issuer, endpoints, scopes_supported, etc.)
    */
-  oauthExpiryDate: text('oauth_expiry_date'),
+  oauthServerMetadata: text('oauth_server_metadata', { mode: 'json' }).$type<AuthorizationServerMetadata>(),
   /**
-   * OAuth discovery metadata (JSON) - stores discovered OAuth server metadata per RFC 8414
+   * OAuth protected resource metadata - matches OAuthProtectedResourceMetadata interface from MCP SDK
+   * Stores resource-specific OAuth metadata (resource identifier, required scopes, etc.)
    */
-  oauthDiscoveryMetadata: text('oauth_discovery_metadata'),
+  oauthResourceMetadata: text('oauth_resource_metadata', { mode: 'json' }).$type<OAuthProtectedResourceMetadata>(),
+  /**
+   * Current status of the MCP server installation/OAuth flow
+   */
+  status: text().notNull().default('installing').$type<McpServerStatus>(),
+  /**
+   * Type of MCP server (local container or remote service)
+   */
+  serverType: text('server_type').notNull().default('local').$type<McpServerType>(),
+  /**
+   * Remote URL for remote MCP servers (null for local servers)
+   */
+  remoteUrl: text('remote_url'),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -71,10 +111,13 @@ export const McpServerSchema = z.object({
   name: z.string(),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.nullable(),
-  oauthAccessToken: z.string().nullable(),
-  oauthRefreshToken: z.string().nullable(),
-  oauthExpiryDate: z.string().nullable(),
-  oauthDiscoveryMetadata: z.string().nullable(),
+  oauthTokens: OAuthTokensSchema.nullable(),
+  oauthClientInfo: OAuthClientInformationSchema.nullable(),
+  oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
+  oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
+  status: McpServerStatusSchema,
+  serverType: McpServerTypeSchema,
+  remoteUrl: z.string().nullable(),
   createdAt: z.string(),
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, X } from 'lucide-react';
+import { FileText, MoreHorizontal, X } from 'lucide-react';
 import React, { useCallback } from 'react';
 
 import {
@@ -17,6 +17,12 @@ import {
   AIInputTools,
 } from '@ui/components/kibo/ai-input';
 import { Badge } from '@ui/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@ui/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
@@ -63,25 +69,69 @@ export default function ChatInput({
       <AIInput onSubmit={handleSubmit} className="bg-inherit">
         {selectedToolIds.size > 0 && (
           <div className={cn('flex flex-wrap gap-2 p-3 pb-0')}>
-            {Array.from(selectedToolIds).map((toolId) => {
-              const tool = availableTools.find((t) => t.id === toolId);
-              if (!tool) return null;
+            {Array.from(selectedToolIds)
+              .slice(0, 10)
+              .map((toolId) => {
+                const tool = availableTools.find((t) => t.id === toolId);
+                if (!tool) return null;
 
-              return (
-                <Badge key={tool.id} variant="secondary" className="flex items-center gap-1.5 px-2 py-1 text-xs">
-                  <span className="text-xs font-medium text-muted-foreground">{tool.mcpServerName}</span>
-                  <span>/</span>
-                  <span>{formatToolName(tool.name || tool.id)}</span>
-                  <button
-                    onClick={() => removeSelectedTool(tool.id)}
-                    className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                    type="button"
+                return (
+                  <Badge key={tool.id} variant="secondary" className="flex items-center gap-1.5 px-2 py-1 text-xs">
+                    <span className="text-xs font-medium text-muted-foreground">{tool.mcpServerName}</span>
+                    <span>/</span>
+                    <span>{formatToolName(tool.name || tool.id)}</span>
+                    <button
+                      onClick={() => removeSelectedTool(tool.id)}
+                      className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                      type="button"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                );
+              })}
+
+            {selectedToolIds.size > 10 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer hover:bg-muted"
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              );
-            })}
+                    <MoreHorizontal className="h-3 w-3" />
+                    <span>+{selectedToolIds.size - 10} more</span>
+                  </Badge>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80 max-h-96 overflow-y-auto">
+                  {Array.from(selectedToolIds)
+                    .slice(10)
+                    .map((toolId) => {
+                      const tool = availableTools.find((t) => t.id === toolId);
+                      if (!tool) return null;
+
+                      return (
+                        <DropdownMenuItem key={tool.id} className="flex items-center justify-between p-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="text-xs font-medium text-muted-foreground">{tool.mcpServerName}</span>
+                            <span>/</span>
+                            <span className="truncate">{formatToolName(tool.name || tool.id)}</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSelectedTool(tool.id);
+                            }}
+                            className="ml-2 hover:bg-muted-foreground/20 rounded-full p-0.5 flex-shrink-0"
+                            type="button"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
         <AIInputTextarea

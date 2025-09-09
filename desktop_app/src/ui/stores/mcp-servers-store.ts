@@ -6,7 +6,7 @@ import {
   type McpServer,
   getMcpServers,
   installMcpServer,
-  startMcpServerOauth,
+  installMcpServerWithOauth,
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
 import { ConnectedMcpServer } from '@ui/types';
@@ -57,10 +57,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       env: {},
     },
     userConfigValues: {},
-    oauthAccessToken: null,
-    oauthRefreshToken: null,
-    oauthExpiryDate: null,
-    oauthDiscoveryMetadata: null,
+    oauthTokens: null,
+    oauthClientInfo: null,
+    oauthServerMetadata: null,
+    oauthResourceMetadata: null,
+    status: 'installed',
+    serverType: 'local',
+    remoteUrl: null,
     state: 'initializing',
     startupPercentage: 0,
     message: null,
@@ -159,9 +162,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
           const { data } = await installMcpServer({
             body: {
               ...installData!,
-              oauthAccessToken: tokens.access_token,
-              oauthRefreshToken: tokens.refresh_token ?? undefined,
-              oauthExpiryDate: tokens.expires_at || null,
+              oauthTokens: {
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token ?? undefined,
+                expires_in: tokens.expires_in ? parseInt(tokens.expires_in, 10) : undefined,
+                token_type: tokens.token_type,
+                scope: tokens.scope,
+              },
             },
           });
 
@@ -179,8 +186,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       }
 
       /**
-       * If OAuth is required for installation of this MCP server, we start the OAuth flow
-       * rather than directly "installing" the MCP server
+       * If OAuth is required, use the new simple oauth_install endpoint
        */
       if (requiresOAuth) {
         // Show confirmation dialog before starting OAuth flow
@@ -198,31 +204,63 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         );
 
         if (!userConfirmed) {
-          // User cancelled the OAuth flow
           console.log('User cancelled OAuth flow');
           set({ installingMcpServerId: null });
           return;
         }
 
-        // Start OAuth flow with installation data
-        const { data } = await startMcpServerOauth({
-          body: {
-            catalogName: id || '',
-            installData: installData!,
-          },
-        });
+        try {
+          // Check if this is a generic OAuth flow
+          const isGenericOAuth = (installData as any).oauthConfig?.generic_oauth;
 
-        if (data?.authUrl) {
-          // Store the state for OAuth callback
-          sessionStorage.setItem('oauth_state', data.state);
+          if (isGenericOAuth) {
+            // Use the generic OAuth start endpoint
+            const response = await fetch('/api/mcp_server/start_oauth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ installData: installData! }),
+            });
 
-          // Open the OAuth URL in the default browser
-          console.log('Opening OAuth URL:', data.authUrl);
-          window.electronAPI.openExternal(data.authUrl);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Generic OAuth start failed');
+            }
 
-          // The OAuth callback will handle the rest of the installation
-          // Navigate to the OAuth callback page to wait for completion
-          window.location.href = '/oauth-callback';
+            const result = await response.json();
+
+            // For generic OAuth, the response includes authUrl - open it in browser
+            if (result.authUrl) {
+              window.open(result.authUrl, '_blank');
+            }
+
+            // Update the server in our store with oauth_pending status
+            if (result.server) {
+              const newServer: ConnectedMcpServer = result.server;
+              set((state) => ({
+                installedMcpServers: [newServer, ...state.installedMcpServers],
+                installingMcpServerId: null,
+              }));
+            }
+            return;
+          } else {
+            // Use the regular MCP OAuth endpoint
+            const { data: result, error } = await installMcpServerWithOauth({
+              body: {
+                installData: installData!,
+              },
+            });
+
+            if (error) {
+              throw new Error(typeof error === 'string' ? error : 'OAuth install failed');
+            }
+
+            if (result?.server) {
+              get().addMcpServerToInstalledMcpServers(result.server);
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          set({ errorInstallingMcpServer: errorMessage });
         }
       } else {
         const { data: newlyInstalledMcpServer, error } = await installMcpServer({ body: installData });

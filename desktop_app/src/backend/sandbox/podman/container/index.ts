@@ -1,6 +1,7 @@
 import type { RawReplyDefaultExpression } from 'fastify';
 import fs from 'fs';
 import path from 'node:path';
+import os from 'os';
 import { createStream } from 'rotating-file-stream';
 import type { Duplex } from 'stream';
 import { Agent, request, upgrade } from 'undici';
@@ -56,6 +57,7 @@ type PodmanContainerStatusSummary = z.infer<typeof PodmanContainerStatusSummaryS
 
 export default class PodmanContainer {
   containerName: string;
+  private serverConfig: McpServerConfig;
 
   private command: string;
   private args: string[];
@@ -89,6 +91,7 @@ export default class PodmanContainer {
 
   constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
+    this.serverConfig = serverConfig;
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -630,6 +633,11 @@ export default class PodmanContainer {
         createBody.command = [this.command, ...this.args];
       }
 
+      // Handle file injection if specified
+      if (this.serverConfig.inject_file) {
+        await this.injectFiles(createBody);
+      }
+
       const response = await containerCreateLibpod({
         body: createBody,
       });
@@ -1104,6 +1112,60 @@ export default class PodmanContainer {
     } catch (error) {
       log.error(`Failed to cleanup log files for ${this.containerName}:`, error);
       // Don't throw here - log cleanup failure shouldn't prevent container removal
+    }
+  }
+
+  /**
+   * Inject files into the container by creating temporary host files and mounting them
+   */
+  private async injectFiles(createBody: any): Promise<void> {
+    if (!this.serverConfig.inject_file) {
+      return;
+    }
+
+    log.info(
+      `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+    );
+
+    const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+
+    try {
+      // Create temp directory
+      await fs.promises.mkdir(tempDir, { recursive: true });
+
+      // Initialize mounts array if not exists
+      if (!createBody.mounts) {
+        createBody.mounts = [];
+      }
+
+      // Create each file and add it as a mount
+      for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
+        const hostFilePath = path.join(tempDir, path.basename(filename));
+        const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
+
+        // Write file content to temp location
+        await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
+        log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
+
+        // Add as bind mount to container
+        createBody.mounts.push({
+          type: 'bind',
+          source: hostFilePath,
+          target: containerFilePath,
+          options: ['ro'], // Read-only mount
+        });
+      }
+
+      log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
+    } catch (error) {
+      log.error(`Failed to setup file injection for ${this.containerName}:`, error);
+      // Clean up temp directory on error
+      try {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+      }
+      throw error;
     }
   }
 }

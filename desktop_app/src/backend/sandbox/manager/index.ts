@@ -93,9 +93,15 @@ class McpServerSandboxManager {
   }
 
   async startServer(mcpServer: McpServer) {
-    const { id, name } = mcpServer;
-    log.info(`Starting MCP server: id="${id}", name="${name}"`);
+    const { id, name, serverType } = mcpServer;
+    log.info(`Starting MCP server: id="${id}", name="${name}", type="${serverType}"`);
 
+    // Handle remote servers differently
+    if (serverType === 'remote') {
+      return await this.startRemoteServer(mcpServer);
+    }
+
+    // Handle local containerized servers (existing logic)
     if (!this.socketPath) {
       throw new Error('Socket path is not initialized');
     }
@@ -112,6 +118,35 @@ class McpServerSandboxManager {
     log.info(`Registered sandboxed MCP server ${id} in map`);
 
     await sandboxedMcpServer.start();
+  }
+
+  /**
+   * Handle remote MCP server by creating a SandboxedMcpServer instance
+   * This integrates remote servers with the existing tool discovery system
+   */
+  private async startRemoteServer(mcpServer: McpServer) {
+    const { id, name } = mcpServer;
+
+    log.info(`Starting remote MCP server: ${name}`);
+
+    try {
+      // Create SandboxedMcpServer for remote server (no socket path needed)
+      const sandboxedMcpServer = new SandboxedMcpServer(mcpServer);
+
+      // Register in the same map as local servers
+      this.mcpServerIdToSandboxedMcpServerMap.set(id, sandboxedMcpServer);
+      log.info(`Registered remote MCP server ${id} in map`);
+
+      // Start the remote connection (this will create MCP client and fetch tools)
+      await sandboxedMcpServer.start();
+
+      log.info(`✅ Remote MCP server ${name} started successfully`);
+    } catch (error) {
+      log.error(`Failed to start remote MCP server ${name}:`, error);
+      // Clean up on failure
+      this.mcpServerIdToSandboxedMcpServerMap.delete(id);
+      throw error;
+    }
   }
 
   async stopServer(mcpServerId: string) {

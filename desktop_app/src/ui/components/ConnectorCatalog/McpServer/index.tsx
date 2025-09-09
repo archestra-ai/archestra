@@ -61,8 +61,9 @@ export default function McpServer({
     license,
   } = server;
 
-  const requiresOAuthSetup = archestra_config?.oauth?.required || false;
-  const requiresBrowserBasedSetup = archestra_config?.browser_based?.required || false;
+  // Safely extract OAuth and browser-based config with null checks
+  const requiresOAuthSetup = !!(server as LocalMcpServerManifest).oauth_config;
+  const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);
@@ -171,7 +172,7 @@ export default function McpServer({
           </div>
 
           {/* Repository info */}
-          {gitHubInfo && gitHubInfo.owner && gitHubInfo.repo && (
+          {gitHubInfo?.owner && gitHubInfo?.repo && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <GitFork className="h-3 w-3" />
               <span className="truncate" title={`${gitHubInfo.owner}/${gitHubInfo.repo}`}>

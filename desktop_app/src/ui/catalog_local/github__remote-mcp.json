@@ -1,0 +1,63 @@
+{
+  "name": "github__remote-mcp",
+
+  "oauth_config": {
+    "name": "GitHub Copilot MCP",
+    "server_url": "https://api.githubcopilot.com/mcp/",
+    "client_id": "Ov23li3CnHLM7PNQ2Xiv",
+    "client_secret": "process.env.GITHUB_CLIENT_SECRET",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "GitHub Copilot MCP Server",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+
+  "server": {
+    "type": "python",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "unknown",
+      "args": [],
+      "env": {}
+    }
+  },
+
+  "display_name": "github MCP",
+  "version": "1.0.0",
+  "description": "Remote MCP server for github - issue tracking and project management",
+  "remote_url": "https://api.githubcopilot.com/mcp/",
+  "remote_mcp_docs_url": "https://github.app/docs/mcp",
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpServers": {}
+    },
+    "oauth": {
+      "provider": "github",
+      "required": true
+    }
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "github_info": {
+    "owner": "iskhakov",
+    "repo": "google_workspace_mcp",
+    "url": "https://github.com/iskhakov/google_workspace_mcp",
+    "name": "google_workspace_mcp",
+    "path": null,
+    "stars": 390,
+    "contributors": 16,
+    "issues": 17,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6cb5b05da1c5469db3c34ab1bf0b83d4f950d3ba"
+  }
+}

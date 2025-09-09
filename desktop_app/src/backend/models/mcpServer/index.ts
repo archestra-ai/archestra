@@ -10,8 +10,15 @@ import {
   McpServerUserConfigValuesSchema,
   mcpServersTable,
 } from '@backend/database/schema/mcpServer';
+import {
+  AuthorizationServerMetadataSchema,
+  OAuthClientInformationSchema,
+  OAuthProtectedResourceMetadataSchema,
+  OAuthTokensSchema,
+} from '@backend/database/schema/oauth';
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
+import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
 export const McpServerInstallSchema = z.object({
@@ -28,14 +35,22 @@ export const McpServerInstallSchema = z.object({
     .regex(/^[A-Za-z0-9-\s]{1,63}$/, 'Name can only contain letters, numbers, spaces, and dashes (-)'),
   serverConfig: McpServerConfigSchema,
   userConfigValues: McpServerUserConfigValuesSchema.optional(),
-  oauthProvider: z
-    .string()
-    .nullable()
-    .optional()
-    .describe('OAuth provider name (e.g., google, slack-browser, linkedin-browser)'),
-  oauthAccessToken: z.string().optional(),
-  oauthRefreshToken: z.string().optional(),
-  oauthExpiryDate: z.string().nullable().optional(),
+  /** OAuth server configuration object from frontend */
+  oauthConfig: OAuthServerConfigSchema.optional(),
+  /** Complete OAuth tokens object from MCP SDK */
+  oauthTokens: OAuthTokensSchema.optional(),
+  /** OAuth client information from MCP SDK */
+  oauthClientInfo: OAuthClientInformationSchema.optional(),
+  /** OAuth server metadata from MCP SDK discovery */
+  oauthServerMetadata: AuthorizationServerMetadataSchema.optional(),
+  /** OAuth protected resource metadata from MCP SDK */
+  oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
+  /** Server installation status */
+  status: z.enum(['installing', 'oauth_pending', 'installed', 'failed']).optional(),
+  /** Server type (local container or remote service) */
+  serverType: z.enum(['local', 'remote']).optional(),
+  /** Remote URL for remote MCP servers */
+  remote_url: z.string().optional(),
 });
 
 // Interface for catalog search parameters
@@ -99,10 +114,14 @@ export default class McpServerModel {
     displayName,
     serverConfig,
     userConfigValues,
-    oauthProvider,
-    oauthAccessToken,
-    oauthRefreshToken,
-    oauthExpiryDate,
+    oauthConfig,
+    oauthTokens,
+    oauthClientInfo,
+    oauthServerMetadata,
+    oauthResourceMetadata,
+    status,
+    serverType,
+    remote_url,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -120,49 +139,21 @@ export default class McpServerModel {
       throw new Error(`MCP server ${id} is already installed`);
     }
 
-    // Handle OAuth tokens - add them to environment variables based on provider
+    // OAuth tokens are now handled directly by the MCP client transport layer
+    // No need to add tokens to environment variables - they're used for HTTP auth headers
     let finalServerConfig = serverConfig;
-    if (oauthAccessToken && oauthProvider) {
-      // Import the provider configuration to get token mapping
-      const { getOAuthProvider, hasOAuthProvider } = await import('@backend/server/plugins/oauth');
-      const { handleProviderTokens } = await import('@backend/server/plugins/oauth/utils/oauth-provider-helper');
 
-      // Validate OAuth provider exists
-      if (!hasOAuthProvider(oauthProvider)) {
-        throw new Error(
-          `Invalid OAuth provider: ${oauthProvider}. Available providers: ${Object.keys((await import('@backend/server/plugins/oauth')).oauthProviders).join(', ')}`
-        );
-      }
-
-      if (hasOAuthProvider(oauthProvider)) {
-        const provider = getOAuthProvider(oauthProvider);
-
-        // Create token response in standard format
-        const tokens = {
-          access_token: oauthAccessToken,
-          refresh_token: oauthRefreshToken || undefined,
-          expires_in: oauthExpiryDate
-            ? Math.floor((new Date(oauthExpiryDate).getTime() - Date.now()) / 1000)
-            : undefined,
-        };
-
-        // Use the provider's token handler to get the correct env vars
-        const tokenEnvVars = await handleProviderTokens(provider, tokens, id);
-
-        // Merge OAuth env variables with existing ones
-        if (tokenEnvVars) {
-          finalServerConfig = {
-            ...serverConfig,
-            env: {
-              ...serverConfig.env, // Keep existing env vars
-              ...tokenEnvVars, // Add/override with OAuth tokens
-            },
-          };
-        }
-      }
-    }
+    // OAuth validation is now handled by the frontend-provided oauthConfig
 
     const now = new Date();
+    const isRemoteServer = serverType === 'remote' || !!remote_url;
+    const finalServerType = isRemoteServer ? 'remote' : serverType || 'local';
+
+    // Remote URL is now stored as a separate column
+    if (remote_url) {
+      log.info(`Remote URL detected: ${remote_url}, setting serverType to 'remote'`);
+    }
+
     const [server] = await db
       .insert(mcpServersTable)
       .values({
@@ -170,14 +161,26 @@ export default class McpServerModel {
         name: displayName,
         serverConfig: finalServerConfig,
         userConfigValues: userConfigValues,
-        oauthAccessToken: oauthAccessToken || null,
-        oauthRefreshToken: oauthRefreshToken || null,
-        oauthExpiryDate: oauthExpiryDate || null,
+        serverType: finalServerType,
+        remoteUrl: remote_url || null,
+        status: status || 'installed', // Default to 'installed' for regular installs
+        oauthTokens: oauthTokens || null,
+        oauthClientInfo: oauthClientInfo || null,
+        oauthServerMetadata: oauthServerMetadata || null,
+        oauthResourceMetadata: oauthResourceMetadata || null,
         createdAt: now.toISOString(),
       })
       .returning();
 
-    await this.startServerAndSyncAllConnectedExternalMcpClients(server);
+    // Only start container for local servers
+    if (isRemoteServer) {
+      log.info(`Remote server ${server.name} installed - skipping container startup`);
+      // Just sync external clients for remote servers
+      await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+    } else {
+      // Start container for local servers
+      await this.startServerAndSyncAllConnectedExternalMcpClients(server);
+    }
 
     return server;
   }

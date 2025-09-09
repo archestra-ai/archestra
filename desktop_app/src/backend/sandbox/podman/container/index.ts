@@ -57,6 +57,7 @@ type PodmanContainerStatusSummary = z.infer<typeof PodmanContainerStatusSummaryS
 
 export default class PodmanContainer {
   containerName: string;
+  private serverConfig: McpServerConfig;
 
   private command: string;
   private args: string[];
@@ -90,6 +91,7 @@ export default class PodmanContainer {
 
   constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
+    this.serverConfig = serverConfig;
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -1142,7 +1144,7 @@ export default class PodmanContainer {
         const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
 
         // Write file content to temp location
-        await fs.promises.writeFile(hostFilePath, content, 'utf-8');
+        await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
         log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
 
         // Add as bind mount to container

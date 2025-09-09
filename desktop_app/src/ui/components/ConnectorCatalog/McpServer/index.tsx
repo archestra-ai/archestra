@@ -145,13 +145,13 @@ export default function McpServer({
         <CardContent className="space-y-4">
           {/* Enhanced Metadata */}
           <div className="flex flex-wrap gap-3 text-xs">
-            {gitHubInfo?.stars > 0 && (
+            {gitHubInfo && gitHubInfo.stars > 0 && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Star className="h-3 w-3" />
                 <span>{gitHubInfo.stars.toLocaleString()}</span>
               </div>
             )}
-            {gitHubInfo?.contributors > 0 && (
+            {gitHubInfo && gitHubInfo.contributors > 0 && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Users className="h-3 w-3" />
                 <span>{gitHubInfo.contributors}</span>

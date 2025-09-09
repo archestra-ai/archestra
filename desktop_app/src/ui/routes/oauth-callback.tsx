@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@ui/components/ui/alert';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@ui/components/ui/card';
-import { completeMcpServerOauth } from '@ui/lib/clients/archestra/api/gen';
+import { completeGenericOAuth } from '@ui/lib/clients/archestra/api/gen';
 import { useMcpServersStore } from '@ui/stores';
 
 interface OAuthCallbackParams {
@@ -74,7 +74,7 @@ function OAuthCallbackPage() {
           body.expiry_date = params.expiry_date;
         }
 
-        const { data, error } = await completeMcpServerOauth({ body });
+        const { data, error } = await completeGenericOAuth({ body });
 
         if (error) {
           throw new Error(error.error || 'Failed to complete OAuth');

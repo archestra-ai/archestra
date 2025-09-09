@@ -105,7 +105,7 @@ const SERVER_CONFIGS: Record<string, ServerConfig> = {
     name: 'Slack OAuth',
     server_url: 'https://slack.com',
     auth_server_url: 'https://slack.com',
-    client_id: process.env.SLACK_CLIENT_ID,
+    client_id: process.env.SLACK_CLIENT_ID || '',
     client_secret: process.env.SLACK_CLIENT_SECRET,
     redirect_uris: ['http://localhost:8080/oauth/callback'],
     scopes: ['channels:read', 'chat:write', 'users:read'],

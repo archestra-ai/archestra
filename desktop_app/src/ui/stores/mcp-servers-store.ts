@@ -57,10 +57,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       env: {},
     },
     userConfigValues: {},
-    oauthAccessToken: null,
-    oauthRefreshToken: null,
-    oauthExpiryDate: null,
-    oauthDiscoveryMetadata: null,
+    oauthTokens: null,
+    oauthClientInfo: null,
+    oauthServerMetadata: null,
+    oauthResourceMetadata: null,
+    status: 'installed',
+    serverType: 'local',
+    remoteUrl: null,
     state: 'initializing',
     startupPercentage: 0,
     message: null,
@@ -159,9 +162,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
           const { data } = await installMcpServer({
             body: {
               ...installData!,
-              oauthAccessToken: tokens.access_token,
-              oauthRefreshToken: tokens.refresh_token ?? undefined,
-              oauthExpiryDate: tokens.expires_at || null,
+              oauthTokens: {
+                access_token: tokens.access_token,
+                refresh_token: tokens.refresh_token ?? undefined,
+                expires_in: tokens.expires_in ? parseInt(tokens.expires_in, 10) : undefined,
+                token_type: tokens.token_type,
+                scope: tokens.scope,
+              },
             },
           });
 
@@ -230,7 +237,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
             if (result.server) {
               const newServer: ConnectedMcpServer = result.server;
               set((state) => ({
-                mcpServers: [newServer, ...state.mcpServers],
+                installedMcpServers: [newServer, ...state.installedMcpServers],
                 installingMcpServerId: null,
               }));
             }
@@ -244,7 +251,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
             });
 
             if (error) {
-              throw new Error(error || 'OAuth install failed');
+              throw new Error(typeof error === 'string' ? error : 'OAuth install failed');
             }
 
             if (result?.server) {

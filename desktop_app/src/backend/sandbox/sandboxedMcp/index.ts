@@ -356,7 +356,7 @@ export default class SandboxedMcpServer {
     if (this.isRemoteServer) {
       // Remote servers don't have container logs
       return {
-        logs: ['Remote MCP servers do not have container logs'],
+        logs: 'Remote MCP servers do not have container logs',
         containerName: `remote-${this.mcpServerId}`,
       };
     } else {
@@ -429,7 +429,6 @@ export default class SandboxedMcpServer {
       // For remote servers, create a mock container status
       return {
         container: {
-          name: `remote-${this.mcpServerId}`,
           state: this.mcpClient ? 'running' : 'not_created',
           startupPercentage: this.mcpClient ? 100 : 0,
           message: this.mcpClient ? 'Connected to remote MCP server' : 'Not connected',

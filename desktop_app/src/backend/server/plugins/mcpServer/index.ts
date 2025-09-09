@@ -327,6 +327,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.object({
             server: McpServerSchema,
           }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
         },
       },
     },

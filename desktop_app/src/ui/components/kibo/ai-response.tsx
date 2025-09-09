@@ -32,7 +32,7 @@ export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
 
 const components: Options['components'] = {
   ol: ({ node, children, className, ...props }) => (
-    <ol className={cn('ml-4 list-outside pl-0.5 list-decimal', className)} {...props}>
+    <ol className={cn('list-inside pl-0.5 list-decimal', className)} {...props}>
       {children}
     </ol>
   ),
@@ -42,7 +42,7 @@ const components: Options['components'] = {
     </li>
   ),
   ul: ({ node, children, className, ...props }) => (
-    <ul className={cn('ml-4 list-outside pl-0.5 list-disc', className)} {...props}>
+    <ul className={cn('list-inside pl-0.5 list-disc', className)} {...props}>
       {children}
     </ul>
   ),

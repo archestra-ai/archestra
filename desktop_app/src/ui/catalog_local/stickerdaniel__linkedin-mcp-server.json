@@ -8,17 +8,6 @@
     "name": "stickerdaniel"
   },
   "server": {
-    "type": "python",
-    "entry_point": "stickerdaniel/linkedin-mcp-server:latest",
-    "mcp_config": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/stickerdaniel/linkedin-mcp-server", "linkedin-mcp-server"],
-      "env": {
-        "LINKEDIN_COOKIE": "${user_config.linkedin_cookie}"
-      }
-    }
-  },
-  "server_docker": {
     "command": "docker",
     "args": ["run", "--rm", "-i", "-e", "LINKEDIN_COOKIE", "stickerdaniel/linkedin-mcp-server:latest"],
     "env": {
@@ -90,42 +79,36 @@
     }
   },
   "archestra_config": {
-    "oauth": {
-      "provider": null,
-      "required": false
-    },
     "client_config_permutations": {
-      "mcpServers": {
-        "stickerdaniel-linkedin-mcp-server-docker": {
-          "command": "docker",
-          "args": ["run", "--rm", "-i", "-e", "LINKEDIN_COOKIE", "stickerdaniel/linkedin-mcp-server:latest"],
-          "env": {
-            "LINKEDIN_COOKIE": "li_at=<YOUR_COOKIE_VALUE_HERE>"
-          }
-        },
-        "stickerdaniel-linkedin-mcp-server-docker-http": {
-          "command": "docker",
-          "args": [
-            "run",
-            "-it",
-            "--rm",
-            "-e",
-            "LINKEDIN_COOKIE",
-            "-p",
-            "8080:8080",
-            "stickerdaniel/linkedin-mcp-server:latest",
-            "--transport",
-            "streamable-http",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "8080",
-            "--path",
-            "/mcp"
-          ],
-          "env": {
-            "LINKEDIN_COOKIE": "li_at=<YOUR_COOKIE_VALUE_HERE>"
-          }
+      "stickerdaniel-linkedin-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "LINKEDIN_COOKIE", "stickerdaniel/linkedin-mcp-server:latest"],
+        "env": {
+          "LINKEDIN_COOKIE": "li_at=<YOUR_COOKIE_VALUE_HERE>"
+        }
+      },
+      "stickerdaniel-linkedin-mcp-server-docker-http": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-it",
+          "--rm",
+          "-e",
+          "LINKEDIN_COOKIE",
+          "-p",
+          "8080:8080",
+          "stickerdaniel/linkedin-mcp-server:latest",
+          "--transport",
+          "streamable-http",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--path",
+          "/mcp"
+        ],
+        "env": {
+          "LINKEDIN_COOKIE": "li_at=<YOUR_COOKIE_VALUE_HERE>"
         }
       }
     },

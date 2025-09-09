@@ -149,7 +149,7 @@ export default class McpServerModel {
         // Use the provider's token handler to get the correct env vars
         const tokenEnvVars = await handleProviderTokens(provider, tokens, id);
 
-        // Merge OAuth env variables with existing ones (including those from server_docker)
+        // Merge OAuth env variables with existing ones
         if (tokenEnvVars) {
           finalServerConfig = {
             ...serverConfig,

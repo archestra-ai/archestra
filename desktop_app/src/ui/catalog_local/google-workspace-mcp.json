@@ -8,28 +8,12 @@
     "name": "iskhakov"
   },
   "server": {
-    "type": "python",
-    "entry_point": "index.js",
-    "mcp_config": {
-      "command": "unknown",
-      "args": [],
-      "env": {}
-    }
-  },
-  "server_overridden": {
-    "type": "python",
-    "entry_point": "index.js",
-    "mcp_config": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/iskhakov/google_workspace_mcp", "workspace-mcp"],
-
-      "env": {}
-    }
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/iskhakov/google_workspace_mcp", "workspace-mcp"],
+    "env": {}
   },
   "archestra_config": {
-    "client_config_permutations": {
-      "mcpServers": {}
-    },
+    "client_config_permutations": {},
     "oauth": {
       "provider": "google",
       "required": true

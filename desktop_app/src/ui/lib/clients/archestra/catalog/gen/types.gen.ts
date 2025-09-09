@@ -19,23 +19,10 @@ export type ArchestraMcpServerManifest = {
   icon?: string;
   screenshots?: Array<string>;
   server: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
+    command: string;
+    args?: Array<string>;
+    env?: {
+      [key: string]: string;
     };
   };
   tools?: Array<{
@@ -73,6 +60,8 @@ export type ArchestraMcpServerManifest = {
       max?: number;
     };
   };
+  remote_url?: string;
+  remote_mcp_docs_url?: string;
   readme: string | null;
   category:
     | 'Aggregators'
@@ -112,15 +101,13 @@ export type ArchestraMcpServerManifest = {
     | 'Local files'
     | 'General';
   quality_score: number | null;
-  archestra_config: {
+  archestra_config?: {
     client_config_permutations: {
-      mcpServers: {
-        [key: string]: {
-          command: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
+      [key: string]: {
+        command: string;
+        args?: Array<string>;
+        env?: {
+          [key: string]: string;
         };
       };
     } | null;
@@ -132,7 +119,7 @@ export type ArchestraMcpServerManifest = {
       required: boolean;
     };
   };
-  github_info: {
+  github_info?: {
     owner: string;
     repo: string;
     url: string;
@@ -145,11 +132,11 @@ export type ArchestraMcpServerManifest = {
     ci_cd: boolean;
     latest_commit_hash: string | null;
   };
-  programming_language: string;
+  programming_language?: string;
   framework: string | null;
   last_scraped_at: string | null;
   evaluation_model: string | null;
-  protocol_features: {
+  protocol_features?: {
     implementing_tools: boolean;
     implementing_prompts: boolean;
     implementing_resources: boolean;
@@ -160,33 +147,61 @@ export type ArchestraMcpServerManifest = {
     implementing_streamable_http: boolean;
     implementing_oauth2: boolean;
   };
-  dependencies: Array<{
+  dependencies?: Array<{
     name: string;
     importance: number;
   }>;
   raw_dependencies: string | null;
-  server_overridden?: {
-    type: 'python' | 'node' | 'binary';
-    entry_point: string;
-    mcp_config: {
-      command: string;
-      args?: Array<string>;
-      env?: {
-        [key: string]: string;
-      };
-      platform_overrides?: {
-        [key: string]: {
-          command?: string;
-          args?: Array<string>;
-          env?: {
-            [key: string]: string;
-          };
-        };
-      };
+};
+
+export type ArchestraMcpServerManifestWithScoreBreakdown = {
+  $schema?: string;
+  dxt_version: string;
+  name: string;
+  display_name: string;
+  version: string;
+  description: string;
+  long_description?: string;
+  author: {
+    name: string;
+    email?: string;
+    url?: string;
+  };
+  homepage?: string;
+  documentation?: string;
+  support?: string;
+  icon?: string;
+  screenshots?: Array<string>;
+  server: {
+    command: string;
+    args?: Array<string>;
+    env?: {
+      [key: string]: string;
     };
   };
-  server_docker?: unknown;
-  user_config_overridden?: {
+  tools?: Array<{
+    name: string;
+    description?: string;
+  }>;
+  tools_generated?: boolean;
+  prompts?: Array<{
+    name: string;
+    description?: string;
+    arguments?: Array<string>;
+    text: string;
+  }>;
+  prompts_generated?: boolean;
+  keywords?: Array<string>;
+  license?: string;
+  compatibility?: {
+    claude_desktop?: string;
+    platforms?: Array<'darwin' | 'win32' | 'linux'>;
+    runtimes?: {
+      python?: string;
+      node?: string;
+    };
+  };
+  user_config?: {
     [key: string]: {
       type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
       title: string;
@@ -199,9 +214,98 @@ export type ArchestraMcpServerManifest = {
       max?: number;
     };
   };
-};
-
-export type ArchestraMcpServerManifestWithScoreBreakdown = ArchestraMcpServerManifest & {
+  remote_url?: string;
+  remote_mcp_docs_url?: string;
+  readme: string | null;
+  category:
+    | 'Aggregators'
+    | 'Art & Culture'
+    | 'Healthcare'
+    | 'Browser Automation'
+    | 'Cloud'
+    | 'Development'
+    | 'CLI Tools'
+    | 'Communication'
+    | 'Data'
+    | 'Logistics'
+    | 'Data Science'
+    | 'IoT'
+    | 'File Management'
+    | 'Finance'
+    | 'Gaming'
+    | 'Knowledge'
+    | 'Location'
+    | 'Marketing'
+    | 'Monitoring'
+    | 'Media'
+    | 'AI Tools'
+    | 'Search'
+    | 'Security'
+    | 'Social Media'
+    | 'Sports'
+    | 'Support'
+    | 'Translation'
+    | 'Audio'
+    | 'Travel'
+    | 'Messengers'
+    | 'Email'
+    | 'CRM'
+    | 'Enterprise'
+    | 'Job Search'
+    | 'Local files'
+    | 'General';
+  quality_score: number | null;
+  archestra_config?: {
+    client_config_permutations: {
+      [key: string]: {
+        command: string;
+        args?: Array<string>;
+        env?: {
+          [key: string]: string;
+        };
+      };
+    } | null;
+    oauth: {
+      provider: 'google' | 'slack' | 'linkedin';
+      required: boolean;
+    };
+    browser_based?: {
+      required: boolean;
+    };
+  };
+  github_info?: {
+    owner: string;
+    repo: string;
+    url: string;
+    name: string;
+    path: string | null;
+    stars: number;
+    contributors: number;
+    issues: number;
+    releases: boolean;
+    ci_cd: boolean;
+    latest_commit_hash: string | null;
+  };
+  programming_language?: string;
+  framework: string | null;
+  last_scraped_at: string | null;
+  evaluation_model: string | null;
+  protocol_features?: {
+    implementing_tools: boolean;
+    implementing_prompts: boolean;
+    implementing_resources: boolean;
+    implementing_sampling: boolean;
+    implementing_roots: boolean;
+    implementing_logging: boolean;
+    implementing_stdio: boolean;
+    implementing_streamable_http: boolean;
+    implementing_oauth2: boolean;
+  };
+  dependencies?: Array<{
+    name: string;
+    importance: number;
+  }>;
+  raw_dependencies: string | null;
   score_breakdown: {
     mcp_protocol: number;
     github_metrics: number;

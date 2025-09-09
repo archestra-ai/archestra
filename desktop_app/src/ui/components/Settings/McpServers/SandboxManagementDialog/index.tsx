@@ -1,5 +1,5 @@
 import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Alert, AlertDescription } from '@ui/components/ui/alert';
 import { Button } from '@ui/components/ui/button';
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@ui/components/ui/dialog';
 import { resetSandbox, restartSandbox } from '@ui/lib/clients/archestra/api/gen';
+import { useMcpServersStore } from '@ui/stores';
 
 interface SandboxManagementDialogProps {
   open: boolean;
@@ -24,11 +25,15 @@ export default function SandboxManagementDialog({ open, onOpenChange }: SandboxM
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleRestart = async () => {
+  const { resetInstalledMcpServers } = useMcpServersStore();
+
+  const handleRestart = useCallback(async () => {
     setIsRestarting(true);
     setError(null);
     try {
       await restartSandbox();
+      resetInstalledMcpServers();
+
       // Close dialog on success - the sandbox will restart and update via WebSocket
       onOpenChange(false);
     } catch (error) {
@@ -36,13 +41,15 @@ export default function SandboxManagementDialog({ open, onOpenChange }: SandboxM
     } finally {
       setIsRestarting(false);
     }
-  };
+  }, []);
 
-  const handleReset = async () => {
+  const handleReset = useCallback(async () => {
     setIsResetting(true);
     setError(null);
     try {
       await resetSandbox();
+      resetInstalledMcpServers();
+
       // Close both dialogs on success
       setShowResetConfirmation(false);
       onOpenChange(false);
@@ -51,7 +58,7 @@ export default function SandboxManagementDialog({ open, onOpenChange }: SandboxM
     } finally {
       setIsResetting(false);
     }
-  };
+  }, []);
 
   if (showResetConfirmation) {
     return (
@@ -63,7 +70,9 @@ export default function SandboxManagementDialog({ open, onOpenChange }: SandboxM
               Confirm Reset
             </DialogTitle>
             <DialogDescription>
-              Are you absolutely sure you want to reset the sandbox? This action cannot be undone.
+              Are you absolutely sure you want to reset the sandbox? This action cannot be undone. <br />
+              <br />
+              <b>Note:</b> depending on how many MCP servers you have installed, this can take a bit of time.
             </DialogDescription>
           </DialogHeader>
 
@@ -149,7 +158,7 @@ export default function SandboxManagementDialog({ open, onOpenChange }: SandboxM
                   onClick={() => setShowResetConfirmation(true)}
                   disabled={isRestarting || isResetting}
                 >
-                  Clean / Purge Data
+                  {isResetting ? 'Resetting...' : 'Clean / Purge Data'}
                 </Button>
               </div>
             </div>

@@ -18,13 +18,16 @@ import {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
 import * as http from 'http';
-import * as os from 'os';
-import * as path from 'path';
 
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
+
+/**
+ * In-memory PKCE code verifier storage (ephemeral, cleared after use)
+ * Maps serverId to code verifier for PKCE flow
+ */
+const codeVerifierStore = new Map<string, string>();
 
 /**
  * Generate server-specific storage key
@@ -81,7 +84,6 @@ async function discoverScopes(config: OAuthServerConfig): Promise<string[]> {
  * MCP OAuth Client Provider for Archestra
  */
 export class McpOAuthProvider implements OAuthClientProvider {
-  private storageDir: string;
   private config: OAuthServerConfig;
   private serverKey: string;
   public authorizationCode?: string;
@@ -91,12 +93,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
     this.config = config;
     this.serverId = serverId;
     this.serverKey = getServerStorageKey(config.server_url);
-    this.storageDir = path.join(os.homedir(), '.archestra-mcp-oauth', this.serverKey);
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.storageDir, { recursive: true });
-    log.info('📁 Storage:', this.storageDir);
     log.info('🌐 Server:', this.config.server_url);
     log.info('🔑 Server Key:', this.serverKey);
     log.info('⚙️  Config:', this.config.name);
@@ -282,7 +281,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
             if (error) {
               res.writeHead(400, { 'Content-Type': 'text/html' });
-              res.end(`<html><body><h1>❌ OAuth Error</h1><p>${error}</p></body></html>`);
+              res.end(`<html><body><h1>❌ OAuth Error</h1></body></html>`);
               server.close();
               reject(new Error(`OAuth error: ${error}`));
               return;
@@ -343,23 +342,20 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await fs.writeFile(path.join(this.storageDir, 'verifier.txt'), codeVerifier);
+    codeVerifierStore.set(this.serverId, codeVerifier);
   }
 
   async codeVerifier(): Promise<string> {
-    const data = await fs.readFile(path.join(this.storageDir, 'verifier.txt'), 'utf-8');
-    return data;
+    const verifier = codeVerifierStore.get(this.serverId);
+    if (!verifier) {
+      throw new Error('No code verifier found for server');
+    }
+    return verifier;
   }
 
   async clear(): Promise<void> {
-    const files = ['verifier.txt'];
-    for (const file of files) {
-      try {
-        await fs.unlink(path.join(this.storageDir, file));
-      } catch {
-        // File doesn't exist
-      }
-    }
+    // Clear in-memory PKCE code verifier
+    codeVerifierStore.delete(this.serverId);
 
     // Clear OAuth data from database
     try {
@@ -370,7 +366,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
         oauthServerMetadata: null,
         oauthResourceMetadata: null,
       });
-      log.info('🗑️ Cleared all OAuth data from database');
+      log.info('🗑️ Cleared all OAuth data from database and memory');
     } catch (error) {
       log.error('Failed to clear OAuth data from database:', error);
     }

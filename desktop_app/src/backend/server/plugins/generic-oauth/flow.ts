@@ -6,10 +6,7 @@
  */
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
-import * as fs from 'fs/promises';
 import * as http from 'http';
-import * as os from 'os';
-import * as path from 'path';
 
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
@@ -30,36 +27,29 @@ function generateState(): string {
 }
 
 /**
- * Get server-specific storage directory
+ * In-memory OAuth state storage (ephemeral, cleared after use)
+ * Maps serverId to OAuth state for CSRF protection
  */
-function getStorageDir(serverId: string): string {
-  return path.join(os.homedir(), '.archestra-generic-oauth', serverId);
+const oauthStateStore = new Map<string, string>();
+
+/**
+ * Store OAuth state in memory
+ */
+function storeOAuthState(serverId: string, state: string): void {
+  oauthStateStore.set(serverId, state);
 }
 
 /**
- * Store OAuth state
+ * Retrieve and clear OAuth state from memory
  */
-async function storeOAuthState(serverId: string, state: string): Promise<void> {
-  const storageDir = getStorageDir(serverId);
-  await fs.mkdir(storageDir, { recursive: true });
-
-  const filePath = path.join(storageDir, 'state.json');
-  await fs.writeFile(filePath, JSON.stringify({ state }), 'utf8');
-}
-
-/**
- * Retrieve OAuth state
- */
-async function retrieveOAuthState(serverId: string): Promise<string | null> {
-  try {
-    const storageDir = getStorageDir(serverId);
-    const filePath = path.join(storageDir, 'state.json');
-    const data = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(data);
-    return parsed.state;
-  } catch (error) {
-    return null;
+function retrieveOAuthState(serverId: string): string | null {
+  const state = oauthStateStore.get(serverId);
+  if (state) {
+    // Clear state after retrieval for security (one-time use)
+    oauthStateStore.delete(serverId);
+    return state;
   }
+  return null;
 }
 
 /**
@@ -179,16 +169,6 @@ function buildAuthorizationUrl(config: OAuthServerConfig, state: string): string
   return authUrl.toString();
 }
 
-/**
- * Store generic OAuth config for proxy access
- */
-async function storeGenericOAuthConfig(serverId: string, config: OAuthServerConfig): Promise<void> {
-  const storageDir = getStorageDir(serverId);
-  await fs.mkdir(storageDir, { recursive: true });
-
-  const filePath = path.join(storageDir, 'config.json');
-  await fs.writeFile(filePath, JSON.stringify(config), 'utf8');
-}
 
 /**
  * Start callback server on port 8080
@@ -207,7 +187,7 @@ function startCallbackServer(serverId: string): Promise<void> {
 
           if (error) {
             res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`<html><body><h1>❌ OAuth Error</h1><p>${error}</p></body></html>`);
+            res.end(`<html><body><h1>❌ OAuth Error</h1></body></html>`);
             server.close();
             reject(new Error(`OAuth error: ${error}`));
             return;
@@ -317,7 +297,7 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   const state = generateState();
 
   // Store state for verification
-  await storeOAuthState(serverId, state);
+  storeOAuthState(serverId, state);
 
   const authUrl = buildAuthorizationUrl(config, state);
 
@@ -362,7 +342,7 @@ export async function completeGenericOAuthFlow(
   log.info(`🔄 Completing generic OAuth flow for ${config.name}`);
 
   // Verify state
-  const storedState = await retrieveOAuthState(serverId);
+  const storedState = retrieveOAuthState(serverId);
   if (state !== storedState) {
     throw new Error(`State mismatch - expected ${storedState}, got ${state}`);
   }

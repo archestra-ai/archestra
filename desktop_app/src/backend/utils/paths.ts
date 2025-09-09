@@ -1,8 +1,4 @@
-/**
- * NOTE: ARCHESTRA_USER_DATA_PATH and ARCHESTRA_LOGS_PATH are set in the main process
- *
- * see main.ts for more details
- */
+import { app } from 'electron';
 import path from 'node:path';
 
 /**
@@ -27,8 +23,8 @@ import path from 'node:path';
  *   at wrapModuleLoad (node:internal/modules/cjs/loader:242:24) {
  *   code: 'ERR_INVALID_ARG_TYPE'
  */
-export const USER_DATA_DIRECTORY = process.env.ARCHESTRA_USER_DATA_PATH || '/tmp';
-export const LOGS_DIRECTORY = process.env.ARCHESTRA_LOGS_PATH || '/tmp';
+export const USER_DATA_DIRECTORY = app.getPath('userData') || '/tmp';
+export const LOGS_DIRECTORY = app.getPath('logs') || '/tmp';
 
 export const DATABASE_PATH = path.join(USER_DATA_DIRECTORY, 'archestra.db');
 export const PODMAN_REGISTRY_AUTH_FILE_PATH = path.join(USER_DATA_DIRECTORY, 'podman', 'auth.json');

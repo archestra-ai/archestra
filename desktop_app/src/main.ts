@@ -1,13 +1,18 @@
 import * as Sentry from '@sentry/electron/main';
-import chokidar from 'chokidar';
 import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
-import { ChildProcess, fork } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
+import ArchestraMcpClient from '@backend/archestraMcp';
+import { runDatabaseMigrations } from '@backend/database';
+import UserModel from '@backend/models/user';
+import { OllamaClient, OllamaServer } from '@backend/ollama';
+import McpServerSandboxManager from '@backend/sandbox';
+import { startFastifyServer, stopFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
+import WebSocketServer from '@backend/websocket';
 
 import config from './config';
 import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
@@ -54,7 +59,6 @@ updateElectronApp({
   updateInterval: config.build.updateInterval,
 });
 
-let serverProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 // Resolve icon path for both dev and packaged builds
@@ -137,91 +141,53 @@ const createWindow = () => {
 };
 
 /**
- * Start the backendin a separate Node.js process
+ * Start the backend server directly in the main process
  *
- * This function spawns the backend as a child process because:
- * 1. The backend needs access to native Node.js modules (better-sqlite3)
- * 2. Electron's renderer process has restrictions on native modules
- * 3. Running in a separate process allows for better error isolation
- * 4. The server can be restarted independently of the Electron app
+ * This integrates all the server functionality directly into the main Electron process
+ * instead of spawning a separate Node.js process, which avoids ASAR packaging issues.
  */
 async function startBackendServer(): Promise<void> {
-  // server-process.js is built by Vite from src/server-process.ts
-  // It's placed in the same directory as main.js after building
-  const serverPath = path.join(__dirname, 'server-process.js');
+  log.info('Starting backend server in main process...');
 
-  // If there's an existing server process, kill it and wait for it to exit
-  if (serverProcess) {
-    await new Promise<void>((resolve) => {
-      const existingProcess = serverProcess;
+  try {
+    await runDatabaseMigrations();
+    await UserModel.ensureUserExists();
 
-      // Set up a one-time listener for the exit event
-      if (existingProcess) {
-        existingProcess.once('exit', () => {
-          log.info('Previous server process has exited');
-          resolve();
-        });
+    // Start WebSocket and Fastify servers first so they're ready for MCP connections
+    WebSocketServer.start();
+    await startFastifyServer();
 
-        // Send SIGTERM to trigger graceful shutdown
-        existingProcess.kill('SIGTERM');
+    // Connect to the Archestra MCP server after Fastify is running
+    try {
+      await ArchestraMcpClient.connect();
+      log.info('Archestra MCP client connected successfully');
+    } catch (error) {
+      log.error('Failed to connect Archestra MCP client:', error);
+      // Continue anyway - the app can work without Archestra tools
+    }
 
-        // If process doesn't exit after 5 seconds, force kill it
-        setTimeout(() => {
-          if (existingProcess.killed === false) {
-            log.warn('Server process did not exit gracefully, force killing');
-            existingProcess.kill('SIGKILL');
-          }
-          resolve();
-        }, 5000);
-      } else {
-        resolve();
-      }
-    });
+    // Now start the sandbox manager which will connect MCP clients
+    McpServerSandboxManager.onSandboxStartupSuccess = () => {
+      log.info('Sandbox startup successful');
+    };
+    McpServerSandboxManager.onSandboxStartupError = (error) => {
+      log.error('Sandbox startup error:', error);
+    };
+    McpServerSandboxManager.start();
 
-    // Wait a bit more to ensure ports are released
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await OllamaServer.startServer();
+
+    /**
+     * Ensure that ollama models that're required for various app functionality are available,
+     * downloading them if necessary
+     */
+    await OllamaClient.ensureModelsAvailable();
+
+    log.info('Backend server started successfully in main process');
+  } catch (error) {
+    log.error('Failed to start backend server:', error);
+    throw error;
   }
-
-  /**
-   * Fork creates a new Node.js process that can communicate with the parent
-   * pass --transpileOnly (disable type checking) to increase startup speed
-   *
-   * https://github.com/fastify/fastify/discussions/3795#discussioncomment-4690921
-   */
-  serverProcess = fork(serverPath, ['--transpileOnly'], {
-    env: {
-      ...process.env,
-      // CRITICAL: This flag tells Electron to run this process as pure Node.js
-      // Without it, the process would run as an Electron process and fail to load native modules
-      ELECTRON_RUN_AS_NODE: '1',
-      /**
-       * NOTE: we are passing these paths in here because electron's app object is not available in
-       * forked processes..
-       *
-       * According to https://www.electronjs.org/docs/latest/api/app#appgetpathname
-       *
-       * userData - The directory for storing your app's configuration files, which by default is the appData directory
-       * appended with your app's name. By convention files storing user data should be written to this directory, and
-       * it is not recommended to write large files here because some environments may backup this directory to cloud
-       * storage.
-       * logs - Directory for your app's log folder.
-       */
-      ARCHESTRA_USER_DATA_PATH: app.getPath('userData'),
-      ARCHESTRA_LOGS_PATH: app.getPath('logs'),
-    },
-    silent: false, // Allow console output from child process for debugging
-  });
-
-  // Handle server process errors
-  serverProcess.on('error', (error) => {
-    log.error('Server process error:', error);
-  });
-
-  // Handle server process exit
-  serverProcess.on('exit', (code, signal) => {
-    log.info(`Server process exited with code ${code} and signal ${signal}`);
-    serverProcess = null;
-  });
 }
 
 // Set up IPC handler for opening external links
@@ -290,14 +256,6 @@ if (!gotTheLock) {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
-  if (config.debug) {
-    const serverPath = path.resolve(__dirname, '.vite/build/server-process.js');
-
-    chokidar.watch(serverPath).on('change', async () => {
-      log.info('Restarting server..');
-      await startBackendServer();
-    });
-  }
   await startBackendServer();
   createWindow();
 
@@ -332,43 +290,55 @@ app.on('activate', () => {
   }
 });
 
+/**
+ * Cleanup function to gracefully shut down all services
+ */
+const cleanup = async () => {
+  log.info('Server cleanup starting...');
+
+  try {
+    // Stop the Fastify server first to free the port
+    log.info('Stopping Fastify server...');
+    await stopFastifyServer();
+
+    // Stop the WebSocket server
+    log.info('Stopping WebSocket server...');
+    WebSocketServer.stop();
+
+    // Disconnect from Archestra MCP server
+    log.info('Disconnecting Archestra MCP client...');
+    await ArchestraMcpClient.disconnect();
+
+    // Stop the sandbox and all MCP servers
+    log.info('Turning off sandbox...');
+    McpServerSandboxManager.turnOffSandbox();
+
+    // Stop the Ollama server
+    log.info('Stopping Ollama server...');
+    await OllamaServer.stopServer();
+
+    log.info('Server cleanup completed');
+  } catch (error) {
+    log.error('Error during cleanup:', error);
+  }
+};
+
 // Gracefully stop server on quit
 app.on('before-quit', async (event) => {
-  if (serverProcess) {
-    event.preventDefault();
-
-    // Kill the server process gracefully
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM');
-
-      // Wait for process to exit
-      await new Promise<void>((resolve) => {
-        if (!serverProcess) {
-          resolve();
-          return;
-        }
-
-        serverProcess.on('exit', () => {
-          resolve();
-        });
-
-        // Force kill after 5 seconds
-        setTimeout(() => {
-          if (serverProcess) {
-            serverProcess.kill('SIGKILL');
-          }
-          resolve();
-        }, 5000);
-      });
-    }
-
-    app.exit();
-  }
+  event.preventDefault();
+  await cleanup();
+  app.exit();
 });
 
-// Clean up on unexpected exit
-process.on('exit', async () => {
-  if (serverProcess) {
-    serverProcess.kill('SIGKILL');
-  }
+// Handle process signals for graceful shutdown
+process.on('SIGTERM', async () => {
+  log.info('Received SIGTERM signal');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  log.info('Received SIGINT signal (Ctrl+C)');
+  await cleanup();
+  process.exit(0);
 });

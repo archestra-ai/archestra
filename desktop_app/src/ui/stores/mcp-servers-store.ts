@@ -40,6 +40,7 @@ interface McpServersActions {
   updateMcpServer: (mcpServerId: string, data: Partial<ConnectedMcpServer>) => void;
   installMcpServer: (requiresOAuth: boolean, installData: InstallMcpServerData['body']) => Promise<void>;
   uninstallMcpServer: (mcpServerId: string) => Promise<void>;
+  resetInstalledMcpServers: () => void;
 }
 
 type McpServersStore = McpServersState & McpServersActions;
@@ -258,6 +259,12 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
     } finally {
       set({ uninstallingMcpServerId: null });
     }
+  },
+
+  resetInstalledMcpServers: () => {
+    set({
+      installedMcpServers: [],
+    });
   },
 }));
 

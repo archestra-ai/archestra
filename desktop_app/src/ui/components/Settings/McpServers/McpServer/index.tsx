@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, FileText, Loader2, Trash2, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
+import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent } from '@ui/components/ui/card';
@@ -125,7 +126,7 @@ export default function McpServer({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6"
+                      className="h-6 w-6 cursor-pointer"
                       onClick={() => setShowLogs(true)}
                       title="View container logs"
                     >
@@ -136,11 +137,13 @@ export default function McpServer({
                       size="icon"
                       className="h-6 w-6 cursor-pointer"
                       onClick={() => setShowUninstallDialog(true)}
+                      title="Uninstall MCP server"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </>
                 )}
+                <ReportIssueWithCatalogEntry catalogId={id} />
               </div>
             </div>
 

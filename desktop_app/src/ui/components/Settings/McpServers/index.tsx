@@ -91,20 +91,37 @@ export default function McpServers(_props: McpServersProps) {
 
   if (!sandboxIsRunning) {
     return (
-      <Card>
-        <CardHeader>
-          <HeaderTitle />
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <DetailedProgressBar
-            icon={overallSandboxStatus.icon}
-            title={overallSandboxStatus.title}
-            description={overallSandboxStatus.description}
-            percentage={startupPercentage}
-            error={startupError}
-          />
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <HeaderTitle />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSandboxManagementDialogOpen(true);
+                }}
+                title="Sandbox Management"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <DetailedProgressBar
+              icon={overallSandboxStatus.icon}
+              title={overallSandboxStatus.title}
+              description={overallSandboxStatus.description}
+              percentage={startupPercentage}
+              error={startupError}
+            />
+          </CardContent>
+        </Card>
+        <SandboxManagementDialog open={sandboxManagementDialogOpen} onOpenChange={setSandboxManagementDialogOpen} />
+      </>
     );
   }
 
@@ -170,7 +187,7 @@ export default function McpServers(_props: McpServersProps) {
             ) : (
               <div className="space-y-3">
                 {installedMcpServers.map((server) => (
-                  <McpServer key={server.name} mcpServer={server} />
+                  <McpServer key={server.id} mcpServer={server} />
                 ))}
               </div>
             )}

@@ -49,7 +49,7 @@ export default function Sidebar({ children }: SidebarProps) {
                       <SidebarMenuButton asChild isActive={location.pathname.startsWith('/chat')}>
                         <Link to="/chat">
                           <MessageCircle className="h-4 w-4" />
-                          <span>Chat</span>
+                          <span>Agents</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

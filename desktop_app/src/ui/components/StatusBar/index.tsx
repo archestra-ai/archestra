@@ -23,8 +23,6 @@ export default function StatusBar() {
   const activeTasks = getActiveTasks();
   const hasActiveTasks = activeTasks.length > 0;
 
-  console.log('StatusBar - Active tasks:', activeTasks);
-
   // Calculate joint progress
   const totalProgress = activeTasks.reduce((sum, task) => {
     return sum + (task.progress || 0);

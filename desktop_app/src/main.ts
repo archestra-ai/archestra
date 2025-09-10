@@ -166,6 +166,9 @@ async function startBackendServer(): Promise<void> {
 
     // Connect to the Archestra MCP server after Fastify is running
     try {
+      // Add a small delay to ensure the MCP endpoint is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       await ArchestraMcpClient.connect();
       log.info('Archestra MCP client connected successfully');
     } catch (error) {
@@ -204,6 +207,74 @@ ipcMain.handle('open-external', async (_event, url: string) => {
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('get-system-info', () => {
+  const os = require('os');
+  const { execSync } = require('child_process');
+  
+  // Get CPU info
+  const cpus = os.cpus();
+  const cpuModel = cpus[0]?.model || 'Unknown';
+  const cpuCores = cpus.length;
+  
+  // Get memory info
+  const totalMemory = os.totalmem();
+  const freeMemory = os.freemem();
+  
+  // Get disk info (macOS/Linux using df command, Windows using wmic)
+  let diskInfo = { total: 0, free: 0, freePercent: '0' };
+  try {
+    if (process.platform === 'win32') {
+      const output = execSync('wmic logicaldisk get size,freespace,caption', { encoding: 'utf8' });
+      const lines = output.trim().split('\n').slice(1);
+      let totalSize = 0;
+      let totalFree = 0;
+      lines.forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3 && parts[1] && parts[2]) {
+          totalFree += parseInt(parts[1]) || 0;
+          totalSize += parseInt(parts[2]) || 0;
+        }
+      });
+      diskInfo.total = totalSize;
+      diskInfo.free = totalFree;
+      diskInfo.freePercent = totalSize > 0 ? ((totalFree / totalSize) * 100).toFixed(1) : '0';
+    } else {
+      // macOS and Linux
+      const output = execSync('df -k /', { encoding: 'utf8' });
+      const lines = output.trim().split('\n');
+      const dataLine = lines[1];
+      const parts = dataLine.split(/\s+/);
+      const total = parseInt(parts[1]) * 1024; // Convert from KB to bytes
+      const used = parseInt(parts[2]) * 1024;
+      const available = parseInt(parts[3]) * 1024;
+      diskInfo.total = total;
+      diskInfo.free = available;
+      diskInfo.freePercent = total > 0 ? ((available / total) * 100).toFixed(1) : '0';
+    }
+  } catch (error) {
+    console.error('Error getting disk info:', error);
+  }
+  
+  // Format sizes to human-readable
+  const formatBytes = (bytes: number) => {
+    const gb = bytes / (1024 * 1024 * 1024);
+    return gb.toFixed(2) + ' GB';
+  };
+  
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    osVersion: os.release(),
+    nodeVersion: process.versions.node,
+    electronVersion: process.versions.electron,
+    cpu: `${cpuModel} (${cpuCores} cores)`,
+    totalMemory: formatBytes(totalMemory),
+    freeMemory: formatBytes(freeMemory),
+    totalDisk: formatBytes(diskInfo.total),
+    freeDisk: formatBytes(diskInfo.free),
+  };
 });
 
 // Set up OAuth callback handler

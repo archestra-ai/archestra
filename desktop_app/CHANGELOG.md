@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.2-alpha...desktop_app-v0.0.3-alpha) (2025-09-10)
+
+
+### Features
+
+* status bar ([#335](https://github.com/archestra-ai/archestra/issues/335)) ([912b4ce](https://github.com/archestra-ai/archestra/commit/912b4ce04303f7382609cd0587575e4217134cbd))
+* working oauth proxy ([#334](https://github.com/archestra-ai/archestra/issues/334)) ([f98c7b6](https://github.com/archestra-ai/archestra/commit/f98c7b6aeb74cf261405d92ed123bc5bda38f886))
+
+
+### Dependencies
+
+* **frontend:** bump vite from 7.1.3 to 7.1.5 in /desktop_app ([#330](https://github.com/archestra-ai/archestra/issues/330)) ([c6295b6](https://github.com/archestra-ai/archestra/commit/c6295b633d312199dfac7e341a7faa57bf55d8ea))
+
 ## [0.0.2-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.1-alpha...desktop_app-v0.0.2-alpha) (2025-09-10)
 
 

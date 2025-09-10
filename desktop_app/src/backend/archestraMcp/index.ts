@@ -48,7 +48,7 @@ class ArchestraMcpClient {
 
       const transport = new StreamableHTTPClientTransport(new URL(this.archestraMcpUrl));
       log.info('Transport created, creating MCP client...');
-      
+
       this.mcpClient = await experimental_createMCPClient({ transport });
       log.info('MCP client created, fetching tools...');
 

@@ -43,74 +43,76 @@ export const createArchestraMcpServer = () => {
   });
 
   archestraMcpServer.tool(
-    'install_mcp_server', 
-    'Install an MCP server', 
+    'install_mcp_server',
+    'Install an MCP server',
     {
-      id: z.string().describe('The ID of the MCP server to install')
-    }, 
+      id: z.string().describe('The ID of the MCP server to install'),
+    },
     async ({ id }) => {
-    try {
-      const server = await McpServerModel.getById(id);
-      if (!server) {
+      try {
+        const server = await McpServerModel.getById(id);
+        if (!server) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `MCP server with id ${id} not found`,
+              },
+            ],
+          };
+        }
+
         return {
           content: [
             {
               type: 'text',
-              text: `MCP server with id ${id} not found`,
+              text: JSON.stringify(server, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify([], null, 2),
             },
           ],
         };
       }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(server, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify([], null, 2),
-          },
-        ],
-      };
     }
-  });
+  );
 
   archestraMcpServer.tool(
-    'uninstall_mcp_server', 
-    'Uninstall an MCP server', 
+    'uninstall_mcp_server',
+    'Uninstall an MCP server',
     {
-      id: z.string().describe('The ID of the MCP server to uninstall')
-    }, 
+      id: z.string().describe('The ID of the MCP server to uninstall'),
+    },
     async ({ id }) => {
-    try {
-      await McpServerModel.uninstallMcpServer(id);
+      try {
+        await McpServerModel.uninstallMcpServer(id);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `MCP server with id ${id} uninstalled`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify([], null, 2),
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `MCP server with id ${id} uninstalled`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify([], null, 2),
+            },
+          ],
+        };
+      }
     }
-  });
+  );
 
   // Memory CRUD tools
   archestraMcpServer.tool('list_memories', 'List all stored memory entries with their names and values', async () => {
@@ -153,7 +155,7 @@ export const createArchestraMcpServer = () => {
     'get_memory',
     'Get a specific memory value by its name',
     {
-      name: z.string().describe('The name of the memory to retrieve')
+      name: z.string().describe('The name of the memory to retrieve'),
     },
     async ({ name }) => {
       try {
@@ -195,13 +197,13 @@ export const createArchestraMcpServer = () => {
     'Set or update a memory entry with a specific name and value',
     {
       name: z.string().describe('The name/key for the memory entry'),
-      value: z.string().describe('The value/content to store')
+      value: z.string().describe('The value/content to store'),
     },
     async (context) => {
       // Workaround for fastify-mcp bug: get arguments from global
       const { name, value } = global._mcpToolArguments || {};
       log.info('set_memory called with:', { name, value });
-      
+
       try {
         // Validation
         if (!name || !name.trim()) {
@@ -261,7 +263,7 @@ export const createArchestraMcpServer = () => {
     'delete_memory',
     'Delete a specific memory entry by name',
     {
-      name: z.string().describe('The name of the memory to delete')
+      name: z.string().describe('The name of the memory to delete'),
     },
     async ({ name }) => {
       try {
@@ -312,7 +314,7 @@ export const createArchestraMcpServer = () => {
     {
       query: z.string().optional().describe('Search query to find specific MCP servers'),
       category: z.string().optional().describe('Filter by category (e.g., "ai", "data", "productivity")'),
-      limit: z.number().int().positive().default(10).optional().describe('Number of results to return')
+      limit: z.number().int().positive().default(10).optional().describe('Number of results to return'),
     },
     async ({ query, category, limit }) => {
       try {
@@ -401,7 +403,7 @@ export const createArchestraMcpServer = () => {
 
 const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
   log.info('Registering Archestra MCP server plugin...');
-  
+
   // Store the current request arguments globally as a workaround
   fastify.addHook('preHandler', async (request, reply) => {
     if (request.url === '/mcp' && request.body) {
@@ -412,7 +414,7 @@ const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
       }
     }
   });
-  
+
   await fastify.register(streamableHttp, {
     stateful: false,
     mcpEndpoint: '/mcp',

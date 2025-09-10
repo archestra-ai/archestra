@@ -167,8 +167,8 @@ async function startBackendServer(): Promise<void> {
     // Connect to the Archestra MCP server after Fastify is running
     try {
       // Add a small delay to ensure the MCP endpoint is ready
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       await ArchestraMcpClient.connect();
       log.info('Archestra MCP client connected successfully');
     } catch (error) {
@@ -212,16 +212,16 @@ ipcMain.handle('get-app-version', () => {
 ipcMain.handle('get-system-info', () => {
   const os = require('os');
   const { execSync } = require('child_process');
-  
+
   // Get CPU info
   const cpus = os.cpus();
   const cpuModel = cpus[0]?.model || 'Unknown';
   const cpuCores = cpus.length;
-  
+
   // Get memory info
   const totalMemory = os.totalmem();
   const freeMemory = os.freemem();
-  
+
   // Get disk info (macOS/Linux using df command, Windows using wmic)
   let diskInfo = { total: 0, free: 0, freePercent: '0' };
   try {
@@ -256,13 +256,13 @@ ipcMain.handle('get-system-info', () => {
   } catch (error) {
     console.error('Error getting disk info:', error);
   }
-  
+
   // Format sizes to human-readable
   const formatBytes = (bytes: number) => {
     const gb = bytes / (1024 * 1024 * 1024);
     return gb.toFixed(2) + ' GB';
   };
-  
+
   return {
     platform: process.platform,
     arch: process.arch,

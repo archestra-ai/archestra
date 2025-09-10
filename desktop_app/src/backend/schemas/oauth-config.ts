@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * OAuth Server Configuration Schema
  *
- * Based on the ServerConfig interface from mcp-oauth/configs.ts
+ * Defines OAuth server configuration schema for MCP server installations
  * This schema validates OAuth configurations passed from the frontend
  */
 export const OAuthServerConfigSchema = z.object({

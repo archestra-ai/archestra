@@ -139,7 +139,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   get redirectUrl(): string {
-    return 'http://localhost:8080/oauth/callback';
+    return this.config.redirect_uris[0];
   }
 
   getServerId(): string {

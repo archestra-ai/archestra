@@ -35,7 +35,7 @@ export class OAuthProxyClient {
    */
   async exchangeTokens(
     mcpServerId: string,
-    tokenEndpoint: string,
+    serverUrl: string, // Now expects MCP server URL for discovery, not token endpoint
     params: Record<string, any>
   ): Promise<OAuthTokens> {
     log.info(`Exchanging tokens via oauth-proxy for MCP server: ${mcpServerId}`);
@@ -46,7 +46,7 @@ export class OAuthProxyClient {
       code_verifier: params.code_verifier,
       redirect_uri: params.redirect_uri,
       resource: params.resource,
-      authorization_server_url: new URL(tokenEndpoint).origin, // Extract base URL
+      authorization_server_url: serverUrl, // Pass MCP server URL for OAuth discovery
     };
 
     // Use the new MCP SDK-based proxy route for perfect compatibility

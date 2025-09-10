@@ -571,16 +571,54 @@ export default async function tokenRoutes(fastify) {
       fastify.log.info(`Using MCP SDK exchangeAuthorization for server ${validatedServerId}`);
       fastify.log.info(`Client credentials: clientId=${clientId ? 'PRESENT' : 'MISSING'}, clientSecret=${clientSecret ? 'PRESENT' : 'MISSING'}`);
       
-      // Use the actual GitHub OAuth endpoints that MCP SDK discovered and uses
-      const authorizationServerUrl = 'https://github.com/login/oauth';
+      // Follow the MCP SDK's discovery pattern: start from MCP server URL, discover authorization servers
+      // This mimics the exact flow used in the linear script
+      let metadata = undefined;
+      let authorizationServerUrl = authorization_server_url;
       
-      // Use GitHub's standard OAuth metadata that actually works
-      const metadata = {
-        token_endpoint: 'https://github.com/login/oauth/access_token',
-        authorization_endpoint: 'https://github.com/login/oauth/authorize',
-        token_endpoint_auth_methods_supported: ['client_secret_post'], // GitHub uses credentials in body
-        grant_types_supported: ['authorization_code'],
-      };
+      try {
+        // Step 1: Discover protected resource metadata from the MCP server
+        if (authorization_server_url) {
+          fastify.log.info(`Discovering OAuth metadata starting from server URL: ${authorization_server_url}`);
+          
+          const { discoverOAuthProtectedResourceMetadata, discoverAuthorizationServerMetadata } = 
+            await import('@modelcontextprotocol/sdk/client/auth.js');
+          
+          // Try to get resource metadata from the MCP server
+          try {
+            const resourceMetadata = await discoverOAuthProtectedResourceMetadata(authorization_server_url);
+            
+            if (resourceMetadata?.authorization_servers && resourceMetadata.authorization_servers.length > 0) {
+              // Use the first authorization server found
+              authorizationServerUrl = resourceMetadata.authorization_servers[0];
+              fastify.log.info(`Found authorization server from resource metadata: ${authorizationServerUrl}`);
+            }
+          } catch (resourceError) {
+            fastify.log.warn(`Protected resource metadata discovery failed: ${resourceError.message}`);
+          }
+          
+          // Step 2: Discover authorization server metadata
+          if (authorizationServerUrl) {
+            try {
+              metadata = await discoverAuthorizationServerMetadata(authorizationServerUrl);
+              
+              if (metadata) {
+                fastify.log.info(`Discovered OAuth metadata:`, {
+                  issuer: metadata.issuer,
+                  authorization_endpoint: metadata.authorization_endpoint,
+                  token_endpoint: metadata.token_endpoint,
+                  token_endpoint_auth_methods_supported: metadata.token_endpoint_auth_methods_supported,
+                });
+              }
+            } catch (metadataError) {
+              fastify.log.warn(`Authorization server metadata discovery failed: ${metadataError.message}`);
+            }
+          }
+        }
+      } catch (discoveryError) {
+        fastify.log.warn(`OAuth discovery failed: ${discoveryError.message}`);
+        fastify.log.info('Will let MCP SDK handle discovery during token exchange');
+      }
       
       fastify.log.info(`Authorization server URL: ${authorizationServerUrl}`);
       fastify.log.info(`Token endpoint: ${metadata.token_endpoint}`);

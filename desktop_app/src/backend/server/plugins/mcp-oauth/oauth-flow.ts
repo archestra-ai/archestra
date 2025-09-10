@@ -70,9 +70,10 @@ export async function performOAuth(provider: McpOAuthProvider, config: OAuthServ
         }
         
         // Exchange authorization code for tokens via OAuth proxy
+        // Pass MCP server URL for discovery, not the token endpoint
         const tokens = await oauthProxyClient.exchangeTokens(
           provider.serverId,
-          tokenEndpoint,
+          config.server_url, // Pass server URL for OAuth discovery
           {
             grant_type: 'authorization_code',
             code: provider.authorizationCode,

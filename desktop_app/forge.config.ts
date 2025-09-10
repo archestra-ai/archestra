@@ -182,11 +182,7 @@ const forgeConfig: ForgeConfig = {
     //   description,
     //   setupIcon: './icons/icon.ico',
     // }),
-    /**
-     * TODO: remove zip for macos once we have the working dmg maker
-     * TODO: remove zip for windows once MakerSquirrel (just above) is working
-     */
-    new MakerZIP({}, ['darwin', 'win32']),
+    new MakerZIP({}, ['win32']),
     new MakerRpm({
       options: {
         name: productName,
@@ -202,28 +198,42 @@ const forgeConfig: ForgeConfig = {
       },
     }),
     /**
-     * TODO: putting this aside for right now as its currently running into the following error
-     * which I've yet to figure out:
+     * See the following resources for configuration documentation:
      *
-     * Have seen these GitHub issues, but still no luck:
-     * - https://github.com/LinusU/node-alias/issues/22
-     * - https://github.com/electron/forge/issues/3845
-     *
-     * An unhandled rejection has occurred inside Forge:
-      Error: Cannot find module '../build/Release/volume.node'
-      Require stack:
-      - desktop_app/node_modules/macos-alias/lib/create.js
-      - desktop_app/node_modules/macos-alias/index.js
-      - desktop_app/node_modules/ds-store/index.js
-      - desktop_app/node_modules/appdmg/lib/appdmg.js
-      - desktop_app/node_modules/appdmg/index.js
-      - desktop_app/node_modules/electron-installer-dmg/dist/index.js
-      - desktop_app/node_modules/@electron-forge/maker-dmg/dist/MakerDMG.js
-      at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+     * https://www.npmjs.com/package/@electron-forge/maker-dmg
+     * https://github.com/LinusU/node-appdmg
      */
     new MakerDMG({
+      /**
+       * re: background -- from the maker-dmg docs:
+       *
+       * Path to the background image for the DMG window. Image should be of size 658x498.
+       *
+       * If you need to want to add a second Retina-compatible size, add a separate `@2x` image.
+       * For example, if your image is called `background.png`, create a `background@2x.png` that is
+       * double the size.
+       */
       background: './assets/dmg-background.png',
       format: 'ULFO', // ULFO = lzfse-compressed image (macOS 10.11+ only)
+      icon: './assets/icons/icon.icns', // this is the volume icon to replace the default Electron icon
+      title: 'Archestra',
+      contents: [
+        {
+          x: 210,
+          y: 245,
+          type: 'file',
+          /**
+           * path was a bit of a pain here to configure, see https://stackoverflow.com/a/68840039
+           */
+          path: `${process.cwd()}/out/Archestra-darwin-${process.arch}/Archestra.app`,
+        },
+        {
+          x: 470,
+          y: 245,
+          type: 'link',
+          path: '/Applications',
+        },
+      ],
     }),
   ],
   plugins: [

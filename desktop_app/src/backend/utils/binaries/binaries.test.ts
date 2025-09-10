@@ -153,7 +153,7 @@ describe('binaries utilities', () => {
 
         const { getBinaryExecPath } = await import('./');
         const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toBe(path.resolve('/packaged/resources/bin/ollama-v0.11.4'));
+        expect(binaryPath).toBe(path.resolve('/packaged/resources/x86_64/ollama-v0.11.4'));
 
         // Restore original value
         Object.defineProperty(process, 'resourcesPath', {

@@ -1,8 +1,8 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { app } from 'electron';
 import path from 'node:path';
 
-import config from '@backend/config';
 import log from '@backend/utils/logger';
 import { DATABASE_PATH } from '@backend/utils/paths';
 
@@ -16,19 +16,15 @@ export async function runDatabaseMigrations() {
     log.info('Running database migrations...');
     log.info('Database path:', DATABASE_PATH);
 
-    /**
-     * TODO: is this actually true?👇
-     *
-     * In development, migrations are in src folder
-     * In production, they should be bundled with the app
-     */
+    // Determine migrations folder based on environment
     let migrationsFolder: string;
-    if (config.debug) {
+    if (!app.isPackaged) {
       // Development: Use absolute path from project root
       migrationsFolder = path.join(process.cwd(), 'src/backend/database/migrations');
     } else {
-      // Production: Migrations should be bundled with the app
-      migrationsFolder = path.join(__dirname, '../../src/backend/database/migrations');
+      // Production: Migrations are bundled within the app resources
+      // The migrations folder is copied to the .vite/build directory during build
+      migrationsFolder = path.join(__dirname, 'migrations');
     }
 
     log.info('Migrations folder:', migrationsFolder);

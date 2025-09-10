@@ -60,7 +60,7 @@ export const getBinariesDirectory = () => {
   }
 
   return app.isPackaged
-    ? path.join(process.resourcesPath, 'bin')
+    ? path.join(process.resourcesPath, ARCHITECTURE)
     : path.join(app.getAppPath(), 'resources', 'bin', PLATFORM, ARCHITECTURE);
 };
 

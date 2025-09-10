@@ -1,9 +1,11 @@
 const HOST = import.meta.env.VITE_HOST || 'localhost';
 
-// NOTE: 5173 is the default port for Vite's dev server
-const PORT = import.meta.env.VITE_PORT || '5173';
+// In development, use Vite's dev server port (5173) which proxies to the backend
+// In production, connect directly to the backend server port
+const HTTP_PORT = import.meta.env.DEV ? import.meta.env.VITE_PORT || '5173' : '54587';
+const WEBSOCKET_PORT = import.meta.env.DEV ? import.meta.env.VITE_WEBSOCKET_PORT || '5173' : '54588';
 
-const BASE_URL = `${HOST}:${PORT}`;
+const BASE_URL = `${HOST}:${HTTP_PORT}`;
 const BASE_URL_WITH_PROTOCOL = `http://${BASE_URL}`;
 
 // Catalog URL - defaults to production, can be overridden for local development
@@ -24,7 +26,7 @@ export default {
     mcpProxyUrl: `${BASE_URL_WITH_PROTOCOL}/mcp_proxy`,
     chatStreamBaseUrl: `${BASE_URL_WITH_PROTOCOL}/api/llm`,
     ollamaProxyUrl: `${BASE_URL}/llm/ollama`,
-    websocketUrl: `ws://${BASE_URL}/ws`,
+    websocketUrl: `ws://${HOST}:${WEBSOCKET_PORT}/ws`,
     catalogUrl: CATALOG_URL,
   },
   chat: {

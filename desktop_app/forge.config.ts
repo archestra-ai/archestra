@@ -6,6 +6,8 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { copy, mkdirs } from 'fs-extra';
+import { dirname, join, resolve } from 'path';
 
 import config from './src/config';
 
@@ -24,15 +26,8 @@ const forgeConfig: ForgeConfig = {
      */
     asar: true,
     /**
-     * One or more files to be copied directly into the app's Contents/Resources directory for macOS target
-     * platforms, and the resources directory for other target platforms. The resources directory can be
-     * referenced in the packaged app via the process.resourcesPath value.
-     * https://electron.github.io/packager/main/interfaces/Options.html#extraResource
-     *
-     * IMPORTANT: We only include binaries for the specific platform and architecture being built.
-     * This prevents RPM/DEB build failures on Linux where the strip command fails when it
-     * encounters binaries from different architectures. It also reduces the final package size
-     * by not including unnecessary binaries for other platforms.
+     * Copy platform-specific binaries to Resources folder.
+     * This will preserve the directory structure (e.g., Resources/mac/arm64/)
      */
     extraResource:
       process.platform === 'darwin'
@@ -98,10 +93,49 @@ const forgeConfig: ForgeConfig = {
           osxSign: undefined,
         }),
   },
-  // https://github.com/WiseLibs/better-sqlite3/issues/1171#issuecomment-2186895668
-  rebuildConfig: {
-    extraModules: ['better-sqlite3'],
-    force: true,
+  /**
+   * NOTE: regarding rebuildConfig and hooks.. this is a bit of a pain to get to work with native modules (ie. better-sqlite3)
+   *
+   * See the following resources for more background:
+   * - https://stackoverflow.com/questions/79435783/how-can-i-use-native-node-modules-in-my-packaged-electron-application/79445715#79445715
+   * - https://github.com/electron/forge/issues/3738#issuecomment-2775762432
+   */
+  rebuildConfig: {},
+  hooks: {
+    // The call to this hook is mandatory for better-sqlite3 to work once the app built
+    async packageAfterCopy(_forgeConfig, buildPath) {
+      const requiredNativePackages = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
+
+      // __dirname isn't accessible from here
+      const dirnamePath: string = '.';
+      const sourceNodeModulesPath = resolve(dirnamePath, 'node_modules');
+      const destNodeModulesPath = resolve(buildPath, 'node_modules');
+
+      // Copy all asked packages in /node_modules directory inside the asar archive
+      await Promise.all(
+        requiredNativePackages.map(async (packageName) => {
+          const sourcePath = join(sourceNodeModulesPath, packageName);
+          const destPath = join(destNodeModulesPath, packageName);
+
+          await mkdirs(dirname(destPath));
+          await copy(sourcePath, destPath, {
+            recursive: true,
+            preserveTimestamps: true,
+          });
+        })
+      );
+
+      // Copy database migrations to the build directory
+      const sourceMigrationsPath = resolve(dirnamePath, 'src/backend/database/migrations');
+      const destMigrationsPath = resolve(buildPath, '.vite/build/migrations');
+
+      await mkdirs(destMigrationsPath);
+      await copy(sourceMigrationsPath, destMigrationsPath, {
+        recursive: true,
+        preserveTimestamps: true,
+      });
+      console.log(`Copied migrations from ${sourceMigrationsPath} to ${destMigrationsPath}`);
+    },
   },
   makers: [
     /**
@@ -148,14 +182,6 @@ const forgeConfig: ForgeConfig = {
           entry: 'src/preload.ts',
           config: 'vite.preload.config.ts',
           target: 'preload',
-        },
-        {
-          // Server process entry point - built separately from main process
-          // This creates server-process.js that runs our Fastify server
-          // in an isolated Node.js process (not Electron)
-          entry: 'src/server-process.ts',
-          config: 'vite.server.config.ts',
-          target: 'main',
         },
       ],
       renderer: [

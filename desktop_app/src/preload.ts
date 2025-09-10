@@ -3,9 +3,7 @@
 import { IpcRendererEvent, contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  serverPort: 54587,
-  websocketPort: 54588,
-  ollamaPort: 54589,
+  appVersion: () => ipcRenderer.invoke('get-app-version'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
   // Generic provider browser auth

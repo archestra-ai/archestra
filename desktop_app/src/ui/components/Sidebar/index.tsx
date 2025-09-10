@@ -1,6 +1,6 @@
 import { Link, useLocation } from '@tanstack/react-router';
 import { Bot, ChevronRight, Download, MessageCircle, Settings } from 'lucide-react';
-import * as React from 'react';
+import React, { useEffect, useState } from 'react';
 
 import MemoryIndicator from '@ui/components/MemoryIndicator';
 import { SiteHeader } from '@ui/components/SiteHeader';
@@ -28,8 +28,13 @@ interface SidebarProps extends React.PropsWithChildren {}
 export default function Sidebar({ children }: SidebarProps) {
   const location = useLocation();
   const isChat = location.pathname.startsWith('/chat');
-  const [llmProvidersOpen, setLlmProvidersOpen] = React.useState(location.pathname.startsWith('/llm-providers'));
-  const [settingsOpen, setSettingsOpen] = React.useState(location.pathname.startsWith('/settings'));
+  const [llmProvidersOpen, setLlmProvidersOpen] = useState(location.pathname.startsWith('/llm-providers'));
+  const [settingsOpen, setSettingsOpen] = useState(location.pathname.startsWith('/settings'));
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    window.electronAPI.appVersion().then(setAppVersion);
+  }, []);
 
   return (
     <div className="[--header-height:2.25rem] h-screen flex flex-col">
@@ -134,8 +139,9 @@ export default function Sidebar({ children }: SidebarProps) {
               </SidebarGroup>
               {isChat && <McpServerWithToolsSidebarSection />}
             </SidebarContent>
-            <SidebarFooter className="p-2 border-t">
+            <SidebarFooter className="p-2 border-t space-y-2">
               <MemoryIndicator />
+              {appVersion && <div className="text-xs text-muted-foreground text-center">v{appVersion}</div>}
             </SidebarFooter>
           </SidebarBase>
           {children}

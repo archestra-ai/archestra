@@ -1,9 +1,8 @@
 declare global {
   interface Window {
     electronAPI: {
-      serverPort: number;
-      websocketPort: number;
-      ollamaPort: number;
+      appVersion: () => Promise<string>;
+
       openExternal: (url: string) => Promise<void>;
 
       // Generic provider browser auth

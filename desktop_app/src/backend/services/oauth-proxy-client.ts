@@ -26,7 +26,7 @@ export class OAuthProxyClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.OAUTH_PROXY_URL || 'http://localhost:8080';
+    this.baseUrl = baseUrl || process.env.OAUTH_PROXY_URL || 'https://oauth.dev.archestra.ai/oauth/callback';
   }
 
   /**

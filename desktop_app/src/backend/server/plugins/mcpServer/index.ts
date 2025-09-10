@@ -391,7 +391,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const placeholderServer = await McpServerModel.create({
           id: serverId,
           name: installData.displayName,
-          serverConfig: installData.serverConfig,
+          serverConfig: installData.serverConfig.mcp_config || installData.serverConfig,
           userConfigValues: installData.userConfigValues || null,
           serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
           remoteUrl: remoteUrl, // Store remote_url in separate column

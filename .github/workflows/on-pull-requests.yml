@@ -36,6 +36,7 @@ jobs:
       contents: write
     with:
       dry_run: true
+      run_tests: true
     secrets:
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

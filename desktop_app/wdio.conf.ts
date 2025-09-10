@@ -7,8 +7,8 @@ function getPackagedAppPath(): string {
   const basePath = path.join(__dirname, 'out');
 
   if (platform === 'darwin') {
-    // macOS app bundle
-    return path.join(basePath, `Archestra-darwin-${arch}`, 'Archestra.app');
+    // macOS app bundle - need to point to the actual executable inside the .app
+    return path.join(basePath, `Archestra-darwin-${arch}`, 'Archestra.app', 'Contents', 'MacOS', 'Archestra');
   } else if (platform === 'win32') {
     // Windows executable
     return path.join(basePath, `Archestra-win32-${arch}`, 'Archestra.exe');
@@ -25,7 +25,7 @@ export const config: WebdriverIO.Config = {
   // ====================
   // WebdriverIO supports running e2e tests as well as unit and component tests.
   runner: 'local',
-  tsConfigPath: './test/tsconfig.json',
+  tsConfigPath: './tsconfig.json',
 
   //
   // ==================
@@ -42,7 +42,7 @@ export const config: WebdriverIO.Config = {
   // The path of the spec files will be resolved relative from the directory of
   // of the config file unless it's absolute.
   //
-  specs: ['./test/specs/**/*.ts'],
+  specs: ['./test/e2e/**/*.test.ts'],
   // Patterns to exclude.
   exclude: [
     // 'path/to/excluded/files'

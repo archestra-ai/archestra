@@ -127,14 +127,6 @@ jobs:
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db
 
-      # Run E2E tests against the packaged application
       - name: Run E2E tests on packaged app
         if: inputs.run_tests
-        shell: bash
-        working-directory: desktop_app
-        run: |
-          # Install Playwright browsers
-          npx playwright install --with-deps chromium
-          
-          # Run E2E tests against the packaged application
-          pnpm test:e2e:packaged
+        run: pnpm test:e2e:packaged

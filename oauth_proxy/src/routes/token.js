@@ -1,24 +1,23 @@
-import { isValidOAuthEndpoint, getSupportedProviders } from '../config/providers.js';
+import { isValidOAuthEndpoint, getAllowedDestinations } from '../config/providers.js';
 
 /**
- * Validate provider name to prevent environment variable injection attacks
- * @param {string} provider - The provider name to validate
- * @returns {string} - The validated, normalized provider name
- * @throws {Error} - If provider is not supported
+ * Validate MCP server ID to prevent environment variable injection attacks
+ * @param {string} mcpServerId - The MCP server ID to validate
+ * @returns {string} - The validated MCP server ID
+ * @throws {Error} - If MCP server ID is invalid
  */
-function validateProvider(provider) {
-  if (!provider || typeof provider !== 'string') {
-    throw new Error('Provider must be a valid string');
+function validateMcpServerId(mcpServerId) {
+  if (!mcpServerId || typeof mcpServerId !== 'string') {
+    throw new Error('MCP server ID must be a valid string');
   }
 
-  const supportedProviders = getSupportedProviders();
-  const normalizedProvider = provider.toLowerCase();
-  
-  if (!supportedProviders.includes(normalizedProvider)) {
-    throw new Error(`Unsupported provider: ${provider}`);
+  // Basic validation - only allow alphanumeric, hyphens, underscores, and dots
+  const validPattern = /^[a-zA-Z0-9_.-]+$/;
+  if (!validPattern.test(mcpServerId)) {
+    throw new Error(`Invalid MCP server ID format: ${mcpServerId}`);
   }
   
-  return normalizedProvider;
+  return mcpServerId;
 }
 
 export default async function tokenRoutes(fastify) {
@@ -27,15 +26,16 @@ export default async function tokenRoutes(fastify) {
     schema: {
       body: {
         type: 'object',
-        required: ['grant_type', 'provider', 'token_endpoint'],
+        required: ['grant_type', 'mcp_server_id', 'token_endpoint'],
         properties: {
           grant_type: { 
             type: 'string',
             enum: ['authorization_code', 'refresh_token']
           },
-          provider: { 
+          mcp_server_id: { 
             type: 'string',
-            enum: getSupportedProviders() // Only allow trusted providers
+            pattern: '^[a-zA-Z0-9_.-]+$', // Only allow safe characters
+            maxLength: 200,
           },
           token_endpoint: {
             type: 'string',
@@ -86,12 +86,12 @@ export default async function tokenRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { grant_type, provider, token_endpoint, ...params } = request.body;
+    const { grant_type, mcp_server_id, token_endpoint, ...params } = request.body;
 
-    // SECURITY: Validate provider to prevent environment variable injection
-    let validatedProvider;
+    // SECURITY: Validate MCP server ID to prevent environment variable injection
+    let validatedServerId;
     try {
-      validatedProvider = validateProvider(provider);
+      validatedServerId = validateMcpServerId(mcp_server_id);
     } catch (error) {
       return reply.code(400).send({
         error: 'invalid_request',
@@ -99,35 +99,40 @@ export default async function tokenRoutes(fastify) {
       });
     }
 
-    // SECURITY: Validate that token endpoint is allowed for this provider
-    if (!isValidOAuthEndpoint(token_endpoint, validatedProvider)) {
+    // SECURITY: Validate that token endpoint hostname is in the allowlist
+    if (!isValidOAuthEndpoint(token_endpoint)) {
+      const hostname = new URL(token_endpoint).hostname;
       return reply.code(400).send({
         error: 'invalid_request',
-        error_description: `Token endpoint not allowed for provider ${validatedProvider}`,
+        error_description: `Token endpoint hostname not allowed: ${hostname}`,
       });
     }
 
-    // Get client credentials from environment variables (using validated provider)
-    const clientId = process.env[`${validatedProvider.toUpperCase()}_CLIENT_ID`];
-    const clientSecret = process.env[`${validatedProvider.toUpperCase()}_CLIENT_SECRET`];
+    // Get client credentials from environment variables using MCP server ID
+    const clientIdEnvVar = `${validatedServerId}_CLIENT_ID`;
+    const clientSecretEnvVar = `${validatedServerId}_SECRET`;
+    
+    const clientId = process.env[clientIdEnvVar];
+    const clientSecret = process.env[clientSecretEnvVar];
     
     if (!clientSecret) {
+      fastify.log.warn(`Client secret not configured for MCP server: ${validatedServerId}`);
       return reply.code(400).send({
         error: 'invalid_client',
-        error_description: `Client secret not configured for provider: ${validatedProvider}`,
+        error_description: `Client secret not configured for MCP server: ${validatedServerId}`,
       });
     }
 
-    try {
-      // Build request parameters - desktop app handles all provider-specific logic
-      const requestParams = {
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type,
-        ...params, // Desktop app provides all other needed parameters
-      };
+    // Build request parameters - desktop app provides parameters, but we override client credentials
+    const requestParams = {
+      ...params, // Desktop app provides all other needed parameters
+      client_id: clientId, // Override with real client ID from environment
+      client_secret: clientSecret, // Override with real client secret from environment  
+      grant_type,
+    };
 
-      fastify.log.info(`Making secure token request to ${token_endpoint} for provider ${validatedProvider}`);
+    try {
+      fastify.log.info(`Making secure token request to ${token_endpoint} for MCP server ${validatedServerId}`);
 
       // Make request to the validated endpoint only
       const response = await fetch(token_endpoint, {
@@ -140,18 +145,32 @@ export default async function tokenRoutes(fastify) {
         signal: AbortSignal.timeout(30000),
       });
 
-      const responseData = await response.json();
+      const responseText = await response.text();
+      let responseData;
+      
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        responseData = { raw_response: responseText };
+      }
 
       if (!response.ok) {
-        fastify.log.error(`Token exchange failed with status ${response.status}:`, responseData);
+        fastify.log.error(`Token exchange failed with status ${response.status}:`);
+        fastify.log.error(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+        fastify.log.error(`Response data: ${JSON.stringify(responseData)}`);
+        fastify.log.error(`Raw response text: ${responseText}`);
+        fastify.log.error(`Status text: ${response.statusText}`);
         return reply.code(response.status).send(responseData);
       }
 
-      fastify.log.info(`Token exchange successful for provider ${validatedProvider}`);
+      fastify.log.info(`Token exchange successful for MCP server ${validatedServerId}`);
       return reply.send(responseData);
       
     } catch (error) {
       fastify.log.error('Token exchange error:', error);
+      fastify.log.error(`Request params keys: ${Object.keys(requestParams)}`);
+      fastify.log.error(`Token endpoint: ${token_endpoint}`);
+      fastify.log.error(`MCP server ID: ${validatedServerId}`);
       
       return reply.code(400).send({
         error: 'invalid_request',
@@ -160,17 +179,18 @@ export default async function tokenRoutes(fastify) {
     }
   });
 
-  // Secure token revocation endpoint - validates endpoints against provider allowlist
+  // Secure token revocation endpoint - validates endpoints against allowlist
   fastify.post('/oauth/revoke', {
     schema: {
       body: {
         type: 'object',
-        required: ['token', 'provider'],
+        required: ['token', 'mcp_server_id'],
         properties: {
           token: { type: 'string' },
-          provider: { 
+          mcp_server_id: { 
             type: 'string',
-            enum: getSupportedProviders() // Only allow trusted providers
+            pattern: '^[a-zA-Z0-9_.-]+$', // Only allow safe characters
+            maxLength: 200,
           },
           revocation_endpoint: {
             type: 'string',
@@ -189,12 +209,12 @@ export default async function tokenRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { token, provider, revocation_endpoint } = request.body;
+    const { token, mcp_server_id, revocation_endpoint } = request.body;
 
-    // SECURITY: Validate provider to prevent environment variable injection
-    let validatedProvider;
+    // SECURITY: Validate MCP server ID to prevent environment variable injection
+    let validatedServerId;
     try {
-      validatedProvider = validateProvider(provider);
+      validatedServerId = validateMcpServerId(mcp_server_id);
     } catch (error) {
       return reply.code(400).send({
         error: 'invalid_request',
@@ -204,21 +224,22 @@ export default async function tokenRoutes(fastify) {
 
     // Skip revocation if no endpoint provided (some providers don't support it)
     if (!revocation_endpoint) {
-      fastify.log.info(`No revocation endpoint provided for provider ${validatedProvider}, skipping`);
+      fastify.log.info(`No revocation endpoint provided for MCP server ${validatedServerId}, skipping`);
       return reply.send({ success: true });
     }
 
-    // SECURITY: Validate that revocation endpoint is allowed for this provider
-    if (!isValidOAuthEndpoint(revocation_endpoint, validatedProvider)) {
+    // SECURITY: Validate that revocation endpoint hostname is in the allowlist
+    if (!isValidOAuthEndpoint(revocation_endpoint)) {
+      const hostname = new URL(revocation_endpoint).hostname;
       return reply.code(400).send({
         error: 'invalid_request',
-        error_description: `Revocation endpoint not allowed for provider ${validatedProvider}`,
+        error_description: `Revocation endpoint hostname not allowed: ${hostname}`,
       });
     }
 
-    // Get client credentials from environment variables (using validated provider)
-    const clientId = process.env[`${validatedProvider.toUpperCase()}_CLIENT_ID`];
-    const clientSecret = process.env[`${validatedProvider.toUpperCase()}_CLIENT_SECRET`];
+    // Get client credentials from environment variables using MCP server ID
+    const clientId = process.env[`${validatedServerId}_CLIENT_ID`];
+    const clientSecret = process.env[`${validatedServerId}_SECRET`];
 
     try {
       const requestParams = {
@@ -227,7 +248,7 @@ export default async function tokenRoutes(fastify) {
         token,
       };
 
-      fastify.log.info(`Revoking token at ${revocation_endpoint} for provider ${validatedProvider}`);
+      fastify.log.info(`Revoking token at ${revocation_endpoint} for MCP server ${validatedServerId}`);
 
       const response = await fetch(revocation_endpoint, {
         method: 'POST',
@@ -261,8 +282,8 @@ export default async function tokenRoutes(fastify) {
     return {
       status: 'ok',
       service: 'OAuth Proxy - Secure Token Exchange Service',
-      supportedProviders: getSupportedProviders(),
-      security: 'Provider-based endpoint validation prevents SSRF attacks',
+      allowedDestinations: getAllowedDestinations(),
+      security: 'Hostname-based endpoint validation prevents SSRF attacks',
       timestamp: new Date().toISOString(),
     };
   });

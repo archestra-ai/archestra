@@ -513,7 +513,7 @@ export default class PodmanContainer {
     };
 
     // Process command
-    const processedCommand = replaceTemplateVariables(serverConfig.command);
+    const processedCommand = serverConfig.command ? replaceTemplateVariables(serverConfig.command) : '';
 
     // Process args if they exist
     const processedArgs = serverConfig.args?.map((arg) => replaceTemplateVariables(arg));

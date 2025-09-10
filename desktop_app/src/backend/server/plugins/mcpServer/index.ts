@@ -348,15 +348,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
 
-        // Use OAuth config from frontend
-        const { resolveOAuthConfig } = await import('@backend/utils/env-resolver');
-        const config = resolveOAuthConfig(installData.oauthConfig);
+        // Use OAuth config directly from catalog
+        const config = installData.oauthConfig;
 
-        log.info('Resolved OAuth config:', {
+        log.info('MCP OAuth config loaded:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
           serverUrl: config.server_url,
+          requiresProxy: !!config.requires_proxy,
         });
 
         // Check if this uses generic OAuth flow - redirect to generic OAuth endpoint

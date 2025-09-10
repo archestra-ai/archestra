@@ -92,4 +92,11 @@ export default async function callbackRoutes(fastify) {
     const provider = request.query.service || 'slack';
     return handleCallback(request, reply, provider);
   });
+
+  // Generic OAuth callback endpoint (for providers using /oauth/callback)
+  fastify.get("/oauth/callback", async (request, reply) => {
+    // Default to google since this is the most common OAuth callback pattern
+    const provider = 'google';
+    return handleCallback(request, reply, provider);
+  });
 }

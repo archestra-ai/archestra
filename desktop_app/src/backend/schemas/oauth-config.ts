@@ -22,6 +22,7 @@ export const OAuthServerConfigSchema = z.object({
   generic_oauth: z.boolean().optional(), // Use generic OAuth 2.0 flow instead of MCP SDK
   token_endpoint: z.string().url().optional(), // Token endpoint for generic OAuth
   access_token_env_var: z.string().optional(), // Environment variable name to store access token
+  requires_proxy: z.boolean().optional(), // Whether this provider requires oauth-proxy for client secrets
 });
 
 export type OAuthServerConfig = z.infer<typeof OAuthServerConfigSchema>;

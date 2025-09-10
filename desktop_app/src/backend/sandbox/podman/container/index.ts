@@ -677,7 +677,9 @@ export default class PodmanContainer {
       // If a boolean `read_only` is provided and true, mounts will be readonly.
       try {
         const userConfigValues = this.userConfigValues;
-        log.info(`Checking userConfigValues for mount configuration:`, userConfigValues);
+        log.info(
+          `Checking userConfigValues for mount configuration: allowed_directories present=${Array.isArray(userConfigValues?.allowed_directories)}, read_only=${Boolean(userConfigValues?.read_only)}`
+        );
         if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
           log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
           const readOnly = Boolean(userConfigValues.read_only);
@@ -688,7 +690,7 @@ export default class PodmanContainer {
             const hostPath = hostPathRaw.trim();
 
             // Mount to /home/mcp/projects with a simple sanitized name to avoid conflicts
-            // Vérifier que le répertoire existe
+            // Check that the directory exists
             try {
               const stats = await fs.promises.stat(hostPath);
               if (!stats.isDirectory()) {
@@ -731,7 +733,6 @@ export default class PodmanContainer {
         log.warn('Failed to inject user-configured mounts into container create body', e);
       }
 
-      log.info(`Full createBody being sent to Podman API:`, JSON.stringify(createBody, null, 2));
       const response = await containerCreateLibpod({
         body: createBody,
       });

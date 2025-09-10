@@ -325,6 +325,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
         className="sm:max-w-[1200px] w-[90vw] max-h-[70vh] h-[65vh]"
         onPointerDownOutside={(e) => e.preventDefault()}
         showCloseButton={false}
+        data-testid="onboarding-wizard-dialog"
       >
         {renderStepContent()}
       </DialogContent>

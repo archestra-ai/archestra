@@ -59,6 +59,7 @@ export default class PodmanContainer {
   containerName: string;
   private serverConfig: McpServerConfig;
 
+  private userConfigValues: McpServerUserConfigValues | null;
   private command: string;
   private args: string[];
   private envVars: Record<string, string>;
@@ -92,6 +93,8 @@ export default class PodmanContainer {
   constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
     this.serverConfig = serverConfig;
+    this.userConfigValues = userConfigValues;
+
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -493,6 +496,13 @@ export default class PodmanContainer {
     serverConfig: McpServerConfig,
     userConfigValues: McpServerUserConfigValues | null
   ) => {
+    const PROJECTS_BASE = '/home/mcp/projects';
+
+    const hostToContainerPath = (hostPath: string): string => {
+      const baseName = path.basename(hostPath);
+      const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      return path.posix.join(PROJECTS_BASE, sanitizedBaseName);
+    };
     const replaceTemplateVariables = (str: string): string => {
       if (!userConfigValues) return str;
 
@@ -503,6 +513,14 @@ export default class PodmanContainer {
           log.warn(`Template variable ${match} not found in user config values`);
           return match; // Return the original template if no value found
         }
+        // Special handling for allowed_directories - map host paths to container paths
+        if (key === 'allowed_directories' && Array.isArray(value)) {
+          const containerPaths = value
+            .filter((p) => typeof p === 'string' && p.trim() !== '')
+            .map((p) => hostToContainerPath(p));
+          return containerPaths.join(',');
+        }
+
         // Convert the value to string (handles string, number, boolean)
         // For arrays, join them with commas
         if (Array.isArray(value)) {
@@ -515,8 +533,25 @@ export default class PodmanContainer {
     // Process command
     const processedCommand = replaceTemplateVariables(serverConfig.command);
 
-    // Process args if they exist
-    const processedArgs = serverConfig.args?.map((arg) => replaceTemplateVariables(arg));
+    // Process args if they exist; expand ${user_config.allowed_directories} into multiple args
+    const processedArgs = serverConfig.args
+      ? (() => {
+          const out: string[] = [];
+          for (const arg of serverConfig.args!) {
+            if (arg === '${user_config.allowed_directories}') {
+              if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+                const containerPaths = userConfigValues.allowed_directories
+                  .filter((p) => typeof p === 'string' && p.trim() !== '')
+                  .map((p) => hostToContainerPath(p));
+                out.push(...containerPaths);
+                continue;
+              }
+            }
+            out.push(replaceTemplateVariables(arg));
+          }
+          return out;
+        })()
+      : undefined;
 
     // Process environment variables if they exist
     const processedEnv: Record<string, string> = {};
@@ -637,12 +672,74 @@ export default class PodmanContainer {
       if (this.serverConfig.inject_file) {
         await this.injectFiles(createBody);
       }
+      // Inject mounts from userConfigValues if provided. We expect a key named `allowed_directories`
+      // to be an array of host paths. These will be mounted into the container under /projects.
+      // If a boolean `read_only` is provided and true, mounts will be readonly.
+      try {
+        const userConfigValues = this.userConfigValues;
+        log.info(`Checking userConfigValues for mount configuration:`, userConfigValues);
+        if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+          log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
+          const readOnly = Boolean(userConfigValues.read_only);
+          const mounts: any[] = [];
 
+          for (const hostPathRaw of userConfigValues.allowed_directories) {
+            if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
+            const hostPath = hostPathRaw.trim();
+
+            // Mount to /home/mcp/projects with a simple sanitized name to avoid conflicts
+            // Vérifier que le répertoire existe
+            try {
+              const stats = await fs.promises.stat(hostPath);
+              if (!stats.isDirectory()) {
+                log.warn(`Path is not a directory, skipping: ${hostPath}`);
+                continue;
+              }
+            } catch (error) {
+              log.warn(`Directory does not exist, skipping: ${hostPath}`, error);
+              continue;
+            }
+
+            const baseName = path.basename(hostPath);
+            const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const target = path.posix.join('/home/mcp/projects', sanitizedBaseName);
+
+            log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
+            // Use SpecGenerator Mount shape (capitalized keys)
+            mounts.push({
+              Type: 'bind',
+              Source: hostPath,
+              Destination: target,
+              ReadOnly: readOnly,
+              BindOptions: { CreateMountpoint: true },
+            });
+          }
+
+          if (mounts.length > 0) {
+            log.info(`Configuring ${mounts.length} mounts for container`);
+            // Podman SpecGenerator expects `mounts` (array of Mount) on the body
+            createBody.mounts = mounts;
+          } else {
+            log.info(`No valid mounts configured`);
+          }
+        } else {
+          log.info(
+            `No mount configuration: userConfigValues=${!!userConfigValues}, allowed_directories type=${userConfigValues?.allowed_directories ? typeof userConfigValues.allowed_directories : 'undefined'}`
+          );
+        }
+      } catch (e) {
+        log.warn('Failed to inject user-configured mounts into container create body', e);
+      }
+
+      log.info(`Full createBody being sent to Podman API:`, JSON.stringify(createBody, null, 2));
       const response = await containerCreateLibpod({
         body: createBody,
       });
 
       if (response.response.status !== 201) {
+        log.error(`Container creation failed with status ${response.response.status}`);
+        log.error(`Full createBody sent to API:`, JSON.stringify(createBody, null, 2));
+        log.error(`Full API response:`, JSON.stringify(response, null, 2));
         throw new Error(`Failed to create container: ${response.response.status}`);
       }
 
@@ -1149,10 +1246,11 @@ export default class PodmanContainer {
 
         // Add as bind mount to container
         createBody.mounts.push({
-          type: 'bind',
-          source: hostFilePath,
-          target: containerFilePath,
-          options: ['ro'], // Read-only mount
+          Type: 'bind',
+          Source: hostFilePath,
+          Destination: containerFilePath,
+          ReadOnly: true,
+          BindOptions: { CreateMountpoint: true },
         });
       }
 

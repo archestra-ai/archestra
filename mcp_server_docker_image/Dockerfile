@@ -83,7 +83,8 @@ COPY --from=node-builder /usr/local/bin /usr/local/bin
 # Create non-root user for running MCP servers
 RUN addgroup -g 1000 mcp && \
    adduser -u 1000 -G mcp -D -h /home/mcp mcp
-
+# Create projects directory for mounting user directories
+RUN mkdir -p /projects && chown mcp:mcp /projects
 # Set up working directory
 WORKDIR /home/mcp
 

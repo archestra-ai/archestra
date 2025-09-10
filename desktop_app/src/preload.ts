@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeOAuthCallbackListener: () => {
     ipcRenderer.removeAllListeners('oauth-callback');
   },
+  // Native open dialog (files / directories)
+  showOpenDialog: (options: { properties: string[] }) => ipcRenderer.invoke('show-open-dialog', options),
 });

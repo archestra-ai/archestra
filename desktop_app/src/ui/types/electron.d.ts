@@ -11,6 +11,11 @@ declare global {
       // OAuth callback methods
       onOAuthCallback: (callback: (params: any) => void) => void;
       removeOAuthCallbackListener: () => void;
+
+      // dialog
+      showOpenDialog: (options: {
+        properties: Array<'openDirectory' | 'openFile' | 'multiSelections'>;
+      }) => Promise<{ canceled: boolean; filePaths: string[] }>;
     };
   }
 }

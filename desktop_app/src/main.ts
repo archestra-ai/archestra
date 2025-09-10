@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/electron/main';
 import { config as dotenvConfig } from 'dotenv';
-import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -205,6 +205,13 @@ ipcMain.handle('open-external', async (_event, url: string) => {
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
+
+ipcMain.handle(
+  'show-open-dialog',
+  async (_event, options: { properties: Array<'openDirectory' | 'openFile' | 'multiSelections'> }) => {
+    return dialog.showOpenDialog(mainWindow!, options);
+  }
+);
 
 // Set up OAuth callback handler
 ipcMain.handle('oauth-callback', async (_event, params: any) => {

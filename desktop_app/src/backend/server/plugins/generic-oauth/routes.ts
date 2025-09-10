@@ -28,7 +28,7 @@ async function handleGenericOAuthInstall(
     const placeholderServer = await McpServerModel.create({
       id: serverId,
       name: installData.displayName,
-      serverConfig: installData.serverConfig,
+      serverConfig: installData.serverConfig.mcp_config || installData.serverConfig,
       userConfigValues: installData.userConfigValues || null,
       serverType: installData.serverType || 'local',
       remoteUrl: installData.remote_url || null,
@@ -180,21 +180,12 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'OAuth config not found in server record' });
         }
 
-        // Complete the generic OAuth flow
+        // Complete the generic OAuth flow (this handles token storage with env vars)
         const tokens = await completeGenericOAuthFlow(storedConfig as OAuthServerConfig, serverId, code, state);
 
-        // Convert generic tokens to MCP format
-        const mcpTokens = {
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_in: tokens.expires_in,
-          token_type: tokens.token_type || 'Bearer',
-        };
-
-        // Update server record with tokens and installed status
+        // Update server record with installed status only (tokens already stored by completeGenericOAuthFlow)
         const [updatedServer] = await McpServerModel.update(serverId, {
           status: 'installed',
-          oauthTokens: mcpTokens,
           oauthClientInfo: null, // Clear the temporary config storage
         });
 

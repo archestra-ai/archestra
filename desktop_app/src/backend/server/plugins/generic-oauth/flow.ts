@@ -12,7 +12,7 @@ import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider
-import { storeAuthorizationCode, authCodeStore } from '../mcp-oauth/provider';
+import { authCodeStore, storeAuthorizationCode } from '../mcp-oauth/provider';
 
 export interface GenericOAuthTokens {
   access_token: string;
@@ -145,18 +145,15 @@ async function storeTokensWithEnvVar(
   const currentServer = servers?.[0];
 
   if (currentServer && (config.access_token_env_var || currentServer.serverConfig.inject_file)) {
-    // Create a copy of the current serverConfig, extracting mcp_config if needed
-    const baseServerConfig = currentServer.serverConfig.mcp_config
-      ? currentServer.serverConfig.mcp_config
-      : currentServer.serverConfig;
+    // Start with the current mcp_config as the base for database storage
     const updatedServerConfig = {
-      ...baseServerConfig,
+      ...currentServer.serverConfig,
     };
 
     // Update environment variables if access_token_env_var is specified
     if (config.access_token_env_var) {
       updatedServerConfig.env = {
-        ...currentServer.serverConfig.env,
+        ...currentServer.serverConfig.mcp_config?.env,
         [config.access_token_env_var]: tokens.access_token,
       };
     }
@@ -219,7 +216,6 @@ function buildAuthorizationUrl(config: OAuthServerConfig, state: string): string
   authUrl.search = params.toString();
   return authUrl.toString();
 }
-
 
 /**
  * Exchange authorization code for tokens (simple OAuth 2.0)
@@ -318,8 +314,8 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   log.info('🔄 Exchanging authorization code for tokens...');
   const tokens = await exchangeCodeForTokens(config, authorizationCode, serverId);
 
-  // Store tokens in database
-  await storeTokens(serverId, tokens);
+  // Store tokens in database with environment variable injection
+  await storeTokensWithEnvVar(serverId, tokens, config);
 
   log.info('✅ Generic OAuth flow completed successfully');
   return authUrl;

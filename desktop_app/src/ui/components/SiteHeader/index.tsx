@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { Plus, SidebarIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { ThemeToggler } from '@ui/components/ThemeToggler';
 import { Button } from '@ui/components/ui/button';
@@ -14,6 +15,11 @@ export function SiteHeader() {
   const { getCurrentChatTitle, createNewChat } = useChatStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    window.electronAPI.appVersion().then(setAppVersion);
+  }, []);
 
   let breadcrumbs: string[] = [];
   const path = location.pathname;
@@ -83,6 +89,7 @@ export function SiteHeader() {
         </div>
         {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
         <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
+          {appVersion && <span className="text-xs text-muted-foreground mr-2">v{appVersion}</span>}
           <ThemeToggler />
         </div>
       </div>

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 
 import MemoryIndicator from '@ui/components/MemoryIndicator';
 import { SiteHeader } from '@ui/components/SiteHeader';
+import StatusBar from '@ui/components/StatusBar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
   Sidebar as SidebarBase,
@@ -30,11 +31,6 @@ export default function Sidebar({ children }: SidebarProps) {
   const isChat = location.pathname.startsWith('/chat');
   const [llmProvidersOpen, setLlmProvidersOpen] = useState(location.pathname.startsWith('/llm-providers'));
   const [settingsOpen, setSettingsOpen] = useState(location.pathname.startsWith('/settings'));
-  const [appVersion, setAppVersion] = useState<string>('');
-
-  useEffect(() => {
-    window.electronAPI.appVersion().then(setAppVersion);
-  }, []);
 
   return (
     <div className="[--header-height:2.25rem] h-screen flex flex-col">
@@ -139,9 +135,11 @@ export default function Sidebar({ children }: SidebarProps) {
               </SidebarGroup>
               {isChat && <McpServerWithToolsSidebarSection />}
             </SidebarContent>
-            <SidebarFooter className="p-2 border-t space-y-2">
-              <MemoryIndicator />
-              {appVersion && <div className="text-xs text-muted-foreground text-center">v{appVersion}</div>}
+            <SidebarFooter className="p-0 space-y-0">
+              <div className="p-2 pb-0 space-y-2">
+                <MemoryIndicator />
+              </div>
+              <StatusBar />
             </SidebarFooter>
           </SidebarBase>
           {children}

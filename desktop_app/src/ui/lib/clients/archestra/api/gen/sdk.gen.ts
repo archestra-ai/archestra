@@ -67,6 +67,9 @@ import type {
   InstallMcpServerWithOauthData,
   InstallMcpServerWithOauthErrors,
   InstallMcpServerWithOauthResponses,
+  PostApiOllamaPullData,
+  PostApiOllamaPullErrors,
+  PostApiOllamaPullResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -541,6 +544,19 @@ export const storeOAuthCode = <ThrowOnError extends boolean = false>(
 ) => {
   return (options.client ?? _heyApiClient).post<StoreOAuthCodeResponses, StoreOAuthCodeErrors, ThrowOnError>({
     url: '/api/oauth/store-code',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+export const postApiOllamaPull = <ThrowOnError extends boolean = false>(
+  options: Options<PostApiOllamaPullData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<PostApiOllamaPullResponses, PostApiOllamaPullErrors, ThrowOnError>({
+    url: '/api/ollama/pull',
     ...options,
     headers: {
       'Content-Type': 'application/json',

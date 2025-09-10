@@ -10,21 +10,24 @@ import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { useMessageActions } from '@ui/hooks/useMessageActions';
 import { useChatStore, useCloudProvidersStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
 
 function ChatPage() {
-  const { getCurrentChat } = useChatStore();
+  const { getCurrentChat, getCurrentChatTitle } = useChatStore();
   const { selectedToolIds } = useToolsStore();
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
+  const { setChatInference } = useStatusBarStore();
   const [localInput, setLocalInput] = useState('');
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
   const currentChatMessages = currentChat?.messages || [];
+  const currentChatTitle = getCurrentChatTitle();
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
   // Without ref, switching models/providers wouldn't work - it would always use the old values.
@@ -114,6 +117,26 @@ function ChatPage() {
     // Use the built-in regenerate function which will regenerate the last assistant message
     regenerate();
   };
+
+  // Track inference in StatusBar
+  useEffect(() => {
+    console.log(
+      'Chat status:',
+      status,
+      'isSubmitting:',
+      isSubmitting,
+      'sessionId:',
+      currentChatSessionId,
+      'title:',
+      currentChatTitle
+    );
+    if (status === 'streaming' || isSubmitting) {
+      setChatInference(currentChatSessionId, currentChatTitle, true);
+    } else if (status === 'ready' || status === 'error') {
+      // Only stop inference when this specific chat is done
+      setChatInference(currentChatSessionId, currentChatTitle, false);
+    }
+  }, [status, isSubmitting, currentChatSessionId, currentChatTitle, setChatInference]);
 
   useEffect(() => {
     if (isLoading) {

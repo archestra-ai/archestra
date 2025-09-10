@@ -358,10 +358,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
             // Success response
             res.writeHead(200, { 'Content-Type': 'text/html' });
-            
+
             // Create deeplink to the desktop app (optional fallback)
             const deeplinkUrl = `archestra-ai://oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(url.searchParams.get('state') || '')}&service=mcp-oauth`;
-            
+
             const html = `
               <!DOCTYPE html>
               <html>
@@ -425,7 +425,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
               </body>
               </html>
             `;
-            
+
             res.end(html);
             server.close();
             resolve(code);

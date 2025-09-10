@@ -143,6 +143,7 @@ export default class McpServerModel {
     // No need to add tokens to environment variables - they're used for HTTP auth headers
     let finalServerConfig = serverConfig;
 
+
     // OAuth validation is now handled by the frontend-provided oauthConfig
 
     const now = new Date();

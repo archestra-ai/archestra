@@ -3,8 +3,8 @@ import { Bot, ChevronRight, Download, MessageCircle, Settings } from 'lucide-rea
 import React, { useEffect, useState } from 'react';
 
 import MemoryIndicator from '@ui/components/MemoryIndicator';
-import StatusBar from '@ui/components/StatusBar';
 import { SiteHeader } from '@ui/components/SiteHeader';
+import StatusBar from '@ui/components/StatusBar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
   Sidebar as SidebarBase,

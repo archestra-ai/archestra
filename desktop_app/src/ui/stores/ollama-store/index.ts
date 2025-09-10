@@ -145,11 +145,11 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
 
   setSelectedModel: async (model: string) => {
     const previousModel = get().selectedModel;
-    
+
     // Track model switching in StatusBar
     const { useStatusBarStore } = await import('@ui/stores/status-bar-store');
     const statusBarStore = useStatusBarStore.getState();
-    
+
     if (previousModel && previousModel !== model) {
       // Show unloading previous model
       statusBarStore.updateTask('ollama-model-switch', {
@@ -160,7 +160,7 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
         status: 'active',
         timestamp: Date.now(),
       });
-      
+
       // Unload the previous model by setting keep_alive to 0
       try {
         await fetch('/llm/ollama/api/generate', {
@@ -175,11 +175,11 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
         console.error('Failed to unload previous model:', error);
       }
     }
-    
+
     // Update selected model
     OllamaLocalStorage.setSelectedModel(model);
     set({ selectedModel: model });
-    
+
     // Show loading new model
     statusBarStore.updateTask('ollama-model-switch', {
       id: 'ollama-model-switch',
@@ -189,7 +189,7 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
       status: 'active',
       timestamp: Date.now(),
     });
-    
+
     // Pre-load the new model with keep_alive to keep it in memory
     try {
       await fetch('/llm/ollama/api/generate', {
@@ -201,14 +201,13 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
           keep_alive: '30m', // Keep model loaded for 30 minutes
         }),
       });
-      
+
       // Mark as completed
       statusBarStore.updateTask('ollama-model-switch', {
         status: 'completed',
         description: `${model} loaded`,
       });
       setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 2000);
-      
     } catch (error) {
       console.error('Failed to load new model:', error);
       statusBarStore.updateTask('ollama-model-switch', {

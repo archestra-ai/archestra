@@ -30,7 +30,7 @@ export const PodmanRuntimeStatusSummarySchema = z.object({
   machineStartupMessage: z.string().nullable().optional(),
   machineStartupError: z.string().nullable().optional(),
   /**
-   * Image pull-specific fields for detailed tracking  
+   * Image pull-specific fields for detailed tracking
    */
   pullPercentage: z.number().min(0).max(100).optional(),
   pullMessage: z.string().nullable().optional(),

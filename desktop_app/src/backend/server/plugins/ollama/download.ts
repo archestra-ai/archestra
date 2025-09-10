@@ -34,10 +34,10 @@ const ollamaDownloadRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         log.info({ model }, 'Starting Ollama model pull with WebSocket progress');
-        
+
         // This method sends WebSocket progress events
         await ollamaClient.pull({ name: model });
-        
+
         return reply.send({
           success: true,
           message: `Successfully pulled model ${model}`,

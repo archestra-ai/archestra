@@ -89,9 +89,7 @@ export function SiteHeader() {
         </div>
         {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
         <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
-          {appVersion && (
-            <span className="text-xs text-muted-foreground mr-2">v{appVersion}</span>
-          )}
+          {appVersion && <span className="text-xs text-muted-foreground mr-2">v{appVersion}</span>}
           <ThemeToggler />
         </div>
       </div>

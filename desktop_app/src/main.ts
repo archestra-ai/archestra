@@ -11,7 +11,7 @@ import { runDatabaseMigrations } from '@backend/database';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
-import { startFastifyServer, stopFastifyServer } from '@backend/server';
+import { startFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
 import WebSocketServer from '@backend/websocket';
 
@@ -130,6 +130,7 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      devTools: !app.isPackaged,
     },
   });
 
@@ -140,8 +141,10 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // Open the DevTools only in development mode
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 /**
@@ -194,9 +197,13 @@ async function startBackendServer(): Promise<void> {
   }
 }
 
-// Set up IPC handler for opening external links
+// Set up IPC handlers
 ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });
 
 // Set up OAuth callback handler
@@ -256,9 +263,11 @@ if (!gotTheLock) {
   });
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+/**
+ * This method will be called when Electron has finished
+ * initialization and is ready to create browser windows
+ * Some APIs can only be used after this event occurs.
+ */
 app.on('ready', async () => {
   await startBackendServer();
   createWindow();
@@ -277,9 +286,11 @@ app.on('ready', async () => {
   }
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+/**
+ * Quit when all windows are closed, except on macOS. There, it's common
+ * for applications and their menu bar to stay active until the user quits
+ * explicitly with Cmd + Q.
+ */
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -287,62 +298,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
+  /**
+   * On OS X it's common to re-create a window in the app when the
+   * dock icon is clicked and there are no other windows open.
+   */
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
-});
-
-/**
- * Cleanup function to gracefully shut down all services
- */
-const cleanup = async () => {
-  log.info('Server cleanup starting...');
-
-  try {
-    // Stop the Fastify server first to free the port
-    log.info('Stopping Fastify server...');
-    await stopFastifyServer();
-
-    // Stop the WebSocket server
-    log.info('Stopping WebSocket server...');
-    WebSocketServer.stop();
-
-    // Disconnect from Archestra MCP server
-    log.info('Disconnecting Archestra MCP client...');
-    await ArchestraMcpClient.disconnect();
-
-    // Stop the sandbox and all MCP servers
-    log.info('Turning off sandbox...');
-    McpServerSandboxManager.turnOffSandbox();
-
-    // Stop the Ollama server
-    log.info('Stopping Ollama server...');
-    await OllamaServer.stopServer();
-
-    log.info('Server cleanup completed');
-  } catch (error) {
-    log.error('Error during cleanup:', error);
-  }
-};
-
-// Gracefully stop server on quit
-app.on('before-quit', async (event) => {
-  event.preventDefault();
-  await cleanup();
-  app.exit();
-});
-
-// Handle process signals for graceful shutdown
-process.on('SIGTERM', async () => {
-  log.info('Received SIGTERM signal');
-  await cleanup();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  log.info('Received SIGINT signal (Ctrl+C)');
-  await cleanup();
-  process.exit(0);
 });

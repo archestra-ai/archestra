@@ -124,6 +124,17 @@ const forgeConfig: ForgeConfig = {
           });
         })
       );
+
+      // Copy database migrations to the build directory
+      const sourceMigrationsPath = resolve(dirnamePath, 'src/backend/database/migrations');
+      const destMigrationsPath = resolve(buildPath, '.vite/build/migrations');
+
+      await mkdirs(destMigrationsPath);
+      await copy(sourceMigrationsPath, destMigrationsPath, {
+        recursive: true,
+        preserveTimestamps: true,
+      });
+      console.log(`Copied migrations from ${sourceMigrationsPath} to ${destMigrationsPath}`);
     },
   },
   makers: [

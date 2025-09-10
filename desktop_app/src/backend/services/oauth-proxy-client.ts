@@ -31,7 +31,55 @@ export class OAuthProxyClient {
   }
 
   /**
-   * Exchange authorization code or refresh token for access tokens via oauth-proxy
+   * Exchange authorization code for access tokens via generic OAuth route
+   */
+  async exchangeGenericOAuthTokens(
+    mcpServerId: string,
+    tokenEndpoint: string,
+    params: Record<string, any>
+  ): Promise<OAuthTokens> {
+    log.info(`Exchanging generic OAuth tokens via oauth-proxy for MCP server: ${mcpServerId}`);
+
+    const requestBody = {
+      grant_type: params.grant_type,
+      mcp_server_id: mcpServerId,
+      token_endpoint: tokenEndpoint,
+      code: params.code,
+      redirect_uri: params.redirect_uri,
+      client_secret: 'REDACTED', // Will be replaced by proxy with real secret
+    };
+
+    const proxyUrl = `${this.baseUrl}/oauth/token`;
+
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        log.error(`Generic OAuth proxy token exchange failed:`, errorData);
+        throw new Error(`OAuth proxy failed: ${response.status} ${response.statusText}`);
+      }
+
+      const tokens = await response.json();
+      log.info(`Generic OAuth token exchange successful via oauth-proxy for MCP server: ${mcpServerId}`);
+      return tokens;
+
+    } catch (error) {
+      log.error(`Generic OAuth proxy token exchange error for ${mcpServerId}:`, error);
+      throw new Error(`Generic OAuth proxy token exchange failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Exchange authorization code or refresh token for access tokens via oauth-proxy (MCP SDK route)
    */
   async exchangeTokens(
     mcpServerId: string,

@@ -98,7 +98,9 @@ async function storeTokensWithEnvVar(
 
   if (currentServer && (config.access_token_env_var || currentServer.serverConfig.inject_file)) {
     // Create a copy of the current serverConfig, extracting mcp_config if needed
-    const baseServerConfig = currentServer.serverConfig.mcp_config;
+    const baseServerConfig = currentServer.serverConfig.mcp_config 
+      ? currentServer.serverConfig.mcp_config 
+      : currentServer.serverConfig;
     const updatedServerConfig = {
       ...baseServerConfig,
     };
@@ -272,7 +274,7 @@ async function exchangeCodeForTokens(
     const { OAuthProxyClient } = await import('@backend/services/oauth-proxy-client');
     const proxyClient = new OAuthProxyClient();
 
-    return proxyClient.exchangeTokens(serverId, tokenEndpoint, {
+    return proxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
       grant_type: 'authorization_code',
       code,
       redirect_uri: config.redirect_uris[0],

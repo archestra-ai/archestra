@@ -3,13 +3,16 @@
  *
  * For OAuth providers that don't support MCP SDK requirements (like Slack)
  * Implements standard OAuth 2.0 Authorization Code flow with PKCE
+ * Uses deep link callback mechanism same as MCP OAuth
  */
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
-import * as http from 'http';
 
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
+
+// Import authorization code storage from MCP OAuth provider
+import { storeAuthorizationCode, authCodeStore } from '../mcp-oauth/provider';
 
 export interface GenericOAuthTokens {
   access_token: string;
@@ -50,6 +53,51 @@ function retrieveOAuthState(serverId: string): string | null {
     return state;
   }
   return null;
+}
+
+/**
+ * Wait for authorization code to be received via deep link when using OAuth proxy
+ */
+async function waitForAuthorizationCode(state: string): Promise<string> {
+  const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+  const pollInterval = 500; // 500ms
+  const startTime = Date.now();
+
+  log.info(`🔍 Waiting for authorization code for state: ${state.substring(0, 10)}...`);
+  log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
+  log.info(
+    `🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+      .map((k) => k.substring(0, 10) + '...')
+      .join(', ')}`
+  );
+
+  while (Date.now() - startTime < maxWaitTime) {
+    const code = authCodeStore.get(state);
+    if (code) {
+      log.info(`✅ Authorization code found for state: ${state.substring(0, 10)}...`);
+      // Clean up stored code
+      authCodeStore.delete(state);
+      return code;
+    }
+
+    // Log progress every 5 seconds
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    if (elapsed > 0 && elapsed % 5 === 0) {
+      log.info(`⏳ Still waiting for authorization code... (${elapsed}s elapsed)`);
+      log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+
+  log.error(`⏰ Timeout waiting for authorization code for state: ${state.substring(0, 10)}...`);
+  log.error(`📊 Final authCodeStore size: ${authCodeStore.size}`);
+  log.error(
+    `🗂️ Final AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+      .map((k) => k.substring(0, 10) + '...')
+      .join(', ')}`
+  );
+  throw new Error('Timeout waiting for authorization code from OAuth proxy');
 }
 
 /**
@@ -172,91 +220,6 @@ function buildAuthorizationUrl(config: OAuthServerConfig, state: string): string
   return authUrl.toString();
 }
 
-/**
- * Start callback server on port 8080
- */
-function startCallbackServer(serverId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      if (req.url?.includes('code=') || req.url?.startsWith('/oauth/callback')) {
-        log.info('📡 OAuth callback received:', req.url);
-
-        try {
-          const url = new URL(req.url, 'http://localhost:8080');
-          const code = url.searchParams.get('code');
-          const state = url.searchParams.get('state');
-          const error = url.searchParams.get('error');
-
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`<html><body><h1>❌ OAuth Error</h1></body></html>`);
-            server.close();
-            reject(new Error(`OAuth error: ${error}`));
-            return;
-          }
-
-          if (!code || !state) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h1>❌ Missing authorization code or state</h1></body></html>');
-            server.close();
-            reject(new Error('Missing authorization code or state'));
-            return;
-          }
-
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end('<html><body><h1>✅ Authorization successful!</h1><p>You can close this window.</p></body></html>');
-          server.close();
-
-          // Call the desktop app's completion endpoint
-          completeOAuthViaAPI(serverId, code, state)
-            .then(() => resolve())
-            .catch(reject);
-        } catch (error) {
-          res.writeHead(500, { 'Content-Type': 'text/html' });
-          res.end('<html><body><h1>❌ Server Error</h1></body></html>');
-          server.close();
-          reject(error);
-        }
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/html' });
-        res.end('<html><body><h1>404 Not Found</h1></body></html>');
-      }
-    });
-
-    server.listen(8080, () => {
-      log.info('📡 Callback server listening on http://localhost:8080');
-    });
-
-    server.on('error', (error) => {
-      reject(error);
-    });
-  });
-}
-
-/**
- * Complete OAuth by calling the desktop app's API
- */
-async function completeOAuthViaAPI(serverId: string, code: string, state: string): Promise<void> {
-  try {
-    const response = await fetch('http://localhost:54587/api/mcp_server/complete_oauth', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ serverId, code, state }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API call failed: ${response.status} ${errorText}`);
-    }
-
-    log.info('✅ OAuth completion API call successful');
-  } catch (error) {
-    log.error('❌ OAuth completion API call failed:', error);
-    throw error;
-  }
-}
 
 /**
  * Exchange authorization code for tokens (simple OAuth 2.0)
@@ -311,7 +274,7 @@ async function exchangeCodeForTokens(
 }
 
 /**
- * Start generic OAuth flow with local callback server
+ * Start generic OAuth flow with OAuth proxy callback
  */
 export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId: string): Promise<string> {
   log.info(`🔐 Starting generic OAuth flow for ${config.name}`);
@@ -325,10 +288,8 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
 
   log.info(`📋 Authorization URL: ${authUrl}`);
 
-  // Start callback server and wait for authorization
-  const callbackPromise = startCallbackServer(serverId);
-
   // Open the authorization URL in the default browser
+  // OAuth proxy will handle callback via deep link
   const platform = process.platform;
   let command: string;
   let args: string[];
@@ -346,9 +307,21 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
 
   spawn(command, args, { detached: true, stdio: 'ignore' });
 
-  // Wait for callback
-  await callbackPromise;
+  log.info('📡 Using OAuth proxy - will wait for deep link callback');
 
+  // Wait for authorization code to be stored via deep link callback
+  const authorizationCode = await waitForAuthorizationCode(state);
+
+  log.info('✅ Authorization code received via deep link callback');
+
+  // Exchange authorization code for tokens
+  log.info('🔄 Exchanging authorization code for tokens...');
+  const tokens = await exchangeCodeForTokens(config, authorizationCode, serverId);
+
+  // Store tokens in database
+  await storeTokens(serverId, tokens);
+
+  log.info('✅ Generic OAuth flow completed successfully');
   return authUrl;
 }
 

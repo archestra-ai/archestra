@@ -33,7 +33,7 @@ const codeVerifierStore = new Map<string, string>();
  * In-memory authorization code storage for proxy OAuth flows
  * Maps state to authorization code when using OAuth proxy
  */
-const authCodeStore = new Map<string, string>();
+export const authCodeStore = new Map<string, string>();
 
 /**
  * Store authorization code from proxy OAuth callback

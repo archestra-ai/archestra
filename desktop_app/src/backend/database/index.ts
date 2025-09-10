@@ -3,7 +3,6 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
 import path from 'node:path';
 
-import config from '@backend/config';
 import log from '@backend/utils/logger';
 import { DATABASE_PATH } from '@backend/utils/paths';
 
@@ -19,7 +18,7 @@ export async function runDatabaseMigrations() {
 
     // Determine migrations folder based on environment
     let migrationsFolder: string;
-    if (config.debug || !app.isPackaged) {
+    if (!app.isPackaged) {
       // Development: Use absolute path from project root
       migrationsFolder = path.join(process.cwd(), 'src/backend/database/migrations');
     } else {

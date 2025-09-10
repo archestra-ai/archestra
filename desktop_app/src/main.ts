@@ -70,9 +70,9 @@ function resolveIconFilename(): string | undefined {
   const isMac = process.platform === 'darwin';
   const isWin = process.platform === 'win32';
   const repoRoot = process.cwd();
-  const projectIconsDir = path.join(repoRoot, 'icons');
-  const siblingIconsFromBuild = path.join(__dirname, '../../icons');
-  const packagedIconsDir = path.join(process.resourcesPath, 'icons');
+  const projectIconsDir = path.join(repoRoot, 'assets', 'icons');
+  const siblingIconsFromBuild = path.join(__dirname, '../../assets', 'icons');
+  const packagedIconsDir = path.join(process.resourcesPath, 'assets', 'icons');
 
   const candidates: string[] = isMac ? ['icon.icns', 'icon.png'] : isWin ? ['icon.ico', 'icon.png'] : ['icon.png'];
   const searchDirs = app.isPackaged

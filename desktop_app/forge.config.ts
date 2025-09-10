@@ -1,4 +1,5 @@
 import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
@@ -40,7 +41,7 @@ const forgeConfig: ForgeConfig = {
      */
     asar: true,
     extraResource: binaryFilePaths,
-    icon: './icons/icon',
+    icon: './assets/icons/icon',
     name: productName,
     appBundleId,
 
@@ -181,10 +182,7 @@ const forgeConfig: ForgeConfig = {
     //   description,
     //   setupIcon: './icons/icon.ico',
     // }),
-    /**
-     * ZIP for macOS and Windows
-     */
-    new MakerZIP({}, ['darwin', 'win32']),
+    new MakerZIP({}, ['win32']),
     new MakerRpm({
       options: {
         name: productName,
@@ -198,6 +196,44 @@ const forgeConfig: ForgeConfig = {
         productName,
         description,
       },
+    }),
+    /**
+     * See the following resources for configuration documentation:
+     *
+     * https://www.npmjs.com/package/@electron-forge/maker-dmg
+     * https://github.com/LinusU/node-appdmg
+     */
+    new MakerDMG({
+      /**
+       * re: background -- from the maker-dmg docs:
+       *
+       * Path to the background image for the DMG window. Image should be of size 658x498.
+       *
+       * If you need to want to add a second Retina-compatible size, add a separate `@2x` image.
+       * For example, if your image is called `background.png`, create a `background@2x.png` that is
+       * double the size.
+       */
+      background: './assets/dmg-background.png',
+      format: 'ULFO', // ULFO = lzfse-compressed image (macOS 10.11+ only)
+      icon: './assets/icons/icon.icns', // this is the volume icon to replace the default Electron icon
+      title: 'Archestra',
+      contents: [
+        {
+          x: 210,
+          y: 245,
+          type: 'file',
+          /**
+           * path was a bit of a pain here to configure, see https://stackoverflow.com/a/68840039
+           */
+          path: `${process.cwd()}/out/Archestra-darwin-${process.arch}/Archestra.app`,
+        },
+        {
+          x: 470,
+          y: 245,
+          type: 'link',
+          path: '/Applications',
+        },
+      ],
     }),
   ],
   plugins: [

@@ -36,16 +36,16 @@
   },
   "packageManager": "pnpm@10.15.1",
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.2",
-    "@electron-forge/maker-deb": "^7.8.2",
+    "@electron-forge/cli": "^7.9.0",
+    "@electron-forge/maker-deb": "^7.9.0",
+    "@electron-forge/maker-dmg": "^7.9.0",
     "@electron-forge/maker-rpm": "^7.8.2",
-    "@electron-forge/maker-squirrel": "^7.8.2",
-    "@electron-forge/maker-zip": "^7.8.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.8.2",
-    "@electron-forge/plugin-fuses": "^7.8.2",
-    "@electron-forge/plugin-vite": "^7.8.2",
-    "@electron-forge/publisher-github": "^7.8.3",
-    "@electron-forge/shared-types": "^7.8.3",
+    "@electron-forge/maker-squirrel": "^7.9.0",
+    "@electron-forge/maker-zip": "^7.9.0",
+    "@electron-forge/plugin-fuses": "^7.9.0",
+    "@electron-forge/plugin-vite": "^7.9.0",
+    "@electron-forge/publisher-github": "^7.9.0",
+    "@electron-forge/shared-types": "^7.9.0",
     "@electron/fuses": "^2.0.0",
     "@electron/rebuild": "^4.0.1",
     "@hey-api/openapi-ts": "^0.80.14",
@@ -148,13 +148,18 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "electron",
-      "better-sqlite3"
+      "fs-xattr",
+      "macos-alias"
     ],
     "ignoredBuiltDependencies": [
       "@tailwindcss/oxide",
+      "bufferutil",
       "electron-winstaller",
-      "esbuild"
+      "esbuild",
+      "sharp",
+      "utf-8-validate"
     ]
   },
   "lint-staged": {

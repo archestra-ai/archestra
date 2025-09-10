@@ -84,6 +84,12 @@ export type SandboxStatusSummaryInput = {
     startupPercentage: number;
     startupMessage: string | null;
     startupError: string | null;
+    machineStartupPercentage?: number;
+    machineStartupMessage?: string | null;
+    machineStartupError?: string | null;
+    pullPercentage?: number;
+    pullMessage?: string | null;
+    pullError?: string | null;
   };
   mcpServers: {
     [key: string]: {
@@ -488,6 +494,12 @@ export type SandboxStatusSummary = {
     startupPercentage: number;
     startupMessage: string | null;
     startupError: string | null;
+    machineStartupPercentage?: number;
+    machineStartupMessage?: string | null;
+    machineStartupError?: string | null;
+    pullPercentage?: number;
+    pullMessage?: string | null;
+    pullError?: string | null;
   };
   mcpServers: {
     [key: string]: {
@@ -1539,6 +1551,41 @@ export type UpdateMemoryResponses = {
 };
 
 export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
+
+export type PostApiOllamaPullData = {
+  body: {
+    /**
+     * The model name to pull
+     */
+    model: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/ollama/pull';
+};
+
+export type PostApiOllamaPullErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type PostApiOllamaPullError = PostApiOllamaPullErrors[keyof PostApiOllamaPullErrors];
+
+export type PostApiOllamaPullResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type PostApiOllamaPullResponse = PostApiOllamaPullResponses[keyof PostApiOllamaPullResponses];
 
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;

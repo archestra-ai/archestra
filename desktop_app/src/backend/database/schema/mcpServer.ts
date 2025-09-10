@@ -30,12 +30,17 @@ export type McpServerType = z.infer<typeof McpServerTypeSchema>;
  *
  * https://github.com/anthropics/dxt/blob/v0.2.6/src/schemas.ts#L3-L7
  */
-export const McpServerConfigSchema = z.strictObject({
-  command: z.string(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
-});
+export const McpServerConfigSchema = z
+  .object({
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
+    type: z.string().optional(),
+    entry_point: z.string().optional(),
+    mcp_config: z.any().optional(),
+  })
+  .passthrough();
 
 export const McpServerUserConfigValuesSchema = z.record(
   z.string(),

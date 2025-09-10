@@ -531,7 +531,7 @@ export default class PodmanContainer {
     };
 
     // Process command
-    const processedCommand = replaceTemplateVariables(serverConfig.command);
+    const processedCommand = serverConfig.command ? replaceTemplateVariables(serverConfig.command) : '';
 
     // Process args if they exist; expand ${user_config.allowed_directories} into multiple args
     const processedArgs = serverConfig.args

@@ -30,6 +30,27 @@ import log from '@backend/utils/logger';
 const codeVerifierStore = new Map<string, string>();
 
 /**
+ * In-memory authorization code storage for proxy OAuth flows
+ * Maps state to authorization code when using OAuth proxy
+ */
+const authCodeStore = new Map<string, string>();
+
+/**
+ * Store authorization code from proxy OAuth callback
+ */
+export function storeAuthorizationCode(state: string, code: string): void {
+  log.info(`🔐 Storing authorization code for state: ${state.substring(0, 10)}...`);
+  log.info(`🔐 Code (first 20 chars): ${code.substring(0, 20)}...`);
+  authCodeStore.set(state, code);
+  log.info(`📊 AuthCodeStore size after storage: ${authCodeStore.size}`);
+  log.info(
+    `🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+      .map((k) => k.substring(0, 10) + '...')
+      .join(', ')}`
+  );
+}
+
+/**
  * Generate server-specific storage key
  */
 function getServerStorageKey(serverUrl: string): string {
@@ -121,6 +142,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return 'http://localhost:8080/oauth/callback';
   }
 
+  getServerId(): string {
+    return this.serverId;
+  }
+
   get clientMetadata(): OAuthClientMetadata {
     return {
       client_name: this.config.name,
@@ -146,7 +171,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
       log.info('🔑 Using static client registration from config');
       const clientInfo: OAuthClientInformation = {
         client_id: this.config.client_id,
-        ...(this.config.client_secret && { client_secret: this.config.client_secret }),
+        // Use REDACTED for providers that require oauth-proxy
+        ...(this.config.client_secret && {
+          client_secret: this.config.requires_proxy ? 'REDACTED' : this.config.client_secret,
+        }),
       };
       return clientInfo;
     }
@@ -243,6 +271,37 @@ export class McpOAuthProvider implements OAuthClientProvider {
     log.info('🌐 Opening browser for authorization...');
     log.info('🔗 Auth URL:', authUrl.toString());
 
+    // Check if using OAuth proxy
+    if (this.config.requires_proxy) {
+      log.info('📡 Using OAuth proxy - will wait for deep link callback');
+
+      // Extract state from auth URL to wait for callback
+      const state = authUrl.searchParams.get('state');
+      if (!state) {
+        throw new Error('No state parameter in authorization URL');
+      }
+
+      // Open browser directly - OAuth proxy will handle callback
+      const platform = process.platform;
+      const url = authUrl.toString();
+
+      if (platform === 'darwin') {
+        spawn('open', [url], { detached: true, stdio: 'ignore' });
+      } else if (platform === 'win32') {
+        spawn('start', [url], { detached: true, stdio: 'ignore', shell: true });
+      } else {
+        spawn('xdg-open', [url], { detached: true, stdio: 'ignore' });
+      }
+
+      log.info('✅ Browser opened - waiting for OAuth proxy callback via deep link');
+
+      // Wait for authorization code to be stored via deep link callback
+      this.authorizationCode = await this.waitForAuthorizationCode(state);
+      log.info('✅ Authorization code received via proxy callback');
+      return;
+    }
+
+    // Original flow for non-proxy OAuth
     // Start callback server first
     log.info('📡 Starting callback server...');
     const serverPromise = this.startCallbackServer();
@@ -351,6 +410,53 @@ export class McpOAuthProvider implements OAuthClientProvider {
       throw new Error('No code verifier found for server');
     }
     return verifier;
+  }
+
+  /**
+   * Wait for authorization code to be received via deep link when using OAuth proxy
+   */
+  private async waitForAuthorizationCode(state: string): Promise<string> {
+    const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+    const pollInterval = 500; // 500ms
+    const startTime = Date.now();
+
+    log.info(`🔍 Waiting for authorization code for state: ${state.substring(0, 10)}...`);
+    log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
+    log.info(
+      `🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+        .map((k) => k.substring(0, 10) + '...')
+        .join(', ')}`
+    );
+
+    while (Date.now() - startTime < maxWaitTime) {
+      const code = authCodeStore.get(state);
+      if (code) {
+        log.info(`✅ Authorization code found for state: ${state.substring(0, 10)}...`);
+        // Clean up stored code
+        authCodeStore.delete(state);
+        return code;
+      }
+
+      // Log periodically to show we're still waiting
+      const elapsed = Date.now() - startTime;
+      if (elapsed % 5000 < pollInterval) {
+        // Log every 5 seconds
+        log.info(`⏳ Still waiting for authorization code... (${Math.round(elapsed / 1000)}s elapsed)`);
+        log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    log.error(`❌ Timeout waiting for authorization code for state: ${state.substring(0, 10)}...`);
+    log.error(`📊 Final authCodeStore size: ${authCodeStore.size}`);
+    log.error(
+      `🗂️ Final AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+        .map((k) => k.substring(0, 10) + '...')
+        .join(', ')}`
+    );
+    throw new Error('Timeout waiting for authorization code from OAuth proxy callback');
   }
 
   async clear(): Promise<void> {

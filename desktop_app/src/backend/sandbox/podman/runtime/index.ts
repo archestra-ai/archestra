@@ -23,6 +23,18 @@ export const PodmanRuntimeStatusSummarySchema = z.object({
    * startupError is a string that gives a human-readable description of the error that occurred during the startup process (if one has)
    */
   startupError: z.string().nullable(),
+  /**
+   * Machine-specific fields for detailed tracking
+   */
+  machineStartupPercentage: z.number().min(0).max(100).optional(),
+  machineStartupMessage: z.string().nullable().optional(),
+  machineStartupError: z.string().nullable().optional(),
+  /**
+   * Image pull-specific fields for detailed tracking
+   */
+  pullPercentage: z.number().min(0).max(100).optional(),
+  pullMessage: z.string().nullable().optional(),
+  pullError: z.string().nullable().optional(),
 });
 
 type PodmanRuntimeStatusSummary = z.infer<typeof PodmanRuntimeStatusSummarySchema>;
@@ -546,6 +558,13 @@ export default class PodmanRuntime {
       startupPercentage: (this.machineStartupPercentage + this.baseImage.statusSummary.pullPercentage) / 2,
       startupMessage,
       startupError,
+      // Include detailed machine and pull fields
+      machineStartupPercentage: this.machineStartupPercentage,
+      machineStartupMessage: this.machineStartupMessage,
+      machineStartupError: this.machineStartupError,
+      pullPercentage: this.baseImage.statusSummary.pullPercentage,
+      pullMessage: this.baseImage.statusSummary.pullMessage,
+      pullError: this.baseImage.statusSummary.pullError,
     };
   }
 }

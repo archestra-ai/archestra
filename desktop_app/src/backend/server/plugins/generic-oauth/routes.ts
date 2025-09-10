@@ -6,7 +6,6 @@ import { McpServerSchema } from '@backend/database/schema/mcpServer';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
 import { ErrorResponseSchema } from '@backend/schemas';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import { resolveOAuthConfig } from '@backend/utils/env-resolver';
 import log from '@backend/utils/logger';
 
 import { completeGenericOAuthFlow, startGenericOAuthFlow } from './flow';
@@ -109,14 +108,15 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
 
-        // Use OAuth config from frontend
-        const config = resolveOAuthConfig(installData.oauthConfig);
+        // Use OAuth config directly from catalog
+        const config = installData.oauthConfig;
 
-        log.info('Generic OAuth config resolved:', {
+        log.info('Generic OAuth config loaded:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
           serverUrl: config.server_url,
+          requiresProxy: !!config.requires_proxy,
           hasAccessTokenEnvVar: !!config.access_token_env_var,
         });
 

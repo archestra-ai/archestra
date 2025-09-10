@@ -30,12 +30,12 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
         <SidebarMenuSubItem>
           <div className="flex items-center gap-2 px-2 py-1.5">
             <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-            <span className="text-xs text-muted-foreground">Loading chats...</span>
+            <span className="text-xs text-muted-foreground">Loading agents...</span>
           </div>
         </SidebarMenuSubItem>
       ) : chats.length === 0 ? (
         <SidebarMenuSubItem>
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">No chats yet</div>
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">No agents yet</div>
         </SidebarMenuSubItem>
       ) : (
         <>

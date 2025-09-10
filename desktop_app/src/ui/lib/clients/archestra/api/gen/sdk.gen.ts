@@ -67,6 +67,9 @@ import type {
   InstallMcpServerWithOauthData,
   InstallMcpServerWithOauthErrors,
   InstallMcpServerWithOauthResponses,
+  PostApiOllamaPullData,
+  PostApiOllamaPullErrors,
+  PostApiOllamaPullResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -78,6 +81,9 @@ import type {
   StartGenericOAuthData,
   StartGenericOAuthErrors,
   StartGenericOAuthResponses,
+  StoreOAuthCodeData,
+  StoreOAuthCodeErrors,
+  StoreOAuthCodeResponses,
   UninstallMcpServerData,
   UninstallMcpServerResponses,
   UpdateChatData,
@@ -526,6 +532,35 @@ export const updateMemory = <ThrowOnError extends boolean = false>(
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
+    },
+  });
+};
+
+/**
+ * Store OAuth authorization code from deep link callback (internal API)
+ */
+export const storeOAuthCode = <ThrowOnError extends boolean = false>(
+  options: Options<StoreOAuthCodeData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<StoreOAuthCodeResponses, StoreOAuthCodeErrors, ThrowOnError>({
+    url: '/api/oauth/store-code',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+export const postApiOllamaPull = <ThrowOnError extends boolean = false>(
+  options: Options<PostApiOllamaPullData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<PostApiOllamaPullResponses, PostApiOllamaPullErrors, ThrowOnError>({
+    url: '/api/ollama/pull',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
     },
   });
 };

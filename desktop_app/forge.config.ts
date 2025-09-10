@@ -6,14 +6,28 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { copy, mkdirs } from 'fs-extra';
-import { dirname, join, resolve } from 'path';
+import { execSync } from 'child_process';
+import fs from 'fs-extra';
+import path from 'path';
 
 import config from './src/config';
 
 const {
   build: { productName, description, authors, appBundleId, github },
 } = config;
+
+const PLATFORM = process.platform;
+const ARCHITECTURE = process.arch === 'x64' ? 'x86_64' : process.arch;
+const IS_MAC = PLATFORM === 'darwin';
+const IS_WINDOWS = PLATFORM === 'win32';
+
+const BINARIES_DIRECTORY = `./resources/bin/${IS_MAC ? 'mac' : IS_WINDOWS ? 'windows' : 'linux'}/${ARCHITECTURE}`;
+
+const binaryFilePaths: string[] = [];
+for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
+  const binaryFilePath = path.join(BINARIES_DIRECTORY, binaryFileName);
+  binaryFilePaths.push(binaryFilePath);
+}
 
 const forgeConfig: ForgeConfig = {
   packagerConfig: {
@@ -25,16 +39,7 @@ const forgeConfig: ForgeConfig = {
      * https://electron.github.io/packager/main/interfaces/Options.html#asar
      */
     asar: true,
-    /**
-     * Copy platform-specific binaries to Resources folder.
-     * This will preserve the directory structure (e.g., Resources/mac/arm64/)
-     */
-    extraResource:
-      process.platform === 'darwin'
-        ? [`./resources/bin/mac/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
-        : process.platform === 'win32'
-          ? [`./resources/bin/windows/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
-          : [`./resources/bin/linux/${process.arch === 'x64' ? 'x86_64' : process.arch}`],
+    extraResource: binaryFilePaths,
     icon: './icons/icon',
     name: productName,
     appBundleId,
@@ -58,7 +63,14 @@ const forgeConfig: ForgeConfig = {
      */
     ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
-          osxSign: {},
+          osxSign: {
+            optionsForFile: (filePath) => ({
+              /**
+               * Use entitlements to allow necessary exceptions
+               */
+              entitlements: './entitlements.plist',
+            }),
+          },
           /**
            * We are currently using the "app-specific password" method for "notarizing" the macOS app
            *
@@ -102,23 +114,42 @@ const forgeConfig: ForgeConfig = {
    */
   rebuildConfig: {},
   hooks: {
+    // Sign bundled binaries before packaging
+    async prePackage(_forgeConfig) {
+      if (IS_MAC && process.env.APPLE_TEAM_ID) {
+        console.log('Signing bundled binaries...');
+
+        const signingIdentityName = `Developer ID Application: Archestra Limited (${process.env.APPLE_TEAM_ID})`;
+
+        for (const binaryFilePath of binaryFilePaths) {
+          try {
+            console.log(`Signing ${binaryFilePath}...`);
+            execSync(`codesign --force --verbose --sign "${signingIdentityName}" "${binaryFilePath}"`, {
+              stdio: 'inherit',
+            });
+          } catch (error) {
+            console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
+          }
+        }
+      }
+    },
     // The call to this hook is mandatory for better-sqlite3 to work once the app built
     async packageAfterCopy(_forgeConfig, buildPath) {
       const requiredNativePackages = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
 
-      // __dirname isn't accessible from here
-      const dirnamePath: string = '.';
-      const sourceNodeModulesPath = resolve(dirnamePath, 'node_modules');
-      const destNodeModulesPath = resolve(buildPath, 'node_modules');
+      const sourceNodeModulesPath = path.resolve(__dirname, 'node_modules');
+      const destNodeModulesPath = path.resolve(buildPath, 'node_modules');
 
       // Copy all asked packages in /node_modules directory inside the asar archive
       await Promise.all(
         requiredNativePackages.map(async (packageName) => {
-          const sourcePath = join(sourceNodeModulesPath, packageName);
-          const destPath = join(destNodeModulesPath, packageName);
+          const sourcePath = path.join(sourceNodeModulesPath, packageName);
+          const destPath = path.join(destNodeModulesPath, packageName);
 
-          await mkdirs(dirname(destPath));
-          await copy(sourcePath, destPath, {
+          console.log(`Copying ${sourcePath} to ${destPath}`);
+
+          await fs.mkdirs(path.dirname(destPath));
+          await fs.copy(sourcePath, destPath, {
             recursive: true,
             preserveTimestamps: true,
           });
@@ -126,15 +157,17 @@ const forgeConfig: ForgeConfig = {
       );
 
       // Copy database migrations to the build directory
-      const sourceMigrationsPath = resolve(dirnamePath, 'src/backend/database/migrations');
-      const destMigrationsPath = resolve(buildPath, '.vite/build/migrations');
+      const sourceMigrationsPath = path.resolve(__dirname, 'src/backend/database/migrations');
+      const destMigrationsPath = path.resolve(buildPath, '.vite/build/migrations');
 
-      await mkdirs(destMigrationsPath);
-      await copy(sourceMigrationsPath, destMigrationsPath, {
+      console.log(`Copying database migration files from ${sourceMigrationsPath} to ${destMigrationsPath}`);
+
+      await fs.mkdirs(destMigrationsPath);
+      await fs.copy(sourceMigrationsPath, destMigrationsPath, {
         recursive: true,
         preserveTimestamps: true,
       });
-      console.log(`Copied migrations from ${sourceMigrationsPath} to ${destMigrationsPath}`);
+      console.log(`Copied database migration files from ${sourceMigrationsPath} to ${destMigrationsPath}`);
     },
   },
   makers: [

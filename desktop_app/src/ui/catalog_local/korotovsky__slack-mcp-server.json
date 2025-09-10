@@ -15,9 +15,6 @@
       "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
       "env": {
         "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
-      },
-      "inject_file": {
-        "/tmp/slack_token.json": "{\"access_token\": \"${access_token}\", \"additional\": \"blahblah\"}"
       }
     }
   },
@@ -102,15 +99,19 @@
     "name": "Slack MCP",
     "server_url": "https://slack.com/oauth/v2/authorize",
     "token_endpoint": "https://slack.com/api/oauth.v2.access",
-    "client_id": "process.env.SLACK_CLIENT_ID",
-    "client_secret": "process.env.SLACK_CLIENT_SECRET",
-    "redirect_uris": ["https://1c38cd52a1cf.ngrok-free.app/oauth/callback", "http://localhost:8080/oauth/callback"],
+    "client_id": "9210991658150.9211748349222",
+    "client_secret": "REDACTED",
+    "redirect_uris": [
+      "https://brushed-leonardo-accursedly.ngrok-free.app/oauth/callback",
+      "http://localhost:8080/oauth/callback"
+    ],
     "scopes": ["channels:read", "chat:write", "users:read"],
     "description": "Slack MCP Server",
     "default_scopes": ["channels:read", "chat:write", "users:read"],
     "supports_resource_metadata": false,
     "generic_oauth": true,
-    "access_token_env_var": "SLACK_MCP_XOXP_TOKEN"
+    "access_token_env_var": "SLACK_MCP_XOXP_TOKEN",
+    "requires_proxy": true
   },
   "archestra_config": {
     "client_config_permutations": {

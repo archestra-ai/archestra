@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
+<!--
+See the following links for more information on the current list of entitlements.
+https://github.com/electron/notarize/issues/185#issuecomment-2034272877
+https://stackoverflow.com/questions/61449772/mapping-process-and-mapped-file-have-different-team-ids
+
+Without this, in the notarized/signed packaged app, we were running into and error along the lines of:
+mapping process and mapped file (non-platform) have different Team IDs),
+-->
+<plist version="1.0">
+  <dict>
+    <!-- Allow JIT for JavaScript execution -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Allow unsigned executable memory for native modules -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Critical: Disable library validation to allow loading native modules with different Team IDs -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

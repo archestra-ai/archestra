@@ -17,13 +17,14 @@
     "server_url": "https://accounts.google.com",
     "resource_metadata_url": "https://accounts.google.com/.well-known/openid-configuration",
     "client_id": "354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com",
-    "client_secret": "process.env.GOOGLE_CLIENT_SECRET",
+    "client_secret": "REDACTED",
     "redirect_uris": ["http://localhost:8080/oauth/callback"],
     "scopes": ["openid", "email", "profile"],
     "description": "Google OAuth (OpenID Connect)",
     "well_known_url": "https://accounts.google.com/.well-known/openid-configuration",
     "default_scopes": ["openid", "email", "profile"],
-    "supports_resource_metadata": false
+    "supports_resource_metadata": false,
+    "requires_proxy": true
   },
   "archestra_config": {
     "client_config_permutations": {},

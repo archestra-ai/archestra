@@ -97,9 +97,12 @@ async function storeTokensWithEnvVar(
   const currentServer = servers?.[0];
 
   if (currentServer && (config.access_token_env_var || currentServer.serverConfig.inject_file)) {
-    // Create a copy of the current serverConfig
+    // Create a copy of the current serverConfig, extracting mcp_config if needed
+    const baseServerConfig = currentServer.serverConfig.mcp_config
+      ? currentServer.serverConfig.mcp_config
+      : currentServer.serverConfig;
     const updatedServerConfig = {
-      ...currentServer.serverConfig,
+      ...baseServerConfig,
     };
 
     // Update environment variables if access_token_env_var is specified
@@ -258,8 +261,28 @@ async function completeOAuthViaAPI(serverId: string, code: string, state: string
 /**
  * Exchange authorization code for tokens (simple OAuth 2.0)
  */
-async function exchangeCodeForTokens(config: OAuthServerConfig, code: string): Promise<GenericOAuthTokens> {
+async function exchangeCodeForTokens(
+  config: OAuthServerConfig,
+  code: string,
+  serverId?: string
+): Promise<GenericOAuthTokens> {
   const tokenEndpoint = config.token_endpoint || config.server_url.replace('/authorize', '/access');
+
+  // Check if this provider requires oauth-proxy
+  if (config.requires_proxy && serverId) {
+    log.info(`Using oauth-proxy for token exchange for ${config.name}`);
+    const { OAuthProxyClient } = await import('@backend/services/oauth-proxy-client');
+    const proxyClient = new OAuthProxyClient();
+
+    return proxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: config.redirect_uris[0],
+    });
+  }
+
+  // Direct request for providers that don't require proxy (e.g. DCR providers)
+  log.info(`Using direct token exchange for ${config.name}`);
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -347,7 +370,7 @@ export async function completeGenericOAuthFlow(
   }
 
   // Exchange code for tokens
-  const tokens = await exchangeCodeForTokens(config, code);
+  const tokens = await exchangeCodeForTokens(config, code, serverId);
 
   // Store tokens and optionally inject into environment variables
   await storeTokensWithEnvVar(serverId, tokens, config);

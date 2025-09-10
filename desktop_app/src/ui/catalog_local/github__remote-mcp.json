@@ -3,14 +3,15 @@
 
   "oauth_config": {
     "name": "GitHub Copilot MCP",
-    "server_url": "https://api.githubcopilot.com/mcp/",
+    "server_url": "https://api.githubcopilot.com/mcp",
     "client_id": "Ov23li3CnHLM7PNQ2Xiv",
-    "client_secret": "process.env.GITHUB_CLIENT_SECRET",
+    "client_secret": "REDACTED",
     "redirect_uris": ["http://localhost:8080/oauth/callback"],
     "scopes": ["read", "write"],
     "description": "GitHub Copilot MCP Server",
     "default_scopes": ["read", "write"],
-    "supports_resource_metadata": true
+    "supports_resource_metadata": true,
+    "requires_proxy": true
   },
 
   "server": {

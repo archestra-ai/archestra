@@ -47,14 +47,19 @@ class ArchestraMcpClient {
       log.info(`Connecting to Archestra MCP server at ${this.archestraMcpUrl}...`);
 
       const transport = new StreamableHTTPClientTransport(new URL(this.archestraMcpUrl));
+      log.info('Transport created, creating MCP client...');
+      
       this.mcpClient = await experimental_createMCPClient({ transport });
+      log.info('MCP client created, fetching tools...');
 
       await this.fetchTools();
       this.isConnected = true;
 
       log.info('Successfully connected to Archestra MCP server');
+      log.info('Available tools:', Object.keys(this.tools));
     } catch (error) {
       log.error('Failed to connect to Archestra MCP server:', error);
+      log.error('Error details:', JSON.stringify(error, null, 2));
       throw error;
     }
   }

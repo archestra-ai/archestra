@@ -61,7 +61,7 @@ export async function performOAuth(provider: McpOAuthProvider, config: OAuthServ
           // Try to discover token endpoint from well-known URL
           const wellKnownUrl = config.well_known_url || `${config.server_url}/.well-known/oauth-authorization-server`;
           const metadata = await discoverAuthorizationServerMetadata(wellKnownUrl);
-          tokenEndpoint = metadata.token_endpoint;
+          tokenEndpoint = metadata?.token_endpoint || `${config.server_url}/oauth/token`;
           log.info('🔍 Discovered token endpoint:', tokenEndpoint);
         } catch (error) {
           // Fallback to common OAuth endpoint pattern
@@ -72,7 +72,7 @@ export async function performOAuth(provider: McpOAuthProvider, config: OAuthServ
         // Exchange authorization code for tokens via OAuth proxy
         // Pass MCP server URL for discovery, not the token endpoint
         const tokens = await oauthProxyClient.exchangeTokens(
-          provider.serverId,
+          provider.getServerId(),
           config.server_url, // Pass server URL for OAuth discovery
           {
             grant_type: 'authorization_code',

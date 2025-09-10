@@ -142,6 +142,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return 'http://localhost:8080/oauth/callback';
   }
 
+  getServerId(): string {
+    return this.serverId;
+  }
+
   get clientMetadata(): OAuthClientMetadata {
     return {
       client_name: this.config.name,

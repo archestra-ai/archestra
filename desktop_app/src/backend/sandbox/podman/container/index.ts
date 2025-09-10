@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import {
+  Mount,
+  SpecGenerator,
   containerCreateLibpod,
   containerDeleteLibpod,
   containerStartLibpod,
@@ -31,6 +33,8 @@ export const PodmanContainerStateSchema = z.enum([
   'stopped',
   'exited',
 ]);
+
+export const PROJECTS_BASE = '/home/mcp/projects';
 
 export const PodmanContainerStatusSummarySchema = z.object({
   /**
@@ -496,8 +500,6 @@ export default class PodmanContainer {
     serverConfig: McpServerConfig,
     userConfigValues: McpServerUserConfigValues | null
   ) => {
-    const PROJECTS_BASE = '/home/mcp/projects';
-
     const hostToContainerPath = (hostPath: string): string => {
       const baseName = path.basename(hostPath);
       const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -649,7 +651,7 @@ export default class PodmanContainer {
       this.statusMessage = 'Creating container';
 
       // Only include command if it's not empty
-      const createBody: any = {
+      const createBody: SpecGenerator = {
         name: this.containerName,
         image: this.customImage || config.sandbox.baseDockerImage,
         env: this.envVars,
@@ -683,13 +685,13 @@ export default class PodmanContainer {
         if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
           log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
           const readOnly = Boolean(userConfigValues.read_only);
-          const mounts: any[] = [];
+          const mounts: Mount[] = [];
 
           for (const hostPathRaw of userConfigValues.allowed_directories) {
             if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
             const hostPath = hostPathRaw.trim();
 
-            // Mount to /home/mcp/projects with a simple sanitized name to avoid conflicts
+            // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
             // Check that the directory exists
             try {
               const stats = await fs.promises.stat(hostPath);
@@ -704,14 +706,14 @@ export default class PodmanContainer {
 
             const baseName = path.basename(hostPath);
             const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const target = path.posix.join('/home/mcp/projects', sanitizedBaseName);
+            const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
 
             log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
             // Use SpecGenerator Mount shape (capitalized keys)
             mounts.push({
               Type: 'bind',
               Source: hostPath,
-              Destination: target,
+              Target: target,
               ReadOnly: readOnly,
               BindOptions: { CreateMountpoint: true },
             });
@@ -1216,7 +1218,7 @@ export default class PodmanContainer {
   /**
    * Inject files into the container by creating temporary host files and mounting them
    */
-  private async injectFiles(createBody: any): Promise<void> {
+  private async injectFiles(createBody: SpecGenerator): Promise<void> {
     if (!this.serverConfig.inject_file) {
       return;
     }
@@ -1249,7 +1251,7 @@ export default class PodmanContainer {
         createBody.mounts.push({
           Type: 'bind',
           Source: hostFilePath,
-          Destination: containerFilePath,
+          Target: containerFilePath,
           ReadOnly: true,
           BindOptions: { CreateMountpoint: true },
         });

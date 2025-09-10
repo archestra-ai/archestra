@@ -17,7 +17,7 @@ export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
     name: 'archestra-server',
     version: '1.0.0',
-  });
+  }) as any;
 
   archestraMcpServer.tool('list_installed_mcp_servers', 'List all installed MCP servers', async () => {
     try {
@@ -45,10 +45,10 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'install_mcp_server',
     'Install an MCP server',
-    {
+    z.object({
       id: z.string().describe('The ID of the MCP server to install'),
-    },
-    async ({ id }) => {
+    }) as any,
+    async ({ id }: any) => {
       try {
         const server = await McpServerModel.getById(id);
         if (!server) {
@@ -86,10 +86,10 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'uninstall_mcp_server',
     'Uninstall an MCP server',
-    {
+    z.object({
       id: z.string().describe('The ID of the MCP server to uninstall'),
-    },
-    async ({ id }) => {
+    }) as any,
+    async ({ id }: any) => {
       try {
         await McpServerModel.uninstallMcpServer(id);
 
@@ -154,10 +154,10 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'get_memory',
     'Get a specific memory value by its name',
-    {
+    z.object({
       name: z.string().describe('The name of the memory to retrieve'),
-    },
-    async ({ name }) => {
+    }) as any,
+    async ({ name }: any) => {
       try {
         const memory = await MemoryModel.getMemory(name);
         if (!memory) {
@@ -195,11 +195,11 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'set_memory',
     'Set or update a memory entry with a specific name and value',
-    {
+    z.object({
       name: z.string().describe('The name/key for the memory entry'),
       value: z.string().describe('The value/content to store'),
-    },
-    async (context) => {
+    }) as any,
+    async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
       const { name, value } = global._mcpToolArguments || {};
       log.info('set_memory called with:', { name, value });
@@ -262,10 +262,10 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'delete_memory',
     'Delete a specific memory entry by name',
-    {
+    z.object({
       name: z.string().describe('The name of the memory to delete'),
-    },
-    async ({ name }) => {
+    }) as any,
+    async ({ name }: any) => {
       try {
         const deleted = await MemoryModel.deleteMemory(name);
 
@@ -311,12 +311,12 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'search_mcp_servers',
     'Search for MCP servers in the catalog',
-    {
+    z.object({
       query: z.string().optional().describe('Search query to find specific MCP servers'),
       category: z.string().optional().describe('Filter by category (e.g., "ai", "data", "productivity")'),
       limit: z.number().int().positive().default(10).optional().describe('Number of results to return'),
-    },
-    async ({ query, category, limit }) => {
+    }) as any,
+    async ({ query, category, limit }: any) => {
       try {
         // Search the catalog
         const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';

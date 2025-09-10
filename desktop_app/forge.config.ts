@@ -182,7 +182,11 @@ const forgeConfig: ForgeConfig = {
     //   description,
     //   setupIcon: './icons/icon.ico',
     // }),
-    new MakerZIP({}, ['win32']),
+    /**
+     * TODO: remove zip for macos once we have the working dmg maker
+     * TODO: remove zip for windows once MakerSquirrel (just above) is working
+     */
+    new MakerZIP({}, ['darwin', 'win32']),
     new MakerRpm({
       options: {
         name: productName,
@@ -197,6 +201,26 @@ const forgeConfig: ForgeConfig = {
         description,
       },
     }),
+    /**
+     * TODO: putting this aside for right now as its currently running into the following error
+     * which I've yet to figure out:
+     *
+     * Have seen these GitHub issues, but still no luck:
+     * - https://github.com/LinusU/node-alias/issues/22
+     * - https://github.com/electron/forge/issues/3845
+     *
+     * An unhandled rejection has occurred inside Forge:
+      Error: Cannot find module '../build/Release/volume.node'
+      Require stack:
+      - desktop_app/node_modules/macos-alias/lib/create.js
+      - desktop_app/node_modules/macos-alias/index.js
+      - desktop_app/node_modules/ds-store/index.js
+      - desktop_app/node_modules/appdmg/lib/appdmg.js
+      - desktop_app/node_modules/appdmg/index.js
+      - desktop_app/node_modules/electron-installer-dmg/dist/index.js
+      - desktop_app/node_modules/@electron-forge/maker-dmg/dist/MakerDMG.js
+      at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+     */
     new MakerDMG({
       background: './assets/dmg-background.png',
       format: 'ULFO', // ULFO = lzfse-compressed image (macOS 10.11+ only)

@@ -8,6 +8,11 @@ import MemoryModel from '@backend/models/memory';
 import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
 
+// Workaround for fastify-mcp bug: declare global to store tool arguments
+declare global {
+  var _mcpToolArguments: any;
+}
+
 export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
     name: 'archestra-server',
@@ -192,14 +197,10 @@ export const createArchestraMcpServer = () => {
       name: z.string().describe('The name/key for the memory entry'),
       value: z.string().describe('The value/content to store')
     }),
-    async (args, context) => {
-      log.info('set_memory - args:', args);
-      log.info('set_memory - context:', context);
-      log.info('set_memory - arguments:', arguments);
-      log.info('set_memory - arguments.length:', arguments.length);
-      
-      const { name, value } = args || {};
-      log.info('set_memory - destructured:', { name, value });
+    async (context) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { name, value } = global._mcpToolArguments || {};
+      log.info('set_memory called with:', { name, value });
       
       try {
         // Validation
@@ -400,6 +401,17 @@ export const createArchestraMcpServer = () => {
 
 const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
   log.info('Registering Archestra MCP server plugin...');
+  
+  // Store the current request arguments globally as a workaround
+  fastify.addHook('preHandler', async (request, reply) => {
+    if (request.url === '/mcp' && request.body) {
+      const body = request.body as any;
+      if (body.method === 'tools/call' && body.params && body.params.arguments) {
+        global._mcpToolArguments = body.params.arguments;
+        log.info('Stored tool arguments globally:', global._mcpToolArguments);
+      }
+    }
+  });
   
   await fastify.register(streamableHttp, {
     stateful: false,

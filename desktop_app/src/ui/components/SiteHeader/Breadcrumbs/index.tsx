@@ -1,6 +1,5 @@
 import React from 'react';
 
-import { TypewriterText } from '@ui/components/TypewriterText';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,7 +14,7 @@ interface BreadcrumbsProps {
   isAnimatedTitle?: boolean;
 }
 
-export function Breadcrumbs({ breadcrumbs, isAnimatedTitle }: BreadcrumbsProps) {
+export function Breadcrumbs({ breadcrumbs }: BreadcrumbsProps) {
   return (
     <Breadcrumb className="min-w-0 overflow-hidden">
       <BreadcrumbList className="flex-nowrap overflow-hidden">
@@ -29,11 +28,7 @@ export function Breadcrumbs({ breadcrumbs, isAnimatedTitle }: BreadcrumbsProps) 
             <BreadcrumbItem className={index === breadcrumbs.length - 1 ? "truncate min-w-0" : "shrink-0"}>
               {index === breadcrumbs.length - 1 ? (
                 <BreadcrumbPage className="truncate block">
-                  {isAnimatedTitle && index === 1 ? (
-                    <TypewriterText text={breadcrumb} className="truncate" />
-                  ) : (
-                    <span className="truncate">{breadcrumb}</span>
-                  )}
+                  <span className="truncate">{breadcrumb}</span>
                 </BreadcrumbPage>
               ) : (
                 <BreadcrumbLink className="truncate">{breadcrumb}</BreadcrumbLink>

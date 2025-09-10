@@ -40,14 +40,17 @@ export class OAuthProxyClient {
   ): Promise<OAuthTokens> {
     log.info(`Exchanging tokens via oauth-proxy for MCP server: ${mcpServerId}`);
 
+    // Transform params for MCP SDK route
     const requestBody = {
-      mcp_server_id: mcpServerId,
-      token_endpoint: tokenEndpoint,
-      client_secret: 'REDACTED', // oauth-proxy will substitute real secret
-      ...params,
+      authorization_code: params.code,
+      code_verifier: params.code_verifier,
+      redirect_uri: params.redirect_uri,
+      resource: params.resource,
+      authorization_server_url: new URL(tokenEndpoint).origin, // Extract base URL
     };
 
-    const proxyUrl = `${this.baseUrl}/oauth/token`;
+    // Use the new MCP SDK-based proxy route for perfect compatibility
+    const proxyUrl = `${this.baseUrl}/mcp/sdk-token/${mcpServerId}`;
 
     try {
       const response = await fetch(proxyUrl, {

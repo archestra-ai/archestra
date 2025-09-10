@@ -5,6 +5,8 @@
  */
 import { defineConfig } from 'drizzle-kit';
 
+import { DATABASE_FILE_NAME } from './src/backend/utils/paths';
+
 export default defineConfig({
   out: './src/backend/database/migrations',
   schema: './src/backend/database/schema',
@@ -12,6 +14,6 @@ export default defineConfig({
   // https://orm.drizzle.team/docs/sql-schema-declaration#camel-and-snake-casing
   casing: 'snake_case',
   dbCredentials: {
-    url: `${process.env.HOME}/Library/Application Support/archestra/archestra.db`,
+    url: `${process.env.HOME}/Library/Application Support/archestra/${DATABASE_FILE_NAME}`,
   },
 });

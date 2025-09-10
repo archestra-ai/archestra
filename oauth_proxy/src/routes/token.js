@@ -1,4 +1,5 @@
 import { isValidOAuthEndpoint, getAllowedDestinations } from '../config/providers.js';
+import { exchangeAuthorization } from '@modelcontextprotocol/sdk/client/auth.js';
 
 /**
  * Validate MCP server ID to prevent environment variable injection attacks
@@ -273,6 +274,362 @@ export default async function tokenRoutes(fastify) {
       return reply.code(400).send({
         error: 'invalid_request',
         error_description: error.message,
+      });
+    }
+  });
+
+  // MCP SDK token exchange proxy - forwards MCP SDK requests with proper client credentials
+  fastify.post('/mcp/token/:mcp_server_id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['mcp_server_id'],
+        properties: {
+          mcp_server_id: {
+            type: 'string',
+            pattern: '^[a-zA-Z0-9_.-]+$',
+            maxLength: 200,
+          },
+        },
+      },
+      body: {
+        type: 'object',
+        // Accept any body - forward as-is to the target endpoint
+        additionalProperties: true,
+      },
+      response: {
+        200: {
+          type: 'object',
+          additionalProperties: true,
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            error_description: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { mcp_server_id } = request.params;
+    const body = request.body;
+
+    // SECURITY: Validate MCP server ID
+    let validatedServerId;
+    try {
+      validatedServerId = validateMcpServerId(mcp_server_id);
+    } catch (error) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: error.message,
+      });
+    }
+
+    // Get client credentials from environment variables
+    const clientIdEnvVar = `${validatedServerId}_CLIENT_ID`;
+    const clientSecretEnvVar = `${validatedServerId}_SECRET`;
+    
+    const clientId = process.env[clientIdEnvVar];
+    const clientSecret = process.env[clientSecretEnvVar];
+    
+    if (!clientSecret) {
+      fastify.log.warn(`Client secret not configured for MCP server: ${validatedServerId}`);
+      return reply.code(400).send({
+        error: 'invalid_client',
+        error_description: `Client secret not configured for MCP server: ${validatedServerId}`,
+      });
+    }
+
+    // Determine target endpoint from request headers or use default
+    const targetEndpoint = request.headers['x-target-endpoint'] || `https://api.githubcopilot.com/mcp/oauth/token`;
+
+    // SECURITY: Validate target endpoint
+    if (!isValidOAuthEndpoint(targetEndpoint)) {
+      const hostname = new URL(targetEndpoint).hostname;
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: `Target endpoint hostname not allowed: ${hostname}`,
+      });
+    }
+
+    // Use exact MCP SDK logic for client authentication
+    // MCP SDK selectClientAuthMethod (line 27-28): defaults to client_secret_post when no supportedMethods
+    // BUT GitHub clearly needs Authorization header, so simulate server supporting basic auth
+    const supportedMethods = ['client_secret_basic']; // Simulate GitHub supporting basic auth
+    const hasClientSecret = !!clientSecret;
+    
+    // MCP SDK selectClientAuthMethod logic (lines 24-42)
+    let authMethod;
+    if (supportedMethods.length === 0) {
+      authMethod = hasClientSecret ? 'client_secret_post' : 'none';
+    } else if (hasClientSecret && supportedMethods.includes('client_secret_basic')) {
+      authMethod = 'client_secret_basic';
+    } else if (hasClientSecret && supportedMethods.includes('client_secret_post')) {
+      authMethod = 'client_secret_post';
+    } else if (supportedMethods.includes('none')) {
+      authMethod = 'none';
+    } else {
+      authMethod = hasClientSecret ? 'client_secret_post' : 'none';
+    }
+    
+    let authHeader = request.headers.authorization;
+    
+    // MCP SDK applyClientAuthentication logic (lines 57-72)
+    if (authMethod === 'client_secret_basic' && !authHeader) {
+      // MCP SDK applyBasicAuth (lines 76-81)
+      const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      authHeader = `Basic ${credentials}`;
+      fastify.log.info('Applied MCP SDK client_secret_basic authentication');
+    }
+    
+    fastify.log.info(`MCP SDK auth method: ${authMethod}, has auth header: ${!!authHeader}`);
+
+    // Build clean request body with only OAuth parameters (remove proxy-specific params)
+    const cleanBody = { ...body };
+    delete cleanBody.mcp_server_id; // Remove proxy-specific parameter
+    delete cleanBody.token_endpoint; // Remove proxy-specific parameter
+    delete cleanBody.client_secret; // Remove since it goes in Authorization header for Basic auth
+    
+    // MCP SDK applyClientAuthentication for request body (lines 86-96)
+    const requestBody = { ...cleanBody };
+    
+    if (authMethod === 'client_secret_basic') {
+      // MCP SDK applyBasicAuth: credentials go in Authorization header only
+      requestBody.client_id = clientId;
+      // client_secret NOT in body for basic auth
+    } else if (authMethod === 'client_secret_post') {
+      // MCP SDK applyPostAuth: credentials go in request body
+      requestBody.client_id = clientId;
+      if (clientSecret) {
+        requestBody.client_secret = clientSecret;
+      }
+    } else if (authMethod === 'none') {
+      // MCP SDK applyPublicAuth: only client_id in body
+      requestBody.client_id = clientId;
+    }
+    
+    fastify.log.info(`Request body will include client_id: ${!!requestBody.client_id}, client_secret: ${!!requestBody.client_secret}`);
+
+    try {
+      fastify.log.info(`Proxying MCP token request to ${targetEndpoint} for server ${validatedServerId}`);
+      fastify.log.info(`Original request body keys: ${Object.keys(body)}`);
+      fastify.log.info(`Clean request body keys: ${Object.keys(requestBody)}`);
+      fastify.log.info(`Incoming Authorization header: ${request.headers.authorization || 'none'}`);
+      fastify.log.info(`All incoming headers: ${JSON.stringify(request.headers)}`);
+      
+      fastify.log.info(`Auth method: ${authMethod}, Authorization header: ${authHeader ? authHeader.substring(0, 20) + '...' : 'none'}`);
+      
+      // Forward all headers from the original request, but override Authorization and Content-Type
+      const forwardedHeaders = {
+        ...request.headers,
+        // Override with target host
+        'host': new URL(targetEndpoint).hostname,
+        // Force form encoding for OAuth token requests (matches MCP SDK)
+        'content-type': 'application/x-www-form-urlencoded',
+      };
+
+      // Always set Authorization header if we have one (GitHub requires it)
+      if (authHeader) {
+        forwardedHeaders['authorization'] = authHeader;
+        fastify.log.info(`Setting Authorization header for method ${authMethod}: ${authHeader.substring(0, 20)}...`);
+      } else {
+        // Remove any existing authorization header if we don't have one
+        delete forwardedHeaders['authorization'];
+        fastify.log.info('No Authorization header to set');
+      }
+      
+      // Remove proxy-specific headers that shouldn't be forwarded
+      delete forwardedHeaders['x-target-endpoint'];
+      delete forwardedHeaders['x-forwarded-for'];
+      delete forwardedHeaders['x-forwarded-proto'];
+      delete forwardedHeaders['x-forwarded-host'];
+      delete forwardedHeaders['content-length']; // Let Node.js calculate correct length for cleaned body
+      
+      fastify.log.info(`Forwarded headers: ${JSON.stringify(forwardedHeaders)}`);
+      
+      fastify.log.info(`Final request body being sent: ${JSON.stringify(requestBody)}`);
+      fastify.log.info(`URLSearchParams body: ${new URLSearchParams(requestBody).toString()}`);
+      
+      let response;
+      try {
+        response = await fetch(targetEndpoint, {
+          method: 'POST',
+          headers: forwardedHeaders,
+          body: new URLSearchParams(requestBody), // Use cleaned requestBody
+          signal: AbortSignal.timeout(30000),
+        });
+
+        const responseText = await response.text();
+        let responseData;
+        
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (parseError) {
+          responseData = { raw_response: responseText };
+        }
+
+        fastify.log.info(`GitHub response status: ${response.status}`);
+        fastify.log.info(`GitHub response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+        fastify.log.info(`GitHub response text: ${responseText}`);
+        fastify.log.info(`GitHub response data: ${JSON.stringify(responseData)}`);
+
+        if (!response.ok) {
+          fastify.log.error(`MCP token exchange failed with status ${response.status}:`);
+          fastify.log.error(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+          fastify.log.error(`Response data: ${JSON.stringify(responseData)}`);
+          fastify.log.error(`Raw response text: ${responseText}`);
+          return reply.code(response.status).send(responseData);
+        }
+
+        fastify.log.info(`MCP token exchange successful for server ${validatedServerId}`);
+        return reply.send(responseData);
+        
+      } catch (fetchError) {
+        fastify.log.error('Fetch error details:');
+        fastify.log.error(`Fetch error message: ${fetchError.message}`);
+        fastify.log.error(`Fetch error name: ${fetchError.name}`);
+        fastify.log.error(`Fetch error cause: ${JSON.stringify(fetchError.cause)}`);
+        fastify.log.error(`Fetch error code: ${fetchError.code}`);
+        fastify.log.error(`Fetch error errno: ${fetchError.errno}`);
+        fastify.log.error(`Fetch error syscall: ${fetchError.syscall}`);
+        fastify.log.error(`Full fetch error: ${JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError))}`);
+        throw fetchError; // Re-throw to be caught by outer catch
+      }
+
+    } catch (error) {
+      fastify.log.error('MCP token exchange error:', error);
+      fastify.log.error(`Target endpoint: ${targetEndpoint}`);
+      fastify.log.error(`MCP server ID: ${validatedServerId}`);
+      fastify.log.error(`Error message: ${error.message}`);
+      fastify.log.error(`Error stack: ${error.stack}`);
+      
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: 'MCP token exchange failed',
+      });
+    }
+  });
+
+  // MCP SDK-based token exchange - uses actual MCP SDK functions
+  fastify.post('/mcp/sdk-token/:mcp_server_id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['mcp_server_id'],
+        properties: {
+          mcp_server_id: {
+            type: 'string',
+            pattern: '^[a-zA-Z0-9_.-]+$',
+            maxLength: 200,
+          },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['authorization_code', 'code_verifier', 'redirect_uri'],
+        properties: {
+          authorization_code: { type: 'string' },
+          code_verifier: { type: 'string' },
+          redirect_uri: { type: 'string' },
+          resource: { type: 'string' },
+          authorization_server_url: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { mcp_server_id } = request.params;
+    const { authorization_code, code_verifier, redirect_uri, resource, authorization_server_url } = request.body;
+
+    // SECURITY: Validate MCP server ID
+    let validatedServerId;
+    try {
+      validatedServerId = validateMcpServerId(mcp_server_id);
+    } catch (error) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: error.message,
+      });
+    }
+
+    // Get client credentials from environment variables
+    const clientIdEnvVar = `${validatedServerId}_CLIENT_ID`;
+    const clientSecretEnvVar = `${validatedServerId}_SECRET`;
+    
+    const clientId = process.env[clientIdEnvVar];
+    const clientSecret = process.env[clientSecretEnvVar];
+    
+    if (!clientId || !clientSecret) {
+      fastify.log.warn(`Client credentials not configured for MCP server: ${validatedServerId}`);
+      return reply.code(400).send({
+        error: 'invalid_client',
+        error_description: `Client credentials not configured for MCP server: ${validatedServerId}`,
+      });
+    }
+
+    try {
+      fastify.log.info(`Using MCP SDK exchangeAuthorization for server ${validatedServerId}`);
+      fastify.log.info(`Client credentials: clientId=${clientId ? 'PRESENT' : 'MISSING'}, clientSecret=${clientSecret ? 'PRESENT' : 'MISSING'}`);
+      
+      // Use the actual GitHub OAuth endpoints that MCP SDK discovered and uses
+      const authorizationServerUrl = 'https://github.com/login/oauth';
+      
+      // Use GitHub's standard OAuth metadata that actually works
+      const metadata = {
+        token_endpoint: 'https://github.com/login/oauth/access_token',
+        authorization_endpoint: 'https://github.com/login/oauth/authorize',
+        token_endpoint_auth_methods_supported: ['client_secret_post'], // GitHub uses credentials in body
+        grant_types_supported: ['authorization_code'],
+      };
+      
+      fastify.log.info(`Authorization server URL: ${authorizationServerUrl}`);
+      fastify.log.info(`Token endpoint: ${metadata.token_endpoint}`);
+
+      // Custom fetch function to log all requests
+      const loggedFetch = async (url, options) => {
+        fastify.log.info(`MCP SDK making request to: ${url}`);
+        if (options?.method) {
+          fastify.log.info(`Request method: ${options.method}`);
+        }
+        if (options?.headers) {
+          // Convert headers to object if it's a Headers instance
+          const headersObj = options.headers instanceof Headers 
+            ? Object.fromEntries(options.headers.entries())
+            : options.headers;
+          fastify.log.info(`Request headers: ${JSON.stringify(headersObj)}`);
+        }
+        if (options?.body) {
+          fastify.log.info(`Request body: ${options.body}`);
+        }
+        const response = await fetch(url, options);
+        fastify.log.info(`Response status: ${response.status} ${response.statusText}`);
+        return response;
+      };
+
+      const tokens = await exchangeAuthorization(authorizationServerUrl, {
+        metadata,
+        clientInformation: {
+          client_id: clientId,
+          client_secret: clientSecret,
+        },
+        authorizationCode: authorization_code,
+        codeVerifier: code_verifier,
+        redirectUri: redirect_uri,
+        resource: resource ? new URL(resource) : undefined,
+        // Don't pass addClientAuthentication - let MCP SDK use default authentication
+        fetchFn: loggedFetch,
+      });
+
+      fastify.log.info(`MCP SDK token exchange successful for server ${validatedServerId}`);
+      return reply.send(tokens);
+
+    } catch (error) {
+      fastify.log.error('MCP SDK token exchange error:', error);
+      fastify.log.error(`Error message: ${error.message}`);
+      
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: `MCP SDK token exchange failed: ${error.message}`,
       });
     }
   });

@@ -59,7 +59,8 @@ export function SiteHeader() {
   }
 
   const handleReportBug = () => {
-    const issueBody = encodeURIComponent(`
+    const issueBody = encodeURIComponent(
+      `
 **Description:**
 Please describe the issue you're experiencing...
 
@@ -88,7 +89,8 @@ What actually happened?
 - **Free Memory:** ${systemInfo?.freeMemory || 'Unknown'}
 - **Total Disk:** ${systemInfo?.totalDisk || 'Unknown'}
 - **Free Disk:** ${systemInfo?.freeDisk || 'Unknown'}
-    `.trim());
+    `.trim()
+    );
 
     const issueTitle = encodeURIComponent('[Put the Bug title here] ');
     const url = `https://github.com/archestra-ai/archestra/issues/new?title=${issueTitle}&body=${issueBody}`;

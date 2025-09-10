@@ -26,7 +26,7 @@ export function Breadcrumbs({ breadcrumbs, isAnimatedTitle }: BreadcrumbsProps) 
         {breadcrumbs.map((breadcrumb, index) => (
           <React.Fragment key={`sep-${index}`}>
             <BreadcrumbSeparator className="shrink-0" />
-            <BreadcrumbItem className={index === breadcrumbs.length - 1 ? "truncate min-w-0" : "shrink-0"}>
+            <BreadcrumbItem className={index === breadcrumbs.length - 1 ? 'truncate min-w-0' : 'shrink-0'}>
               {index === breadcrumbs.length - 1 ? (
                 <BreadcrumbPage className="truncate block">
                   {isAnimatedTitle && index === 1 ? (

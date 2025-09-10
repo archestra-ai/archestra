@@ -141,8 +141,8 @@ importers:
         specifier: ^5.5.0
         version: 5.5.0
       fastify-mcp:
-        specifier: ^2.0.3
-        version: 2.0.3
+        specifier: ^2.0.7
+        version: 2.0.7
       fastify-type-provider-zod:
         specifier: ^5.0.3
         version: 5.0.3(@fastify/swagger@9.5.1)(fastify@5.5.0)(openapi-types@12.1.3)(zod@4.0.17)
@@ -1525,6 +1525,10 @@ packages:
 
   '@modelcontextprotocol/sdk@1.17.3':
     resolution: {integrity: sha512-JPwUKWSsbzx+DLFznf/QZ32Qa+ptfbUlHhRLrBQBAFu9iI1iYvizM4p+zhhRDceSsPutXp4z+R/HPVphlIiclg==}
+    engines: {node: '>=18'}
+
+  '@modelcontextprotocol/sdk@1.17.5':
+    resolution: {integrity: sha512-QakrKIGniGuRVfWBdMsDea/dx1PNE739QJ7gCM41s9q+qaCYTHCdsIBXQVVXry3mfWAiaM9kT22Hyz53Uw8mfg==}
     engines: {node: '>=18'}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -3890,8 +3894,8 @@ packages:
   fast-uri@3.0.6:
     resolution: {integrity: sha512-Atfo14OibSv5wAp4VWNsFYE1AchQRTv9cBGWET4pZWHzYshFSS9NQI6I57rdKn9croWVMbYFbLhJ+yJvmZIIHw==}
 
-  fastify-mcp@2.0.3:
-    resolution: {integrity: sha512-n7RIkajHco/jshdjPQ8fXce8WxFAvDgCzscHWYuFZHTBTWCCNhi78eyTj2Q/hOI8jVOrw7CQQqupcE2zkZ2eFA==}
+  fastify-mcp@2.0.7:
+    resolution: {integrity: sha512-2Q+w+j82jA9p5bnuDACvQVgEwn7y4/EXeQhQUPvxDhhNuMuOxoMH7zmplvQF6zoITbJgt0B3dkn2vYRWBQn6qw==}
 
   fastify-plugin@5.0.1:
     resolution: {integrity: sha512-HCxs+YnRaWzCl+cWRYFnHmeRFyR5GVnJTAaCJQiYzQSDwK9MgJdyAsuL3nh0EWRCYMgQ5MeziymvmAhUHYHDUQ==}
@@ -7882,6 +7886,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@modelcontextprotocol/sdk@1.17.5':
+    dependencies:
+      ajv: 6.12.6
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.5
+      express: 5.1.0
+      express-rate-limit: 7.5.1(express@5.1.0)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.0
+      zod: 3.25.76
+      zod-to-json-schema: 3.24.6(zod@3.25.76)
+    transitivePeerDependencies:
+      - supports-color
+
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -10441,9 +10462,9 @@ snapshots:
 
   fast-uri@3.0.6: {}
 
-  fastify-mcp@2.0.3:
+  fastify-mcp@2.0.7:
     dependencies:
-      '@modelcontextprotocol/sdk': 1.17.3
+      '@modelcontextprotocol/sdk': 1.17.5
       fastify: 5.5.0
     transitivePeerDependencies:
       - supports-color

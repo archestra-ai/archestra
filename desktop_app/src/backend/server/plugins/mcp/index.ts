@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import McpServerModel from '@backend/models/mcpServer';
 import MemoryModel from '@backend/models/memory';
+import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
 
 export const createArchestraMcpServer = () => {
@@ -36,7 +37,13 @@ export const createArchestraMcpServer = () => {
     }
   });
 
-  archestraMcpServer.tool('install_mcp_server', 'Install an MCP server', { id: z.string() }, async ({ id }) => {
+  archestraMcpServer.tool(
+    'install_mcp_server', 
+    'Install an MCP server', 
+    z.object({
+      id: z.string().describe('The ID of the MCP server to install')
+    }), 
+    async ({ id }) => {
     try {
       const server = await McpServerModel.getById(id);
       if (!server) {
@@ -70,7 +77,13 @@ export const createArchestraMcpServer = () => {
     }
   });
 
-  archestraMcpServer.tool('uninstall_mcp_server', 'Uninstall an MCP server', { id: z.string() }, async ({ id }) => {
+  archestraMcpServer.tool(
+    'uninstall_mcp_server', 
+    'Uninstall an MCP server', 
+    z.object({
+      id: z.string().describe('The ID of the MCP server to uninstall')
+    }), 
+    async ({ id }) => {
     try {
       await McpServerModel.uninstallMcpServer(id);
 
@@ -96,6 +109,7 @@ export const createArchestraMcpServer = () => {
 
   // Memory CRUD tools
   archestraMcpServer.tool('list_memories', 'List all stored memory entries with their names and values', async () => {
+    log.info('list_memories called');
     try {
       const memories = await MemoryModel.getAllMemories();
       if (memories.length === 0) {
@@ -133,7 +147,9 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'get_memory',
     'Get a specific memory value by its name',
-    { name: z.string().describe('The name of the memory to retrieve') },
+    z.object({
+      name: z.string().describe('The name of the memory to retrieve')
+    }),
     async ({ name }) => {
       try {
         const memory = await MemoryModel.getMemory(name);
@@ -172,11 +188,19 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'set_memory',
     'Set or update a memory entry with a specific name and value',
-    {
+    z.object({
       name: z.string().describe('The name/key for the memory entry'),
-      value: z.string().describe('The value/content to store'),
-    },
-    async ({ name, value }) => {
+      value: z.string().describe('The value/content to store')
+    }),
+    async (args, context) => {
+      log.info('set_memory - args:', args);
+      log.info('set_memory - context:', context);
+      log.info('set_memory - arguments:', arguments);
+      log.info('set_memory - arguments.length:', arguments.length);
+      
+      const { name, value } = args || {};
+      log.info('set_memory - destructured:', { name, value });
+      
       try {
         // Validation
         if (!name || !name.trim()) {
@@ -219,6 +243,7 @@ export const createArchestraMcpServer = () => {
           ],
         };
       } catch (error) {
+        log.error('Error in set_memory tool:', error);
         return {
           content: [
             {
@@ -234,7 +259,9 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'delete_memory',
     'Delete a specific memory entry by name',
-    { name: z.string().describe('The name of the memory to delete') },
+    z.object({
+      name: z.string().describe('The name of the memory to delete')
+    }),
     async ({ name }) => {
       try {
         const deleted = await MemoryModel.deleteMemory(name);
@@ -281,11 +308,11 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.tool(
     'search_mcp_servers',
     'Search for MCP servers in the catalog',
-    {
+    z.object({
       query: z.string().optional().describe('Search query to find specific MCP servers'),
       category: z.string().optional().describe('Filter by category (e.g., "ai", "data", "productivity")'),
-      limit: z.number().int().positive().default(10).optional().describe('Number of results to return'),
-    },
+      limit: z.number().int().positive().default(10).optional().describe('Number of results to return')
+    }),
     async ({ query, category, limit }) => {
       try {
         // Search the catalog
@@ -372,12 +399,15 @@ export const createArchestraMcpServer = () => {
 };
 
 const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
+  log.info('Registering Archestra MCP server plugin...');
+  
   await fastify.register(streamableHttp, {
     stateful: false,
     mcpEndpoint: '/mcp',
     createServer: createArchestraMcpServer,
   });
 
+  log.info('Archestra MCP server plugin registered successfully');
   fastify.log.info(`Archestra MCP server plugin registered`);
 };
 

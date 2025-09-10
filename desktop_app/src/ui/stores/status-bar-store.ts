@@ -48,7 +48,6 @@ export const useStatusBarStore = create<StatusBarState>()(
           // If task doesn't exist, create it
           newTasks.set(id, { id, ...updates, timestamp: Date.now() } as StatusTask);
         }
-        console.log('Updated tasks map:', Array.from(newTasks.values()));
         return { tasks: newTasks };
       });
     },
@@ -95,8 +94,6 @@ export const useStatusBarStore = create<StatusBarState>()(
     },
 
     setChatInference: (chatId, title, isActive = true) => {
-      console.log('setChatInference called:', chatId, title, isActive);
-
       if (isActive && chatId) {
         // Starting inference for a chat
         const taskId = `chat-${chatId}`;
@@ -108,7 +105,6 @@ export const useStatusBarStore = create<StatusBarState>()(
           status: 'active' as const,
           timestamp: Date.now(),
         };
-        console.log('Adding/updating chat task:', task);
         set({ activeInferenceId: chatId });
         get().updateTask(taskId, task);
       } else if (!isActive && chatId) {
@@ -116,7 +112,6 @@ export const useStatusBarStore = create<StatusBarState>()(
         const taskId = `chat-${chatId}`;
         const task = get().tasks.get(taskId);
         if (task && get().activeInferenceId === chatId) {
-          console.log('Marking chat task as completed');
           set({ activeInferenceId: null });
           get().updateTask(taskId, { status: 'completed' });
           setTimeout(() => get().removeTask(taskId), 2000);
@@ -130,7 +125,6 @@ export const useStatusBarStore = create<StatusBarState>()(
 const setupWebSocketSubscriptions = () => {
   websocketService.subscribe('sandbox-status-update', ({ payload }) => {
     const store = useStatusBarStore.getState();
-    console.log('Sandbox status update:', payload);
 
     // Handle overall sandbox status
     if (payload.status) {

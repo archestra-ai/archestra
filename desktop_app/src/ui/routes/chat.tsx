@@ -120,16 +120,6 @@ function ChatPage() {
 
   // Track inference in StatusBar
   useEffect(() => {
-    console.log(
-      'Chat status:',
-      status,
-      'isSubmitting:',
-      isSubmitting,
-      'sessionId:',
-      currentChatSessionId,
-      'title:',
-      currentChatTitle
-    );
     if (status === 'streaming' || isSubmitting) {
       setChatInference(currentChatSessionId, currentChatTitle, true);
     } else if (status === 'ready' || status === 'error') {

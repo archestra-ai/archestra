@@ -46,6 +46,7 @@ export type OAuthServerConfigInput = {
   generic_oauth?: boolean;
   token_endpoint?: string;
   access_token_env_var?: string;
+  requires_proxy?: boolean;
 };
 
 export type ToolAnalysisResultInput = {
@@ -236,7 +237,7 @@ export type McpRequestLogStatsInput = {
 export type McpRequestLogFilterStatusInput = 'HTTP 200' | 'HTTP 40x' | 'HTTP 50x';
 
 export type McpServerConfigInput = {
-  command: string;
+  command?: string;
   args?: Array<string>;
   env?: {
     [key: string]: string;
@@ -244,6 +245,20 @@ export type McpServerConfigInput = {
   inject_file?: {
     [key: string]: string;
   };
+  type?: string;
+  entry_point?: string;
+  mcp_config?: unknown;
+  [key: string]:
+    | unknown
+    | string
+    | Array<string>
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 export type McpServerUserConfigValuesInput = {
@@ -450,6 +465,7 @@ export type OAuthServerConfig = {
   generic_oauth?: boolean;
   token_endpoint?: string;
   access_token_env_var?: string;
+  requires_proxy?: boolean;
 };
 
 export type ToolAnalysisResult = {
@@ -640,7 +656,7 @@ export type McpRequestLogStats = {
 export type McpRequestLogFilterStatus = 'HTTP 200' | 'HTTP 40x' | 'HTTP 50x';
 
 export type McpServerConfig = {
-  command: string;
+  command?: string;
   args?: Array<string>;
   env?: {
     [key: string]: string;
@@ -648,6 +664,20 @@ export type McpServerConfig = {
   inject_file?: {
     [key: string]: string;
   };
+  type?: string;
+  entry_point?: string;
+  mcp_config?: unknown;
+  [key: string]:
+    | unknown
+    | string
+    | Array<string>
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 export type McpServerUserConfigValues = {
@@ -1539,6 +1569,45 @@ export type UpdateMemoryResponses = {
 };
 
 export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
+
+export type StoreOAuthCodeData = {
+  body: {
+    state: string;
+    code: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/oauth/store-code';
+};
+
+export type StoreOAuthCodeErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type StoreOAuthCodeError = StoreOAuthCodeErrors[keyof StoreOAuthCodeErrors];
+
+export type StoreOAuthCodeResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type StoreOAuthCodeResponse = StoreOAuthCodeResponses[keyof StoreOAuthCodeResponses];
 
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;

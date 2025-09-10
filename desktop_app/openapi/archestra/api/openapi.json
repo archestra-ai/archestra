@@ -142,6 +142,9 @@
           },
           "access_token_env_var": {
             "type": "string"
+          },
+          "requires_proxy": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -932,10 +935,16 @@
             "additionalProperties": {
               "type": "string"
             }
-          }
+          },
+          "type": {
+            "type": "string"
+          },
+          "entry_point": {
+            "type": "string"
+          },
+          "mcp_config": {}
         },
-        "required": ["command"],
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "McpServerUserConfigValuesInput": {
         "type": "object",
@@ -1507,6 +1516,9 @@
           },
           "access_token_env_var": {
             "type": "string"
+          },
+          "requires_proxy": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -2320,10 +2332,16 @@
             "additionalProperties": {
               "type": "string"
             }
-          }
+          },
+          "type": {
+            "type": "string"
+          },
+          "entry_point": {
+            "type": "string"
+          },
+          "mcp_config": {}
         },
-        "required": ["command"],
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "McpServerUserConfigValues": {
         "type": "object",
@@ -4122,6 +4140,90 @@
                     }
                   },
                   "required": ["success"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oauth/store-code": {
+      "post": {
+        "operationId": "storeOAuthCode",
+        "tags": ["OAuth"],
+        "description": "Store OAuth authorization code from deep link callback (internal API)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["state", "code"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["success", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }

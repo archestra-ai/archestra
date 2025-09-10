@@ -1,6 +1,6 @@
 /**
  * OAuth API Routes
- * 
+ *
  * Handles cross-process communication for OAuth authorization codes
  * between main process (deep link handler) and backend server (OAuth flow)
  */
@@ -44,14 +44,14 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body }, reply) => {
       try {
         const { state, code } = body;
-        
+
         log.info('📨 Received authorization code storage request from main process');
         log.info(`📋 State: ${state.substring(0, 10)}...`);
         log.info(`🔐 Code: ${code.substring(0, 20)}...`);
-        
+
         // Store the authorization code using the existing function
         storeAuthorizationCode(state, code);
-        
+
         return reply.send({
           success: true,
           message: 'Authorization code stored successfully',

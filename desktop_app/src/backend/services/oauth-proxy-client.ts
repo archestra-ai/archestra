@@ -1,10 +1,9 @@
 /**
  * OAuth Proxy Client Service
- * 
+ *
  * Handles communication with the oauth-proxy server to securely exchange tokens
  * without exposing client secrets in the desktop application.
  */
-
 import log from '@backend/utils/logger';
 
 export interface OAuthTokens {
@@ -54,9 +53,9 @@ export class OAuthProxyClient {
     try {
       const response = await fetch(proxyUrl, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(30000),
@@ -71,10 +70,11 @@ export class OAuthProxyClient {
       const tokens = await response.json();
       log.info(`Generic OAuth token exchange successful via oauth-proxy for MCP server: ${mcpServerId}`);
       return tokens;
-
     } catch (error) {
       log.error(`Generic OAuth proxy token exchange error for ${mcpServerId}:`, error);
-      throw new Error(`Generic OAuth proxy token exchange failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Generic OAuth proxy token exchange failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -103,9 +103,9 @@ export class OAuthProxyClient {
     try {
       const response = await fetch(proxyUrl, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         body: JSON.stringify(requestBody),
         // Add timeout for safety
@@ -121,7 +121,6 @@ export class OAuthProxyClient {
       const tokens = await response.json();
       log.info(`Token exchange successful via oauth-proxy for MCP server: ${mcpServerId}`);
       return tokens;
-
     } catch (error) {
       log.error(`OAuth proxy token exchange error for ${mcpServerId}:`, error);
       throw new Error(`OAuth proxy token exchange failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -131,11 +130,7 @@ export class OAuthProxyClient {
   /**
    * Revoke tokens via oauth-proxy
    */
-  async revokeTokens(
-    mcpServerId: string,
-    revocationEndpoint: string,
-    token: string
-  ): Promise<void> {
+  async revokeTokens(mcpServerId: string, revocationEndpoint: string, token: string): Promise<void> {
     if (!revocationEndpoint) {
       log.info(`No revocation endpoint provided for MCP server ${mcpServerId}, skipping revocation`);
       return;
@@ -146,9 +141,9 @@ export class OAuthProxyClient {
     try {
       const response = await fetch(`${this.baseUrl}/oauth/revoke`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         body: JSON.stringify({
           mcp_server_id: mcpServerId,
@@ -167,7 +162,6 @@ export class OAuthProxyClient {
       }
 
       log.info(`Token revocation successful via oauth-proxy for MCP server: ${mcpServerId}`);
-
     } catch (error) {
       log.warn(`Token revocation error (non-critical) for ${mcpServerId}:`, error);
       // Don't throw error for revocation failures - they're not critical
@@ -206,7 +200,6 @@ export class OAuthProxyClient {
 
       const data = await response.json();
       return data.allowedDestinations || [];
-
     } catch (error) {
       log.warn(`Failed to get allowed destinations from oauth-proxy:`, error);
       return [];

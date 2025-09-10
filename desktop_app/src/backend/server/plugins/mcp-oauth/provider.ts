@@ -43,7 +43,11 @@ export function storeAuthorizationCode(state: string, code: string): void {
   log.info(`🔐 Code (first 20 chars): ${code.substring(0, 20)}...`);
   authCodeStore.set(state, code);
   log.info(`📊 AuthCodeStore size after storage: ${authCodeStore.size}`);
-  log.info(`🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys()).map(k => k.substring(0, 10) + '...').join(', ')}`);
+  log.info(
+    `🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+      .map((k) => k.substring(0, 10) + '...')
+      .join(', ')}`
+  );
 }
 
 /**
@@ -164,8 +168,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
       const clientInfo: OAuthClientInformation = {
         client_id: this.config.client_id,
         // Use REDACTED for providers that require oauth-proxy
-        ...(this.config.client_secret && { 
-          client_secret: this.config.requires_proxy ? 'REDACTED' : this.config.client_secret 
+        ...(this.config.client_secret && {
+          client_secret: this.config.requires_proxy ? 'REDACTED' : this.config.client_secret,
         }),
       };
       return clientInfo;
@@ -266,13 +270,13 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // Check if using OAuth proxy
     if (this.config.requires_proxy) {
       log.info('📡 Using OAuth proxy - will wait for deep link callback');
-      
+
       // Extract state from auth URL to wait for callback
       const state = authUrl.searchParams.get('state');
       if (!state) {
         throw new Error('No state parameter in authorization URL');
       }
-      
+
       // Open browser directly - OAuth proxy will handle callback
       const platform = process.platform;
       const url = authUrl.toString();
@@ -286,7 +290,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
       }
 
       log.info('✅ Browser opened - waiting for OAuth proxy callback via deep link');
-      
+
       // Wait for authorization code to be stored via deep link callback
       this.authorizationCode = await this.waitForAuthorizationCode(state);
       log.info('✅ Authorization code received via proxy callback');
@@ -414,7 +418,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     log.info(`🔍 Waiting for authorization code for state: ${state.substring(0, 10)}...`);
     log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
-    log.info(`🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys()).map(k => k.substring(0, 10) + '...').join(', ')}`);
+    log.info(
+      `🗂️ AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+        .map((k) => k.substring(0, 10) + '...')
+        .join(', ')}`
+    );
 
     while (Date.now() - startTime < maxWaitTime) {
       const code = authCodeStore.get(state);
@@ -424,21 +432,26 @@ export class McpOAuthProvider implements OAuthClientProvider {
         authCodeStore.delete(state);
         return code;
       }
-      
+
       // Log periodically to show we're still waiting
       const elapsed = Date.now() - startTime;
-      if (elapsed % 5000 < pollInterval) { // Log every 5 seconds
+      if (elapsed % 5000 < pollInterval) {
+        // Log every 5 seconds
         log.info(`⏳ Still waiting for authorization code... (${Math.round(elapsed / 1000)}s elapsed)`);
         log.info(`📊 Current authCodeStore size: ${authCodeStore.size}`);
       }
-      
+
       // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
 
     log.error(`❌ Timeout waiting for authorization code for state: ${state.substring(0, 10)}...`);
     log.error(`📊 Final authCodeStore size: ${authCodeStore.size}`);
-    log.error(`🗂️ Final AuthCodeStore keys: ${Array.from(authCodeStore.keys()).map(k => k.substring(0, 10) + '...').join(', ')}`);
+    log.error(
+      `🗂️ Final AuthCodeStore keys: ${Array.from(authCodeStore.keys())
+        .map((k) => k.substring(0, 10) + '...')
+        .join(', ')}`
+    );
     throw new Error('Timeout waiting for authorization code from OAuth proxy callback');
   }
 

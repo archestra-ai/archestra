@@ -98,8 +98,8 @@ async function storeTokensWithEnvVar(
 
   if (currentServer && (config.access_token_env_var || currentServer.serverConfig.inject_file)) {
     // Create a copy of the current serverConfig, extracting mcp_config if needed
-    const baseServerConfig = currentServer.serverConfig.mcp_config 
-      ? currentServer.serverConfig.mcp_config 
+    const baseServerConfig = currentServer.serverConfig.mcp_config
+      ? currentServer.serverConfig.mcp_config
       : currentServer.serverConfig;
     const updatedServerConfig = {
       ...baseServerConfig,

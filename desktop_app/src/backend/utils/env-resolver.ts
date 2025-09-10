@@ -19,7 +19,7 @@ export function resolveEnvironmentVariables<T>(obj: T): T {
     if (obj === 'REDACTED') {
       return obj;
     }
-    
+
     // Check if string matches pattern "process.env.VARIABLE_NAME"
     const envMatch = obj.match(/^process\.env\.([A-Z_][A-Z0-9_]*)$/);
     if (envMatch) {

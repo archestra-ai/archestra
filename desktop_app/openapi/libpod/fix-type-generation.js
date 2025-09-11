@@ -9,14 +9,14 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Chemin vers vos types générés (ajustez selon votre structure)
+// Path to generated type file
 const typesFilePath = path.join(__dirname, '../../src/backend/clients/libpod/gen/types.gen.ts');
 function fixMountTypes() {
-  console.log('🔧 Correction du fichier types.gen.ts...');
+  console.log('🔧 Fixing types.gen.ts file...');
 
   if (!fs.existsSync(typesFilePath)) {
-    console.error(`❌ Le fichier ${typesFilePath} n'existe pas`);
-    console.log('Chemin recherché:', typesFilePath);
+    console.error(`❌ File ${typesFilePath} does not exist`);
+    console.log('Searched path:', typesFilePath);
     return;
   }
 
@@ -24,31 +24,50 @@ function fixMountTypes() {
     let content = fs.readFileSync(typesFilePath, 'utf8');
     let modified = false;
 
-    // Chercher et remplacer Target par Destination dans le type Mount
-    const originalContent = content;
-
-    // Pattern spécifique pour le type Mount
-    // Ajoute "Destination?: string;" après "Target?: string;" dans la définition du type Mount
-    content = content.replace(
-      /(export\s+type\s+Mount\s*=\s*{[^}]*?Target\?\s*:\s*string;)/gs,
-      '$1\n  Destination?: string; // add missing type replacing Target for podman API compatibility'
-    );
-
-    // Vérifier si une modification a été effectuée
-    if (content !== originalContent) {
+    // Add Destination after Target (without replacing Target)
+    if (content.includes('Target?: string;')) {
+      content = content.replace(
+        /(\s+Target\?\s*:\s*string;)/g,
+        '$1\n  Destination?: string; // Podman API compatibility'
+      );
       modified = true;
+    }
+
+    // Add RW after ReadOnly (without replacing ReadOnly) => not sure if useful
+    if (content.includes('ReadOnly?: boolean;')) {
+      content = content.replace(
+        /(\s+ReadOnly\?\s*:\s*boolean;)/g,
+        '$1\n  RW?: boolean; // Podman API compatibility - inverse of ReadOnly'
+      );
+      modified = true;
+      console.log('✅ Add RW?: boolean;');
+    }
+
+    if (modified) {
+      if (!content.includes('PODMAN TYPES FIXED')) {
+        const warningComment = `/**
+ * PODMAN TYPES FIXED - Added compatibility fields
+ * - Added Mount.Destination alongside Mount.Target for Podman API
+ * - Added Mount.RW alongside Mount.ReadOnly for Podman API compatibility
+ * 
+ * Usage:
+ * - Docker API: use Target and ReadOnly
+ * - Podman API: use Destination, ReadOnly or RW
+ */
+
+`;
+        // Insert the comment before the Mount type definition
+        content = content.replace(/(export\s+type\s+Mount\s*=)/, warningComment + '$1');
+      }
 
       fs.writeFileSync(typesFilePath, content);
-      console.log('✅ types.gen.ts corrigé avec succès');
-      console.log('   Mount.Target → Mount.Destination');
-    } else {
-      console.log('ℹ️  Aucune modification nécessaire (Target non trouvé ou déjà corrigé)');
+      console.log('✅ types.gen.ts corrected successfully');
     }
   } catch (error) {
-    console.error(`❌ Erreur lors de la modification:`, error.message);
+    console.error(`❌ Error while modifying:`, error.message);
   }
 }
 
 // Exécution
 fixMountTypes();
-console.log('✨ Correction terminée !');
+console.log('✨ Types modified !');

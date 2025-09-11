@@ -5058,6 +5058,7 @@ export type Mount = {
    */
   Source?: string;
   Target?: string;
+  Destination?: string; // add missing type replacing Target for podman API compatibility
   TmpfsOptions?: TmpfsOptions;
   Type?: Type;
   VolumeOptions?: VolumeOptions;

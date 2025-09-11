@@ -713,7 +713,7 @@ export default class PodmanContainer {
             mounts.push({
               Type: 'bind',
               Source: hostPath,
-              Target: target,
+              Destination: target,
               ReadOnly: readOnly,
               BindOptions: { CreateMountpoint: true },
             });
@@ -1251,7 +1251,7 @@ export default class PodmanContainer {
         createBody.mounts.push({
           Type: 'bind',
           Source: hostFilePath,
-          Target: containerFilePath,
+          Destination: containerFilePath,
           ReadOnly: true,
           BindOptions: { CreateMountpoint: true },
         });

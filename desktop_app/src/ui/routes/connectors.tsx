@@ -3,6 +3,7 @@ import { AlertCircle, Filter, Package, Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { type LocalMcpServerManifest } from '@ui/catalog_local';
+import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import AlphaDisclaimerMessage from '@ui/components/ConnectorCatalog/AlphaDisclaimerMessage';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
@@ -21,6 +22,11 @@ function ConnectorCatalogPage() {
     ArchestraMcpServerManifest | LocalMcpServerManifest | null
   >(null);
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const [oauthConfirmDialogOpen, setOauthConfirmDialogOpen] = useState(false);
+  const [pendingOAuthServer, setPendingOAuthServer] = useState<
+    ArchestraMcpServerManifest | LocalMcpServerManifest | null
+  >(null);
+  const [pendingBrowserAuth, setPendingBrowserAuth] = useState(false);
 
   const {
     connectorCatalog,
@@ -92,14 +98,38 @@ function ConnectorCatalogPage() {
   };
 
   const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
-    // For OAuth install, skip the config dialog and go straight to OAuth flow
-    await installMcpServer(mcpServer);
+    // Check if it's a Remote MCP server
+    const isRemoteMcp = !!(mcpServer as LocalMcpServerManifest).remote_url;
+
+    if (isRemoteMcp) {
+      // For Remote MCP, skip the dialog and install directly
+      await installMcpServer(mcpServer);
+    } else {
+      // Show OAuth confirmation dialog for regular OAuth
+      setPendingOAuthServer(mcpServer);
+      setPendingBrowserAuth(false);
+      setOauthConfirmDialogOpen(true);
+    }
   };
 
   const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
-    // For any server that supports browser-based authentication
-    // Directly install with browser auth flag
-    await installMcpServer(mcpServer, undefined, true);
+    // Show OAuth confirmation dialog for browser auth
+    setPendingOAuthServer(mcpServer);
+    setPendingBrowserAuth(true);
+    setOauthConfirmDialogOpen(true);
+  };
+
+  const handleOAuthConfirm = async () => {
+    if (pendingOAuthServer) {
+      await installMcpServer(pendingOAuthServer, undefined, pendingBrowserAuth);
+      setPendingOAuthServer(null);
+      setPendingBrowserAuth(false);
+    }
+  };
+
+  const handleOAuthCancel = () => {
+    setPendingOAuthServer(null);
+    setPendingBrowserAuth(false);
   };
 
   const handleInstallWithConfig = async (config: McpServerUserConfigValues) => {
@@ -246,6 +276,16 @@ function ConnectorCatalogPage() {
         open={installDialogOpen}
         onOpenChange={setInstallDialogOpen}
         onInstall={handleInstallWithConfig}
+      />
+
+      {/* Auth Confirmation Dialog */}
+      <AuthConfirmationDialog
+        open={oauthConfirmDialogOpen}
+        onOpenChange={setOauthConfirmDialogOpen}
+        serverName={pendingOAuthServer?.display_name || pendingOAuthServer?.name || ''}
+        isBrowserAuth={pendingBrowserAuth}
+        onConfirm={handleOAuthConfirm}
+        onCancel={handleOAuthCancel}
       />
     </div>
   );

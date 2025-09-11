@@ -203,21 +203,8 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
        * If OAuth is required, use the new simple oauth_install endpoint
        */
       if (requiresOAuth) {
-        // Show confirmation dialog before starting OAuth flow
-
-        const userConfirmed = window.confirm(
-          `You're about to connect ${installData?.displayName || id} to Archestra.\n\n` +
-            `This will:\n` +
-            `• Open oauth provider's authentication page in your browser\n` +
-            `• Securely store your credentials in Archestra\n\n` +
-            `Do you want to continue?`
-        );
-
-        if (!userConfirmed) {
-          console.log('User cancelled OAuth flow');
-          set({ installingMcpServerId: null });
-          return;
-        }
+        // OAuth confirmation is now handled in the UI layer
+        // The UI will only call this function after user confirms
 
         try {
           // Check if this is a generic OAuth flow

@@ -8,8 +8,17 @@ const { apiKey, apiHost } = config.posthog;
 class PostHogClient {
   private initialized = false;
 
-  initialize(): void {
-    if (this.initialized) return;
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    const appInfo = await window.electronAPI.getAppInfo();
+
+    // if (!appInfo.isPackaged) {
+    //   console.log('PostHog analytics disabled for dev (non-packaged) builds of the app');
+    //   return;
+    // }
 
     const user = useUserStore.getState().user;
 

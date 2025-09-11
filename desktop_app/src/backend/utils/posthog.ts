@@ -8,7 +8,13 @@ class PostHogBackend {
   private initialized = false;
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) {
+      return;
+      // } else if (!config.debug) {
+      //   log.info('PostHog analytics disabled for dev (non-packaged) builds of the app');
+      //   return;
+      // }
+    }
 
     try {
       const user = await UserModel.getUser();

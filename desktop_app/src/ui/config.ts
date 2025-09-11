@@ -12,7 +12,6 @@ const BASE_URL_WITH_PROTOCOL = `http://${BASE_URL}`;
 const CATALOG_URL = import.meta.env.VITE_ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
 
 export default {
-  debug: !['production', 'prod'].includes(process.env.NODE_ENV?.toLowerCase() || ''),
   archestra: {
     apiUrl: BASE_URL_WITH_PROTOCOL,
     /**

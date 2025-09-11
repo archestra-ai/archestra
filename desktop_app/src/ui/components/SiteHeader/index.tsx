@@ -14,7 +14,10 @@ export function SiteHeader() {
   const { getCurrentChatTitle, createNewChat } = useChatStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const [appVersion, setAppVersion] = useState<string>('');
+  const [appInfo, setAppInfo] = useState<{
+    version: string;
+    isPackaged: boolean;
+  } | null>(null);
   const [systemInfo, setSystemInfo] = useState<{
     platform: string;
     arch: string;
@@ -29,7 +32,7 @@ export function SiteHeader() {
   } | null>(null);
 
   useEffect(() => {
-    window.electronAPI.appVersion().then(setAppVersion);
+    window.electronAPI.getAppInfo().then(setAppInfo);
     window.electronAPI.getSystemInfo().then(setSystemInfo);
   }, []);
 
@@ -58,6 +61,9 @@ export function SiteHeader() {
     }
   }
 
+  const appVersion = appInfo?.version;
+  const appPackaged = appInfo?.isPackaged;
+
   const handleReportBug = () => {
     const issueBody = encodeURIComponent(
       `
@@ -77,6 +83,7 @@ What actually happened?
 
 **System Information:**
 - **App Version:** ${appVersion}
+- **App Packaged:** ${appPackaged ? 'Yes' : 'No'}
 - **Platform:** ${systemInfo?.platform || 'Unknown'}
 - **Architecture:** ${systemInfo?.arch || 'Unknown'}
 - **OS Version:** ${systemInfo?.osVersion || 'Unknown'}

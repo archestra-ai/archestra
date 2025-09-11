@@ -1,8 +1,14 @@
+import { app } from 'electron';
+
 const OLLAMA_SERVER_PORT = parseInt(process.env.ARCHESTRA_OLLAMA_SERVER_PORT || '54589', 10);
 const OLLAMA_GUARD_MODEL = 'llama-guard3:1b';
 const OLLAMA_GENERAL_MODEL = 'qwen3:8b';
 
-const DEBUG = !['production', 'prod'].includes(process.env.NODE_ENV?.toLowerCase() || '');
+/**
+ * NOTE: in the context of codegen, app is not available (undefined), so we default to false
+ * (also the reason why we use the ?. operator)
+ */
+const DEBUG = !app?.isPackaged;
 
 export default {
   debug: DEBUG,

@@ -20,6 +20,7 @@ import {
 import config from '@backend/config';
 import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@backend/models/mcpServer';
 import log from '@backend/utils/logger';
+import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
 
 export const PodmanContainerStateSchema = z.enum([
@@ -670,69 +671,12 @@ export default class PodmanContainer {
         createBody.command = [this.command, ...this.args];
       }
 
-      // Handle file injection if specified
-      if (this.serverConfig.inject_file) {
-        await this.injectFiles(createBody);
-      }
-      // Inject mounts from userConfigValues if provided. We expect a key named `allowed_directories`
-      // to be an array of host paths. These will be mounted into the container under /projects.
-      // If a boolean `read_only` is provided and true, mounts will be readonly.
+      // Configures volume mounts with necessary directories and files
       try {
-        const userConfigValues = this.userConfigValues;
-        log.info(
-          `Checking userConfigValues for mount configuration: allowed_directories present=${Array.isArray(userConfigValues?.allowed_directories)}, read_only=${Boolean(userConfigValues?.read_only)}`
-        );
-        if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
-          log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
-          const readOnly = Boolean(userConfigValues.read_only);
-          const mounts: Mount[] = [];
-
-          for (const hostPathRaw of userConfigValues.allowed_directories) {
-            if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
-            const hostPath = hostPathRaw.trim();
-
-            // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
-            // Check that the directory exists
-            try {
-              const stats = await fs.promises.stat(hostPath);
-              if (!stats.isDirectory()) {
-                log.warn(`Path is not a directory, skipping: ${hostPath}`);
-                continue;
-              }
-            } catch (error) {
-              log.warn(`Directory does not exist, skipping: ${hostPath}`, error);
-              continue;
-            }
-
-            const baseName = path.basename(hostPath);
-            const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
-
-            log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
-            // Use SpecGenerator Mount shape (capitalized keys)
-            mounts.push({
-              Type: 'bind',
-              Source: hostPath,
-              Destination: target,
-              ReadOnly: readOnly,
-              BindOptions: { CreateMountpoint: true },
-            });
-          }
-
-          if (mounts.length > 0) {
-            log.info(`Configuring ${mounts.length} mounts for container`);
-            // Podman SpecGenerator expects `mounts` (array of Mount) on the body
-            createBody.mounts = mounts;
-          } else {
-            log.info(`No valid mounts configured`);
-          }
-        } else {
-          log.info(
-            `No mount configuration: userConfigValues=${!!userConfigValues}, allowed_directories type=${userConfigValues?.allowed_directories ? typeof userConfigValues.allowed_directories : 'undefined'}`
-          );
-        }
+        await this.configureVolumeMounts(createBody, this.userConfigValues);
       } catch (e) {
-        log.warn('Failed to inject user-configured mounts into container create body', e);
+        log.warn('Failed to configure volume mounts into container create body', e);
+        throw e;
       }
 
       const response = await containerCreateLibpod({
@@ -1215,58 +1159,100 @@ export default class PodmanContainer {
     }
   }
 
-  /**
-   * Inject files into the container by creating temporary host files and mounting them
-   */
-  private async injectFiles(createBody: SpecGenerator): Promise<void> {
-    if (!this.serverConfig.inject_file) {
-      return;
+  private buildMount(hostPath: string, destination: string, readOnly: boolean): Mount {
+    const mount: Mount = {
+      Type: 'bind',
+      Source: hostPath,
+      Destination: destination,
+      ReadOnly: readOnly,
+      BindOptions: { CreateMountpoint: true },
+      RW: !readOnly,
+    };
+
+    return mount as Mount;
+  }
+  private async configureVolumeMounts(
+    createBody: SpecGenerator,
+    userConfigValues: McpServerUserConfigValues | null
+  ): Promise<void> {
+    const mounts: Mount[] = [];
+    if (this.serverConfig.inject_file) {
+      //  Inject files into the container by creating temporary host files and mounting them
+      log.info(
+        `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      );
+      const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+
+      try {
+        // Create temp directory
+        await fs.promises.mkdir(tempDir, { recursive: true });
+
+        // Create each file and add it as a mount
+        for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
+          const hostFilePath = path.join(tempDir, path.basename(filename));
+          const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
+
+          // Write file content to temp location
+          await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
+          log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
+
+          // Add as bind mount to container
+          mounts.push(this.buildMount(hostFilePath, containerFilePath, true));
+        }
+
+        log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
+      } catch (error) {
+        log.error(`Failed to setup file injection for ${this.containerName}:`, error);
+        // Clean up temp directory on error
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+        }
+        throw error;
+      }
     }
 
+    // Handle mounts from userConfigValues.allowed_directories
     log.info(
-      `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      `Checking userConfigValues for mount configuration: allowed_directories present=${Array.isArray(userConfigValues?.allowed_directories)}, read_only=${parseBoolean(userConfigValues?.read_only)}`
     );
+    if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+      log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
+      const readOnly = parseBoolean(userConfigValues.read_only);
+      for (const hostPathRaw of userConfigValues.allowed_directories) {
+        if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
+        const hostPath = hostPathRaw.trim();
 
-    const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+        // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
+        // Check that the directory exists
+        try {
+          const stats = await fs.promises.stat(hostPath);
+          if (!stats.isDirectory()) {
+            log.warn(`Path is not a directory, skipping: ${hostPath}`);
+            continue;
+          }
+        } catch (error) {
+          log.warn(`Directory does not exist, skipping: ${hostPath}`, error);
+          continue;
+        }
 
-    try {
-      // Create temp directory
-      await fs.promises.mkdir(tempDir, { recursive: true });
+        const baseName = path.basename(hostPath);
+        const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
 
-      // Initialize mounts array if not exists
-      if (!createBody.mounts) {
-        createBody.mounts = [];
+        log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
+        // Use SpecGenerator Mount shape (capitalized keys)
+        mounts.push(this.buildMount(hostPath, target, readOnly));
       }
-
-      // Create each file and add it as a mount
-      for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
-        const hostFilePath = path.join(tempDir, path.basename(filename));
-        const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
-
-        // Write file content to temp location
-        await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
-        log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
-
-        // Add as bind mount to container
-        createBody.mounts.push({
-          Type: 'bind',
-          Source: hostFilePath,
-          Destination: containerFilePath,
-          ReadOnly: true,
-          BindOptions: { CreateMountpoint: true },
-        });
-      }
-
-      log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
-    } catch (error) {
-      log.error(`Failed to setup file injection for ${this.containerName}:`, error);
-      // Clean up temp directory on error
-      try {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
-      }
-      throw error;
+    } else {
+      log.info(
+        `No mount configuration: userConfigValues=${!!userConfigValues}, allowed_directories type=${userConfigValues?.allowed_directories ? typeof userConfigValues.allowed_directories : 'undefined'}`
+      );
+    }
+    if (!createBody.mounts) createBody.mounts = [];
+    for (const m of mounts) {
+      createBody.mounts.push(m);
     }
   }
 }

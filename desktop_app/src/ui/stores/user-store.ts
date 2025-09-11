@@ -21,7 +21,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ loading: true });
     try {
       const { data } = await getUser();
+
       set({ user: data });
+
+      // Initialize PostHog analytics after user data is loaded
+      if (data?.collectAnalyticsData) {
+        posthogClient.initialize();
+      }
     } finally {
       set({ loading: false });
     }

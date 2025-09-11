@@ -33,7 +33,7 @@ export default {
     defaultTitle: 'New Chat',
   },
   posthog: {
-    apiKey: process.env.VITE_POSTHOG_API_KEY || 'phc_ojCQHbEMj7Bk6mYsdBdPXk0KLsF4HCzRykBOYLdMbJk',
-    apiHost: process.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com',
+    apiKey: import.meta.env.VITE_POSTHOG_API_KEY || 'phc_ojCQHbEMj7Bk6mYsdBdPXk0KLsF4HCzRykBOYLdMbJk',
+    apiHost: import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com',
   },
 };

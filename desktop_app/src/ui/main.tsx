@@ -7,6 +7,8 @@ import { useUserStore } from '@ui/stores/user-store';
 
 import App from './App';
 
+import './index.css';
+
 // Initialize Sentry early for error tracking
 sentryClient.initialize();
 

@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/electron/main';
 import { z } from 'zod';
 
 import { SelectUserSchema } from '@backend/database/schema/user';
@@ -8,6 +7,12 @@ import config from '../../config';
 
 type User = z.infer<typeof SelectUserSchema>;
 
+// Only import Sentry when not running as Node (e.g., during codegen)
+let Sentry: typeof import('@sentry/electron/main') | null = null;
+if (!process.env.ELECTRON_RUN_AS_NODE) {
+  Sentry = require('@sentry/electron/main');
+}
+
 class SentryClient {
   private initialized = false;
 
@@ -15,6 +20,11 @@ class SentryClient {
    * Initialize Sentry early for error tracking
    */
   initialize() {
+    if (!Sentry) {
+      log.info('Sentry not available (running in Node mode)');
+      return;
+    }
+
     if (this.initialized) {
       log.info('Sentry already initialized');
       return;
@@ -32,6 +42,10 @@ class SentryClient {
    * Set user context for Sentry
    */
   setUserContext(user: User) {
+    if (!Sentry) {
+      return;
+    }
+
     if (!this.initialized) {
       log.warn('Sentry not initialized, cannot set user context');
       return;
@@ -51,7 +65,7 @@ class SentryClient {
    * Clear user context from Sentry
    */
   clearUserContext() {
-    if (!this.initialized) {
+    if (!Sentry || !this.initialized) {
       return;
     }
 
@@ -63,6 +77,10 @@ class SentryClient {
    * Update telemetry collection status
    */
   updateTelemetryStatus(collectTelemetryData: boolean, user: User | null = null) {
+    if (!Sentry) {
+      return;
+    }
+
     if (!this.initialized) {
       log.warn('Sentry not initialized');
       return;

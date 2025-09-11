@@ -33,11 +33,7 @@ export {
 } from './provider-registry';
 
 // Re-export types for external use
-export type {
-  OAuthProviderDefinition,
-  OAuthProviderRegistry,
-  BrowserTokenResponse,
-} from './provider-interface';
+export type { OAuthProviderDefinition, OAuthProviderRegistry, BrowserTokenResponse } from './provider-interface';
 
 // Re-export utilities for convenience
 export {

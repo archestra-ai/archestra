@@ -47,6 +47,8 @@ export type OAuthServerConfigInput = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
 };
 
 export type ToolAnalysisResultInput = {
@@ -299,6 +301,7 @@ export type McpServerInstallInput = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogsInput = {
@@ -472,6 +475,8 @@ export type OAuthServerConfig = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
 };
 
 export type ToolAnalysisResult = {
@@ -724,6 +729,7 @@ export type McpServerInstall = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogs = {

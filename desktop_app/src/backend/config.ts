@@ -40,10 +40,6 @@ export default {
       },
     ],
   },
-  posthog: {
-    apiKey: process.env.POSTHOG_API_KEY || 'phc_ojCQHbEMj7Bk6mYsdBdPXk0KLsF4HCzRykBOYLdMbJk',
-    apiHost: process.env.POSTHOG_HOST || 'https://eu.i.posthog.com',
-  },
   sandbox: {
     baseDockerImage:
       process.env.MCP_BASE_DOCKER_IMAGE ||

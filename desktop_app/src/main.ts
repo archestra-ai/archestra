@@ -13,7 +13,6 @@ import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
 import { startFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
-import posthogBackend from '@backend/utils/posthog';
 import WebSocketServer from '@backend/websocket';
 
 import config from './config';
@@ -160,9 +159,6 @@ async function startBackendServer(): Promise<void> {
   try {
     await runDatabaseMigrations();
     await UserModel.ensureUserExists();
-
-    // Initialize PostHog analytics if user has opted in
-    await posthogBackend.initialize();
 
     // Start WebSocket and Fastify servers first so they're ready for MCP connections
     WebSocketServer.start();
@@ -405,12 +401,6 @@ if (!gotTheLock) {
 app.on('ready', async () => {
   await startBackendServer();
   createWindow();
-
-  // Track app startup
-  posthogBackend.capture('app_started', {
-    platform: process.platform,
-    version: app.getVersion(),
-  });
 
   // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
   if (process.platform === 'darwin') {

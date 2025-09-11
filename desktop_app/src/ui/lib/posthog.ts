@@ -3,7 +3,7 @@ import posthog from 'posthog-js';
 import config from '@ui/config';
 import { useUserStore } from '@ui/stores/user-store';
 
-const { apiKey, apiHost } = config.posthog;
+const { apiKey, ...posthogConfig } = config.posthog;
 
 class PostHogClient {
   private initialized = false;
@@ -15,10 +15,10 @@ class PostHogClient {
 
     const appInfo = await window.electronAPI.getAppInfo();
 
-    // if (!appInfo.isPackaged) {
-    //   console.log('PostHog analytics disabled for dev (non-packaged) builds of the app');
-    //   return;
-    // }
+    if (!appInfo.isPackaged) {
+      console.log('PostHog analytics disabled for dev (non-packaged) builds of the app');
+      return;
+    }
 
     const user = useUserStore.getState().user;
 
@@ -27,23 +27,7 @@ class PostHogClient {
       return;
     }
 
-    posthog.init(apiKey, {
-      api_host: apiHost,
-      capture_pageview: false,
-      capture_pageleave: false,
-      persistence: 'localStorage+cookie',
-      session_recording: {
-        maskAllInputs: true,
-        maskTextSelector: '[data-sensitive]',
-        maskInputOptions: {
-          password: true,
-          email: true,
-          tel: true,
-        },
-      },
-      defaults: '2025-05-24',
-      person_profiles: 'always',
-    });
+    posthog.init(apiKey, posthogConfig);
 
     if (user.uniqueId) {
       posthog.identify(user.uniqueId);

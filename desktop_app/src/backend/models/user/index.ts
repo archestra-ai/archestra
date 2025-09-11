@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import db from '@backend/database';
@@ -9,6 +10,7 @@ export const PatchUserSchema = z
   .object({
     hasCompletedOnboarding: z.boolean(),
     collectTelemetryData: z.boolean(),
+    collectAnalyticsData: z.boolean(),
   })
   .partial();
 
@@ -19,12 +21,24 @@ export default class UserModel {
 
       if (result.length === 0) {
         /**
-         * No record exists, create the default user
-         *
-         * For now, we don't need to specify any values here, as the default values are set in the schema
+         * No record exists, create the default user with a unique ID
          */
-        await db.insert(userTable).values({});
-        log.info('Created default user record');
+        await db.insert(userTable).values({
+          uniqueId: uuidv4(),
+        });
+        log.info('Created default user record with unique ID');
+      } else if (!result[0].uniqueId) {
+        /**
+         * User exists but doesn't have a uniqueId, generate one
+         *
+         * Unforunately, drizzle-kit does not currently support js/ts migration files, see:
+         * - https://orm.drizzle.team/docs/kit-custom-migrations
+         * - https://github.com/drizzle-team/drizzle-orm/discussions/2832
+         *
+         * Additionally, sqlite does not have a native way to generate a UUID, so for now, we do the "migration" here..
+         */
+        await db.update(userTable).set({ uniqueId: uuidv4() }).where(eq(userTable.id, result[0].id));
+        log.info('Added unique ID to existing user record');
       }
     } catch (error) {
       log.error('Failed to ensure user exists:', error);

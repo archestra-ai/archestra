@@ -1,3 +1,5 @@
+import { PostHogConfig } from 'posthog-js';
+
 const HOST = import.meta.env.VITE_HOST || 'localhost';
 
 // In development, use Vite's dev server port (5173) which proxies to the backend
@@ -12,7 +14,6 @@ const BASE_URL_WITH_PROTOCOL = `http://${BASE_URL}`;
 const CATALOG_URL = import.meta.env.VITE_ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
 
 export default {
-  debug: !['production', 'prod'].includes(process.env.NODE_ENV?.toLowerCase() || ''),
   archestra: {
     apiUrl: BASE_URL_WITH_PROTOCOL,
     /**
@@ -32,4 +33,20 @@ export default {
   chat: {
     defaultTitle: 'New Chat',
   },
+  posthog: {
+    apiKey: 'phc_ojCQHbEMj7Bk6mYsdBdPXk0KLsF4HCzRykBOYLdMbJk',
+    api_host: 'https://eu.i.posthog.com',
+    persistence: 'localStorage+cookie',
+    session_recording: {
+      maskAllInputs: true,
+      maskTextSelector: '[data-sensitive]',
+      maskInputOptions: {
+        password: true,
+        email: true,
+        tel: true,
+      },
+    },
+    defaults: '2025-05-24',
+    person_profiles: 'always',
+  } as Partial<PostHogConfig> & { apiKey: string },
 };

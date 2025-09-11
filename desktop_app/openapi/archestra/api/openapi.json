@@ -1426,10 +1426,24 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
           "collectTelemetryData": {
+            "type": "boolean"
+          },
+          "collectAnalyticsData": {
             "type": "boolean"
           },
           "createdAt": {
@@ -1439,7 +1453,15 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+        "required": [
+          "id",
+          "uniqueId",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "OAuthTokens": {
         "type": "object",
@@ -2898,10 +2920,24 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
           "collectTelemetryData": {
+            "type": "boolean"
+          },
+          "collectAnalyticsData": {
             "type": "boolean"
           },
           "createdAt": {
@@ -2911,7 +2947,15 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "uniqueId",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ],
         "additionalProperties": false
       }
     }
@@ -4547,6 +4591,9 @@
                     "type": "boolean"
                   },
                   "collectTelemetryData": {
+                    "type": "boolean"
+                  },
+                  "collectAnalyticsData": {
                     "type": "boolean"
                   }
                 }

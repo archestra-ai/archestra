@@ -205,8 +205,11 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
-ipcMain.handle('get-app-version', () => {
-  return app.getVersion();
+ipcMain.handle('get-app-info', () => {
+  return {
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+  };
 });
 
 ipcMain.handle(

@@ -422,8 +422,10 @@ export type SandboxActionResponseInput = {
 
 export type UserInput = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -850,8 +852,10 @@ export type SandboxActionResponse = {
 
 export type User = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1755,6 +1759,7 @@ export type UpdateUserData = {
   body?: {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
+    collectAnalyticsData?: boolean;
   };
   path?: never;
   query?: never;

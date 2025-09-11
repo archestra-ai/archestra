@@ -1,7 +1,10 @@
 declare global {
   interface Window {
     electronAPI: {
-      appVersion: () => Promise<string>;
+      getAppInfo: () => Promise<{
+        version: string;
+        isPackaged: boolean;
+      }>;
       getSystemInfo: () => Promise<{
         platform: string;
         arch: string;

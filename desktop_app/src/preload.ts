@@ -3,7 +3,7 @@
 import { IpcRendererEvent, contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  appVersion: () => ipcRenderer.invoke('get-app-version'),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 

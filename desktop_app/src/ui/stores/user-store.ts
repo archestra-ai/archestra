@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { type User, getUser, updateUser } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
 
 interface UserStore {
   user: User | null;
@@ -9,6 +10,7 @@ interface UserStore {
   fetchUser: () => Promise<void>;
   markOnboardingCompleted: () => Promise<void>;
   toggleTelemetryCollectionStatus: (collectTelemetryData: boolean) => Promise<void>;
+  toggleAnalyticsCollectionStatus: (collectAnalyticsData: boolean) => Promise<void>;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -19,7 +21,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ loading: true });
     try {
       const { data } = await getUser();
+
       set({ user: data });
+
+      // Initialize PostHog analytics after user data is loaded
+      if (data?.collectAnalyticsData) {
+        await posthogClient.initialize();
+      }
     } finally {
       set({ loading: false });
     }
@@ -36,6 +44,17 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     const { data } = await updateUser({ body: { collectTelemetryData } });
     set({ user: data });
+  },
+
+  toggleAnalyticsCollectionStatus: async (collectAnalyticsData: boolean) => {
+    const { user } = get();
+    if (!user) return;
+
+    const { data } = await updateUser({ body: { collectAnalyticsData } });
+    set({ user: data });
+
+    // Update PostHog client opt-in status
+    posthogClient.updateOptInStatus(collectAnalyticsData);
   },
 }));
 

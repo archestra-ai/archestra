@@ -30,7 +30,7 @@ export default function McpServer({
   const isUninstalling = uninstallingMcpServerId === id;
   const tools = availableTools.filter((tool) => tool.mcpServerId === id);
   const hasFetchedTools = tools.length > 0;
-  const isRemoteMcp = !!remote_url;
+  const isRemoteMcp = !!remoteUrl;
 
   const getStateIcon = (state: ConnectedMcpServer['state']) => {
     switch (state) {

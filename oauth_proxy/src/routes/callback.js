@@ -20,7 +20,7 @@ export default async function callbackRoutes(fastify) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>OAuth Callback</title>
+        <title>Ok to close this page!</title>
         <meta charset="utf-8">
         <style>
           body {

@@ -18,7 +18,7 @@ interface McpServerProps {
 }
 
 export default function McpServer({
-  mcpServer: { id, name, state, error, startupPercentage, message },
+  mcpServer: { id, name, state, error, startupPercentage, message, remoteUrl },
 }: McpServerProps) {
   const [showLogs, setShowLogs] = useState(false);
   const [showUninstallDialog, setShowUninstallDialog] = useState(false);
@@ -30,6 +30,7 @@ export default function McpServer({
   const isUninstalling = uninstallingMcpServerId === id;
   const tools = availableTools.filter((tool) => tool.mcpServerId === id);
   const hasFetchedTools = tools.length > 0;
+  const isRemoteMcp = !!remote_url;
 
   const getStateIcon = (state: ConnectedMcpServer['state']) => {
     switch (state) {
@@ -121,27 +122,27 @@ export default function McpServer({
                   {tools.length} tool
                   {tools.length !== 1 ? 's' : ''}
                 </div>
-                {state === 'running' && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 cursor-pointer"
-                      onClick={() => setShowLogs(true)}
-                      title="View container logs"
-                    >
-                      <FileText className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 cursor-pointer"
-                      onClick={() => setShowUninstallDialog(true)}
-                      title="Uninstall MCP server"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </>
+                {state === 'running' && !isRemoteMcp && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 cursor-pointer"
+                    onClick={() => setShowLogs(true)}
+                    title="View container logs"
+                  >
+                    <FileText className="h-3 w-3" />
+                  </Button>
+                )}
+                {(state === 'running' || isRemoteMcp) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 cursor-pointer"
+                    onClick={() => setShowUninstallDialog(true)}
+                    title="Uninstall MCP server"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 )}
                 <ReportIssueWithCatalogEntry catalogId={id} />
               </div>

@@ -1,1 +1,0 @@
-ALTER TABLE `user` ADD `collect_analytics_data` integer DEFAULT true NOT NULL;

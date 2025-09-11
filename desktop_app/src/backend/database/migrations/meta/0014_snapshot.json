@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d75bc6ee-7abf-4a72-913f-47b4eb28f6e8",
+  "id": "2c67cb13-0e1a-4091-93e7-384ab2bb41c3",
   "prevId": "0f993021-fbef-4ac0-8026-792ef4b3bb69",
   "tables": {
     "chats": {
@@ -685,6 +685,13 @@
           "notNull": true,
           "autoincrement": true
         },
+        "unique_id": {
+          "name": "unique_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "has_completed_onboarding": {
           "name": "has_completed_onboarding",
           "type": "integer",
@@ -726,7 +733,15 @@
           "default": "(current_timestamp)"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "user_uniqueId_unique": {
+          "name": "user_uniqueId_unique",
+          "columns": [
+            "unique_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

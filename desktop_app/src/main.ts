@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/electron/main';
 import { config as dotenvConfig } from 'dotenv';
 import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
@@ -13,6 +12,7 @@ import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
 import { startFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
+import sentryClient from '@backend/utils/sentry';
 import WebSocketServer from '@backend/websocket';
 
 import config from './config';
@@ -20,6 +20,9 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 
 // Load environment variables from .env file
 dotenvConfig();
+
+// Initialize Sentry early for error tracking
+sentryClient.initialize();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -42,17 +45,6 @@ if (process.defaultApp) {
 } else {
   app.setAsDefaultProtocolClient('archestra-ai');
 }
-
-/**
- * Configure Sentry for error monitoring, logs, session replay, and tracing
- * https://docs.sentry.io/platforms/javascript/guides/electron/#configure
- */
-Sentry.init({
-  dsn: config.sentry.dsn,
-  /**
-   * TODO: pull from User.collectTelemetryData..
-   */
-});
 
 /**
  * Enable automatic updates
@@ -158,7 +150,10 @@ async function startBackendServer(): Promise<void> {
 
   try {
     await runDatabaseMigrations();
-    await UserModel.ensureUserExists();
+    const user = await UserModel.ensureUserExists();
+
+    // Set Sentry user context now that user is available
+    sentryClient.setUserContext(user);
 
     // Start WebSocket and Fastify servers first so they're ready for MCP connections
     WebSocketServer.start();

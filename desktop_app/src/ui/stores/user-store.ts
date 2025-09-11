@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { type User, getUser, updateUser } from '@ui/lib/clients/archestra/api/gen';
+import sentryClient from '@ui/lib/sentry';
 
 interface UserStore {
   user: User | null;
@@ -37,6 +38,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     const { data } = await updateUser({ body: { collectTelemetryData } });
     set({ user: data });
+
+    // Update Sentry client telemetry status
+    sentryClient.updateTelemetryStatus(collectTelemetryData, data);
   },
 
   toggleAnalyticsCollectionStatus: async (collectAnalyticsData: boolean) => {
@@ -47,8 +51,3 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ user: data });
   },
 }));
-
-/**
- * Fetch user data on store initialization
- */
-useUserStore.getState().fetchUser();

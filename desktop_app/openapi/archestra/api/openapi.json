@@ -1432,6 +1432,9 @@
           "collectTelemetryData": {
             "type": "boolean"
           },
+          "collectAnalyticsData": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1439,7 +1442,14 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+        "required": [
+          "id",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "OAuthTokens": {
         "type": "object",
@@ -2904,6 +2914,9 @@
           "collectTelemetryData": {
             "type": "boolean"
           },
+          "collectAnalyticsData": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2911,7 +2924,14 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ],
         "additionalProperties": false
       }
     }
@@ -4547,6 +4567,9 @@
                     "type": "boolean"
                   },
                   "collectTelemetryData": {
+                    "type": "boolean"
+                  },
+                  "collectAnalyticsData": {
                     "type": "boolean"
                   }
                 }

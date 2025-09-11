@@ -4,11 +4,13 @@ import { z } from 'zod';
 import db from '@backend/database';
 import { SelectUserSchema, userTable } from '@backend/database/schema/user';
 import log from '@backend/utils/logger';
+import posthogBackend from '@backend/utils/posthog';
 
 export const PatchUserSchema = z
   .object({
     hasCompletedOnboarding: z.boolean(),
     collectTelemetryData: z.boolean(),
+    collectAnalyticsData: z.boolean(),
   })
   .partial();
 
@@ -63,6 +65,11 @@ export default class UserModel {
       /**
        * TODO: if collectTelemetryData in `updates`, update the Sentry SDK accordingly...
        */
+      
+      // Update PostHog opt-in status if collectAnalyticsData changed
+      if ('collectAnalyticsData' in updates) {
+        await posthogBackend.updateOptInStatus(updates.collectAnalyticsData as boolean);
+      }
 
       log.info('User updated successfully');
       return updatedRecord[0];

@@ -424,6 +424,7 @@ export type UserInput = {
   id: number;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -852,6 +853,7 @@ export type User = {
   id: number;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1755,6 +1757,7 @@ export type UpdateUserData = {
   body?: {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
+    collectAnalyticsData?: boolean;
   };
   path?: never;
   query?: never;

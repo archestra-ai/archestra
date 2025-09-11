@@ -6,6 +6,10 @@ export default {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
   },
+  posthog: {
+    apiKey: process.env.POSTHOG_API_KEY || 'phc_OGmvTSl1iyrlL58sj00g3ucnZ5kv4mOeGJOJKXmPFCb',
+    apiHost: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
+  },
   build: {
     updateInterval: '1 hour',
     github: {

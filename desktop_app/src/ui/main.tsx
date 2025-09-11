@@ -2,7 +2,9 @@ import * as Sentry from '@sentry/electron/renderer';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import posthogClient from '@ui/lib/posthog';
 import websocketService from '@ui/lib/websocket';
+import { useUserStore } from '@ui/stores/user-store';
 
 import config from '../config';
 import App from './App';
@@ -38,6 +40,15 @@ Sentry.init({
  * Open a single websocket connection to WebSocket server when the app is loaded
  */
 websocketService.connect().catch(console.error);
+
+/**
+ * Initialize PostHog analytics after user data is loaded
+ */
+useUserStore.subscribe((state) => {
+  if (state.user && state.user.collectAnalyticsData) {
+    posthogClient.initialize();
+  }
+});
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(

@@ -128,6 +128,7 @@
     "ollama": "^0.5.17",
     "ollama-ai-provider": "^1.2.0",
     "ollama-ai-provider-v2": "1.1.2-beta.0",
+    "posthog-js": "^1.264.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-hook-form": "^7.62.0",

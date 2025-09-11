@@ -4,7 +4,7 @@ import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'el
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
-import { updateElectronApp } from 'update-electron-app';
+import { UpdateSourceType, updateElectronApp } from 'update-electron-app';
 
 import ArchestraMcpClient from '@backend/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
@@ -59,8 +59,12 @@ Sentry.init({
  * https://github.com/electron/update-electron-app?tab=readme-ov-file#usage
  */
 updateElectronApp({
-  repo: `${config.build.github.owner}/${config.build.github.repoName}`,
+  updateSource: {
+    type: UpdateSourceType.ElectronPublicUpdateService,
+    repo: `${config.build.github.owner}/${config.build.github.repoName}`,
+  },
   updateInterval: config.build.updateInterval,
+  logger: log,
 });
 
 let mainWindow: BrowserWindow | null = null;

@@ -182,7 +182,13 @@ const forgeConfig: ForgeConfig = {
     //   description,
     //   setupIcon: './icons/icon.ico',
     // }),
-    new MakerZIP({}, ['win32']),
+
+    /**
+     * The Mac .zip is required for update-electron-app to work
+     * (see https://github.com/electron/update-electron-app?tab=readme-ov-file#what-kinds-of-assets-do-i-need-to-build)
+     */
+    new MakerZIP({}, ['win32', 'darwin']),
+
     new MakerRpm({
       options: {
         name: productName,

@@ -1426,6 +1426,17 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
@@ -1444,6 +1455,7 @@
         },
         "required": [
           "id",
+          "uniqueId",
           "hasCompletedOnboarding",
           "collectTelemetryData",
           "collectAnalyticsData",
@@ -2908,6 +2920,17 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
@@ -2926,6 +2949,7 @@
         },
         "required": [
           "id",
+          "uniqueId",
           "hasCompletedOnboarding",
           "collectTelemetryData",
           "collectAnalyticsData",

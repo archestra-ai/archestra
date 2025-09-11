@@ -1,8 +1,9 @@
 import posthog from 'posthog-js';
 
+import config from '@ui/config';
 import { useUserStore } from '@ui/stores/user-store';
 
-import config from '../../config';
+const { apiKey, apiHost } = config.posthog;
 
 class PostHogClient {
   private initialized = false;
@@ -17,8 +18,8 @@ class PostHogClient {
       return;
     }
 
-    posthog.init(config.posthog.apiKey, {
-      api_host: config.posthog.apiHost,
+    posthog.init(apiKey, {
+      api_host: apiHost,
       capture_pageview: false,
       capture_pageleave: false,
       persistence: 'localStorage+cookie',
@@ -31,10 +32,12 @@ class PostHogClient {
           tel: true,
         },
       },
+      defaults: '2025-05-24',
+      person_profiles: 'always',
     });
 
-    if (user.id) {
-      posthog.identify(`user_${user.id}`);
+    if (user.uniqueId) {
+      posthog.identify(user.uniqueId);
     }
 
     this.initialized = true;

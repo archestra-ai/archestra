@@ -1,12 +1,10 @@
-import { PostHog } from 'posthog-js';
+import posthog from 'posthog-js';
 
+import config from '@backend/config';
 import UserModel from '@backend/models/user';
 import log from '@backend/utils/logger';
 
-import config from '../../config';
-
 class PostHogBackend {
-  private posthog: PostHog | null = null;
   private initialized = false;
 
   async initialize(): Promise<void> {
@@ -20,14 +18,17 @@ class PostHogBackend {
         return;
       }
 
-      const { PostHog } = await import('posthog-js');
-      this.posthog = new PostHog(config.posthog.apiKey, {
-        host: config.posthog.apiHost,
+      posthog.init(config.posthog.apiKey, {
+        api_host: config.posthog.apiHost,
         capture_pageview: false,
         persistence: 'memory',
+        defaults: '2025-05-24',
+        person_profiles: 'always',
       });
 
-      this.posthog.identify(`user_${user.id}`);
+      if (user.uniqueId) {
+        posthog.identify(user.uniqueId);
+      }
       this.initialized = true;
 
       log.info('PostHog backend initialized successfully');
@@ -37,20 +38,19 @@ class PostHogBackend {
   }
 
   capture(event: string, properties?: Record<string, any>): void {
-    if (!this.posthog || !this.initialized) return;
+    if (!this.initialized) return;
 
     try {
-      this.posthog.capture(event, properties);
+      posthog.capture(event, properties);
     } catch (error) {
       log.error('Failed to capture PostHog event:', error);
     }
   }
 
   shutdown(): void {
-    if (this.posthog && this.initialized) {
-      this.posthog.shutdown();
+    if (this.initialized) {
+      posthog.opt_out_capturing();
       this.initialized = false;
-      this.posthog = null;
     }
   }
 

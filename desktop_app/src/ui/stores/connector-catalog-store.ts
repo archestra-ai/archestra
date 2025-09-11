@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 
 import { type LocalMcpServerManifest, localCatalogServers } from '@ui/catalog_local';
-import { getMcpServerCategories, searchMcpServerCatalog } from '@ui/lib/clients/archestra/catalog/gen';
+import {
+  type SearchMcpServerCatalogData,
+  getMcpServerCategories,
+  searchMcpServerCatalog,
+} from '@ui/lib/clients/archestra/catalog/gen';
 
 /**
  * NOTE: ideally should be divisible by 3 to make it look nice in the UI (as we tend to have 3 "columns" of servers)
@@ -62,9 +66,10 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
         errorFetchingConnectorCatalog: null,
       });
 
-      const params: any = {
+      const params: SearchMcpServerCatalogData['query'] = {
         limit: CATALOG_PAGE_SIZE,
         offset: append ? catalogOffset : 0,
+        worksInArchestra: true,
       };
 
       if (catalogSearchQuery) {
@@ -72,7 +77,7 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
       }
 
       if (catalogSelectedCategory && catalogSelectedCategory !== 'all') {
-        params.category = catalogSelectedCategory;
+        params.category = catalogSelectedCategory as NonNullable<SearchMcpServerCatalogData['query']>['category'];
       }
 
       const { data } = await searchMcpServerCatalog({ query: params });

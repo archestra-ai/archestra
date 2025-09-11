@@ -19,6 +19,7 @@ import {
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
 import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
+import { getBrowserAuthProvider, hasBrowserAuthProvider } from '@backend/server/plugins/browser-auth/provider-registry';
 import log from '@backend/utils/logger';
 
 export const McpServerInstallSchema = z.object({
@@ -51,6 +52,8 @@ export const McpServerInstallSchema = z.object({
   serverType: z.enum(['local', 'remote']).optional(),
   /** Remote URL for remote MCP servers */
   remote_url: z.string().optional(),
+  /** Archestra configuration from catalog (includes browser_based config) */
+  archestra_config: z.any().optional(),
 });
 
 // Interface for catalog search parameters
@@ -122,6 +125,7 @@ export default class McpServerModel {
     status,
     serverType,
     remote_url,
+    archestra_config,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -139,9 +143,38 @@ export default class McpServerModel {
       throw new Error(`MCP server ${id} is already installed`);
     }
 
-    // OAuth tokens are now handled directly by the MCP client transport layer
-    // No need to add tokens to environment variables - they're used for HTTP auth headers
-    let finalServerConfig = serverConfig;
+    // Handle browser authentication tokens and map them to environment variables
+    let finalServerConfig = serverConfig.mcp_config;
+    console.log('serverConfig', serverConfig);
+    console.log('archestra_config', archestra_config);
+
+    // Map browser auth tokens to environment variables
+    const providerName = archestra_config?.browser_based?.provider;
+    console.log('providerName', providerName);
+    console.log('oauthTokens', oauthTokens);
+    console.log('hasBrowserAuthProvider(providerName)', hasBrowserAuthProvider(providerName));
+    if (providerName && oauthTokens && hasBrowserAuthProvider(providerName)) {
+      const provider = getBrowserAuthProvider(providerName);
+      console.log('provider', provider);
+      const tokenMapping = provider.browserAuthConfig?.tokenMapping;
+      console.log('tokenMapping', tokenMapping);
+
+      if (tokenMapping) {
+        if (!finalServerConfig.env) {
+          finalServerConfig.env = {};
+        }
+
+        if (tokenMapping.primary && oauthTokens.access_token) {
+          finalServerConfig.env[tokenMapping.primary] = oauthTokens.access_token;
+        }
+
+        if (tokenMapping.secondary && oauthTokens.refresh_token) {
+          finalServerConfig.env[tokenMapping.secondary] = oauthTokens.refresh_token;
+        }
+
+        log.info(`Browser auth tokens mapped for provider: ${providerName}`);
+      }
+    }
 
     // OAuth validation is now handled by the frontend-provided oauthConfig
 

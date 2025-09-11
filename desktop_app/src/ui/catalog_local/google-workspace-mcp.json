@@ -18,7 +18,7 @@
     "resource_metadata_url": "https://accounts.google.com/.well-known/openid-configuration",
     "client_id": "354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com",
     "client_secret": "REDACTED",
-    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "redirect_uris": ["https://oauth.dev.archestra.ai/oauth/callback"],
     "scopes": ["openid", "email", "profile"],
     "description": "Google OAuth (OpenID Connect)",
     "well_known_url": "https://accounts.google.com/.well-known/openid-configuration",

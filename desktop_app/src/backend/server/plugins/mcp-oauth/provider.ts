@@ -33,7 +33,7 @@ const codeVerifierStore = new Map<string, string>();
  * In-memory authorization code storage for proxy OAuth flows
  * Maps state to authorization code when using OAuth proxy
  */
-const authCodeStore = new Map<string, string>();
+export const authCodeStore = new Map<string, string>();
 
 /**
  * Store authorization code from proxy OAuth callback
@@ -139,7 +139,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   get redirectUrl(): string {
-    return 'http://localhost:8080/oauth/callback';
+    return this.config.redirect_uris[0];
   }
 
   getServerId(): string {
@@ -358,13 +358,75 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
             // Success response
             res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html><body>
-                <h1>✅ Authorization Successful!</h1>
-                <p>You can close this window and return to the application.</p>
-                <script>setTimeout(() => window.close(), 2000);</script>
-              </body></html>
-            `);
+
+            // Create deeplink to the desktop app (optional fallback)
+            const deeplinkUrl = `archestra-ai://oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(url.searchParams.get('state') || '')}&service=mcp-oauth`;
+
+            const html = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>OAuth Callback</title>
+                <meta charset="utf-8">
+                <style>
+                  body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  }
+                  .container {
+                    text-align: center;
+                    background: white;
+                    padding: 40px;
+                    border-radius: 10px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                  }
+                  h1 { color: #333; }
+                  p { color: #666; margin: 20px 0; }
+                  a {
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background: #667eea;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin-top: 20px;
+                  }
+                  a:hover { background: #5a67d8; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>Authorization Successful</h1>
+                  <p>Redirecting to Archestra...</p>
+                  <p>If the app doesn't open automatically, <a id="deeplink">click here</a></p>
+                </div>
+                <script>
+                  // Safely encode the deeplink URL
+                  const deeplinkUrl = ${JSON.stringify(deeplinkUrl)};
+                  
+                  // Set the href attribute safely
+                  document.getElementById('deeplink').href = deeplinkUrl;
+                  
+                  // Try to open the deeplink
+                  try {
+                    window.location.href = deeplinkUrl;
+                  } catch (e) {
+                    console.log('Deeplink failed, user can click manually');
+                  }
+                  
+                  // Preserve existing auto-close functionality
+                  setTimeout(() => window.close(), 2000);
+                </script>
+              </body>
+              </html>
+            `;
+
+            res.end(html);
             server.close();
             resolve(code);
           } catch (parseError) {

@@ -253,9 +253,6 @@ export type McpServerConfigInput = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string
@@ -683,9 +680,6 @@ export type McpServerConfig = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string

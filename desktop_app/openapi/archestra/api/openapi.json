@@ -995,14 +995,7 @@
             "additionalProperties": {
               "type": "string"
             }
-          },
-          "type": {
-            "type": "string"
-          },
-          "entry_point": {
-            "type": "string"
-          },
-          "mcp_config": {}
+          }
         },
         "additionalProperties": {}
       },
@@ -2475,14 +2468,7 @@
             "additionalProperties": {
               "type": "string"
             }
-          },
-          "type": {
-            "type": "string"
-          },
-          "entry_point": {
-            "type": "string"
-          },
-          "mcp_config": {}
+          }
         },
         "additionalProperties": {}
       },

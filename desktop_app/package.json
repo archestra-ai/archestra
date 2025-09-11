@@ -29,9 +29,8 @@
     "test": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/vitest/dist/cli.js --config vite.main.config.ts",
     "prettier": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/prettier/bin/prettier.cjs --write .",
     "db": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/drizzle-kit/bin.cjs",
-    "fix-podman-types": "node ./openapi/libpod/fix-type-generation.js",
     "codegen:all": "pnpm codegen:libpod && pnpm codegen:archestra:api && pnpm codegen:archestra:catalog && pnpm prettier",
-    "codegen:libpod": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/libpod/openapi-ts.config.ts && npm run fix-podman-types",
+    "codegen:libpod": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/libpod/openapi-ts.config.ts && npx tsx ./openapi/libpod/fix-type-generation.ts",
     "codegen:archestra:api": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/tsx/dist/cli.mjs openapi/archestra/api/generate-openapi.ts && ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/archestra/api/openapi-ts.config.ts",
     "codegen:archestra:catalog": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/archestra/catalog/openapi-ts.config.ts"
   },

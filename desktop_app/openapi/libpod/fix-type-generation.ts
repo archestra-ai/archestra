@@ -1,7 +1,10 @@
-// There is an issue with the OpenAPI type generation with libpod swagger mixing type of Docker and PodmanAPI specs
-// Specifically, the `Mount` type uses `Target` for Docker and `Destination` for Podman, but not both
-// This file provides utility functions to convert between the two types
-// See https://github.com/archestra-ai/archestra/pull/338#issuecomment-3278579082
+/**
+ * There is an issue with the OpenAPI type generation with libpod swagger mixing type of Docker and PodmanAPI specs
+ *
+ * Specifically, the `Mount` type uses `Target` for Docker and `Destination` for Podman, but not both
+ * This file provides utility functions to convert between the two types
+ * See https://github.com/archestra-ai/archestra/pull/338#issuecomment-3278579082
+ */
 import fs from 'fs';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
@@ -49,12 +52,11 @@ function fixMountTypes() {
  * PODMAN TYPES FIXED - Added compatibility fields
  * - Added Mount.Destination alongside Mount.Target for Podman API
  * - Added Mount.RW alongside Mount.ReadOnly for Podman API compatibility
- * 
+ *
  * Usage:
  * - Docker API: use Target and ReadOnly
  * - Podman API: use Destination, ReadOnly or RW
  */
-
 `;
         // Insert the comment before the Mount type definition
         content = content.replace(/(export\s+type\s+Mount\s*=)/, warningComment + '$1');
@@ -68,6 +70,5 @@ function fixMountTypes() {
   }
 }
 
-// Exécution
 fixMountTypes();
 console.log('✨ Types modified !');

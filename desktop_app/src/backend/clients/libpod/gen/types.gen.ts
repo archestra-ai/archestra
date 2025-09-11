@@ -5050,12 +5050,11 @@ export type Metadata = {
  * PODMAN TYPES FIXED - Added compatibility fields
  * - Added Mount.Destination alongside Mount.Target for Podman API
  * - Added Mount.RW alongside Mount.ReadOnly for Podman API compatibility
- * 
+ *
  * Usage:
  * - Docker API: use Target and ReadOnly
- * - Podman API: can use Target or Destination, ReadOnly or RW
+ * - Podman API: use Destination, ReadOnly or RW
  */
-
 export type Mount = {
   BindOptions?: BindOptions;
   ClusterOptions?: ClusterOptions;

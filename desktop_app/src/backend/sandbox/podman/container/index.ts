@@ -1160,7 +1160,7 @@ export default class PodmanContainer {
   }
 
   private buildMount(hostPath: string, destination: string, readOnly: boolean): Mount {
-    const mount: Mount = {
+    return {
       Type: 'bind',
       Source: hostPath,
       Destination: destination,
@@ -1168,9 +1168,8 @@ export default class PodmanContainer {
       BindOptions: { CreateMountpoint: true },
       RW: !readOnly,
     };
-
-    return mount as Mount;
   }
+
   private async configureVolumeMounts(
     createBody: SpecGenerator,
     userConfigValues: McpServerUserConfigValues | null

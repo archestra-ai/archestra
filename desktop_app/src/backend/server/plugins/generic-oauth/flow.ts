@@ -12,7 +12,7 @@ import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider
-import { authCodeStore, storeAuthorizationCode } from '../mcp-oauth/provider';
+import { authCodeStore } from '../mcp-oauth/provider';
 
 export interface GenericOAuthTokens {
   access_token: string;
@@ -153,7 +153,7 @@ async function storeTokensWithEnvVar(
     // Update environment variables if access_token_env_var is specified
     if (config.access_token_env_var) {
       updatedServerConfig.env = {
-        ...currentServer.serverConfig.mcp_config?.env,
+        ...currentServer.serverConfig.env,
         [config.access_token_env_var]: tokens.access_token,
       };
     }

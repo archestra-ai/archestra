@@ -144,20 +144,14 @@ export default class McpServerModel {
     }
 
     // Handle browser authentication tokens and map them to environment variables
-    let finalServerConfig = serverConfig.mcp_config;
-    console.log('serverConfig', serverConfig);
-    console.log('archestra_config', archestra_config);
+    let finalServerConfig = serverConfig;
 
     // Map browser auth tokens to environment variables
     const providerName = archestra_config?.browser_based?.provider;
-    console.log('providerName', providerName);
-    console.log('oauthTokens', oauthTokens);
-    console.log('hasBrowserAuthProvider(providerName)', hasBrowserAuthProvider(providerName));
+
     if (providerName && oauthTokens && hasBrowserAuthProvider(providerName)) {
       const provider = getBrowserAuthProvider(providerName);
-      console.log('provider', provider);
       const tokenMapping = provider.browserAuthConfig?.tokenMapping;
-      console.log('tokenMapping', tokenMapping);
 
       if (tokenMapping) {
         if (!finalServerConfig.env) {
@@ -229,44 +223,6 @@ export default class McpServerModel {
 
     // Sync all connected external MCP clients after uninstalling
     await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
-  }
-
-  /**
-   * Search the MCP server catalog
-   * This method acts as a proxy to the external catalog API
-   */
-  static async searchCatalog(params: CatalogSearchParams) {
-    // Get the catalog URL from environment or use default
-    const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
-
-    // Build query string
-    const queryParams = new URLSearchParams();
-    if (params.q) queryParams.append('q', params.q);
-    if (params.category) queryParams.append('category', params.category);
-    if (params.limit) queryParams.append('limit', params.limit.toString());
-    if (params.offset) queryParams.append('offset', params.offset.toString());
-
-    const url = `${catalogUrl}/search?${queryParams.toString()}`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Archestra-Desktop/1.0',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Catalog API returned ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      log.error('Failed to fetch from catalog API:', error);
-      throw error;
-    }
   }
 }
 

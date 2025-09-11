@@ -388,10 +388,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Create placeholder MCP server record with oauth_pending status
         // This allows OAuth provider to save client info during the flow
-        const placeholderServer = await McpServerModel.create({
+        await McpServerModel.create({
           id: serverId,
           name: installData.displayName,
-          serverConfig: installData.serverConfig.mcp_config || installData.serverConfig,
+          serverConfig: installData.serverConfig,
           userConfigValues: installData.userConfigValues || null,
           serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
           remoteUrl: remoteUrl, // Store remote_url in separate column

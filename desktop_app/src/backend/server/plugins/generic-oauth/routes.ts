@@ -28,7 +28,7 @@ async function handleGenericOAuthInstall(
     const placeholderServer = await McpServerModel.create({
       id: serverId,
       name: installData.displayName,
-      serverConfig: installData.serverConfig.mcp_config || installData.serverConfig,
+      serverConfig: installData.serverConfig,
       userConfigValues: installData.userConfigValues || null,
       serverType: installData.serverType || 'local',
       remoteUrl: installData.remote_url || null,

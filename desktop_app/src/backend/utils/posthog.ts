@@ -14,7 +14,7 @@ class PostHogBackend {
 
     try {
       const user = await UserModel.getUser();
-      
+
       if (!user.collectAnalyticsData) {
         log.info('PostHog analytics disabled by user preference');
         return;
@@ -29,7 +29,7 @@ class PostHogBackend {
 
       this.posthog.identify(`user_${user.id}`);
       this.initialized = true;
-      
+
       log.info('PostHog backend initialized successfully');
     } catch (error) {
       log.error('Failed to initialize PostHog backend:', error);
@@ -38,7 +38,7 @@ class PostHogBackend {
 
   capture(event: string, properties?: Record<string, any>): void {
     if (!this.posthog || !this.initialized) return;
-    
+
     try {
       this.posthog.capture(event, properties);
     } catch (error) {

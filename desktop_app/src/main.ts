@@ -402,7 +402,7 @@ if (!gotTheLock) {
 app.on('ready', async () => {
   await startBackendServer();
   createWindow();
-  
+
   // Track app startup
   posthogBackend.capture('app_started', {
     platform: process.platform,

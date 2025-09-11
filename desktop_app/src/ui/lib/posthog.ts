@@ -11,7 +11,7 @@ class PostHogClient {
     if (this.initialized) return;
 
     const user = useUserStore.getState().user;
-    
+
     if (!user?.collectAnalyticsData) {
       console.log('PostHog analytics disabled by user preference');
       return;
@@ -43,7 +43,7 @@ class PostHogClient {
 
   capture(event: string, properties?: Record<string, any>): void {
     if (!this.initialized) return;
-    
+
     try {
       posthog.capture(event, properties);
     } catch (error) {

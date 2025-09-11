@@ -46,7 +46,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     const { data } = await updateUser({ body: { collectAnalyticsData } });
     set({ user: data });
-    
+
     // Update PostHog client opt-in status
     posthogClient.updateOptInStatus(collectAnalyticsData);
   },

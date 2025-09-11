@@ -65,7 +65,7 @@ export default class UserModel {
       /**
        * TODO: if collectTelemetryData in `updates`, update the Sentry SDK accordingly...
        */
-      
+
       // Update PostHog opt-in status if collectAnalyticsData changed
       if ('collectAnalyticsData' in updates) {
         await posthogBackend.updateOptInStatus(updates.collectAnalyticsData as boolean);

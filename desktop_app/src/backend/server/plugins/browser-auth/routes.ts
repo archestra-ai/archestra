@@ -1,8 +1,8 @@
 /**
- * OAuth API Routes
+ * Browser Authentication API Routes
  *
- * Handles cross-process communication for OAuth authorization codes
- * between main process (deep link handler) and backend server (OAuth flow)
+ * Handles cross-process communication for browser authentication
+ * between main process and backend server
  */
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';

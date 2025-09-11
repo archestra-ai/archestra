@@ -1,29 +1,34 @@
 /**
- * OAuth Plugin Index
+ * Browser Authentication Plugin Index
  *
- * Main export for OAuth routes plugin and browser authentication functionality
+ * Main export for browser authentication routes and functionality
  */
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 
-import oauthRoutes from './routes';
+import browserAuthRoutes from './routes';
 
 /**
- * OAuth Plugin
+ * Browser Authentication Plugin
  *
- * This plugin handles all OAuth-related functionality including:
- * - OAuth route handlers for MCP OAuth compatibility
+ * This plugin handles browser-based authentication functionality including:
+ * - Browser authentication route handlers
  * - Browser-based authentication providers
  * - Token extraction and management
  */
-const oauthPlugin: FastifyPluginAsyncZod = async (fastify) => {
-  // Register OAuth routes
-  await fastify.register(oauthRoutes);
+const browserAuthPlugin: FastifyPluginAsyncZod = async (fastify) => {
+  // Register browser authentication routes
+  await fastify.register(browserAuthRoutes);
 };
 
-export default oauthPlugin;
+export default browserAuthPlugin;
 
 // Re-export database-free functions from provider-registry
 export {
+  getBrowserAuthProvider,
+  hasBrowserAuthProvider,
+  getBrowserAuthProviderNames,
+  browserAuthProviders,
+  // Legacy exports for backwards compatibility
   getOAuthProvider,
   hasOAuthProvider,
   getOAuthProviderNames,
@@ -34,9 +39,12 @@ export {
 
 // Re-export types for external use
 export type {
-  OAuthProviderDefinition,
-  OAuthProviderRegistry,
+  BrowserAuthProviderDefinition,
+  BrowserAuthProviderRegistry,
   BrowserTokenResponse,
+  // Legacy types for backwards compatibility
+  BrowserAuthProviderDefinition as OAuthProviderDefinition,
+  BrowserAuthProviderRegistry as OAuthProviderRegistry,
 } from './provider-interface';
 
 // Re-export utilities for convenience

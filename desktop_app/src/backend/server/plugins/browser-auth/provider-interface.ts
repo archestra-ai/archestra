@@ -1,7 +1,7 @@
 /**
- * OAuth Provider Interface Definitions
+ * Browser Authentication Provider Interface Definitions
  *
- * This file defines the TypeScript interfaces for browser-based OAuth provider configuration.
+ * This file defines the TypeScript interfaces for browser-based authentication provider configuration.
  * These providers extract tokens directly from authenticated browser sessions.
  */
 
@@ -21,9 +21,9 @@ export interface BrowserTokenResponse {
 }
 
 /**
- * OAuth provider definition for browser-based authentication
+ * Browser authentication provider definition
  */
-export interface OAuthProviderDefinition {
+export interface BrowserAuthProviderDefinition {
   /** Provider name (lowercase, no spaces) */
   name: string;
 
@@ -76,6 +76,6 @@ export interface OAuthProviderDefinition {
 }
 
 /**
- * Registry of all OAuth providers
+ * Registry of all browser authentication providers
  */
-export type OAuthProviderRegistry = Record<string, OAuthProviderDefinition>;
+export type BrowserAuthProviderRegistry = Record<string, BrowserAuthProviderDefinition>;

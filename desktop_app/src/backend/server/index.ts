@@ -3,6 +3,7 @@ import fastify from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 
 import config from '@backend/config';
+import browserAuthRoutes from '@backend/server/plugins/browser-auth';
 import chatRoutes from '@backend/server/plugins/chat';
 import cloudProviderRoutes from '@backend/server/plugins/cloudProviders';
 import externalMcpClientRoutes from '@backend/server/plugins/externalMcpClient';
@@ -12,7 +13,6 @@ import archestraMcpServerPlugin from '@backend/server/plugins/mcp';
 import mcpRequestLogRoutes from '@backend/server/plugins/mcpRequestLog';
 import mcpServerRoutes from '@backend/server/plugins/mcpServer';
 import memoryRoutes from '@backend/server/plugins/memory';
-import oauthRoutes from '@backend/server/plugins/oauth';
 // OAuth functionality now integrated into MCP system via mcp-oauth plugin
 import ollamaDownloadRoutes from '@backend/server/plugins/ollama/download';
 import ollamaMetadataRoutes from '@backend/server/plugins/ollama/metadata';
@@ -60,7 +60,7 @@ export const startFastifyServer = async () => {
   await app.register(mcpRequestLogRoutes);
   await app.register(mcpServerRoutes);
   await app.register(memoryRoutes);
-  await app.register(oauthRoutes);
+  await app.register(browserAuthRoutes);
   await app.register(ollamaMetadataRoutes);
   await app.register(ollamaDownloadRoutes);
   await app.register(ollamaProxyRoutes);

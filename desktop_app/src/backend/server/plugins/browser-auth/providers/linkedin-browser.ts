@@ -1,11 +1,11 @@
-import { OAuthProviderDefinition } from '../provider-interface';
+import { BrowserAuthProviderDefinition } from '../provider-interface';
 import {
   buildLinkedInTokenExtractionScript,
   isLinkedInAuthenticatedPage,
   isLinkedInLoginPage,
 } from '../utils/linkedin-token-extractor';
 
-export const linkedinBrowserProvider: OAuthProviderDefinition = {
+export const linkedinBrowserProvider: BrowserAuthProviderDefinition = {
   name: 'linkedin-browser',
 
   // Browser-based authentication configuration

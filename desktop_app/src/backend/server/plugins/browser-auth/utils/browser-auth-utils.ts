@@ -7,14 +7,14 @@ import { BrowserWindow } from 'electron';
 
 import log from '@backend/utils/logger';
 
-import { BrowserTokenResponse, OAuthProviderDefinition } from '../provider-interface';
+import { BrowserAuthProviderDefinition, BrowserTokenResponse } from '../provider-interface';
 
 /**
  * Token extraction handler configuration
  */
 interface TokenExtractionConfig {
   window: BrowserWindow;
-  provider: OAuthProviderDefinition;
+  provider: BrowserAuthProviderDefinition;
   getWorkspaceId: () => string | null;
   onSuccess: (tokens: BrowserTokenResponse) => void;
 }

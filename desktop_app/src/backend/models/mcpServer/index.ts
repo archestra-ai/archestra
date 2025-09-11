@@ -19,7 +19,7 @@ import {
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
 import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
-import { getOAuthProvider, hasOAuthProvider } from '@backend/server/plugins/oauth/provider-registry';
+import { getBrowserAuthProvider, hasBrowserAuthProvider } from '@backend/server/plugins/browser-auth/provider-registry';
 import log from '@backend/utils/logger';
 
 export const McpServerInstallSchema = z.object({
@@ -152,9 +152,9 @@ export default class McpServerModel {
     const providerName = archestra_config?.browser_based?.provider;
     console.log('providerName', providerName);
     console.log('oauthTokens', oauthTokens);
-    console.log('hasOAuthProvider(providerName)', hasOAuthProvider(providerName));
-    if (providerName && oauthTokens && hasOAuthProvider(providerName)) {
-      const provider = getOAuthProvider(providerName);
+    console.log('hasBrowserAuthProvider(providerName)', hasBrowserAuthProvider(providerName));
+    if (providerName && oauthTokens && hasBrowserAuthProvider(providerName)) {
+      const provider = getBrowserAuthProvider(providerName);
       console.log('provider', provider);
       const tokenMapping = provider.browserAuthConfig?.tokenMapping;
       console.log('tokenMapping', tokenMapping);

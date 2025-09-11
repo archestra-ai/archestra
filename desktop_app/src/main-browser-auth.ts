@@ -6,13 +6,19 @@
  */
 import { BrowserWindow, ipcMain } from 'electron';
 
-import { BrowserTokenResponse, OAuthProviderDefinition } from './backend/server/plugins/oauth/provider-interface';
-import { getOAuthProvider, hasOAuthProvider } from './backend/server/plugins/oauth/provider-registry';
+import {
+  BrowserAuthProviderDefinition,
+  BrowserTokenResponse,
+} from './backend/server/plugins/browser-auth/provider-interface';
+import {
+  getBrowserAuthProvider,
+  hasBrowserAuthProvider,
+} from './backend/server/plugins/browser-auth/provider-registry';
 import {
   BROWSER_AUTH_WINDOW_CONFIG,
   getProviderSessionPartition,
   setupTokenExtractionHandlers,
-} from './backend/server/plugins/oauth/utils/browser-auth-utils';
+} from './backend/server/plugins/browser-auth/utils/browser-auth-utils';
 import log from './backend/utils/logger';
 
 /**
@@ -21,11 +27,11 @@ import log from './backend/utils/logger';
 export function setupProviderBrowserAuthHandlers() {
   // Register IPC handler for provider browser auth
   ipcMain.handle('provider-browser-auth', async (_event, providerName: string) => {
-    if (!hasOAuthProvider(providerName)) {
+    if (!hasBrowserAuthProvider(providerName)) {
       throw new Error(`Provider ${providerName} not configured`);
     }
 
-    const provider = getOAuthProvider(providerName);
+    const provider = getBrowserAuthProvider(providerName);
 
     if (!provider.browserAuthConfig?.enabled) {
       throw new Error(`Browser auth not enabled for provider ${providerName}`);
@@ -36,7 +42,7 @@ export function setupProviderBrowserAuthHandlers() {
 
   // Legacy support for Slack (backward compatibility)
   ipcMain.handle('slack-auth', async () => {
-    const provider = getOAuthProvider('slack-browser');
+    const provider = getBrowserAuthProvider('slack-browser');
     if (!provider.browserAuthConfig?.enabled) {
       throw new Error('Browser auth not enabled for Slack');
     }
@@ -49,7 +55,7 @@ export function setupProviderBrowserAuthHandlers() {
 /**
  * Convert BrowserTokenResponse to OAuth-like format for UI compatibility
  */
-function convertBrowserTokensToOAuthFormat(tokens: BrowserTokenResponse, provider: OAuthProviderDefinition): any {
+function convertBrowserTokensToOAuthFormat(tokens: BrowserTokenResponse, provider: BrowserAuthProviderDefinition): any {
   // Map browser tokens to OAuth format based on provider config
   if (provider.browserAuthConfig?.tokenMapping) {
     return {
@@ -71,7 +77,7 @@ function convertBrowserTokensToOAuthFormat(tokens: BrowserTokenResponse, provide
 /**
  * Handle browser-based authentication for a provider
  */
-async function handleBrowserAuth(provider: OAuthProviderDefinition): Promise<any> {
+async function handleBrowserAuth(provider: BrowserAuthProviderDefinition): Promise<any> {
   return new Promise((resolve, reject) => {
     let authWindow: BrowserWindow | null = null;
     let detectedWorkspaceId: string | null = null;
@@ -132,7 +138,7 @@ async function handleBrowserAuth(provider: OAuthProviderDefinition): Promise<any
  */
 function setupNavigationHandlers(
   authWindow: BrowserWindow,
-  provider: OAuthProviderDefinition,
+  provider: BrowserAuthProviderDefinition,
   onWorkspaceDetected: (workspaceId: string) => void
 ) {
   const config = provider.browserAuthConfig;

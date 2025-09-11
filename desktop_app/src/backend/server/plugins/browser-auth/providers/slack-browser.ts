@@ -1,7 +1,7 @@
-import { OAuthProviderDefinition } from '../provider-interface';
+import { BrowserAuthProviderDefinition } from '../provider-interface';
 import { buildSlackTokenExtractionScript, isSlackWorkspacePage } from '../utils/slack-token-extractor';
 
-export const slackBrowserProvider: OAuthProviderDefinition = {
+export const slackBrowserProvider: BrowserAuthProviderDefinition = {
   name: 'slack-browser',
 
   // Browser-based authentication configuration

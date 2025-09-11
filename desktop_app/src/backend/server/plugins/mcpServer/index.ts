@@ -434,17 +434,40 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // For remote servers, start the remote server immediately
           // For local servers, start container as usual
-          if (isRemoteServer) {
-            log.info(`Remote server ${server.name} installed successfully - starting remote server`);
-            // Import McpServerSandboxManager to start the remote server
-            const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
-            await McpServerSandboxManager.startServer(server);
-            // Also sync external clients
-            const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
-            await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
-          } else {
-            // Start the MCP server container for local servers
-            await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+          try {
+            if (isRemoteServer) {
+              log.info(`Remote server ${server.name} installed successfully - starting remote server`);
+              // Import McpServerSandboxManager to start the remote server
+              const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
+              await McpServerSandboxManager.startServer(server);
+              // Also sync external clients
+              const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
+              await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+            } else {
+              // Start the MCP server container for local servers
+              await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+            }
+
+            log.info(`OAuth MCP server ${server.name} started successfully`);
+          } catch (startupError) {
+            log.error(`Failed to start OAuth MCP server ${server.name} after successful OAuth:`, startupError);
+
+            // Rollback server status to 'failed' if startup fails
+            await McpServerModel.update(serverId, {
+              status: 'failed',
+            });
+
+            // Clean up the server from sandbox manager if it was registered
+            try {
+              const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
+              await McpServerSandboxManager.removeMcpServer(serverId);
+            } catch (cleanupError) {
+              log.warn('Failed to clean up server from sandbox manager:', cleanupError);
+            }
+
+            return reply.code(500).send({
+              error: `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`,
+            });
           }
 
           return reply.send({ server });

@@ -106,20 +106,6 @@ export default class PodmanContainer {
       this.args = dockerConfig.args;
       // Merge environment variables - OAuth tokens from env override Docker config placeholders
       this.envVars = { ...dockerConfig.env, ...env };
-    } else if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
-      // Check if Google OAuth tokens are present and wrap command if needed
-      // Wrap the command to create the credentials file on startup
-      const originalCommand = [command, ...(args || [])].join(' ');
-      const email = env.GOOGLE_OAUTH_EMAIL;
-
-      this.command = 'sh';
-      this.args = [
-        '-c',
-        `mkdir -p ~/.google_workspace_mcp/credentials && ` +
-          `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
-          `${originalCommand}`,
-      ];
-      this.envVars = env;
     } else {
       this.command = command;
       this.args = args || [];

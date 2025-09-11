@@ -113,6 +113,22 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
+ * Store OAuth authorization code from deep link callback (internal API)
+ */
+export const storeOAuthCode = <ThrowOnError extends boolean = false>(
+  options: Options<StoreOAuthCodeData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<StoreOAuthCodeResponses, StoreOAuthCodeErrors, ThrowOnError>({
+    url: '/api/oauth/store-code',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
  * Get all chats
  */
 export const getChats = <ThrowOnError extends boolean = false>(options?: Options<GetChatsData, ThrowOnError>) => {
@@ -532,22 +548,6 @@ export const updateMemory = <ThrowOnError extends boolean = false>(
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
-    },
-  });
-};
-
-/**
- * Store OAuth authorization code from deep link callback (internal API)
- */
-export const storeOAuthCode = <ThrowOnError extends boolean = false>(
-  options: Options<StoreOAuthCodeData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<StoreOAuthCodeResponses, StoreOAuthCodeErrors, ThrowOnError>({
-    url: '/api/oauth/store-code',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
     },
   });
 };

@@ -145,6 +145,12 @@
           },
           "requires_proxy": {
             "type": "boolean"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "browser_auth": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1168,7 +1174,8 @@
           },
           "remote_url": {
             "type": "string"
-          }
+          },
+          "archestra_config": {}
         },
         "required": ["displayName", "serverConfig"]
       },
@@ -1572,6 +1579,12 @@
             "type": "string"
           },
           "requires_proxy": {
+            "type": "boolean"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "browser_auth": {
             "type": "boolean"
           }
         },
@@ -2620,7 +2633,8 @@
           },
           "remote_url": {
             "type": "string"
-          }
+          },
+          "archestra_config": {}
         },
         "required": ["displayName", "serverConfig"],
         "additionalProperties": false
@@ -2903,6 +2917,90 @@
     }
   },
   "paths": {
+    "/api/oauth/store-code": {
+      "post": {
+        "operationId": "storeOAuthCode",
+        "tags": ["OAuth"],
+        "description": "Store OAuth authorization code from deep link callback (internal API)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["state", "code"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["success", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chat": {
       "get": {
         "operationId": "getChats",
@@ -4248,90 +4346,6 @@
                     }
                   },
                   "required": ["success"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/oauth/store-code": {
-      "post": {
-        "operationId": "storeOAuthCode",
-        "tags": ["OAuth"],
-        "description": "Store OAuth authorization code from deep link callback (internal API)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "state": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "code": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": ["state", "code"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["success", "message"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
                   "additionalProperties": false
                 }
               }

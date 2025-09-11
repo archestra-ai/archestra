@@ -47,6 +47,8 @@ export type OAuthServerConfigInput = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
 };
 
 export type ToolAnalysisResultInput = {
@@ -299,6 +301,7 @@ export type McpServerInstallInput = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogsInput = {
@@ -472,6 +475,8 @@ export type OAuthServerConfig = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
 };
 
 export type ToolAnalysisResult = {
@@ -724,6 +729,7 @@ export type McpServerInstall = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogs = {
@@ -849,6 +855,45 @@ export type User = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type StoreOAuthCodeData = {
+  body: {
+    state: string;
+    code: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/oauth/store-code';
+};
+
+export type StoreOAuthCodeErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type StoreOAuthCodeError = StoreOAuthCodeErrors[keyof StoreOAuthCodeErrors];
+
+export type StoreOAuthCodeResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type StoreOAuthCodeResponse = StoreOAuthCodeResponses[keyof StoreOAuthCodeResponses];
 
 export type GetChatsData = {
   body?: never;
@@ -1581,45 +1626,6 @@ export type UpdateMemoryResponses = {
 };
 
 export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
-
-export type StoreOAuthCodeData = {
-  body: {
-    state: string;
-    code: string;
-  };
-  path?: never;
-  query?: never;
-  url: '/api/oauth/store-code';
-};
-
-export type StoreOAuthCodeErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-  };
-  /**
-   * Default Response
-   */
-  500: {
-    error: string;
-  };
-};
-
-export type StoreOAuthCodeError = StoreOAuthCodeErrors[keyof StoreOAuthCodeErrors];
-
-export type StoreOAuthCodeResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-    message: string;
-  };
-};
-
-export type StoreOAuthCodeResponse = StoreOAuthCodeResponses[keyof StoreOAuthCodeResponses];
 
 export type PostApiOllamaPullData = {
   body: {

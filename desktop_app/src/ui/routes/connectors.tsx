@@ -3,10 +3,10 @@ import { AlertCircle, Filter, Package, Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { type LocalMcpServerManifest } from '@ui/catalog_local';
+import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import AlphaDisclaimerMessage from '@ui/components/ConnectorCatalog/AlphaDisclaimerMessage';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
-import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import { Input } from '@ui/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui/components/ui/select';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
@@ -100,7 +100,7 @@ function ConnectorCatalogPage() {
   const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
     // Check if it's a Remote MCP server
     const isRemoteMcp = !!(mcpServer as LocalMcpServerManifest).remote_url;
-    
+
     if (isRemoteMcp) {
       // For Remote MCP, skip the dialog and install directly
       await installMcpServer(mcpServer);

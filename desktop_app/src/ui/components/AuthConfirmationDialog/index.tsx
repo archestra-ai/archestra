@@ -47,9 +47,9 @@ export default function AuthConfirmationDialog({
         particle.style.left = '-100px';
         particle.style.top = Math.random() * 100 + '%';
         particle.style.animationDelay = Math.random() * 8 + 's';
-        particle.style.animationDuration = (8 + Math.random() * 6) + 's';
+        particle.style.animationDuration = 8 + Math.random() * 6 + 's';
         particle.style.opacity = '0';
-        
+
         // Check if dark mode is active
         const isDark = document.documentElement.classList.contains('dark');
         if (!isDark) {
@@ -62,7 +62,7 @@ export default function AuthConfirmationDialog({
             particle.style.background = 'rgba(40, 53, 177, 0.85)'; // Dark blue
           }
         }
-        
+
         particlesRef.current.appendChild(particle);
       }
 
@@ -76,9 +76,9 @@ export default function AuthConfirmationDialog({
         shape.style.left = '-150px';
         shape.style.top = Math.random() * 100 + '%';
         shape.style.animationDelay = Math.random() * 15 + 's';
-        shape.style.animationDuration = (15 + Math.random() * 10) + 's';
+        shape.style.animationDuration = 15 + Math.random() * 10 + 's';
         shape.style.opacity = '0';
-        
+
         // Check if dark mode is active
         const isDark = document.documentElement.classList.contains('dark');
         if (!isDark) {
@@ -91,7 +91,7 @@ export default function AuthConfirmationDialog({
             shape.style.background = 'rgba(55, 35, 75, 0.15)';
           }
         }
-        
+
         particlesRef.current.appendChild(shape);
       }
     } else {
@@ -192,45 +192,48 @@ export default function AuthConfirmationDialog({
       <div ref={particlesRef} />
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[500px] border-purple-200 dark:border-purple-800" style={{ zIndex: 52 }}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-blue-500" />
-            MCP authentication magic happening!
-          </DialogTitle>
-          <DialogDescription className="pt-4 space-y-3">
-            {isBrowserAuth ? (
-              <p className="text-sm">
-                Archestra will show the browser window and ask you to authenticate. Once you are in, Archestra will extract your API key and use it to interact with the third-party system. Your keys will be stored only in your app!
-              </p>
-            ) : (
-              <p className="text-sm">
-                Archestra cloud will generate the private secrets for you, but it <b>won't store them</b>. All further communication with the third party will happen through your local app!
-              </p>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-3 sm:gap-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              onCancel();
-              onOpenChange(false);
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              onConfirm();
-              onOpenChange(false);
-            }}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {isBrowserAuth ? 'Open Browser...' : 'Continue...'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-500" />
+              MCP authentication magic happening!
+            </DialogTitle>
+            <DialogDescription className="pt-4 space-y-3">
+              {isBrowserAuth ? (
+                <p className="text-sm">
+                  Archestra will show the browser window and ask you to authenticate. Once you are in, Archestra will
+                  extract your API key and use it to interact with the third-party system. Your keys will be stored only
+                  in your app!
+                </p>
+              ) : (
+                <p className="text-sm">
+                  Archestra cloud will generate the private secrets for you, but it <b>won't store them</b>. All further
+                  communication with the third party will happen through your local app!
+                </p>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                onCancel();
+                onOpenChange(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                onConfirm();
+                onOpenChange(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isBrowserAuth ? 'Open Browser...' : 'Continue...'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

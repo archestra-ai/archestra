@@ -23,6 +23,8 @@ export const OAuthServerConfigSchema = z.object({
   token_endpoint: z.string().url().optional(), // Token endpoint for generic OAuth
   access_token_env_var: z.string().optional(), // Environment variable name to store access token
   requires_proxy: z.boolean().optional(), // Whether this provider requires oauth-proxy for client secrets
+  provider_name: z.string().optional(), // Provider name for token mapping lookup (e.g., 'slack-browser')
+  browser_auth: z.boolean().optional(), // Whether this uses browser authentication
 });
 
 export type OAuthServerConfig = z.infer<typeof OAuthServerConfigSchema>;

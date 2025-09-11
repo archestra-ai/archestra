@@ -68,6 +68,8 @@ function ConnectorCatalogPage() {
       }),
       // Include remote_url for remote MCP servers
       ...(mcpServer.remote_url && { remote_url: mcpServer.remote_url }),
+      // Include archestra_config for browser auth provider lookup
+      ...(mcpServer.archestra_config && { archestra_config: mcpServer.archestra_config }),
     };
 
     // Add useBrowserAuth flag for internal handling

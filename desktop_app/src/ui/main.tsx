@@ -4,18 +4,22 @@ import ReactDOM from 'react-dom/client';
 import sentryClient from '@ui/lib/sentry';
 import websocketService from '@ui/lib/websocket';
 import { useUserStore } from '@ui/stores/user-store';
+
 import App from './App';
 
 // Initialize Sentry early for error tracking
 sentryClient.initialize();
 
 // Fetch user data and set Sentry user context
-useUserStore.getState().fetchUser().then(() => {
-  const user = useUserStore.getState().user;
-  if (user) {
-    sentryClient.setUserContext(user);
-  }
-});
+useUserStore
+  .getState()
+  .fetchUser()
+  .then(() => {
+    const user = useUserStore.getState().user;
+    if (user) {
+      sentryClient.setUserContext(user);
+    }
+  });
 
 /**
  * Open a single websocket connection to WebSocket server when the app is loaded

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { getAvailableTools } from '@ui/lib/clients/archestra/api/gen';
+import { deselectAllChatTools, deselectChatTools, getAvailableTools, selectAllChatTools, selectChatTools } from '@ui/lib/clients/archestra/api/gen';
 import websocketService from '@ui/lib/websocket';
 import type { AvailableToolsMap, Tool, ToolChoice } from '@ui/types/tools';
+import { useChatStore } from './chat-store';
 
 interface ToolsState {
   availableTools: Tool[];
@@ -45,13 +46,30 @@ export const useToolsStore = create<ToolsStore>()(
       toolChoice: 'auto',
 
       // Actions
-      addSelectedTool: (toolId: string) => {
+      addSelectedTool: async (toolId: string) => {
+        const currentChat = useChatStore.getState().getCurrentChat();
+        
         set(({ selectedToolIds }) => ({
           selectedToolIds: new Set(selectedToolIds).add(toolId),
         }));
+
+        // Save to backend if we have a current chat
+        if (currentChat) {
+          try {
+            // Just call selectChatTools - backend handles null->explicit conversion
+            await selectChatTools({
+              path: { id: currentChat.id.toString() },
+              body: { toolIds: [toolId] }
+            });
+          } catch (error) {
+            console.error('Failed to save tool selection to backend:', error);
+          }
+        }
       },
 
-      removeSelectedTool: (toolId: string) => {
+      removeSelectedTool: async (toolId: string) => {
+        const currentChat = useChatStore.getState().getCurrentChat();
+        
         set(({ selectedToolIds }) => {
           const newSelectedToolIds = new Set(selectedToolIds);
           newSelectedToolIds.delete(toolId);
@@ -59,6 +77,19 @@ export const useToolsStore = create<ToolsStore>()(
             selectedToolIds: newSelectedToolIds,
           };
         });
+
+        // Save to backend if we have a current chat
+        if (currentChat) {
+          try {
+            // Just call deselectChatTools - backend handles null->explicit conversion
+            await deselectChatTools({
+              path: { id: currentChat.id.toString() },
+              body: { toolIds: [toolId] }
+            });
+          } catch (error) {
+            console.error('Failed to save tool deselection to backend:', error);
+          }
+        }
       },
 
       setToolChoice: (choice: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }) => {

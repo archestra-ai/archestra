@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 
 import config from '@ui/config';
-import { createChat, deleteChat, getChatById, getChats, updateChat } from '@ui/lib/clients/archestra/api/gen';
+import { createChat, deleteChat, getChatById, getChatSelectedTools, getChats, selectChatTools, updateChat } from '@ui/lib/clients/archestra/api/gen';
 import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
+import { useToolsStore } from './tools-store';
 
 interface ChatState {
   chats: ChatWithMessages[];
@@ -87,6 +88,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         currentChatSessionId: initializedChat.sessionId,
       }));
 
+      // Save the current tool selection to the new chat
+      const toolsStore = useToolsStore.getState();
+      if (toolsStore.selectedToolIds.size > 0) {
+        // If specific tools are selected, save them to the new chat
+        try {
+          await selectChatTools({
+            path: { id: initializedChat.id.toString() },
+            body: { toolIds: Array.from(toolsStore.selectedToolIds) }
+          });
+        } catch (error) {
+          console.error('Failed to save initial tool selection to new chat:', error);
+        }
+      }
+      // If no tools selected or all tools selected, leave as null (default)
+
       return initializedChat;
     } catch (error) {
       console.error('Failed to create new chat:', error);
@@ -107,6 +123,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           chats: state.chats.map((chat) => (chat.id === chatId ? initializedChat : chat)),
           currentChatSessionId: initializedChat.sessionId,
         }));
+
+        // Load and apply the chat's selected tools
+        try {
+          const { data: toolsData } = await getChatSelectedTools({ path: { id: chatId.toString() } });
+          if (toolsData) {
+            const toolsStore = useToolsStore.getState();
+            
+            // Clear current selection first
+            toolsStore.selectedToolIds.clear();
+            
+            if (toolsData.selectedTools === null) {
+              // null means all tools are selected
+              const allToolIds = toolsData.availableTools.map(tool => tool.id);
+              allToolIds.forEach(id => toolsStore.selectedToolIds.add(id));
+            } else if (toolsData.selectedTools.length > 0) {
+              // Add only the selected tools
+              toolsData.selectedTools.forEach(id => toolsStore.selectedToolIds.add(id));
+            }
+            // If selectedTools is empty array, keep the selection empty
+            
+            // Trigger a re-render by creating a new Set
+            useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
+          }
+        } catch (toolsError) {
+          console.error('Failed to load chat tools:', toolsError);
+          // Continue even if tools loading fails
+        }
       }
     } catch (error) {
       console.error('Failed to load chat messages:', error);

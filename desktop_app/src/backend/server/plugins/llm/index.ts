@@ -18,6 +18,7 @@ interface StreamRequestBody {
   provider?: string;
   requestedTools?: string[]; // Tool IDs requested by frontend
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  chatId?: number; // Chat ID to get chat-specific tools
 }
 
 const createModelInstance = async (model: string, provider?: string) => {
@@ -63,14 +64,29 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request: FastifyRequest<{ Body: StreamRequestBody }>, reply: FastifyReply) => {
-      const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice } = request.body;
+      const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice, chatId } = request.body;
 
       try {
-        // Get tools from tool aggregator (includes both sandboxed and Archestra tools)
+        // Get tools based on chat selection or requested tools
         let tools = {};
-        if (requestedTools && requestedTools.length > 0) {
+        
+        if (chatId) {
+          // Get chat-specific tool selection
+          const chatSelectedTools = await Chat.getSelectedTools(chatId);
+          
+          if (chatSelectedTools === null) {
+            // null means all tools are selected
+            tools = toolAggregator.getAllTools();
+          } else if (chatSelectedTools.length > 0) {
+            // Use only the selected tools for this chat
+            tools = toolAggregator.getToolsById(chatSelectedTools);
+          }
+          // If chatSelectedTools is empty array, tools remains empty (no tools enabled)
+        } else if (requestedTools && requestedTools.length > 0) {
+          // Fallback to requested tools if no chatId
           tools = toolAggregator.getToolsById(requestedTools);
         } else {
+          // Default to all tools if no specific selection
           tools = toolAggregator.getAllTools();
         }
 

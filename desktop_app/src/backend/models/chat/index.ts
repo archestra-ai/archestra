@@ -37,6 +37,127 @@ export default class ChatModel {
   static generateCompositeMessageId = (chat: Chat, message: DatabaseMessage): string =>
     `${chat.sessionId}-${message.id}`;
 
+  /**
+   * Get selected tools for a chat
+   * @param chatId The chat ID
+   * @returns Array of selected tool IDs, or null if all tools are selected
+   */
+  static async getSelectedTools(chatId: number): Promise<string[] | null> {
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chatId)).limit(1);
+    
+    if (!chat) {
+      throw new Error(`Chat not found: ${chatId}`);
+    }
+    
+    return chat.selectedTools as string[] | null;
+  }
+
+  /**
+   * Update selected tools for a chat
+   * @param chatId The chat ID
+   * @param toolIds Array of tool IDs to set as selected, or null to select all
+   */
+  static async updateSelectedTools(chatId: number, toolIds: string[] | null): Promise<void> {
+    await db
+      .update(chatsTable)
+      .set({
+        selectedTools: toolIds,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chatId));
+    
+    // Broadcast the update via WebSocket
+    WebSocketService.broadcast({
+      type: 'chat-tools-updated',
+      payload: {
+        chatId,
+        selectedTools: toolIds,
+      },
+    });
+  }
+
+  /**
+   * Add tools to the chat's selection
+   * @param chatId The chat ID
+   * @param toolIds Array of tool IDs to add
+   */
+  static async addSelectedTools(chatId: number, toolIds: string[]): Promise<string[]> {
+    const currentTools = await this.getSelectedTools(chatId);
+    
+    let updatedTools: string[];
+    
+    if (currentTools === null) {
+      // When null (all tools selected), we need to convert to explicit list
+      // Get all available tools and ensure the new ones are included
+      const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
+      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allToolIds = allAvailableTools.map(tool => tool.id);
+      
+      // Make sure all tools including the new ones are in the list
+      const toolSet = new Set([...allToolIds, ...toolIds]);
+      updatedTools = Array.from(toolSet);
+    } else {
+      // Add new tools to existing selection, avoiding duplicates
+      const toolSet = new Set([...currentTools, ...toolIds]);
+      updatedTools = Array.from(toolSet);
+    }
+    
+    await this.updateSelectedTools(chatId, updatedTools);
+    return updatedTools;
+  }
+
+  /**
+   * Remove tools from the chat's selection
+   * @param chatId The chat ID
+   * @param toolIds Array of tool IDs to remove
+   */
+  static async removeSelectedTools(chatId: number, toolIds: string[]): Promise<string[]> {
+    const currentTools = await this.getSelectedTools(chatId);
+    
+    let updatedTools: string[];
+    
+    if (currentTools === null) {
+      // When null (all tools selected), we need to convert to explicit list first
+      // then remove the specified tools
+      const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
+      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allToolIds = allAvailableTools.map(tool => tool.id);
+      
+      // Remove specified tools from the full list
+      const toolSet = new Set(allToolIds);
+      for (const toolId of toolIds) {
+        toolSet.delete(toolId);
+      }
+      updatedTools = Array.from(toolSet);
+    } else {
+      // Remove specified tools from existing selection
+      const toolSet = new Set(currentTools);
+      for (const toolId of toolIds) {
+        toolSet.delete(toolId);
+      }
+      updatedTools = Array.from(toolSet);
+    }
+    
+    await this.updateSelectedTools(chatId, updatedTools);
+    return updatedTools;
+  }
+
+  /**
+   * Select all available tools for a chat (sets selectedTools to null)
+   * @param chatId The chat ID
+   */
+  static async selectAllTools(chatId: number): Promise<void> {
+    await this.updateSelectedTools(chatId, null);
+  }
+
+  /**
+   * Deselect all tools for a chat (sets selectedTools to empty array)
+   * @param chatId The chat ID
+   */
+  static async deselectAllTools(chatId: number): Promise<void> {
+    await this.updateSelectedTools(chatId, []);
+  }
+
   static async generateAndUpdateChatTitle(chatId: number, messages: UIMessage[]): Promise<void> {
     try {
       // Extract text content from the first few messages for title generation

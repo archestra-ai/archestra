@@ -699,6 +699,47 @@
               }
             ]
           },
+          "selectedTools": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [
+                          null
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
+              },
+              {
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           },
@@ -745,6 +786,7 @@
           "id",
           "sessionId",
           "title",
+          "selectedTools",
           "createdAt",
           "updatedAt",
           "messages"
@@ -2379,6 +2421,47 @@
               }
             ]
           },
+          "selectedTools": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [
+                          null
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
+              },
+              {
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2426,6 +2509,7 @@
           "id",
           "sessionId",
           "title",
+          "selectedTools",
           "createdAt",
           "updatedAt",
           "messages"
@@ -3682,6 +3766,422 @@
                     "error"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools": {
+      "get": {
+        "operationId": "getChatSelectedTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Get selected tools for a specific chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "availableTools": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailableTool"
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedTools",
+                    "availableTools"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/select": {
+      "post": {
+        "operationId": "selectChatTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Add tools to chat selection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "toolIds"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedTools"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/deselect": {
+      "post": {
+        "operationId": "deselectChatTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Remove tools from chat selection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "toolIds"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedTools"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/select-all": {
+      "post": {
+        "operationId": "selectAllChatTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Select all available tools for this chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/deselect-all": {
+      "post": {
+        "operationId": "deselectAllChatTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Clear all tool selections for this chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/available": {
+      "get": {
+        "operationId": "getChatAvailableTools",
+        "tags": [
+          "Chat"
+        ],
+        "description": "List all tools available for selection",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvailableTool"
+                  }
                 }
               }
             }

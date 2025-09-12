@@ -50,6 +50,7 @@ function ChatPage() {
         const currentModel = selectedModelRef.current;
         const currentCloudProviderModels = availableCloudProviderModelsRef.current;
         const currentSelectedToolIds = selectedToolIdsRef.current;
+        const currentChat = getCurrentChat();
 
         const cloudModel = currentCloudProviderModels.find((m) => m.id === currentModel);
         const provider = cloudModel ? cloudModel.provider : 'ollama';
@@ -60,14 +61,15 @@ function ChatPage() {
             model: currentModel || 'llama3.1:8b',
             sessionId: id || currentChatSessionId,
             provider: provider,
-            // Send selected tools if any, otherwise undefined (backend will use all tools)
-            requestedTools: currentSelectedToolIds.size > 0 ? Array.from(currentSelectedToolIds) : undefined,
+            // Include chatId so backend can load chat-specific tools
+            chatId: currentChat?.id,
+            // Don't send requestedTools - let backend use chat's stored selection
             toolChoice: 'auto', // Always enable tool usage
           },
         };
       },
     });
-  }, [currentChatSessionId]);
+  }, [currentChatSessionId, getCurrentChat]);
 
   const { sendMessage, messages, setMessages, stop, status, error, regenerate } = useChat({
     id: currentChatSessionId || 'temp-id', // use the provided chat ID or a temp ID

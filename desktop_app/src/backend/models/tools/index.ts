@@ -209,14 +209,14 @@ export class ToolModel {
 
           // Analyze single tool - this will wait for the model if it's not available yet
           const analysisResults = await OllamaClient.analyzeTools([toolData]);
-          
+
           // Update tool with analysis results
           const analysis = analysisResults[toolData.name];
           if (analysis) {
             await ToolModel.updateAnalysisResults(toolData.id, analysis);
             analyzedCount++;
             log.info(`Updated analysis for tool ${toolData.name}`);
-            
+
             // Broadcast progress after successful analysis
             WebSocketService.broadcast({
               type: 'tool-analysis-progress',
@@ -252,7 +252,7 @@ export class ToolModel {
       log.info(`Completed background analysis for MCP server ${mcpServerId}`);
     } catch (error) {
       log.error(`Background analysis failed for MCP server ${mcpServerId}:`, error);
-      
+
       // Broadcast error
       WebSocketService.broadcast({
         type: 'tool-analysis-progress',

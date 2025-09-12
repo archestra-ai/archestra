@@ -333,7 +333,7 @@ CRITICAL REQUIREMENTS:
       });
 
       const rawResult = JSON.parse(response.response);
-      
+
       // Debug log to see what the model actually returned
       log.info('Raw analysis response from Ollama:', JSON.stringify(rawResult, null, 2));
 
@@ -346,16 +346,18 @@ CRITICAL REQUIREMENTS:
           if (typeof analysis === 'boolean' || typeof analysis !== 'object' || analysis === null) {
             log.warn(`Tool ${toolName} has invalid format (not an object):`, analysis);
             // Try to infer based on tool name
-            const isRead = toolName.toLowerCase().includes('get') || 
-                          toolName.toLowerCase().includes('list') || 
-                          toolName.toLowerCase().includes('read') ||
-                          toolName.toLowerCase().includes('search');
-            const isWrite = toolName.toLowerCase().includes('create') || 
-                           toolName.toLowerCase().includes('update') || 
-                           toolName.toLowerCase().includes('delete') ||
-                           toolName.toLowerCase().includes('add') ||
-                           toolName.toLowerCase().includes('remove');
-            
+            const isRead =
+              toolName.toLowerCase().includes('get') ||
+              toolName.toLowerCase().includes('list') ||
+              toolName.toLowerCase().includes('read') ||
+              toolName.toLowerCase().includes('search');
+            const isWrite =
+              toolName.toLowerCase().includes('create') ||
+              toolName.toLowerCase().includes('update') ||
+              toolName.toLowerCase().includes('delete') ||
+              toolName.toLowerCase().includes('add') ||
+              toolName.toLowerCase().includes('remove');
+
             result[toolName] = {
               is_read: isRead,
               is_write: isWrite,

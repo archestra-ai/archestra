@@ -85,16 +85,19 @@ export function ToolHoverCard({
                   {(is_read !== null || is_write !== null) && (
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-muted-foreground">Access:</span>
-                      <span className={cn('text-xs font-medium', 
-                        is_read && is_write ? 'text-blue-600' :
-                        is_read ? 'text-green-600' :
-                        is_write ? 'text-orange-600' :
-                        'text-gray-600'
-                      )}>
-                        {is_read && is_write ? 'Read/Write' :
-                         is_read ? 'Read' :
-                         is_write ? 'Write' :
-                         'None'}
+                      <span
+                        className={cn(
+                          'text-xs font-medium',
+                          is_read && is_write
+                            ? 'text-blue-600'
+                            : is_read
+                              ? 'text-green-600'
+                              : is_write
+                                ? 'text-orange-600'
+                                : 'text-gray-600'
+                        )}
+                      >
+                        {is_read && is_write ? 'Read/Write' : is_read ? 'Read' : is_write ? 'Write' : 'None'}
                       </span>
                     </div>
                   )}

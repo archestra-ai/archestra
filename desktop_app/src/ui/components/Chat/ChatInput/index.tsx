@@ -3,6 +3,7 @@
 import { AlertCircle, FileText, Loader2, X } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
 
+import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
   AIInput,
   AIInputButton,
@@ -16,11 +17,16 @@ import {
   AIInputToolbar,
   AIInputTools,
 } from '@ui/components/kibo/ai-input';
-import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
-import { useCloudProvidersStore, useDeveloperModeStore, useMcpServersStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import {
+  useCloudProvidersStore,
+  useDeveloperModeStore,
+  useMcpServersStore,
+  useOllamaStore,
+  useToolsStore,
+} from '@ui/stores';
 import type { Tool } from '@ui/types/tools';
 
 interface ChatInputProps {
@@ -63,36 +69,41 @@ export default function ChatInput({
   // Helper function to find common prefix
   const findCommonPrefix = (tools: Tool[]): string => {
     if (tools.length === 0) return '';
-    
-    const names = tools.map(t => formatToolName(t.name || t.id));
+
+    const names = tools.map((t) => formatToolName(t.name || t.id));
     if (names.length === 1) return '';
-    
+
     let prefix = '';
-    const minLength = Math.min(...names.map(n => n.length));
-    
+    const minLength = Math.min(...names.map((n) => n.length));
+
     for (let i = 0; i < minLength; i++) {
       const char = names[0][i];
-      if (names.every(name => name[i] === char)) {
+      if (names.every((name) => name[i] === char)) {
         prefix += char;
       } else {
         break;
       }
     }
-    
+
     // Only remove prefix if it ends with a separator like _ or -
     const lastChar = prefix[prefix.length - 1];
     if (lastChar === '_' || lastChar === '-' || lastChar === '.') {
       return prefix;
     }
-    
+
     // Or if the prefix is a complete word (next char is uppercase or separator)
-    if (prefix.length > 0 && names.every(name => {
-      const nextChar = name[prefix.length];
-      return !nextChar || nextChar === '_' || nextChar === '-' || nextChar === '.' || nextChar === nextChar.toUpperCase();
-    })) {
+    if (
+      prefix.length > 0 &&
+      names.every((name) => {
+        const nextChar = name[prefix.length];
+        return (
+          !nextChar || nextChar === '_' || nextChar === '-' || nextChar === '.' || nextChar === nextChar.toUpperCase()
+        );
+      })
+    ) {
       return prefix;
     }
-    
+
     return '';
   };
 
@@ -104,31 +115,36 @@ export default function ChatInput({
 
   // Helper function to check if server is still initializing
   const isServerInitializing = (serverId: string): boolean => {
-    const mcpServer = installedMcpServers.find(s => s.id === serverId);
+    const mcpServer = installedMcpServers.find((s) => s.id === serverId);
     if (!mcpServer) return false;
-    return mcpServer.state === 'not_created' || 
-           mcpServer.state === 'created' || 
-           mcpServer.state === 'initializing' ||
-           mcpServer.state === 'error';
+    return (
+      mcpServer.state === 'not_created' ||
+      mcpServer.state === 'created' ||
+      mcpServer.state === 'initializing' ||
+      mcpServer.state === 'error'
+    );
   };
 
   // Group selected tools by MCP server with read/write counts
   const groupedTools = useMemo(() => {
-    const groups: Record<string, { 
-      tools: Tool[]; 
-      readOnlyTools: Tool[];
-      writeOnlyTools: Tool[];
-      readWriteTools: Tool[];
-      otherTools: Tool[];
-      readOnlyCount: number;
-      writeOnlyCount: number;
-      readWriteCount: number;
-      otherCount: number;
-      commonPrefix: string;
-      serverId: string;
-      isInitializing: boolean;
-      serverState?: string;
-    }> = {};
+    const groups: Record<
+      string,
+      {
+        tools: Tool[];
+        readOnlyTools: Tool[];
+        writeOnlyTools: Tool[];
+        readWriteTools: Tool[];
+        otherTools: Tool[];
+        readOnlyCount: number;
+        writeOnlyCount: number;
+        readWriteCount: number;
+        otherCount: number;
+        commonPrefix: string;
+        serverId: string;
+        isInitializing: boolean;
+        serverState?: string;
+      }
+    > = {};
 
     Array.from(selectedToolIds).forEach((toolId) => {
       const tool = availableTools.find((t) => t.id === toolId);
@@ -136,8 +152,8 @@ export default function ChatInput({
         const serverName = tool.mcpServerName || 'Unknown';
         const serverId = extractServerIdFromToolId(tool.id);
         if (!groups[serverName]) {
-          groups[serverName] = { 
-            tools: [], 
+          groups[serverName] = {
+            tools: [],
             readOnlyTools: [],
             writeOnlyTools: [],
             readWriteTools: [],
@@ -149,7 +165,7 @@ export default function ChatInput({
             commonPrefix: '',
             serverId: serverId,
             isInitializing: isServerInitializing(serverId),
-            serverState: installedMcpServers.find(s => s.id === serverId)?.state
+            serverState: installedMcpServers.find((s) => s.id === serverId)?.state,
           };
         }
         groups[serverName].tools.push(tool);
@@ -157,7 +173,7 @@ export default function ChatInput({
         // Categorize based on tool analysis (both read and write flags)
         const isRead = tool.analysis?.is_read || false;
         const isWrite = tool.analysis?.is_write || false;
-        
+
         if (isRead && isWrite) {
           groups[serverName].readWriteCount++;
           groups[serverName].readWriteTools.push(tool);
@@ -175,9 +191,9 @@ export default function ChatInput({
     });
 
     // Calculate common prefixes for each server and sort tools
-    Object.values(groups).forEach(group => {
+    Object.values(groups).forEach((group) => {
       group.commonPrefix = findCommonPrefix(group.tools);
-      
+
       // Sort each category of tools
       const sortTools = (tools: Tool[]) => {
         return tools.sort((a, b) => {
@@ -185,24 +201,24 @@ export default function ChatInput({
           const aWrite = a.analysis?.is_write ?? false;
           const bRead = b.analysis?.is_read ?? false;
           const bWrite = b.analysis?.is_write ?? false;
-          
+
           const getPriority = (isRead: boolean, isWrite: boolean) => {
             if (isRead && !isWrite) return 0;
             if (isRead && isWrite) return 1;
             if (!isRead && isWrite) return 2;
             return 3;
           };
-          
+
           const aPriority = getPriority(aRead, aWrite);
           const bPriority = getPriority(bRead, bWrite);
-          
+
           if (aPriority !== bPriority) {
             return aPriority - bPriority;
           }
           return (a.name || a.id).localeCompare(b.name || b.id);
         });
       };
-      
+
       group.readOnlyTools = sortTools(group.readOnlyTools);
       group.readWriteTools = sortTools(group.readWriteTools);
       group.writeOnlyTools = sortTools(group.writeOnlyTools);
@@ -234,9 +250,7 @@ export default function ChatInput({
               return (
                 <Tooltip key={serverName}>
                   <TooltipTrigger asChild>
-                    <div
-                      className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-full border border-muted-foreground/10 group hover:bg-muted/40 transition-colors cursor-default"
-                    >
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-full border border-muted-foreground/10 group hover:bg-muted/40 transition-colors cursor-default">
                       <span className="text-sm font-medium">{serverName}</span>
                       {countText && <span className="text-xs text-muted-foreground">({countText})</span>}
                       <button
@@ -270,7 +284,7 @@ export default function ChatInput({
                           )}
                         </div>
                       )}
-                      
+
                       {/* Read-only tools */}
                       {data.readOnlyTools.length > 0 && (
                         <div>
@@ -280,7 +294,9 @@ export default function ChatInput({
                           <div className="flex flex-col">
                             {data.readOnlyTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
+                              const displayName = data.commonPrefix
+                                ? fullName.slice(data.commonPrefix.length)
+                                : fullName;
                               return (
                                 <ToolHoverCard
                                   key={tool.id}
@@ -296,7 +312,8 @@ export default function ChatInput({
                                     type="button"
                                   >
                                     {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                    tool.analysis?.status === 'in_progress' ? (
                                       <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                     ) : tool.analysis?.status === 'error' ? (
                                       <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -313,7 +330,7 @@ export default function ChatInput({
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Read/Write tools */}
                       {data.readWriteTools.length > 0 && (
                         <div>
@@ -323,7 +340,9 @@ export default function ChatInput({
                           <div className="flex flex-col">
                             {data.readWriteTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
+                              const displayName = data.commonPrefix
+                                ? fullName.slice(data.commonPrefix.length)
+                                : fullName;
                               return (
                                 <ToolHoverCard
                                   key={tool.id}
@@ -339,7 +358,8 @@ export default function ChatInput({
                                     type="button"
                                   >
                                     {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                    tool.analysis?.status === 'in_progress' ? (
                                       <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                     ) : tool.analysis?.status === 'error' ? (
                                       <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -356,7 +376,7 @@ export default function ChatInput({
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Write-only tools */}
                       {data.writeOnlyTools.length > 0 && (
                         <div>
@@ -366,7 +386,9 @@ export default function ChatInput({
                           <div className="flex flex-col">
                             {data.writeOnlyTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
+                              const displayName = data.commonPrefix
+                                ? fullName.slice(data.commonPrefix.length)
+                                : fullName;
                               return (
                                 <ToolHoverCard
                                   key={tool.id}
@@ -382,7 +404,8 @@ export default function ChatInput({
                                     type="button"
                                   >
                                     {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                    tool.analysis?.status === 'in_progress' ? (
                                       <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                     ) : tool.analysis?.status === 'error' ? (
                                       <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -399,7 +422,7 @@ export default function ChatInput({
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Other tools */}
                       {data.otherTools.length > 0 && (
                         <div>
@@ -409,7 +432,9 @@ export default function ChatInput({
                           <div className="flex flex-col">
                             {data.otherTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
+                              const displayName = data.commonPrefix
+                                ? fullName.slice(data.commonPrefix.length)
+                                : fullName;
                               return (
                                 <ToolHoverCard
                                   key={tool.id}
@@ -425,7 +450,8 @@ export default function ChatInput({
                                     type="button"
                                   >
                                     {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                    tool.analysis?.status === 'in_progress' ? (
                                       <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                     ) : tool.analysis?.status === 'error' ? (
                                       <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />

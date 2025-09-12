@@ -340,10 +340,10 @@ const setupWebSocketSubscriptions = () => {
   // Subscribe to tool analysis events
   websocketService.subscribe('tool-analysis-progress', ({ payload }) => {
     const store = useStatusBarStore.getState();
-    
+
     if (payload.mcpServerId && payload.status) {
       const taskId = `tool-analysis-${payload.mcpServerId}`;
-      
+
       if (payload.status === 'started' || payload.status === 'analyzing') {
         store.updateTask(taskId, {
           id: taskId,
@@ -355,10 +355,10 @@ const setupWebSocketSubscriptions = () => {
           timestamp: Date.now(),
         });
       } else if (payload.status === 'completed') {
-        store.updateTask(taskId, { 
-          status: 'completed', 
+        store.updateTask(taskId, {
+          status: 'completed',
           progress: 100,
-          description: payload.message || 'Analysis complete'
+          description: payload.message || 'Analysis complete',
         });
         setTimeout(() => store.removeTask(taskId), 3000);
       } else if (payload.status === 'error') {

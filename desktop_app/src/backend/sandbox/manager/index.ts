@@ -70,14 +70,14 @@ class McpServerSandboxManager {
     // Count how many servers started vs failed
     const failures = results.filter((result) => result.status === 'rejected');
     const successes = results.filter((result) => result.status === 'fulfilled');
-    
+
     if (failures.length > 0) {
       log.warn(`${failures.length} MCP server(s) failed to start, but will remain visible with error state`);
       failures.forEach((failure) => {
         log.warn(`  - ${(failure as PromiseRejectedResult).reason}`);
       });
     }
-    
+
     if (successes.length > 0) {
       log.info(`${successes.length} MCP server(s) started successfully`);
     }
@@ -128,7 +128,7 @@ class McpServerSandboxManager {
       // Keep the server in the map even if it failed to start
       // This ensures it appears in WebSocket updates so the UI can show its error state
       log.warn(`MCP server ${id} failed to start but remains registered for error display`);
-      
+
       // Don't throw - allow other servers to continue starting
       // The server will remain in error state but still be visible in the UI
     }
@@ -161,7 +161,7 @@ class McpServerSandboxManager {
       // Keep the server in the map even if it failed to start
       // This ensures it appears in WebSocket updates so the UI can show its error state
       log.warn(`Remote MCP server ${id} failed to start but remains registered for error display`);
-      
+
       // Don't throw - allow other servers to continue starting
       // The server will remain in error state but still be visible in the UI
     }

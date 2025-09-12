@@ -1,16 +1,17 @@
-<div align="center">  
-  
-  # Archestra
-  
-  **Enterprise MCP Platform for AI Agents**
+<div align="center">
 
-  **[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
-  
+# Archestra
+
+**Enterprise MCP Platform for AI Agents**
+
+**[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
+
   <br />
-  
-  [![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
-  [![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
-  [![Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack)](https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg)
+
+[![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+[![Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack)](https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg)
+
 </div>
 
 ---
@@ -25,7 +26,7 @@
 
 Archestra is an enterprise-grade platform that enables non-technical users to safely leverage AI agents and MCP (Model Context Protocol) servers. Built as a privacy-focused desktop application, Archestra provides a secure runtime environment for AI interactions with sandboxing, resource controls, and prompt injection prevention.
 
-![Archestra Screenshot](desktop_app/public/images/screenshot.png)
+![Archestra Screenshot](./docs/assets/screenshot.png)
 
 ### Key Features
 
@@ -44,7 +45,7 @@ We welcome contributions from the community! [Contribution guideline](https://ww
 
 <div align="center">
   <br />
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="desktop_app/public/images/linux-foundation-logo.png" height="50" alt="Linux Foundation" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/linux-foundation-logo.png" height="50" alt="Linux Foundation" /></a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="desktop_app/public/images/cncf-logo.png" height="50" alt="CNCF" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/cncf-logo.png" height="50" alt="CNCF" /></a>
 </div>

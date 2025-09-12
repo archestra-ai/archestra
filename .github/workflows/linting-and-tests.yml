@@ -166,6 +166,9 @@ jobs:
             echo "db-migration-check=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Ensure database migrations run successfully
+        run: pnpm db migrate
+
       - name: Add and commit database migration changes
         # Only commit if changes exist and it's not a PR from a fork
         if: steps.db-migration-check.outputs.db-migration-check == 'true' && github.event.pull_request.head.repo.fork == false

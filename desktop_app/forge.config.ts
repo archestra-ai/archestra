@@ -22,7 +22,7 @@ const ARCHITECTURE = process.arch === 'x64' ? 'x86_64' : process.arch;
 const IS_MAC = PLATFORM === 'darwin';
 const IS_WINDOWS = PLATFORM === 'win32';
 
-const BINARIES_DIRECTORY = `./resources/bin/${IS_MAC ? 'mac' : IS_WINDOWS ? 'windows' : 'linux'}/${ARCHITECTURE}`;
+const BINARIES_DIRECTORY = `./resources/bin/${IS_MAC ? 'mac' : IS_WINDOWS ? 'win' : 'linux'}/${ARCHITECTURE}`;
 
 const binaryFilePaths: string[] = [];
 for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
@@ -188,6 +188,7 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
     }),
     new MakerDeb({
@@ -195,6 +196,7 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
     }),
     /**

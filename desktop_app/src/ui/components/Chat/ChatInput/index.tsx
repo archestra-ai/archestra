@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, X } from 'lucide-react';
+import { AlertCircle, FileText, Loader2, X } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
 
 import {
@@ -16,10 +16,11 @@ import {
   AIInputToolbar,
   AIInputTools,
 } from '@ui/components/kibo/ai-input';
+import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
-import { useCloudProvidersStore, useDeveloperModeStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import { useCloudProvidersStore, useDeveloperModeStore, useMcpServersStore, useOllamaStore, useToolsStore } from '@ui/stores';
 import type { Tool } from '@ui/types/tools';
 
 interface ChatInputProps {
@@ -43,6 +44,7 @@ export default function ChatInput({
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
+  const { installedMcpServers } = useMcpServersStore();
 
   // Use the selected model from Ollama store
   const currentModel = selectedModel || '';
@@ -94,6 +96,22 @@ export default function ChatInput({
     return '';
   };
 
+  // Helper function to extract server ID from tool ID (format: serverId__toolName)
+  const extractServerIdFromToolId = (toolId: string): string => {
+    const parts = toolId.split('__');
+    return parts[0] || '';
+  };
+
+  // Helper function to check if server is still initializing
+  const isServerInitializing = (serverId: string): boolean => {
+    const mcpServer = installedMcpServers.find(s => s.id === serverId);
+    if (!mcpServer) return false;
+    return mcpServer.state === 'not_created' || 
+           mcpServer.state === 'created' || 
+           mcpServer.state === 'initializing' ||
+           mcpServer.state === 'error';
+  };
+
   // Group selected tools by MCP server with read/write counts
   const groupedTools = useMemo(() => {
     const groups: Record<string, { 
@@ -107,12 +125,16 @@ export default function ChatInput({
       readWriteCount: number;
       otherCount: number;
       commonPrefix: string;
+      serverId: string;
+      isInitializing: boolean;
+      serverState?: string;
     }> = {};
 
     Array.from(selectedToolIds).forEach((toolId) => {
       const tool = availableTools.find((t) => t.id === toolId);
       if (tool) {
         const serverName = tool.mcpServerName || 'Unknown';
+        const serverId = extractServerIdFromToolId(tool.id);
         if (!groups[serverName]) {
           groups[serverName] = { 
             tools: [], 
@@ -124,14 +146,17 @@ export default function ChatInput({
             writeOnlyCount: 0,
             readWriteCount: 0,
             otherCount: 0,
-            commonPrefix: ''
+            commonPrefix: '',
+            serverId: serverId,
+            isInitializing: isServerInitializing(serverId),
+            serverState: installedMcpServers.find(s => s.id === serverId)?.state
           };
         }
         groups[serverName].tools.push(tool);
 
         // Categorize based on tool analysis (both read and write flags)
-        const isRead = tool.analysis?.isRead || false;
-        const isWrite = tool.analysis?.isWrite || false;
+        const isRead = tool.analysis?.is_read || false;
+        const isWrite = tool.analysis?.is_write || false;
         
         if (isRead && isWrite) {
           groups[serverName].readWriteCount++;
@@ -149,13 +174,43 @@ export default function ChatInput({
       }
     });
 
-    // Calculate common prefixes for each server
+    // Calculate common prefixes for each server and sort tools
     Object.values(groups).forEach(group => {
       group.commonPrefix = findCommonPrefix(group.tools);
+      
+      // Sort each category of tools
+      const sortTools = (tools: Tool[]) => {
+        return tools.sort((a, b) => {
+          const aRead = a.analysis?.is_read ?? false;
+          const aWrite = a.analysis?.is_write ?? false;
+          const bRead = b.analysis?.is_read ?? false;
+          const bWrite = b.analysis?.is_write ?? false;
+          
+          const getPriority = (isRead: boolean, isWrite: boolean) => {
+            if (isRead && !isWrite) return 0;
+            if (isRead && isWrite) return 1;
+            if (!isRead && isWrite) return 2;
+            return 3;
+          };
+          
+          const aPriority = getPriority(aRead, aWrite);
+          const bPriority = getPriority(bRead, bWrite);
+          
+          if (aPriority !== bPriority) {
+            return aPriority - bPriority;
+          }
+          return (a.name || a.id).localeCompare(b.name || b.id);
+        });
+      };
+      
+      group.readOnlyTools = sortTools(group.readOnlyTools);
+      group.readWriteTools = sortTools(group.readWriteTools);
+      group.writeOnlyTools = sortTools(group.writeOnlyTools);
+      group.otherTools = sortTools(group.otherTools);
     });
 
     return groups;
-  }, [selectedToolIds, availableTools]);
+  }, [selectedToolIds, availableTools, installedMcpServers]);
 
   return (
     <TooltipProvider>
@@ -197,99 +252,191 @@ export default function ChatInput({
                       </button>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-sm max-h-96 overflow-y-auto">
-                    <div className="space-y-3 p-1">
+                  <TooltipContent side="top" className="max-w-md max-h-96 overflow-y-auto p-0">
+                    <div className="space-y-2 p-2">
+                      {/* Server status indicator if initializing or error */}
+                      {(data.isInitializing || data.serverState === 'error') && (
+                        <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/50 rounded-md">
+                          {data.serverState === 'error' ? (
+                            <>
+                              <AlertCircle className="h-3 w-3 text-red-500" />
+                              <span className="text-xs text-red-500">Server error - check Settings</span>
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">Server initializing...</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Read-only tools */}
                       {data.readOnlyTools.length > 0 && (
                         <div>
-                          <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1.5">
+                          <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1 px-2">
                             Read Tools ({data.readOnlyTools.length})
                           </div>
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col">
                             {data.readOnlyTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
                               const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
                               return (
-                                <button
+                                <ToolHoverCard
                                   key={tool.id}
-                                  onClick={() => removeSelectedTool(tool.id)}
-                                  className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors cursor-pointer text-left"
-                                  type="button"
-                                  title={`Remove ${fullName}`}
+                                  tool={tool}
+                                  side="left"
+                                  align="start"
+                                  showInstructions={true}
+                                  instructionText="Click to remove this tool"
                                 >
-                                  {displayName}
-                                </button>
+                                  <button
+                                    onClick={() => removeSelectedTool(tool.id)}
+                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                    type="button"
+                                  >
+                                    {/* Status indicator */}
+                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                    ) : tool.analysis?.status === 'error' ? (
+                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                    ) : data.isInitializing ? (
+                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                                    )}
+                                    <span className="text-xs truncate flex-1">{displayName}</span>
+                                  </button>
+                                </ToolHoverCard>
                               );
                             })}
                           </div>
                         </div>
                       )}
+                      
+                      {/* Read/Write tools */}
                       {data.readWriteTools.length > 0 && (
                         <div>
-                          <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1.5">
+                          <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 px-2">
                             Read/Write Tools ({data.readWriteTools.length})
                           </div>
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col">
                             {data.readWriteTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
                               const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
                               return (
-                                <button
+                                <ToolHoverCard
                                   key={tool.id}
-                                  onClick={() => removeSelectedTool(tool.id)}
-                                  className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors cursor-pointer text-left"
-                                  type="button"
-                                  title={`Remove ${fullName}`}
+                                  tool={tool}
+                                  side="left"
+                                  align="start"
+                                  showInstructions={true}
+                                  instructionText="Click to remove this tool"
                                 >
-                                  {displayName}
-                                </button>
+                                  <button
+                                    onClick={() => removeSelectedTool(tool.id)}
+                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                    type="button"
+                                  >
+                                    {/* Status indicator */}
+                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                    ) : tool.analysis?.status === 'error' ? (
+                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                    ) : data.isInitializing ? (
+                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                                    )}
+                                    <span className="text-xs truncate flex-1">{displayName}</span>
+                                  </button>
+                                </ToolHoverCard>
                               );
                             })}
                           </div>
                         </div>
                       )}
+                      
+                      {/* Write-only tools */}
                       {data.writeOnlyTools.length > 0 && (
                         <div>
-                          <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1.5">
+                          <div className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 px-2">
                             Write Tools ({data.writeOnlyTools.length})
                           </div>
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col">
                             {data.writeOnlyTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
                               const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
                               return (
-                                <button
+                                <ToolHoverCard
                                   key={tool.id}
-                                  onClick={() => removeSelectedTool(tool.id)}
-                                  className="text-xs px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors cursor-pointer text-left"
-                                  type="button"
-                                  title={`Remove ${fullName}`}
+                                  tool={tool}
+                                  side="left"
+                                  align="start"
+                                  showInstructions={true}
+                                  instructionText="Click to remove this tool"
                                 >
-                                  {displayName}
-                                </button>
+                                  <button
+                                    onClick={() => removeSelectedTool(tool.id)}
+                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                    type="button"
+                                  >
+                                    {/* Status indicator */}
+                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                    ) : tool.analysis?.status === 'error' ? (
+                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                    ) : data.isInitializing ? (
+                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
+                                    )}
+                                    <span className="text-xs truncate flex-1">{displayName}</span>
+                                  </button>
+                                </ToolHoverCard>
                               );
                             })}
                           </div>
                         </div>
                       )}
+                      
+                      {/* Other tools */}
                       {data.otherTools.length > 0 && (
                         <div>
-                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
+                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 px-2">
                             Other Tools ({data.otherTools.length})
                           </div>
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col">
                             {data.otherTools.map((tool) => {
                               const fullName = formatToolName(tool.name || tool.id);
                               const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
                               return (
-                                <button
+                                <ToolHoverCard
                                   key={tool.id}
-                                  onClick={() => removeSelectedTool(tool.id)}
-                                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-900/50 transition-colors cursor-pointer text-left"
-                                  type="button"
-                                  title={`Remove ${fullName}`}
+                                  tool={tool}
+                                  side="left"
+                                  align="start"
+                                  showInstructions={true}
+                                  instructionText="Click to remove this tool"
                                 >
-                                  {displayName}
-                                </button>
+                                  <button
+                                    onClick={() => removeSelectedTool(tool.id)}
+                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                    type="button"
+                                  >
+                                    {/* Status indicator */}
+                                    {tool.analysis?.status === 'awaiting_ollama_model' || tool.analysis?.status === 'in_progress' ? (
+                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                    ) : tool.analysis?.status === 'error' ? (
+                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                    ) : data.isInitializing ? (
+                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-2 h-2 bg-gray-500 rounded-full flex-shrink-0" />
+                                    )}
+                                    <span className="text-xs truncate flex-1">{displayName}</span>
+                                  </button>
+                                </ToolHoverCard>
                               );
                             })}
                           </div>

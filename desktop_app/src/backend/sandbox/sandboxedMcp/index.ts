@@ -161,10 +161,28 @@ export default class SandboxedMcpServer {
    */
   private async fetchCachedTools() {
     try {
+      log.info(`[fetchCachedTools] Fetching cached tools for ${this.mcpServerId}`);
       const cachedTools = await ToolModel.getByMcpServerId(this.mcpServerId);
+      log.info(`[fetchCachedTools] Found ${cachedTools.length} tools in database for ${this.mcpServerId}`);
+      
       if (cachedTools.length > 0) {
         // Count how many tools actually have analysis results
         let analyzedCount = 0;
+        
+        // Log Google tools for debugging
+        const googleTools = cachedTools.filter(t => 
+          t.name.includes('gmail') || t.name.includes('drive') || t.name.includes('google')
+        );
+        if (googleTools.length > 0) {
+          log.info(`[fetchCachedTools] Found ${googleTools.length} Google tools in database:`, 
+            googleTools.map(t => ({
+              name: t.name,
+              analyzed_at: t.analyzed_at,
+              is_read: t.is_read,
+              is_write: t.is_write,
+            }))
+          );
+        }
         
         // Cache all tools from the database, regardless of analysis status
         for (const cachedTool of cachedTools) {
@@ -176,13 +194,24 @@ export default class SandboxedMcpServer {
             reversible: cachedTool.reversible,
           });
           
+          // Log caching for Google tools
+          if (cachedTool.name.includes('gmail') || cachedTool.name.includes('drive')) {
+            log.info(`[fetchCachedTools] Caching Google tool: ${cachedTool.name}`, {
+              is_read: cachedTool.is_read,
+              is_write: cachedTool.is_write,
+              idempotent: cachedTool.idempotent,
+              reversible: cachedTool.reversible,
+              analyzed_at: cachedTool.analyzed_at,
+            });
+          }
+          
           // Count tools that have been analyzed
           if (cachedTool.analyzed_at) {
             analyzedCount++;
           }
         }
         
-        log.info(`Cached ${cachedTools.length} tools for ${this.mcpServerId} (${analyzedCount} analyzed)`);
+        log.info(`[fetchCachedTools] Cached ${cachedTools.length} tools for ${this.mcpServerId} (${analyzedCount} analyzed)`);
         
         // Always broadcast when we cache tools, regardless of analysis status
         WebSocketService.broadcast({
@@ -545,6 +574,10 @@ export default class SandboxedMcpServer {
    * that we expose to the UI
    */
   get availableToolsList(): AvailableTool[] {
+    log.info(`[availableToolsList] Getting tools for server ${this.mcpServerId} (${this.mcpServer.name})`);
+    log.info(`[availableToolsList] Total tools in this.tools: ${Object.keys(this.tools).length}`);
+    log.info(`[availableToolsList] Total cached analysis entries: ${this.cachedToolAnalysis.size}`);
+    
     return Object.entries(this.tools).map(([id, tool]) => {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
@@ -553,8 +586,27 @@ export default class SandboxedMcpServer {
       // This is needed because remote MCP tools have this prefix at runtime but not in the database
       const cacheKey = toolName.startsWith('remote-mcp__') ? toolName.substring('remote-mcp__'.length) : toolName;
 
+      // Extensive logging for debugging
+      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
+        log.info(`[availableToolsList] Processing Google tool:`, {
+          id,
+          toolName,
+          cacheKey,
+          hasCachedEntry: this.cachedToolAnalysis.has(cacheKey),
+          cachedKeys: Array.from(this.cachedToolAnalysis.keys()).filter(k => k.includes('gmail') || k.includes('drive')),
+        });
+      }
+
       // Get analysis results from cache if available
       const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
+      
+      // Log cache lookup result for Google tools
+      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
+        log.info(`[availableToolsList] Cache lookup for ${cacheKey}:`, {
+          found: !!cachedAnalysis,
+          analysis: cachedAnalysis,
+        });
+      }
       
       // Check if the tool has actually been analyzed (at least one non-null value)
       const hasAnalysis = cachedAnalysis && (
@@ -563,6 +615,15 @@ export default class SandboxedMcpServer {
         cachedAnalysis.idempotent !== null ||
         cachedAnalysis.reversible !== null
       );
+
+      // Log analysis status for Google tools
+      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
+        log.info(`[availableToolsList] Analysis status for ${toolName}:`, {
+          hasAnalysis,
+          status: hasAnalysis ? 'completed' : 'awaiting_ollama_model',
+          cachedAnalysis,
+        });
+      }
 
       return {
         id,

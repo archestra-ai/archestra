@@ -24,6 +24,7 @@ interface ToolsActions {
 
   fetchAvailableTools: () => void;
   setAvailableTools: (tools: Tool[]) => void;
+  mergeAvailableTools: (tools: Tool[]) => void;
 
   getAvailableToolsMap: () => AvailableToolsMap;
 }
@@ -105,6 +106,47 @@ export const useToolsStore = create<ToolsStore>()(
     });
   },
 
+  mergeAvailableTools: (newTools: Tool[]) => {
+    const { availableTools: currentTools } = get();
+    
+    // Create a map of current tools for efficient lookup
+    const currentToolsMap = new Map(currentTools.map(tool => [tool.id, tool]));
+    
+    // Create the merged array, preserving existing tool objects when unchanged
+    const mergedTools = currentTools.map(currentTool => {
+      const newTool = newTools.find(t => t.id === currentTool.id);
+      if (!newTool) {
+        // Tool was removed
+        return null;
+      }
+      
+      // Check if the tool has actually changed (comparing relevant fields)
+      const hasChanged = 
+        currentTool.name !== newTool.name ||
+        currentTool.description !== newTool.description ||
+        currentTool.analysis?.status !== newTool.analysis?.status ||
+        currentTool.analysis?.is_read !== newTool.analysis?.is_read ||
+        currentTool.analysis?.is_write !== newTool.analysis?.is_write ||
+        currentTool.analysis?.idempotent !== newTool.analysis?.idempotent ||
+        currentTool.analysis?.reversible !== newTool.analysis?.reversible;
+      
+      // Return the new tool if changed, otherwise keep the existing reference
+      return hasChanged ? newTool : currentTool;
+    }).filter(Boolean) as Tool[];
+    
+    // Add any new tools that weren't in the current list
+    const newToolIds = new Set(currentTools.map(t => t.id));
+    const addedTools = newTools.filter(t => !newToolIds.has(t.id));
+    
+    const finalTools = [...mergedTools, ...addedTools];
+    
+    // Only update if there are actual changes
+    if (finalTools.length !== currentTools.length || 
+        finalTools.some((tool, index) => tool !== currentTools[index])) {
+      set({ availableTools: finalTools });
+    }
+  },
+
   getAvailableToolsMap: () => {
     return get().availableTools.reduce((acc, tool) => {
       acc[tool.id] = tool;
@@ -134,8 +176,35 @@ export const useToolsStore = create<ToolsStore>()(
 useToolsStore.getState().fetchAvailableTools();
 
 // Subscribe to tools updates via WebSocket
-websocketService.subscribe('tools-updated', ({ payload }) => {
+websocketService.subscribe('tools-updated', async ({ payload }) => {
   console.log('Tools updated for MCP server:', payload.mcpServerId);
-  // Refetch available tools when any MCP server's tools are updated
-  useToolsStore.getState().fetchAvailableTools();
+  
+  // For analysis updates, use merge to preserve scroll position
+  // For initial tool discovery or major changes, do a full fetch
+  const { availableTools } = useToolsStore.getState();
+  const isInitialLoad = availableTools.length === 0;
+  
+  if (isInitialLoad || payload.message?.includes('Discovered')) {
+    // Full fetch for initial load or when new tools are discovered
+    useToolsStore.getState().fetchAvailableTools();
+  } else {
+    // Merge updates for analysis changes to preserve scroll
+    try {
+      const { data } = await getAvailableTools();
+      if (data) {
+        useToolsStore.getState().mergeAvailableTools(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tools for merge:', error);
+      // Fallback to full fetch on error
+      useToolsStore.getState().fetchAvailableTools();
+    }
+  }
+});
+
+// Subscribe to tool analysis progress without refetching
+websocketService.subscribe('tool-analysis-progress', ({ payload }) => {
+  // Log progress but don't refetch - wait for tools-updated event with actual data
+  console.log('Tool analysis progress:', payload);
+  // The actual tool updates will come through tools-updated event
 });

@@ -1,6 +1,5 @@
 {
   "name": "linear__remote-mcp",
-
   "oauth_config": {
     "name": "Linear MCP",
     "server_url": "https://mcp.linear.app/mcp",
@@ -11,17 +10,11 @@
     "default_scopes": ["read", "write"],
     "supports_resource_metadata": true
   },
-
   "server": {
-    "type": "python",
-    "entry_point": "index.js",
-    "mcp_config": {
-      "command": "unknown",
-      "args": [],
-      "env": {}
-    }
+    "command": "unknown",
+    "args": [],
+    "env": {}
   },
-
   "display_name": "Linear MCP",
   "version": "1.0.0",
   "description": "Remote MCP server for Linear - issue tracking and project management",
@@ -34,9 +27,7 @@
   "category": "Development",
   "quality_score": 80,
   "archestra_config": {
-    "client_config_permutations": {
-      "mcpServers": {}
-    },
+    "client_config_permutations": {},
     "oauth": {
       "provider": "linear",
       "required": true

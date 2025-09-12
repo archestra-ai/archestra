@@ -8,62 +8,18 @@
     "name": "korotovsky"
   },
   "server": {
-    "type": "node",
-    "entry_point": "slack-mcp-server",
-    "mcp_config": {
-      "command": "npx",
-      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
-      "env": {
-        "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
-      }
-    }
-  },
-  "server_overridden": {
-    "type": "node",
-    "entry_point": "slack-mcp-server",
-    "mcp_config": {
-      "command": "npx",
-      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
-      "env": {
-        "SLACK_MCP_XOXC_TOKEN": "${user_config.slack_mcp_xoxc_token}",
-        "SLACK_MCP_XOXD_TOKEN": "${user_config.slack_mcp_xoxd_token}",
-        "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
-      }
+    "command": "npx",
+    "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"],
+    "env": {
+      "SLACK_MCP_XOXC_TOKEN": "${user_config.slack_mcp_xoxc_token}",
+      "SLACK_MCP_XOXD_TOKEN": "${user_config.slack_mcp_xoxd_token}",
+      "SLACK_MCP_ADD_MESSAGE_TOOL": "${user_config.slack_mcp_add_message_tool}"
     }
   },
   "tools": [],
   "prompts": [],
   "keywords": [],
   "user_config": {
-    "slack_mcp_xoxc_token": {
-      "type": "string",
-      "title": "Slack 'xoxc' Token (Stealth Mode)",
-      "description": "Slack browser token (starts with 'xoxc-') for stealth mode authentication. Required if not using OAuth mode.",
-      "sensitive": true,
-      "required": false
-    },
-    "slack_mcp_xoxd_token": {
-      "type": "string",
-      "title": "Slack 'd' Cookie (Stealth Mode)",
-      "description": "Slack browser cookie 'd' (starts with 'xoxd-') for stealth mode authentication. Required if not using OAuth mode.",
-      "sensitive": true,
-      "required": false
-    },
-    "slack_mcp_oauth_token": {
-      "type": "string",
-      "title": "Slack OAuth Token",
-      "description": "Slack OAuth token (e.g., starts with 'xoxb-') for secure access. Required if not using stealth mode.",
-      "sensitive": true,
-      "required": false
-    },
-    "slack_mcp_add_message_tool": {
-      "type": "string",
-      "title": "Enable Add Message Tool",
-      "description": "Set to 'true' to enable posting messages, or provide a comma-separated list of channel IDs to restrict posting to specific channels. Disabled by default.",
-      "required": false
-    }
-  },
-  "user_config_overridden": {
     "slack_mcp_xoxc_token": {
       "type": "string",
       "title": "Slack 'xoxc' Token (Stealth Mode)",
@@ -115,9 +71,7 @@
     "requires_proxy": true
   },
   "archestra_config": {
-    "client_config_permutations": {
-      "mcpServers": {}
-    },
+    "client_config_permutations": {},
     "oauth": {
       "provider": "slack",
       "required": true

@@ -1,6 +1,5 @@
 {
   "name": "github__remote-mcp",
-
   "oauth_config": {
     "name": "GitHub Copilot MCP",
     "server_url": "https://api.githubcopilot.com/mcp",
@@ -13,17 +12,11 @@
     "supports_resource_metadata": true,
     "requires_proxy": true
   },
-
   "server": {
-    "type": "python",
-    "entry_point": "index.js",
-    "mcp_config": {
-      "command": "unknown",
-      "args": [],
-      "env": {}
-    }
+    "command": "unknown",
+    "args": [],
+    "env": {}
   },
-
   "display_name": "github MCP",
   "version": "1.0.0",
   "description": "Remote MCP server for github - issue tracking and project management",
@@ -36,9 +29,7 @@
   "category": "Development",
   "quality_score": 80,
   "archestra_config": {
-    "client_config_permutations": {
-      "mcpServers": {}
-    },
+    "client_config_permutations": {},
     "oauth": {
       "provider": "github",
       "required": true

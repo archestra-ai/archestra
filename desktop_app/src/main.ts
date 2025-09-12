@@ -1,6 +1,5 @@
-import * as Sentry from '@sentry/electron/main';
 import { config as dotenvConfig } from 'dotenv';
-import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,11 +7,13 @@ import { updateElectronApp } from 'update-electron-app';
 
 import ArchestraMcpClient from '@backend/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
+import { ToolModel } from '@backend/models/tools';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
-import { startFastifyServer } from '@backend/server';
+import { startFastifyServer, stopFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
+import sentryClient from '@backend/utils/sentry';
 import WebSocketServer from '@backend/websocket';
 
 import config from './config';
@@ -20,6 +21,9 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 
 // Load environment variables from .env file
 dotenvConfig();
+
+// Initialize Sentry early for error tracking
+sentryClient.initialize();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -44,17 +48,6 @@ if (process.defaultApp) {
 }
 
 /**
- * Configure Sentry for error monitoring, logs, session replay, and tracing
- * https://docs.sentry.io/platforms/javascript/guides/electron/#configure
- */
-Sentry.init({
-  dsn: config.sentry.dsn,
-  /**
-   * TODO: pull from User.collectTelemetryData..
-   */
-});
-
-/**
  * Enable automatic updates
  * https://github.com/electron/update-electron-app?tab=readme-ov-file#usage
  */
@@ -64,6 +57,56 @@ updateElectronApp({
 });
 
 let mainWindow: BrowserWindow | null = null;
+let isCleaningUp = false;
+
+/**
+ * Cleanup function to gracefully shut down all backend services
+ */
+async function cleanup(): Promise<void> {
+  if (isCleaningUp) {
+    return; // Prevent multiple cleanup attempts
+  }
+
+  isCleaningUp = true;
+  log.info('Starting graceful shutdown cleanup...');
+
+  try {
+    // Stop Fastify server first to prevent new requests
+    await stopFastifyServer();
+  } catch (error) {
+    log.error('Error stopping Fastify server:', error);
+  }
+
+  try {
+    // Stop WebSocket server
+    WebSocketServer.stop();
+  } catch (error) {
+    log.error('Error stopping WebSocket server:', error);
+  }
+
+  try {
+    // Disconnect from Archestra MCP server
+    await ArchestraMcpClient.disconnect();
+  } catch (error) {
+    log.error('Error disconnecting Archestra MCP client:', error);
+  }
+
+  try {
+    // Turn off sandbox manager (stops all MCP containers)
+    McpServerSandboxManager.turnOffSandbox();
+  } catch (error) {
+    log.error('Error turning off sandbox:', error);
+  }
+
+  try {
+    // Stop Ollama server
+    await OllamaServer.stopServer();
+  } catch (error) {
+    log.error('Error stopping Ollama server:', error);
+  }
+
+  log.info('Graceful shutdown cleanup completed');
+}
 
 // Resolve icon path for both dev and packaged builds
 function resolveIconFilename(): string | undefined {
@@ -158,7 +201,10 @@ async function startBackendServer(): Promise<void> {
 
   try {
     await runDatabaseMigrations();
-    await UserModel.ensureUserExists();
+    const user = await UserModel.ensureUserExists();
+
+    // Set Sentry user context now that user is available
+    sentryClient.setUserContext(user);
 
     // Start WebSocket and Fastify servers first so they're ready for MCP connections
     WebSocketServer.start();
@@ -205,9 +251,19 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
-ipcMain.handle('get-app-version', () => {
-  return app.getVersion();
+ipcMain.handle('get-app-info', () => {
+  return {
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+  };
 });
+
+ipcMain.handle(
+  'show-open-dialog',
+  async (_event, options: { properties: Array<'openDirectory' | 'openFile' | 'multiSelections'> }) => {
+    return dialog.showOpenDialog(mainWindow!, options);
+  }
+);
 
 ipcMain.handle('get-system-info', () => {
   const os = require('os');
@@ -432,4 +488,42 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+/**
+ * Handle graceful shutdown on app quit
+ */
+app.on('before-quit', async (event) => {
+  if (!isCleaningUp) {
+    event.preventDefault();
+    await cleanup();
+    app.quit(); // Quit after cleanup is done
+  }
+});
+
+/**
+ * Handle process termination signals for graceful shutdown
+ */
+process.on('SIGTERM', async () => {
+  log.info('Received SIGTERM signal');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  log.info('Received SIGINT signal (Ctrl+C)');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on('uncaughtException', async (error) => {
+  log.error('Uncaught exception:', error);
+  await cleanup();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  log.error('Unhandled rejection at:', promise, 'reason:', reason);
+  await cleanup();
+  process.exit(1);
 });

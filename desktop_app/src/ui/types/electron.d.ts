@@ -1,7 +1,10 @@
 declare global {
   interface Window {
     electronAPI: {
-      appVersion: () => Promise<string>;
+      getAppInfo: () => Promise<{
+        version: string;
+        isPackaged: boolean;
+      }>;
       getSystemInfo: () => Promise<{
         platform: string;
         arch: string;
@@ -23,6 +26,11 @@ declare global {
       // OAuth callback methods
       onOAuthCallback: (callback: (params: any) => void) => void;
       removeOAuthCallbackListener: () => void;
+
+      // dialog
+      showOpenDialog: (options: {
+        properties: Array<'openDirectory' | 'openFile' | 'multiSelections'>;
+      }) => Promise<{ canceled: boolean; filePaths: string[] }>;
     };
   }
 }

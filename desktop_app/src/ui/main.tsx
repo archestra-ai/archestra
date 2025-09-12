@@ -1,38 +1,27 @@
-import * as Sentry from '@sentry/electron/renderer';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import sentryClient from '@ui/lib/sentry';
 import websocketService from '@ui/lib/websocket';
+import { useUserStore } from '@ui/stores/user-store';
 
-import config from '../config';
 import App from './App';
 
 import './index.css';
 
-const { tracesSampleRate, replaysSessionSampleRate, replaysOnErrorSampleRate } = config.sentry;
+// Initialize Sentry early for error tracking
+sentryClient.initialize();
 
-Sentry.init({
-  /**
-   * Adds request headers and IP for users, for more info visit:
-   * https://docs.sentry.io/platforms/javascript/guides/electron/configuration/options/#sendDefaultPii
-   */
-  sendDefaultPii: true,
-  integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
-
-  /**
-   * https://docs.sentry.io/platforms/javascript/configuration/options/#traces-sample-rate
-   */
-  tracesSampleRate,
-
-  /**
-   * Capture Replay for configured % of all sessions,
-   * plus for configured % of sessions with an error
-   *
-   * https://docs.sentry.io/platforms/javascript/session-replay/configuration/#general-integration-configuration
-   */
-  replaysSessionSampleRate,
-  replaysOnErrorSampleRate,
-});
+// Fetch user data and set Sentry user context
+useUserStore
+  .getState()
+  .fetchUser()
+  .then(() => {
+    const user = useUserStore.getState().user;
+    if (user) {
+      sentryClient.setUserContext(user);
+    }
+  });
 
 /**
  * Open a single websocket connection to WebSocket server when the app is loaded

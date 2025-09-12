@@ -255,9 +255,6 @@ export type McpServerConfigInput = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string
@@ -425,8 +422,10 @@ export type SandboxActionResponseInput = {
 
 export type UserInput = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -686,9 +685,6 @@ export type McpServerConfig = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string
@@ -856,8 +852,10 @@ export type SandboxActionResponse = {
 
 export type User = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1760,6 +1758,7 @@ export type UpdateUserData = {
   body?: {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
+    collectAnalyticsData?: boolean;
   };
   path?: never;
   query?: never;

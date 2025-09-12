@@ -56,7 +56,6 @@ class ArchestraMcpClient {
       this.isConnected = true;
 
       log.info('Successfully connected to Archestra MCP server');
-      log.info('Available tools:', Object.keys(this.tools));
     } catch (error) {
       log.error('Failed to connect to Archestra MCP server:', error);
       log.error('Error details:', JSON.stringify(error, null, 2));

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Dialog, DialogContent } from '@ui/components/ui/dialog';
-import { useChatStore, useUserStore } from '@ui/stores';
+import { useUserStore } from '@ui/stores';
 
 enum OnboardingStep {
   Welcome = 0,
@@ -23,22 +23,12 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
   const [isButtonEnabled, setIsButtonEnabled] = useState(false);
 
   const { user, markOnboardingCompleted } = useUserStore();
-  const { chats, loadChats } = useChatStore();
 
   useEffect(() => {
-    // Load chats to check if user has existing memories
-    loadChats();
-  }, []);
-
-  useEffect(() => {
-    // Skip onboarding if user has existing chats (memories)
-    if (user && !user.hasCompletedOnboarding && chats.length === 0) {
+    if (user && !user.hasCompletedOnboarding) {
       setIsOpen(true);
-    } else if (user && !user.hasCompletedOnboarding && chats.length > 0) {
-      // Auto-complete onboarding if user has existing chats
-      markOnboardingCompleted();
     }
-  }, [user, chats]);
+  }, [user]);
 
   useEffect(() => {
     onOpenChange?.(isOpen);

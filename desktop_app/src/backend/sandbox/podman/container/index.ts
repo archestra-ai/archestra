@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import {
+  Mount,
+  SpecGenerator,
   containerCreateLibpod,
   containerDeleteLibpod,
   containerInspectLibpod,
@@ -19,6 +21,7 @@ import {
 import config from '@backend/config';
 import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@backend/models/mcpServer';
 import log from '@backend/utils/logger';
+import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
 
 export const PodmanContainerStateSchema = z.enum([
@@ -32,6 +35,8 @@ export const PodmanContainerStateSchema = z.enum([
   'stopped',
   'exited',
 ]);
+
+export const PROJECTS_BASE = '/home/mcp/projects';
 
 export const PodmanContainerStatusSummarySchema = z.object({
   /**
@@ -61,6 +66,7 @@ export default class PodmanContainer {
   private serverConfig: McpServerConfig;
   private mcpServer: McpServer; // Store the full McpServer object for OAuth access
 
+  private userConfigValues: McpServerUserConfigValues | null;
   private command: string;
   private args: string[];
   private envVars: Record<string, string>;
@@ -99,6 +105,7 @@ export default class PodmanContainer {
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
     this.serverConfig = serverConfig;
     this.mcpServer = mcpServer; // Store full object for OAuth access
+    this.userConfigValues = userConfigValues;
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -532,6 +539,11 @@ export default class PodmanContainer {
     serverConfig: McpServerConfig,
     userConfigValues: McpServerUserConfigValues | null
   ) => {
+    const hostToContainerPath = (hostPath: string): string => {
+      const baseName = path.basename(hostPath);
+      const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      return path.posix.join(PROJECTS_BASE, sanitizedBaseName);
+    };
     const replaceTemplateVariables = (str: string): string => {
       if (!userConfigValues) return str;
 
@@ -542,6 +554,14 @@ export default class PodmanContainer {
           log.warn(`Template variable ${match} not found in user config values`);
           return match; // Return the original template if no value found
         }
+        // Special handling for allowed_directories - map host paths to container paths
+        if (key === 'allowed_directories' && Array.isArray(value)) {
+          const containerPaths = value
+            .filter((p) => typeof p === 'string' && p.trim() !== '')
+            .map((p) => hostToContainerPath(p));
+          return containerPaths.join(',');
+        }
+
         // Convert the value to string (handles string, number, boolean)
         // For arrays, join them with commas
         if (Array.isArray(value)) {
@@ -554,8 +574,25 @@ export default class PodmanContainer {
     // Process command
     const processedCommand = serverConfig.command ? replaceTemplateVariables(serverConfig.command) : '';
 
-    // Process args if they exist
-    const processedArgs = serverConfig.args?.map((arg) => replaceTemplateVariables(arg));
+    // Process args if they exist; expand ${user_config.allowed_directories} into multiple args
+    const processedArgs = serverConfig.args
+      ? (() => {
+          const out: string[] = [];
+          for (const arg of serverConfig.args!) {
+            if (arg === '${user_config.allowed_directories}') {
+              if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+                const containerPaths = userConfigValues.allowed_directories
+                  .filter((p) => typeof p === 'string' && p.trim() !== '')
+                  .map((p) => hostToContainerPath(p));
+                out.push(...containerPaths);
+                continue;
+              }
+            }
+            out.push(replaceTemplateVariables(arg));
+          }
+          return out;
+        })()
+      : undefined;
 
     // Process environment variables if they exist
     const processedEnv: Record<string, string> = {};
@@ -662,7 +699,7 @@ export default class PodmanContainer {
       this.statusMessage = 'Creating container';
 
       // Only include command if it's not empty
-      const createBody: any = {
+      const createBody: SpecGenerator = {
         name: this.containerName,
         image: this.customImage || config.sandbox.baseDockerImage,
         env: this.envVars,
@@ -681,9 +718,12 @@ export default class PodmanContainer {
         createBody.command = [this.command, ...this.args];
       }
 
-      // Handle file injection if specified
-      if (this.serverConfig.inject_file) {
-        await this.injectFiles(createBody);
+      // Configures volume mounts with necessary directories and files
+      try {
+        await this.configureVolumeMounts(createBody, this.userConfigValues);
+      } catch (e) {
+        log.warn('Failed to configure volume mounts into container create body', e);
+        throw e;
       }
 
       // Check if this is a streamable HTTP server and add port bindings
@@ -708,6 +748,9 @@ export default class PodmanContainer {
       });
 
       if (response.response.status !== 201) {
+        log.error(`Container creation failed with status ${response.response.status}`);
+        log.error(`Full createBody sent to API:`, JSON.stringify(createBody, null, 2));
+        log.error(`Full API response:`, JSON.stringify(response, null, 2));
         throw new Error(`Failed to create container: ${response.response.status}`);
       }
 
@@ -1185,57 +1228,99 @@ export default class PodmanContainer {
     }
   }
 
-  /**
-   * Inject files into the container by creating temporary host files and mounting them
-   */
-  private async injectFiles(createBody: any): Promise<void> {
-    if (!this.serverConfig.inject_file) {
-      return;
+  private buildMount(hostPath: string, destination: string, readOnly: boolean): Mount {
+    return {
+      Type: 'bind',
+      Source: hostPath,
+      Destination: destination,
+      ReadOnly: readOnly,
+      BindOptions: { CreateMountpoint: true },
+      RW: !readOnly,
+    };
+  }
+
+  private async configureVolumeMounts(
+    createBody: SpecGenerator,
+    userConfigValues: McpServerUserConfigValues | null
+  ): Promise<void> {
+    const mounts: Mount[] = [];
+    if (this.serverConfig.inject_file) {
+      //  Inject files into the container by creating temporary host files and mounting them
+      log.info(
+        `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      );
+      const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+
+      try {
+        // Create temp directory
+        await fs.promises.mkdir(tempDir, { recursive: true });
+
+        // Create each file and add it as a mount
+        for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
+          const hostFilePath = path.join(tempDir, path.basename(filename));
+          const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
+
+          // Write file content to temp location
+          await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
+          log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
+
+          // Add as bind mount to container
+          mounts.push(this.buildMount(hostFilePath, containerFilePath, true));
+        }
+
+        log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
+      } catch (error) {
+        log.error(`Failed to setup file injection for ${this.containerName}:`, error);
+        // Clean up temp directory on error
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+        }
+        throw error;
+      }
     }
 
+    // Handle mounts from userConfigValues.allowed_directories
     log.info(
-      `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      `Checking userConfigValues for mount configuration: allowed_directories present=${Array.isArray(userConfigValues?.allowed_directories)}, read_only=${parseBoolean(userConfigValues?.read_only)}`
     );
+    if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+      log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
+      const readOnly = parseBoolean(userConfigValues.read_only);
+      for (const hostPathRaw of userConfigValues.allowed_directories) {
+        if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
+        const hostPath = hostPathRaw.trim();
 
-    const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+        // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
+        // Check that the directory exists
+        try {
+          const stats = await fs.promises.stat(hostPath);
+          if (!stats.isDirectory()) {
+            log.warn(`Path is not a directory, skipping: ${hostPath}`);
+            continue;
+          }
+        } catch (error) {
+          log.warn(`Directory does not exist, skipping: ${hostPath}`, error);
+          continue;
+        }
 
-    try {
-      // Create temp directory
-      await fs.promises.mkdir(tempDir, { recursive: true });
+        const baseName = path.basename(hostPath);
+        const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
 
-      // Initialize mounts array if not exists
-      if (!createBody.mounts) {
-        createBody.mounts = [];
+        log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
+        // Use SpecGenerator Mount shape (capitalized keys)
+        mounts.push(this.buildMount(hostPath, target, readOnly));
       }
-
-      // Create each file and add it as a mount
-      for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
-        const hostFilePath = path.join(tempDir, path.basename(filename));
-        const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
-
-        // Write file content to temp location
-        await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
-        log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
-
-        // Add as bind mount to container
-        createBody.mounts.push({
-          type: 'bind',
-          source: hostFilePath,
-          target: containerFilePath,
-          options: ['ro'], // Read-only mount
-        });
-      }
-
-      log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
-    } catch (error) {
-      log.error(`Failed to setup file injection for ${this.containerName}:`, error);
-      // Clean up temp directory on error
-      try {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
-      }
-      throw error;
+    } else {
+      log.info(
+        `No mount configuration: userConfigValues=${!!userConfigValues}, allowed_directories type=${userConfigValues?.allowed_directories ? typeof userConfigValues.allowed_directories : 'undefined'}`
+      );
+    }
+    if (!createBody.mounts) createBody.mounts = [];
+    for (const m of mounts) {
+      createBody.mounts.push(m);
     }
   }
 }

@@ -64,6 +64,7 @@ export default function McpServer({
   // Safely extract OAuth and browser-based config with null checks
   const requiresOAuthSetup = !!(server as LocalMcpServerManifest).oauth_config;
   const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
+  const isRemoteMcp = !!(server as LocalMcpServerManifest).remote_url;
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);
@@ -247,16 +248,8 @@ export default function McpServer({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onInstallClick(server)}
-                    disabled={isInstalling}
-                    className="cursor-pointer text-xs px-2 h-7"
-                  >
-                    Install
-                  </Button>
-                  {requiresOAuthSetup && (
+                  {/* For Remote MCP, only show Install (OAuth) button */}
+                  {isRemoteMcp ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -266,23 +259,46 @@ export default function McpServer({
                     >
                       Install (OAuth)
                     </Button>
-                  )}
-                  {requiresBrowserBasedSetup && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => {
-                        if (onBrowserInstallClick) {
-                          onBrowserInstallClick(server);
-                        } else {
-                          onInstallClick(server);
-                        }
-                      }}
-                      disabled={isInstalling}
-                      className="cursor-pointer text-xs px-2 h-7"
-                    >
-                      Install (Browser)
-                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onInstallClick(server)}
+                        disabled={isInstalling}
+                        className="cursor-pointer text-xs px-2 h-7"
+                      >
+                        Install
+                      </Button>
+                      {requiresOAuthSetup && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onOAuthInstallClick?.(server)}
+                          disabled={isInstalling}
+                          className="cursor-pointer text-xs px-2 h-7"
+                        >
+                          Install (OAuth)
+                        </Button>
+                      )}
+                      {requiresBrowserBasedSetup && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => {
+                            if (onBrowserInstallClick) {
+                              onBrowserInstallClick(server);
+                            } else {
+                              onInstallClick(server);
+                            }
+                          }}
+                          disabled={isInstalling}
+                          className="cursor-pointer text-xs px-2 h-7"
+                        >
+                          Install (Browser)
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

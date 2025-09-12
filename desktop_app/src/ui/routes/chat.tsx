@@ -1,7 +1,7 @@
 import { useChat } from '@ai-sdk/react';
 import { createFileRoute } from '@tanstack/react-router';
 import { DefaultChatTransport, UIMessage } from 'ai';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ChatHistory from '@ui/components/Chat/ChatHistory';
 import ChatInput from '@ui/components/Chat/ChatInput';
@@ -17,17 +17,19 @@ export const Route = createFileRoute('/chat')({
 });
 
 function ChatPage() {
-  const { getCurrentChat, getCurrentChatTitle } = useChatStore();
+  const { getCurrentChat, getCurrentChatTitle, saveDraftMessage, getDraftMessage, clearDraftMessage } = useChatStore();
   const { selectedToolIds } = useToolsStore();
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
-  const [localInput, setLocalInput] = useState('');
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
   const currentChatMessages = currentChat?.messages || [];
   const currentChatTitle = getCurrentChatTitle();
+  
+  // Get current input from draft messages
+  const currentInput = currentChat ? getDraftMessage(currentChat.id) : '';
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
   // Without ref, switching models/providers wouldn't work - it would always use the old values.
@@ -186,17 +188,36 @@ function ChatPage() {
     }
   }, [currentChatSessionId]); // Only depend on session ID to avoid infinite loop
 
+  // Simple debounce implementation
+  const debounceRef = useRef<NodeJS.Timeout>();
+  
+  const debouncedSaveDraft = useCallback((chatId: number, content: string) => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      // This could be used for future persistence to localStorage or server
+      console.log('Debounced save draft:', { chatId, contentLength: content.length });
+    }, 500);
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalInput(e.target.value);
+    const newValue = e.target.value;
+    if (currentChat) {
+      // Immediately update UI by saving to store without debounce
+      saveDraftMessage(currentChat.id, newValue);
+      // Also save with debounce for potential future persistence
+      debouncedSaveDraft(currentChat.id, newValue);
+    }
   };
 
   const handleSubmit = (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    if (localInput.trim()) {
+    if (currentInput.trim() && currentChat) {
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
-      sendMessage({ text: localInput });
-      setLocalInput('');
+      sendMessage({ text: currentInput });
+      clearDraftMessage(currentChat.id);
     }
   };
 
@@ -244,7 +265,7 @@ function ChatPage() {
       <SystemPrompt />
       <div className="flex-shrink-0">
         <ChatInput
-          input={localInput}
+          input={currentInput}
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isLoading={isLoading}

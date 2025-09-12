@@ -156,6 +156,31 @@ class ArchestraMcpClient {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
 
+      // Static evaluation for all Archestra MCP tools
+      const toolEvaluations: Record<string, { is_read: boolean; is_write: boolean }> = {
+        // MCP Server management tools
+        'list_installed_mcp_servers': { is_read: true, is_write: false },
+        'install_mcp_server': { is_read: false, is_write: true },
+        'uninstall_mcp_server': { is_read: false, is_write: true },
+        'search_mcp_servers': { is_read: true, is_write: false },
+        
+        // Memory management tools
+        'list_memories': { is_read: true, is_write: false },
+        'get_memory': { is_read: true, is_write: false },
+        'set_memory': { is_read: false, is_write: true },
+        'delete_memory': { is_read: false, is_write: true },
+        
+        // Tool management tools
+        'list_available_tools': { is_read: true, is_write: false },
+        'enable_tools': { is_read: false, is_write: true },
+        'disable_tools': { is_read: false, is_write: true },
+      };
+
+      const evaluation = toolEvaluations[toolName] || { 
+        is_read: false, 
+        is_write: false 
+      };
+
       return {
         id,
         name: toolName,
@@ -163,14 +188,12 @@ class ArchestraMcpClient {
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: ARCHESTRA_MCP_SERVER_ID,
         mcpServerName: 'Archestra',
-        // Built-in tools don't need analysis
+        // Static evaluations for built-in tools
         analysis: {
           status: 'completed',
           error: null,
-          is_read: ['list_installed_mcp_servers', 'list_memories', 'get_memory', 'search_mcp_servers'].includes(
-            toolName
-          ),
-          is_write: ['install_mcp_server', 'uninstall_mcp_server', 'set_memory', 'delete_memory'].includes(toolName),
+          is_read: evaluation.is_read,
+          is_write: evaluation.is_write,
         },
       };
     });

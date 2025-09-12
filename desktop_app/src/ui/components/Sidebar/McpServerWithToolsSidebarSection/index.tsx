@@ -100,23 +100,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
     }
   }, [availableTools, hasInitialized]);
 
-  // Debug logging
-  console.log('[McpServerSidebar] Debug info:', {
-    availableToolsCount: availableTools.length,
-    selectedToolIdsCount: selectedToolIds.size,
-    installedServersCount: installedMcpServers.length,
-    githubTools: availableTools.filter(t => t.id.includes('github')).slice(0, 3),
-    installedServerNames: installedMcpServers.map(s => ({ id: s.id, name: s.name })),
-  });
-
   // Step 1: Filter and group UNSELECTED tools by server
   const toolsByServer = availableTools
     .filter((tool) => {
       // Only show tools that are NOT selected
       const isSelected = selectedToolIds.has(tool.id);
-      if (tool.id.includes('github') && !isSelected) {
-        console.log('[McpServerSidebar] GitHub tool not selected:', tool.id, tool.mcpServerName);
-      }
       return !isSelected;
     })
     .reduce(
@@ -170,32 +158,10 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
       {}
     );
 
-  // Debug: Check what's in toolsByServer
-  console.log('[McpServerSidebar] toolsByServer:', {
-    serverNames: Object.keys(toolsByServer),
-    githubEntry: toolsByServer['github MCP'] || toolsByServer['GitHub'] || 'not found',
-    allEntries: Object.entries(toolsByServer).map(([name, data]) => ({
-      name,
-      toolCount: data.tools.length,
-      serverId: data.serverId
-    }))
-  });
-
   // Step 2: Add MCP servers that don't have unselected tools
   installedMcpServers.forEach((server) => {
       // Check if this server already has unselected tools showing
       const serverAlreadyShowing = Object.values(toolsByServer).some((group) => group.serverId === server.id);
-      
-      // Debug log for GitHub
-      if (server.id.includes('github')) {
-        console.log('[McpServerSidebar] GitHub server check:', {
-          serverId: server.id,
-          serverName: server.name,
-          serverAlreadyShowing,
-          toolsByServerHasIt: server.name in toolsByServer,
-          exactMatch: toolsByServer[server.name],
-        });
-      }
 
       // If server is not already showing, add it (regardless of state)
       // This ensures running servers without tools still appear as "Loading..."

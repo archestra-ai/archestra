@@ -11,6 +11,7 @@ interface ChatState {
   chats: ChatWithMessages[];
   currentChatSessionId: string | null;
   isLoadingChats: boolean;
+  draftMessages: Map<number, string>; // chatId -> draft content
 }
 
 interface ChatActions {
@@ -22,6 +23,9 @@ interface ChatActions {
   deleteCurrentChat: () => Promise<void>;
   updateChatTitle: (chatId: number, title: string) => Promise<void>;
   initializeStore: () => Promise<void>;
+  saveDraftMessage: (chatId: number, content: string) => void;
+  getDraftMessage: (chatId: number) => string;
+  clearDraftMessage: (chatId: number) => void;
 }
 
 type ChatStore = ChatState & ChatActions;
@@ -43,6 +47,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chats: [],
   currentChatSessionId: null,
   isLoadingChats: false,
+  draftMessages: new Map(),
 
   // Actions
   loadChats: async () => {
@@ -178,8 +183,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       await deleteChat({ path: { id: currentChat.id.toString() } });
 
-      const { chats } = get();
+      const { chats, draftMessages } = get();
       const newChats = chats.filter((chat) => chat.id !== currentChat.id);
+      
+      // Clean up draft message for deleted chat
+      const newDrafts = new Map(draftMessages);
+      newDrafts.delete(currentChat.id);
 
       if (newChats.length === 0) {
         /**
@@ -187,11 +196,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
          *
          * there should never be a case where no chat exists..
          */
-        set({ chats: [], currentChatSessionId: null });
+        set({ chats: [], currentChatSessionId: null, draftMessages: newDrafts });
 
         await get().createNewChat();
       } else {
-        set({ chats: newChats, currentChatSessionId: newChats[0].sessionId });
+        set({ chats: newChats, currentChatSessionId: newChats[0].sessionId, draftMessages: newDrafts });
       }
     } catch (error) {
       console.error('Failed to delete chat:', error);
@@ -221,6 +230,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to establish WebSocket connection:', error);
     }
+  },
+
+  // Draft message actions
+  saveDraftMessage: (chatId: number, content: string) => {
+    set((state) => {
+      const newDrafts = new Map(state.draftMessages);
+      if (content.trim()) {
+        newDrafts.set(chatId, content);
+      } else {
+        newDrafts.delete(chatId);
+      }
+      return { draftMessages: newDrafts };
+    });
+  },
+
+  getDraftMessage: (chatId: number) => {
+    return get().draftMessages.get(chatId) || '';
+  },
+
+  clearDraftMessage: (chatId: number) => {
+    set((state) => {
+      const newDrafts = new Map(state.draftMessages);
+      newDrafts.delete(chatId);
+      return { draftMessages: newDrafts };
+    });
   },
 }));
 

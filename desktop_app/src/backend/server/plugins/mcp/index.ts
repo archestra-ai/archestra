@@ -404,7 +404,7 @@ export const createArchestraMcpServer = () => {
   // Tool management tools
   archestraMcpServer.tool(
     'list_available_tools',
-    'List all available MCP tools showing which are selected for the current chat',
+    'List all available MCP tools showing which are enabled for the current chat',
     async () => {
       try {
         const chatId = ArchestraMcpContext.getCurrentChatId();
@@ -451,8 +451,8 @@ export const createArchestraMcpServer = () => {
         // Format the output
         const formattedOutput = Object.entries(toolsByServer)
           .map(([serverName, tools]) => {
-            const selectedCount = tools.filter(t => t.selected).length;
-            const header = `**${serverName}** (${selectedCount}/${tools.length} selected)`;
+            const enabledCount = tools.filter(t => t.selected).length;
+            const header = `**${serverName}** (${enabledCount}/${tools.length} enabled)`;
             
             const toolList = tools
               .map(t => {
@@ -469,8 +469,8 @@ export const createArchestraMcpServer = () => {
           .join('\n\n');
         
         const summary = selectedTools === null
-          ? 'All tools are currently selected (default)'
-          : `${selectedSet.size} out of ${allTools.length} tools selected`;
+          ? 'All tools are currently enabled (default)'
+          : `${selectedSet.size} out of ${allTools.length} tools enabled`;
         
         return {
           content: [
@@ -494,10 +494,10 @@ export const createArchestraMcpServer = () => {
   );
 
   archestraMcpServer.tool(
-    'select_tools',
-    'Select specific tools for use in the current chat',
+    'enable_tools',
+    'Enable specific tools for use in the current chat',
     z.object({
-      toolIds: z.array(z.string()).describe('Array of tool IDs to select (e.g., ["google__gmail_send", "filesystem__read_file"])'),
+      toolIds: z.array(z.string()).describe('Array of tool IDs to enable (e.g., ["google__gmail_send", "filesystem__read_file"])'),
     }) as any,
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
@@ -533,7 +533,7 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Successfully selected ${toolIds.length} tool(s). Total selected: ${updatedTools.length}`,
+              text: `Successfully enabled ${toolIds.length} tool(s). Total enabled: ${updatedTools.length}`,
             },
           ],
         };
@@ -542,7 +542,7 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Error selecting tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              text: `Error enabling tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
             },
           ],
         };
@@ -551,10 +551,10 @@ export const createArchestraMcpServer = () => {
   );
 
   archestraMcpServer.tool(
-    'deselect_tools',
-    'Deselect specific tools from the current chat',
+    'disable_tools',
+    'Disable specific tools from the current chat',
     z.object({
-      toolIds: z.array(z.string()).describe('Array of tool IDs to deselect'),
+      toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
     }) as any,
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
@@ -590,7 +590,7 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Successfully deselected ${toolIds.length} tool(s). Remaining selected: ${updatedTools.length}`,
+              text: `Successfully disabled ${toolIds.length} tool(s). Remaining enabled: ${updatedTools.length}`,
             },
           ],
         };
@@ -599,7 +599,7 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Error deselecting tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              text: `Error disabling tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
             },
           ],
         };

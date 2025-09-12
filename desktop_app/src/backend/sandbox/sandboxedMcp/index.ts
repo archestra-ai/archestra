@@ -569,10 +569,6 @@ export default class SandboxedMcpServer {
    * that we expose to the UI
    */
   get availableToolsList(): AvailableTool[] {
-    log.info(`[availableToolsList] Getting tools for server ${this.mcpServerId} (${this.mcpServer.name})`);
-    log.info(`[availableToolsList] Total tools in this.tools: ${Object.keys(this.tools).length}`);
-    log.info(`[availableToolsList] Total cached analysis entries: ${this.cachedToolAnalysis.size}`);
-
     return Object.entries(this.tools).map(([id, tool]) => {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
@@ -582,44 +578,14 @@ export default class SandboxedMcpServer {
       const prefixSeparatorIndex = toolName.indexOf('__');
       const cacheKey = prefixSeparatorIndex !== -1 ? toolName.substring(prefixSeparatorIndex + 2) : toolName;
 
-      // Extensive logging for debugging
-      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
-        log.info(`[availableToolsList] Processing Google tool:`, {
-          id,
-          toolName,
-          cacheKey,
-          hasCachedEntry: this.cachedToolAnalysis.has(cacheKey),
-          cachedKeys: Array.from(this.cachedToolAnalysis.keys()).filter(
-            (k) => k.includes('gmail') || k.includes('drive')
-          ),
-        });
-      }
-
       // Get analysis results from cache if available
       const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
-
-      // Log cache lookup result for Google tools
-      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
-        log.info(`[availableToolsList] Cache lookup for ${cacheKey}:`, {
-          found: !!cachedAnalysis,
-          analysis: cachedAnalysis,
-        });
-      }
 
       // Check if the tool has actually been analyzed (at least one non-null value)
       const hasAnalysis =
         cachedAnalysis &&
         (cachedAnalysis.is_read !== null ||
           cachedAnalysis.is_write !== null);
-
-      // Log analysis status for Google tools
-      if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
-        log.info(`[availableToolsList] Analysis status for ${toolName}:`, {
-          hasAnalysis,
-          status: hasAnalysis ? 'completed' : 'awaiting_ollama_model',
-          cachedAnalysis,
-        });
-      }
 
       return {
         id,

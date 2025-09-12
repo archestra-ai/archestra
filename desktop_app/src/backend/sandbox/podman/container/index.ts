@@ -13,6 +13,7 @@ import {
   SpecGenerator,
   containerCreateLibpod,
   containerDeleteLibpod,
+  containerInspectLibpod,
   containerStartLibpod,
   containerStopLibpod,
   containerWaitLibpod,
@@ -63,6 +64,7 @@ type PodmanContainerStatusSummary = z.infer<typeof PodmanContainerStatusSummaryS
 export default class PodmanContainer {
   containerName: string;
   private serverConfig: McpServerConfig;
+  private mcpServer: McpServer; // Store the full McpServer object for OAuth access
 
   private userConfigValues: McpServerUserConfigValues | null;
   private command: string;
@@ -75,6 +77,9 @@ export default class PodmanContainer {
   private statusError: string | null = null;
 
   private socketPath: string | null = null;
+
+  // Assigned HTTP port for streamable HTTP servers (when random port is assigned by Podman)
+  assignedHttpPort?: number;
 
   // Connection pooling for MCP server communication
   private mcpSocket: Duplex | null = null;
@@ -95,11 +100,12 @@ export default class PodmanContainer {
 
   private customImage: string | null = null;
 
-  constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
+  constructor(mcpServer: McpServer, socketPath: string) {
+    const { name, serverConfig, userConfigValues } = mcpServer;
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
     this.serverConfig = serverConfig;
+    this.mcpServer = mcpServer; // Store full object for OAuth access
     this.userConfigValues = userConfigValues;
-
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -114,20 +120,6 @@ export default class PodmanContainer {
       this.args = dockerConfig.args;
       // Merge environment variables - OAuth tokens from env override Docker config placeholders
       this.envVars = { ...dockerConfig.env, ...env };
-    } else if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
-      // Check if Google OAuth tokens are present and wrap command if needed
-      // Wrap the command to create the credentials file on startup
-      const originalCommand = [command, ...(args || [])].join(' ');
-      const email = env.GOOGLE_OAUTH_EMAIL;
-
-      this.command = 'sh';
-      this.args = [
-        '-c',
-        `mkdir -p ~/.google_workspace_mcp/credentials && ` +
-          `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
-          `${originalCommand}`,
-      ];
-      this.envVars = env;
     } else {
       this.command = command;
       this.args = args || [];
@@ -152,6 +144,52 @@ export default class PodmanContainer {
    */
   private static prettifyServerNameIntoContainerName = (serverName: string) =>
     `archestra-ai-${serverName.replace(/ /g, '-').toLowerCase()}-mcp-server`;
+
+  /**
+   * Discover the assigned host port for streamable HTTP servers
+   * This queries the container inspection API to get the actual port assigned by Podman
+   */
+  private async discoverAssignedHttpPort(): Promise<void> {
+    try {
+      log.info(`Discovering assigned HTTP port for container: ${this.containerName}`);
+
+      const inspectResponse = await containerInspectLibpod({
+        path: { name: this.containerName },
+      });
+
+      if (inspectResponse.response.status !== 200) {
+        throw new Error(`Failed to inspect container: ${inspectResponse.response.status}`);
+      }
+
+      const portBindings = inspectResponse.data?.NetworkSettings?.Ports;
+      log.info(`Available port bindings:`, Object.keys(portBindings || {}));
+
+      if (portBindings) {
+        // Look for any TCP port mapping (for existing containers)
+        const tcpPorts = Object.keys(portBindings).filter((key) => key.endsWith('/tcp'));
+
+        if (tcpPorts.length > 0) {
+          // Use the first available TCP port mapping
+          const portKey = tcpPorts[0];
+          const hostPort = portBindings[portKey]?.[0]?.HostPort;
+
+          if (hostPort) {
+            this.assignedHttpPort = parseInt(hostPort, 10);
+            const containerPort = portKey.replace('/tcp', '');
+            log.info(`Assigned HTTP port discovered: ${this.assignedHttpPort} (container port: ${containerPort})`);
+          } else {
+            log.warn(`Port binding found (${portKey}) but no HostPort assigned`);
+          }
+        } else {
+          log.warn(`No TCP port bindings found in container inspection`);
+        }
+      } else {
+        log.warn(`No port bindings found in container inspection`);
+      }
+    } catch (error) {
+      log.error('Failed to discover assigned HTTP port:', error);
+    }
+  }
 
   /**
    * Parse Docker/Podman run command arguments to extract image and configuration
@@ -607,6 +645,15 @@ export default class PodmanContainer {
       if (response.status === 304) {
         log.info(`MCP server container ${this.containerName} is already running.`);
 
+        // For existing containers, we still need to discover the assigned port
+        const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+        const isStreamableHttp = oauthConfig?.streamable_http_url;
+
+        if (isStreamableHttp) {
+          log.info(`Discovering port for existing streamable HTTP container`);
+          await this.discoverAssignedHttpPort();
+        }
+
         // Update state
         this.setContainerAsRunning();
 
@@ -679,6 +726,23 @@ export default class PodmanContainer {
         throw e;
       }
 
+      // Check if this is a streamable HTTP server and add port bindings
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      const isStreamableHttp = oauthConfig?.streamable_http_url;
+
+      if (isStreamableHttp) {
+        const containerPort = oauthConfig?.streamable_http_port || 8000; // Default to 8000 if not specified
+
+        log.info(`Detected streamable HTTP server, exposing container port ${containerPort} with random host port`);
+        createBody.portmappings = [
+          {
+            container_port: containerPort,
+            host_port: 0, // 0 = random available port
+            protocol: 'tcp',
+          },
+        ];
+      }
+
       const response = await containerCreateLibpod({
         body: createBody,
       });
@@ -701,6 +765,11 @@ export default class PodmanContainer {
       this.statusMessage = 'Container created, starting it';
 
       await this.startContainer();
+
+      // If this is a streamable HTTP server, discover the assigned host port after starting
+      if (isStreamableHttp) {
+        await this.discoverAssignedHttpPort();
+      }
 
       // Wait for container to be healthy
       log.info(`MCP server container ${this.containerName} started, waiting for it to be healthy...`);

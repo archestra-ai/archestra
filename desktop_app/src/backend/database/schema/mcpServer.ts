@@ -88,6 +88,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    */
   oauthResourceMetadata: text('oauth_resource_metadata', { mode: 'json' }).$type<OAuthProtectedResourceMetadata>(),
   /**
+   * OAuth server configuration from catalog (contains streamable_http_url, etc.)
+   */
+  oauthConfig: text('oauth_config', { mode: 'json' }),
+  /**
    * Current status of the MCP server installation/OAuth flow
    */
   status: text().notNull().default('installing').$type<McpServerStatus>(),
@@ -117,6 +121,7 @@ export const McpServerSchema = z.object({
   oauthClientInfo: OAuthClientInformationSchema.nullable(),
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
+  oauthConfig: z.unknown().nullable(), // JSON object containing OAuth config from catalog (parsed by Drizzle)
   status: McpServerStatusSchema,
   serverType: McpServerTypeSchema,
   remoteUrl: z.string().nullable(),

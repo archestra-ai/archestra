@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2c67cb13-0e1a-4091-93e7-384ab2bb41c3",
+  "id": "bcc6c8ef-0600-4a63-baa9-a17311b2005c",
   "prevId": "0f993021-fbef-4ac0-8026-792ef4b3bb69",
   "tables": {
     "chats": {
@@ -360,6 +360,13 @@
         },
         "oauth_resource_metadata": {
           "name": "oauth_resource_metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "oauth_config": {
+          "name": "oauth_config",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

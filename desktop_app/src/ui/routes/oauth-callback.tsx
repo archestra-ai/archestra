@@ -58,21 +58,11 @@ function OAuthCallbackPage() {
           throw new Error(`Invalid OAuth service: ${service}`);
         }
 
-        // Complete the OAuth flow by sending code or tokens to backend
+        // Complete the OAuth flow by sending code to backend
         const body = {
-          service: service,
           state: state,
+          code: params.code,
         } as any;
-
-        if (params.code) {
-          // New PKCE flow - send code for exchange
-          body.code = params.code;
-        } else {
-          // Old flow - send tokens directly
-          body.access_token = params.access_token;
-          body.refresh_token = params.refresh_token;
-          body.expiry_date = params.expiry_date;
-        }
 
         const { data, error } = await completeGenericOAuth({ body });
 

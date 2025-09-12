@@ -51,6 +51,9 @@ export default class SandboxedMcpServer {
   private podmanContainer?: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
+
+  // Assigned HTTP port for streamable HTTP servers (stored in memory)
+  assignedHttpPort?: number;
   private analysisUpdateInterval: NodeJS.Timeout | null = null;
 
   tools: McpTools = {};
@@ -81,14 +84,21 @@ export default class SandboxedMcpServer {
       this.mcpServerUrl = remoteUrl;
       log.info(`Creating SandboxedMcpServer for remote server: ${mcpServer.name} at ${remoteUrl}`);
     } else {
-      // For local servers, use the proxy URL and set up container
+      // For local servers, set up container first
       if (!podmanSocketPath) {
         throw new Error(`Local server ${mcpServer.id} requires podmanSocketPath`);
       }
-      this.mcpServerUrl = this.mcpServerProxyUrl;
       this.podmanSocketPath = podmanSocketPath;
       this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
-      log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
+
+      // For streamable HTTP servers, use direct container URL instead of proxy
+      if (this.isStreamableHttpServer()) {
+        // We'll set this dynamically after container starts and port is discovered
+        this.mcpServerUrl = 'http://localhost:0/mcp'; // Placeholder, will be updated
+      } else {
+        // For stdio servers, use the proxy URL
+        this.mcpServerUrl = this.mcpServerProxyUrl;
+      }
     }
 
     // Try to fetch cached tools on initialization
@@ -96,6 +106,53 @@ export default class SandboxedMcpServer {
 
     // Set up periodic updates for cached analysis
     this.startPeriodicAnalysisUpdates();
+  }
+
+  /**
+   * Get the assigned HTTP port for streamable HTTP servers
+   */
+  getAssignedHttpPort(): number | undefined {
+    return this.podmanContainer?.assignedHttpPort;
+  }
+
+  /**
+   * Check if this server is a streamable HTTP server based on OAuth config
+   */
+  isStreamableHttpServer(): boolean {
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      return !!oauthConfig?.streamable_http_url;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Update the MCP server URL for streamable HTTP servers after port discovery
+   */
+  updateStreamableHttpUrl(): void {
+    if (!this.isStreamableHttpServer() || !this.podmanContainer) {
+      return;
+    }
+
+    const assignedPort = this.podmanContainer.assignedHttpPort;
+    if (!assignedPort) {
+      log.warn(`Cannot update streamable HTTP URL: no assigned port for ${this.mcpServerId}`);
+      return;
+    }
+
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      const streamableHttpUrl = oauthConfig?.streamable_http_url;
+
+      if (streamableHttpUrl) {
+        const url = new URL(streamableHttpUrl);
+        url.port = assignedPort.toString();
+        this.mcpServerUrl = url.toString();
+      }
+    } catch (error) {
+      log.error(`Failed to update streamable HTTP URL for ${this.mcpServerId}:`, error);
+    }
   }
 
   /**
@@ -224,43 +281,69 @@ export default class SandboxedMcpServer {
       return;
     }
 
-    try {
-      // Check if this MCP server has OAuth tokens
-      const headers: Record<string, string> = {};
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      if (this.mcpServer.oauthTokens?.access_token) {
-        log.info(`Using OAuth authentication for MCP server ${this.mcpServerId}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if this MCP server has OAuth tokens
+        const headers: Record<string, string> = {};
 
-        // Check if tokens are expired and refresh if needed
-        try {
-          const { ensureValidTokens } = await import('@backend/server/plugins/mcp-oauth');
+        if (this.mcpServer.oauthTokens?.access_token) {
+          try {
+            // Try to refresh tokens if needed
+            const { ensureValidTokens, McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
 
-          // Get server config based on provider (this needs to be determined from the server)
-          // For now, we'll try to use the stored access token directly
-          // TODO: Implement proper token refresh logic with provider configs
-          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
-        } catch (error) {
-          log.warn(`Failed to ensure valid OAuth tokens for ${this.mcpServerId}:`, error);
-          // Fall back to using existing token
-          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+            // We need the OAuth config to refresh tokens, but it's not stored with the server
+            // For now, check if tokens are expired manually and warn if they might be
+            const { areTokensExpired } = await import('@backend/server/plugins/mcp-oauth');
+
+            // Ensure token has required fields for MCP SDK compatibility
+            const tokensWithDefaults = {
+              ...this.mcpServer.oauthTokens,
+              token_type: this.mcpServer.oauthTokens.token_type || 'Bearer', // Default to Bearer if not set
+            };
+
+            if (areTokensExpired(tokensWithDefaults, 5)) {
+              log.warn(`OAuth tokens for ${this.mcpServerId} are expired or expiring soon. You may need to reinstall the server to refresh OAuth tokens.`);
+            }
+
+            headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+          } catch (error) {
+            log.warn(`Failed to validate OAuth tokens for ${this.mcpServerId}:`, error);
+            // Fall back to using existing token
+            headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+          }
+        }
+
+        // Use the appropriate URL: remote_url for remote servers, proxy URL for local servers
+        const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerUrl), {
+          requestInit: {
+            headers,
+          },
+        });
+
+        this.mcpClient = await experimental_createMCPClient({ transport });
+
+        // Success - break out of retry loop
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        log.error(`Failed to connect MCP client for ${this.mcpServerId} (attempt ${attempt}/${maxRetries}):`, error);
+
+        if (attempt < maxRetries) {
+          // Wait before retry with exponential backoff
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 1s, 2s, 4s (capped at 5s)
+          log.info(`Retrying MCP client connection in ${waitTime}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       }
-
-      // Use the appropriate URL: remote_url for remote servers, proxy URL for local servers
-      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerUrl), {
-        requestInit: {
-          headers,
-        },
-      });
-
-      this.mcpClient = await experimental_createMCPClient({ transport });
-
-      if (this.mcpServer.oauthTokens?.access_token) {
-        log.info(`✅ MCP client connected with OAuth authentication for ${this.mcpServerId}`);
-      }
-    } catch (error) {
-      log.error(`Failed to connect MCP client for ${this.mcpServerId}:`, error);
     }
+
+    // If we get here, all retries failed
+    const errorMsg = `Failed to create MCP client for ${this.mcpServerId} after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`;
+    log.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   /**
@@ -272,32 +355,36 @@ export default class SandboxedMcpServer {
    * TODO: this should be baked into the MCP Server Dockfile's health check (to replace the current one)
    */
   private async pingMcpServerContainerUntilHealthy() {
-    const MAX_PING_ATTEMPTS = 10;
-    const PING_INTERVAL_MS = 500;
+    const MAX_PING_ATTEMPTS = 30;
+    const BASE_PING_INTERVAL_MS = 1000;
     let attempts = 0;
 
     while (attempts < MAX_PING_ATTEMPTS) {
-      log.info(`Pinging MCP server container ${this.mcpServerId} until healthy...`);
+      try {
+        // Initialize MCP client connection for this ping attempt
+        if (!this.mcpClient) {
+          await this.createMcpClient();
+        }
 
-      const response = await fetch(this.mcpServerProxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: uuidv4(),
-          method: 'ping',
-        }),
-      });
+        // Use MCP client's tools() method as a health check
+        await this.mcpClient.tools();
 
-      if (response.ok) {
-        log.info(`MCP server container ${this.mcpServerId} is healthy!`);
         return;
-      } else {
-        log.info(`MCP server container ${this.mcpServerId} is not healthy, retrying...`);
+      } catch (error) {
         attempts++;
-        await new Promise((resolve) => setTimeout(resolve, PING_INTERVAL_MS));
+
+        if (attempts >= MAX_PING_ATTEMPTS) {
+          const errorMsg = `MCP server container ${this.mcpServerId} failed to become healthy after ${MAX_PING_ATTEMPTS} attempts`;
+          log.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        // Exponential backoff with jitter for OAuth containers
+        const backoffMultiplier = this.mcpServer.oauthTokens ? 1.2 : 1.0;
+        const jitter = Math.random() * 200;
+        const waitTime = Math.min(BASE_PING_INTERVAL_MS * Math.pow(backoffMultiplier, attempts) + jitter, 5000);
+
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
     }
   }
@@ -311,12 +398,42 @@ export default class SandboxedMcpServer {
     } else {
       // For local servers, use existing container startup logic
       log.info(`Starting local MCP server: ${this.mcpServer.name}`);
+
+      // Validate OAuth tokens are properly set if this is an OAuth server
+      if (this.mcpServer.oauthTokens && !this.mcpServer.oauthTokens.access_token) {
+        throw new Error(`OAuth MCP server ${this.mcpServer.name} is missing access_token - cannot start container`);
+      }
+
       this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
 
-      await this.podmanContainer.startOrCreateContainer();
-      await this.pingMcpServerContainerUntilHealthy();
-      await this.createMcpClient();
-      await this.fetchTools();
+      try {
+        await this.podmanContainer.startOrCreateContainer();
+
+        // For streamable HTTP servers, update the URL with the discovered port
+        if (this.isStreamableHttpServer()) {
+          this.updateStreamableHttpUrl();
+        }
+
+        await this.pingMcpServerContainerUntilHealthy();
+        await this.createMcpClient();
+        await this.fetchTools();
+
+        log.info(`Successfully started MCP server: ${this.mcpServer.name} (OAuth: ${!!this.mcpServer.oauthTokens})`);
+      } catch (error) {
+        log.error(`Failed to start MCP server container ${this.mcpServer.name}:`, error);
+
+        // Clean up container if it was created but startup failed
+        if (this.podmanContainer) {
+          try {
+            await this.podmanContainer.removeContainer();
+            log.info(`Cleaned up failed container for MCP server: ${this.mcpServer.name}`);
+          } catch (cleanupError) {
+            log.warn(`Failed to clean up container for MCP server ${this.mcpServer.name}:`, cleanupError);
+          }
+        }
+
+        throw error;
+      }
     }
   }
 

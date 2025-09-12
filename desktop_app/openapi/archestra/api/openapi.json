@@ -151,6 +151,13 @@
           },
           "browser_auth": {
             "type": "boolean"
+          },
+          "streamable_http_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "streamable_http_port": {
+            "type": "number"
           }
         },
         "required": [
@@ -1088,6 +1095,15 @@
               }
             ]
           },
+          "oauthConfig": {
+            "anyOf": [
+              {},
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": ["installing", "oauth_pending", "installed", "failed"]
@@ -1120,6 +1136,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -1601,6 +1618,13 @@
           },
           "browser_auth": {
             "type": "boolean"
+          },
+          "streamable_http_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "streamable_http_port": {
+            "type": "number"
           }
         },
         "required": [
@@ -2561,6 +2585,15 @@
               }
             ]
           },
+          "oauthConfig": {
+            "anyOf": [
+              {},
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": ["installing", "oauth_pending", "installed", "failed"]
@@ -2593,6 +2626,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -3569,9 +3603,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "serverId": {
-                    "type": "string"
-                  },
                   "code": {
                     "type": "string"
                   },
@@ -3579,7 +3610,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["serverId", "code", "state"]
+                "required": ["code", "state"]
               }
             }
           },

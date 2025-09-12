@@ -195,6 +195,7 @@ export default class McpServerModel {
         oauthClientInfo: oauthClientInfo || null,
         oauthServerMetadata: oauthServerMetadata || null,
         oauthResourceMetadata: oauthResourceMetadata || null,
+        oauthConfig: oauthConfig ? (JSON.stringify(oauthConfig) as string) : null,
         createdAt: now.toISOString(),
       })
       .returning();

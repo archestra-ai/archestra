@@ -49,6 +49,8 @@ export type OAuthServerConfigInput = {
   requires_proxy?: boolean;
   provider_name?: string;
   browser_auth?: boolean;
+  streamable_http_url?: string;
+  streamable_http_port?: number;
 };
 
 export type ToolAnalysisResultInput = {
@@ -279,6 +281,7 @@ export type McpServerInput = {
   oauthClientInfo: OAuthClientInformationInput | null;
   oauthServerMetadata: AuthorizationServerMetadataInput | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadataInput | null;
+  oauthConfig: unknown | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -476,6 +479,8 @@ export type OAuthServerConfig = {
   requires_proxy?: boolean;
   provider_name?: string;
   browser_auth?: boolean;
+  streamable_http_url?: string;
+  streamable_http_port?: number;
 };
 
 export type ToolAnalysisResult = {
@@ -706,6 +711,7 @@ export type McpServer = {
   oauthClientInfo: OAuthClientInformation | null;
   oauthServerMetadata: AuthorizationServerMetadata | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadata | null;
+  oauthConfig: unknown | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -1207,7 +1213,6 @@ export type StartGenericOAuthResponse = StartGenericOAuthResponses[keyof StartGe
 
 export type CompleteGenericOAuthData = {
   body: {
-    serverId: string;
     code: string;
     state: string;
   };

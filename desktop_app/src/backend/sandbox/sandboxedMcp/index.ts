@@ -548,9 +548,13 @@ export default class SandboxedMcpServer {
     return Object.entries(this.tools).map(([id, tool]) => {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
+      
+      // Strip 'remote-mcp__' prefix if present for cache lookup
+      // This is needed because remote MCP tools have this prefix at runtime but not in the database
+      const cacheKey = toolName.startsWith('remote-mcp__') ? toolName.substring('remote-mcp__'.length) : toolName;
 
       // Get analysis results from cache if available
-      const cachedAnalysis = this.cachedToolAnalysis.get(toolName);
+      const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
       
       // Check if the tool has actually been analyzed (at least one non-null value)
       const hasAnalysis = cachedAnalysis && (

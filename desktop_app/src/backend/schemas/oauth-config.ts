@@ -25,6 +25,8 @@ export const OAuthServerConfigSchema = z.object({
   requires_proxy: z.boolean().optional(), // Whether this provider requires oauth-proxy for client secrets
   provider_name: z.string().optional(), // Provider name for token mapping lookup (e.g., 'slack-browser')
   browser_auth: z.boolean().optional(), // Whether this uses browser authentication
+  streamable_http_url: z.string().url().optional(), // URL for streamable HTTP MCP servers
+  streamable_http_port: z.number().optional(), // Port for streamable HTTP MCP servers
 });
 
 export type OAuthServerConfig = z.infer<typeof OAuthServerConfigSchema>;

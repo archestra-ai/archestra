@@ -27,7 +27,8 @@
   "oauth_config": {
     "name": "Google OAuth",
     "server_url": "https://accounts.google.com",
-    "local_mcp_server_url": "http://localhost:8080/mcp",
+    "streamable_http_url": "http://localhost:8080/mcp",
+    "streamable_http_port": 8080,
     "resource_metadata_url": "https://accounts.google.com/.well-known/openid-configuration",
     "client_id": "354887056155-5b4rlcofccknibd4fv3ldud9vvac3rdf.apps.googleusercontent.com",
     "client_secret": "REDACTED",

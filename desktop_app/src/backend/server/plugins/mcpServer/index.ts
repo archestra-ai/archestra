@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { request } from 'undici';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
@@ -28,6 +29,55 @@ z.globalRegistry.add(McpServerSchema, { id: 'McpServer' });
 z.globalRegistry.add(McpServerInstallSchema, { id: 'McpServerInstall' });
 z.globalRegistry.add(McpServerContainerLogsSchema, { id: 'McpServerContainerLogs' });
 z.globalRegistry.add(AvailableToolSchema, { id: 'AvailableTool' });
+
+/**
+ * Proxy HTTP request to streamable HTTP MCP server
+ */
+async function proxyHttpRequest(
+  body: any,
+  headers: Record<string, any>,
+  mcpServer: any,
+  targetPort: number,
+  responseStream: NodeJS.WritableStream
+): Promise<void> {
+  // Get the streamable_http_url from OAuth config and replace port
+  const oauthConfig = mcpServer.oauthConfig ? JSON.parse(mcpServer.oauthConfig) : null;
+  const streamableHttpUrl = oauthConfig?.streamable_http_url;
+  
+  if (!streamableHttpUrl) {
+    throw new Error('streamable_http_url not found in OAuth config');
+  }
+  
+  // Parse the URL and replace the port
+  const url = new URL(streamableHttpUrl);
+  url.port = targetPort.toString();
+  const targetUrl = url.toString();
+  
+  try {
+    const response = await request(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // Forward auth headers if present
+        ...(headers.authorization && { 'Authorization': headers.authorization }),
+      },
+      body: JSON.stringify(body),
+    });
+
+    // Stream the response back
+    response.body.pipe(responseStream);
+    
+    // Handle response completion
+    return new Promise((resolve, reject) => {
+      response.body.on('end', resolve);
+      response.body.on('error', reject);
+    });
+  } catch (error) {
+    log.error(`Failed to proxy HTTP request to ${targetUrl}:`, error);
+    throw error;
+  }
+}
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -202,8 +252,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return originalEnd(chunk, encoding);
         };
 
-        // Stream the request to the container!
-        await sandboxedMcpServer.streamToContainer(body, reply.raw);
+        // Check if this is a streamable HTTP server
+        if (sandboxedMcpServer.isStreamableHttpServer()) {
+          const assignedPort = sandboxedMcpServer.getAssignedHttpPort();
+          if (assignedPort) {
+            fastify.log.info(`Proxying HTTP request to streamable server on port ${assignedPort}`);
+            // Proxy HTTP request directly to the container's assigned port
+            await proxyHttpRequest(body, headers, sandboxedMcpServer.mcpServer, assignedPort, reply.raw);
+          } else {
+            throw new Error('Streamable HTTP server port not found');
+          }
+        } else {
+          // Stream the request to the container via stdio!
+          await sandboxedMcpServer.streamToContainer(body, reply.raw);
+        }
 
         // Return undefined when hijacking to prevent Fastify from sending response
         return;
@@ -395,6 +457,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues: installData.userConfigValues || null,
           serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
           remoteUrl: remoteUrl, // Store remote_url in separate column
+          oauthConfig: installData.oauthConfig ? JSON.stringify(installData.oauthConfig) : null, // Include OAuth config from catalog
           status: 'oauth_pending',
           oauthTokens: null,
           oauthClientInfo: null,
@@ -406,7 +469,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         try {
           // Perform OAuth and get tokens
           const { connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
-          const { client, accessToken } = await connectMcpServer(config, serverId);
+          const { client, accessToken } = await connectMcpServer(config, serverId, remoteUrl);
 
           // Close the test connection
           await client.close();

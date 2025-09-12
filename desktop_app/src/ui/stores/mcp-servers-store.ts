@@ -61,6 +61,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
     oauthClientInfo: null,
     oauthServerMetadata: null,
     oauthResourceMetadata: null,
+    oauthConfig: null,
     status: 'installed',
     serverType: 'local',
     remoteUrl: null,

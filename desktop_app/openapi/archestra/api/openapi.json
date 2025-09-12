@@ -25,7 +25,9 @@
             "type": "string"
           }
         },
-        "required": ["access_token"],
+        "required": [
+          "access_token"
+        ],
         "additionalProperties": {}
       },
       "OAuthClientInformationInput": {
@@ -38,7 +40,9 @@
             "type": "string"
           }
         },
-        "required": ["client_id"],
+        "required": [
+          "client_id"
+        ],
         "additionalProperties": {}
       },
       "AuthorizationServerMetadataInput": {
@@ -179,7 +183,12 @@
             "type": "boolean"
           }
         },
-        "required": ["is_read", "is_write", "idempotent", "reversible"]
+        "required": [
+          "is_read",
+          "is_write",
+          "idempotent",
+          "reversible"
+        ]
       },
       "ToolInput": {
         "type": "object",
@@ -200,7 +209,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -221,7 +232,9 @@
                       },
                       {
                         "nullable": true,
-                        "enum": [null]
+                        "enum": [
+                          null
+                        ]
                       }
                     ]
                   },
@@ -237,7 +250,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -248,7 +263,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -259,7 +276,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -270,7 +289,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -281,7 +302,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -292,7 +315,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -323,7 +348,14 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["not_installed", "initializing", "running", "error", "stopping", "stopped"]
+            "enum": [
+              "not_installed",
+              "initializing",
+              "running",
+              "error",
+              "stopping",
+              "stopped"
+            ]
           },
           "runtime": {
             "type": "object",
@@ -340,7 +372,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -351,7 +385,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -367,7 +403,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -378,7 +416,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -394,7 +434,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -405,12 +447,18 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               }
             },
-            "required": ["startupPercentage", "startupMessage", "startupError"]
+            "required": [
+              "startupPercentage",
+              "startupMessage",
+              "startupError"
+            ]
           },
           "mcpServers": {
             "type": "object",
@@ -427,7 +475,10 @@
                   }
                 }
               },
-              "required": ["container", "tools"]
+              "required": [
+                "container",
+                "tools"
+              ]
             }
           },
           "allAvailableTools": {
@@ -437,7 +488,11 @@
             }
           }
         },
-        "required": ["status", "runtime", "mcpServers"]
+        "required": [
+          "status",
+          "runtime",
+          "mcpServers"
+        ]
       },
       "PodmanContainerStatusSummaryInput": {
         "type": "object",
@@ -468,7 +523,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -479,12 +536,19 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
         },
-        "required": ["startupPercentage", "state", "message", "error"]
+        "required": [
+          "startupPercentage",
+          "state",
+          "message",
+          "error"
+        ]
       },
       "OllamaModelDownloadProgressInput": {
         "type": "object",
@@ -494,7 +558,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["downloading", "verifying", "completed", "error"]
+            "enum": [
+              "downloading",
+              "verifying",
+              "completed",
+              "error"
+            ]
           },
           "progress": {
             "type": "number",
@@ -505,7 +574,12 @@
             "type": "string"
           }
         },
-        "required": ["model", "status", "progress", "message"]
+        "required": [
+          "model",
+          "status",
+          "progress",
+          "message"
+        ]
       },
       "WebSocketMessageInput": {
         "anyOf": [
@@ -514,7 +588,9 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["chat-title-updated"]
+                "enum": [
+                  "chat-title-updated"
+                ]
               },
               "payload": {
                 "type": "object",
@@ -526,43 +602,61 @@
                     "type": "string"
                   }
                 },
-                "required": ["chatId", "title"]
+                "required": [
+                  "chatId",
+                  "title"
+                ]
               }
             },
-            "required": ["type", "payload"]
+            "required": [
+              "type",
+              "payload"
+            ]
           },
           {
             "type": "object",
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["sandbox-status-update"]
+                "enum": [
+                  "sandbox-status-update"
+                ]
               },
               "payload": {
                 "$ref": "#/components/schemas/SandboxStatusSummaryInput"
               }
             },
-            "required": ["type", "payload"]
+            "required": [
+              "type",
+              "payload"
+            ]
           },
           {
             "type": "object",
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["ollama-model-download-progress"]
+                "enum": [
+                  "ollama-model-download-progress"
+                ]
               },
               "payload": {
                 "$ref": "#/components/schemas/OllamaModelDownloadProgressInput"
               }
             },
-            "required": ["type", "payload"]
+            "required": [
+              "type",
+              "payload"
+            ]
           },
           {
             "type": "object",
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["memory-updated"]
+                "enum": [
+                  "memory-updated"
+                ]
               },
               "payload": {
                 "type": "object",
@@ -588,14 +682,25 @@
                           "type": "string"
                         }
                       },
-                      "required": ["id", "name", "value", "createdAt", "updatedAt"]
+                      "required": [
+                        "id",
+                        "name",
+                        "value",
+                        "createdAt",
+                        "updatedAt"
+                      ]
                     }
                   }
                 },
-                "required": ["memories"]
+                "required": [
+                  "memories"
+                ]
               }
             },
-            "required": ["type", "payload"]
+            "required": [
+              "type",
+              "payload"
+            ]
           }
         ]
       },
@@ -617,7 +722,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -642,18 +749,35 @@
                 },
                 "role": {
                   "type": "string",
-                  "enum": ["user", "assistant", "system"]
+                  "enum": [
+                    "user",
+                    "assistant",
+                    "system"
+                  ]
                 },
                 "content": {},
                 "createdAt": {
                   "type": "string"
                 }
               },
-              "required": ["id", "chatId", "role", "content", "createdAt"]
+              "required": [
+                "id",
+                "chatId",
+                "role",
+                "content",
+                "createdAt"
+              ]
             }
           }
         },
-        "required": ["id", "sessionId", "title", "createdAt", "updatedAt", "messages"]
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdAt",
+          "updatedAt",
+          "messages"
+        ]
       },
       "CloudProviderWithConfigInput": {
         "type": "object",
@@ -700,7 +824,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
@@ -719,7 +845,13 @@
       },
       "SupportedCloudProvidersInput": {
         "type": "string",
-        "enum": ["anthropic", "openai", "deepseek", "gemini", "ollama"]
+        "enum": [
+          "anthropic",
+          "openai",
+          "deepseek",
+          "gemini",
+          "ollama"
+        ]
       },
       "SupportedCloudProviderModelInput": {
         "type": "object",
@@ -731,7 +863,10 @@
             "$ref": "#/components/schemas/SupportedCloudProvidersInput"
           }
         },
-        "required": ["id", "provider"]
+        "required": [
+          "id",
+          "provider"
+        ]
       },
       "ExternalMcpClientInput": {
         "type": "object",
@@ -743,11 +878,18 @@
             "type": "string"
           }
         },
-        "required": ["clientName", "createdAt"]
+        "required": [
+          "clientName",
+          "createdAt"
+        ]
       },
       "ExternalMcpClientNameInput": {
         "type": "string",
-        "enum": ["claude", "cursor", "vscode"]
+        "enum": [
+          "claude",
+          "cursor",
+          "vscode"
+        ]
       },
       "McpRequestLogInput": {
         "type": "object",
@@ -767,7 +909,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -778,7 +922,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -809,7 +955,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -828,7 +976,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -849,7 +999,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -860,7 +1012,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -879,7 +1033,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -905,7 +1061,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -918,7 +1076,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -966,11 +1126,21 @@
             }
           }
         },
-        "required": ["totalRequests", "successCount", "errorCount", "avgDurationMs", "requestsPerServer"]
+        "required": [
+          "totalRequests",
+          "successCount",
+          "errorCount",
+          "avgDurationMs",
+          "requestsPerServer"
+        ]
       },
       "McpRequestLogFilterStatusInput": {
         "type": "string",
-        "enum": ["HTTP 200", "HTTP 40x", "HTTP 50x"]
+        "enum": [
+          "HTTP 200",
+          "HTTP 40x",
+          "HTTP 50x"
+        ]
       },
       "McpServerConfigInput": {
         "type": "object",
@@ -1047,7 +1217,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1058,7 +1230,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1069,7 +1243,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1080,7 +1256,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1091,17 +1269,40 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
+          "oauthConfig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [
+                  null
+                ]
               }
             ]
           },
           "status": {
             "type": "string",
-            "enum": ["installing", "oauth_pending", "installed", "failed"]
+            "enum": [
+              "installing",
+              "oauth_pending",
+              "installed",
+              "failed"
+            ]
           },
           "serverType": {
             "type": "string",
-            "enum": ["local", "remote"]
+            "enum": [
+              "local",
+              "remote"
+            ]
           },
           "remoteUrl": {
             "anyOf": [
@@ -1110,7 +1311,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1127,6 +1330,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -1166,18 +1370,29 @@
           },
           "status": {
             "type": "string",
-            "enum": ["installing", "oauth_pending", "installed", "failed"]
+            "enum": [
+              "installing",
+              "oauth_pending",
+              "installed",
+              "failed"
+            ]
           },
           "serverType": {
             "type": "string",
-            "enum": ["local", "remote"]
+            "enum": [
+              "local",
+              "remote"
+            ]
           },
           "remote_url": {
             "type": "string"
           },
           "archestra_config": {}
         },
-        "required": ["displayName", "serverConfig"]
+        "required": [
+          "displayName",
+          "serverConfig"
+        ]
       },
       "McpServerContainerLogsInput": {
         "type": "object",
@@ -1189,7 +1404,10 @@
             "type": "string"
           }
         },
-        "required": ["logs", "containerName"]
+        "required": [
+          "logs",
+          "containerName"
+        ]
       },
       "AvailableToolInput": {
         "type": "object",
@@ -1224,7 +1442,12 @@
               "status": {
                 "description": "Analysis status",
                 "type": "string",
-                "enum": ["awaiting_ollama_model", "in_progress", "error", "completed"]
+                "enum": [
+                  "awaiting_ollama_model",
+                  "in_progress",
+                  "error",
+                  "completed"
+                ]
               },
               "error": {
                 "description": "Error message if analysis failed",
@@ -1234,7 +1457,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1246,7 +1471,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1258,7 +1485,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1270,7 +1499,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1282,15 +1513,30 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               }
             },
-            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"]
+            "required": [
+              "status",
+              "error",
+              "is_read",
+              "is_write",
+              "idempotent",
+              "reversible"
+            ]
           }
         },
-        "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"]
+        "required": [
+          "id",
+          "name",
+          "mcpServerId",
+          "mcpServerName",
+          "analysis"
+        ]
       },
       "MemoryEntryInput": {
         "type": "object",
@@ -1311,7 +1557,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "name", "value", "createdAt", "updatedAt"]
+        "required": [
+          "id",
+          "name",
+          "value",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "MemoryListResponseInput": {
         "type": "object",
@@ -1323,7 +1575,9 @@
             }
           }
         },
-        "required": ["memories"]
+        "required": [
+          "memories"
+        ]
       },
       "MemoryResponseInput": {
         "type": "object",
@@ -1335,12 +1589,16 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
         },
-        "required": ["memory"]
+        "required": [
+          "memory"
+        ]
       },
       "LegacyMemoryResponseInput": {
         "type": "object",
@@ -1349,7 +1607,9 @@
             "type": "string"
           }
         },
-        "required": ["content"]
+        "required": [
+          "content"
+        ]
       },
       "CreateMemoryInput": {
         "type": "object",
@@ -1364,7 +1624,10 @@
             "type": "string"
           }
         },
-        "required": ["name", "value"]
+        "required": [
+          "name",
+          "value"
+        ]
       },
       "DeleteResponseInput": {
         "type": "object",
@@ -1379,7 +1642,9 @@
             "type": "number"
           }
         },
-        "required": ["success"]
+        "required": [
+          "success"
+        ]
       },
       "WriteMemoryInput": {
         "type": "object",
@@ -1389,7 +1654,9 @@
             "type": "string"
           }
         },
-        "required": ["content"]
+        "required": [
+          "content"
+        ]
       },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
@@ -1404,7 +1671,11 @@
             "type": "boolean"
           }
         },
-        "required": ["model", "reason", "installed"]
+        "required": [
+          "model",
+          "reason",
+          "installed"
+        ]
       },
       "SandboxActionResponseInput": {
         "type": "object",
@@ -1416,7 +1687,10 @@
             "type": "string"
           }
         },
-        "required": ["success", "message"]
+        "required": [
+          "success",
+          "message"
+        ]
       },
       "UserInput": {
         "type": "object",
@@ -1439,7 +1713,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+        "required": [
+          "id",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "OAuthTokens": {
         "type": "object",
@@ -1460,7 +1740,9 @@
             "type": "string"
           }
         },
-        "required": ["access_token"],
+        "required": [
+          "access_token"
+        ],
         "additionalProperties": {}
       },
       "OAuthClientInformation": {
@@ -1473,7 +1755,9 @@
             "type": "string"
           }
         },
-        "required": ["client_id"],
+        "required": [
+          "client_id"
+        ],
         "additionalProperties": {}
       },
       "AuthorizationServerMetadata": {
@@ -1615,7 +1899,12 @@
             "type": "boolean"
           }
         },
-        "required": ["is_read", "is_write", "idempotent", "reversible"],
+        "required": [
+          "is_read",
+          "is_write",
+          "idempotent",
+          "reversible"
+        ],
         "additionalProperties": false
       },
       "Tool": {
@@ -1637,7 +1926,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1658,7 +1949,9 @@
                       },
                       {
                         "nullable": true,
-                        "enum": [null]
+                        "enum": [
+                          null
+                        ]
                       }
                     ]
                   },
@@ -1674,7 +1967,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1685,7 +1980,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1696,7 +1993,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1707,7 +2006,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1718,7 +2019,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1729,7 +2032,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1761,7 +2066,14 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["not_installed", "initializing", "running", "error", "stopping", "stopped"]
+            "enum": [
+              "not_installed",
+              "initializing",
+              "running",
+              "error",
+              "stopping",
+              "stopped"
+            ]
           },
           "runtime": {
             "type": "object",
@@ -1778,7 +2090,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1789,7 +2103,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1805,7 +2121,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1816,7 +2134,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1832,7 +2152,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -1843,12 +2165,18 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               }
             },
-            "required": ["startupPercentage", "startupMessage", "startupError"],
+            "required": [
+              "startupPercentage",
+              "startupMessage",
+              "startupError"
+            ],
             "additionalProperties": false
           },
           "mcpServers": {
@@ -1866,7 +2194,10 @@
                   }
                 }
               },
-              "required": ["container", "tools"],
+              "required": [
+                "container",
+                "tools"
+              ],
               "additionalProperties": false
             }
           },
@@ -1877,7 +2208,11 @@
             }
           }
         },
-        "required": ["status", "runtime", "mcpServers"],
+        "required": [
+          "status",
+          "runtime",
+          "mcpServers"
+        ],
         "additionalProperties": false
       },
       "PodmanContainerStatusSummary": {
@@ -1909,7 +2244,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -1920,12 +2257,19 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
         },
-        "required": ["startupPercentage", "state", "message", "error"],
+        "required": [
+          "startupPercentage",
+          "state",
+          "message",
+          "error"
+        ],
         "additionalProperties": false
       },
       "OllamaModelDownloadProgress": {
@@ -1936,7 +2280,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["downloading", "verifying", "completed", "error"]
+            "enum": [
+              "downloading",
+              "verifying",
+              "completed",
+              "error"
+            ]
           },
           "progress": {
             "type": "number",
@@ -1947,7 +2296,12 @@
             "type": "string"
           }
         },
-        "required": ["model", "status", "progress", "message"],
+        "required": [
+          "model",
+          "status",
+          "progress",
+          "message"
+        ],
         "additionalProperties": false
       },
       "WebSocketMessage": {
@@ -1957,7 +2311,9 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["chat-title-updated"]
+                "enum": [
+                  "chat-title-updated"
+                ]
               },
               "payload": {
                 "type": "object",
@@ -1969,11 +2325,17 @@
                     "type": "string"
                   }
                 },
-                "required": ["chatId", "title"],
+                "required": [
+                  "chatId",
+                  "title"
+                ],
                 "additionalProperties": false
               }
             },
-            "required": ["type", "payload"],
+            "required": [
+              "type",
+              "payload"
+            ],
             "additionalProperties": false
           },
           {
@@ -1981,13 +2343,18 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["sandbox-status-update"]
+                "enum": [
+                  "sandbox-status-update"
+                ]
               },
               "payload": {
                 "$ref": "#/components/schemas/SandboxStatusSummary"
               }
             },
-            "required": ["type", "payload"],
+            "required": [
+              "type",
+              "payload"
+            ],
             "additionalProperties": false
           },
           {
@@ -1995,13 +2362,18 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["ollama-model-download-progress"]
+                "enum": [
+                  "ollama-model-download-progress"
+                ]
               },
               "payload": {
                 "$ref": "#/components/schemas/OllamaModelDownloadProgress"
               }
             },
-            "required": ["type", "payload"],
+            "required": [
+              "type",
+              "payload"
+            ],
             "additionalProperties": false
           },
           {
@@ -2009,7 +2381,9 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["memory-updated"]
+                "enum": [
+                  "memory-updated"
+                ]
               },
               "payload": {
                 "type": "object",
@@ -2035,16 +2409,27 @@
                           "type": "string"
                         }
                       },
-                      "required": ["id", "name", "value", "createdAt", "updatedAt"],
+                      "required": [
+                        "id",
+                        "name",
+                        "value",
+                        "createdAt",
+                        "updatedAt"
+                      ],
                       "additionalProperties": false
                     }
                   }
                 },
-                "required": ["memories"],
+                "required": [
+                  "memories"
+                ],
                 "additionalProperties": false
               }
             },
-            "required": ["type", "payload"],
+            "required": [
+              "type",
+              "payload"
+            ],
             "additionalProperties": false
           }
         ]
@@ -2067,7 +2452,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2092,19 +2479,36 @@
                 },
                 "role": {
                   "type": "string",
-                  "enum": ["user", "assistant", "system"]
+                  "enum": [
+                    "user",
+                    "assistant",
+                    "system"
+                  ]
                 },
                 "content": {},
                 "createdAt": {
                   "type": "string"
                 }
               },
-              "required": ["id", "chatId", "role", "content", "createdAt"],
+              "required": [
+                "id",
+                "chatId",
+                "role",
+                "content",
+                "createdAt"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["id", "sessionId", "title", "createdAt", "updatedAt", "messages"],
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdAt",
+          "updatedAt",
+          "messages"
+        ],
         "additionalProperties": false
       },
       "CloudProviderWithConfig": {
@@ -2152,7 +2556,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
@@ -2172,7 +2578,13 @@
       },
       "SupportedCloudProviders": {
         "type": "string",
-        "enum": ["anthropic", "openai", "deepseek", "gemini", "ollama"]
+        "enum": [
+          "anthropic",
+          "openai",
+          "deepseek",
+          "gemini",
+          "ollama"
+        ]
       },
       "SupportedCloudProviderModel": {
         "type": "object",
@@ -2184,7 +2596,10 @@
             "$ref": "#/components/schemas/SupportedCloudProviders"
           }
         },
-        "required": ["id", "provider"],
+        "required": [
+          "id",
+          "provider"
+        ],
         "additionalProperties": false
       },
       "ExternalMcpClient": {
@@ -2197,12 +2612,19 @@
             "type": "string"
           }
         },
-        "required": ["clientName", "createdAt"],
+        "required": [
+          "clientName",
+          "createdAt"
+        ],
         "additionalProperties": false
       },
       "ExternalMcpClientName": {
         "type": "string",
-        "enum": ["claude", "cursor", "vscode"]
+        "enum": [
+          "claude",
+          "cursor",
+          "vscode"
+        ]
       },
       "McpRequestLog": {
         "type": "object",
@@ -2222,7 +2644,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2233,7 +2657,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2265,7 +2691,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2284,7 +2712,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2305,7 +2735,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2316,7 +2748,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2335,7 +2769,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2361,7 +2797,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2374,7 +2812,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2423,12 +2863,22 @@
             }
           }
         },
-        "required": ["totalRequests", "successCount", "errorCount", "avgDurationMs", "requestsPerServer"],
+        "required": [
+          "totalRequests",
+          "successCount",
+          "errorCount",
+          "avgDurationMs",
+          "requestsPerServer"
+        ],
         "additionalProperties": false
       },
       "McpRequestLogFilterStatus": {
         "type": "string",
-        "enum": ["HTTP 200", "HTTP 40x", "HTTP 50x"]
+        "enum": [
+          "HTTP 200",
+          "HTTP 40x",
+          "HTTP 50x"
+        ]
       },
       "McpServerConfig": {
         "type": "object",
@@ -2505,7 +2955,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2516,7 +2968,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2527,7 +2981,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2538,7 +2994,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2549,17 +3007,40 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
+          "oauthConfig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [
+                  null
+                ]
               }
             ]
           },
           "status": {
             "type": "string",
-            "enum": ["installing", "oauth_pending", "installed", "failed"]
+            "enum": [
+              "installing",
+              "oauth_pending",
+              "installed",
+              "failed"
+            ]
           },
           "serverType": {
             "type": "string",
-            "enum": ["local", "remote"]
+            "enum": [
+              "local",
+              "remote"
+            ]
           },
           "remoteUrl": {
             "anyOf": [
@@ -2568,7 +3049,9 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           },
@@ -2585,6 +3068,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -2625,18 +3109,29 @@
           },
           "status": {
             "type": "string",
-            "enum": ["installing", "oauth_pending", "installed", "failed"]
+            "enum": [
+              "installing",
+              "oauth_pending",
+              "installed",
+              "failed"
+            ]
           },
           "serverType": {
             "type": "string",
-            "enum": ["local", "remote"]
+            "enum": [
+              "local",
+              "remote"
+            ]
           },
           "remote_url": {
             "type": "string"
           },
           "archestra_config": {}
         },
-        "required": ["displayName", "serverConfig"],
+        "required": [
+          "displayName",
+          "serverConfig"
+        ],
         "additionalProperties": false
       },
       "McpServerContainerLogs": {
@@ -2649,7 +3144,10 @@
             "type": "string"
           }
         },
-        "required": ["logs", "containerName"],
+        "required": [
+          "logs",
+          "containerName"
+        ],
         "additionalProperties": false
       },
       "AvailableTool": {
@@ -2685,7 +3183,12 @@
               "status": {
                 "description": "Analysis status",
                 "type": "string",
-                "enum": ["awaiting_ollama_model", "in_progress", "error", "completed"]
+                "enum": [
+                  "awaiting_ollama_model",
+                  "in_progress",
+                  "error",
+                  "completed"
+                ]
               },
               "error": {
                 "description": "Error message if analysis failed",
@@ -2695,7 +3198,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2707,7 +3212,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2719,7 +3226,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2731,7 +3240,9 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               },
@@ -2743,16 +3254,31 @@
                   },
                   {
                     "nullable": true,
-                    "enum": [null]
+                    "enum": [
+                      null
+                    ]
                   }
                 ]
               }
             },
-            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"],
+            "required": [
+              "status",
+              "error",
+              "is_read",
+              "is_write",
+              "idempotent",
+              "reversible"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"],
+        "required": [
+          "id",
+          "name",
+          "mcpServerId",
+          "mcpServerName",
+          "analysis"
+        ],
         "additionalProperties": false
       },
       "MemoryEntry": {
@@ -2774,7 +3300,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "name", "value", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "name",
+          "value",
+          "createdAt",
+          "updatedAt"
+        ],
         "additionalProperties": false
       },
       "MemoryListResponse": {
@@ -2787,7 +3319,9 @@
             }
           }
         },
-        "required": ["memories"],
+        "required": [
+          "memories"
+        ],
         "additionalProperties": false
       },
       "MemoryResponse": {
@@ -2800,12 +3334,16 @@
               },
               {
                 "nullable": true,
-                "enum": [null]
+                "enum": [
+                  null
+                ]
               }
             ]
           }
         },
-        "required": ["memory"],
+        "required": [
+          "memory"
+        ],
         "additionalProperties": false
       },
       "LegacyMemoryResponse": {
@@ -2815,7 +3353,9 @@
             "type": "string"
           }
         },
-        "required": ["content"],
+        "required": [
+          "content"
+        ],
         "additionalProperties": false
       },
       "CreateMemory": {
@@ -2831,7 +3371,10 @@
             "type": "string"
           }
         },
-        "required": ["name", "value"],
+        "required": [
+          "name",
+          "value"
+        ],
         "additionalProperties": false
       },
       "DeleteResponse": {
@@ -2847,7 +3390,9 @@
             "type": "number"
           }
         },
-        "required": ["success"],
+        "required": [
+          "success"
+        ],
         "additionalProperties": false
       },
       "WriteMemory": {
@@ -2858,7 +3403,9 @@
             "type": "string"
           }
         },
-        "required": ["content"],
+        "required": [
+          "content"
+        ],
         "additionalProperties": false
       },
       "OllamaRequiredModelStatus": {
@@ -2874,7 +3421,11 @@
             "type": "boolean"
           }
         },
-        "required": ["model", "reason", "installed"],
+        "required": [
+          "model",
+          "reason",
+          "installed"
+        ],
         "additionalProperties": false
       },
       "SandboxActionResponse": {
@@ -2887,7 +3438,10 @@
             "type": "string"
           }
         },
-        "required": ["success", "message"],
+        "required": [
+          "success",
+          "message"
+        ],
         "additionalProperties": false
       },
       "User": {
@@ -2911,7 +3465,13 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "createdAt",
+          "updatedAt"
+        ],
         "additionalProperties": false
       }
     }
@@ -2920,7 +3480,9 @@
     "/api/oauth/store-code": {
       "post": {
         "operationId": "storeOAuthCode",
-        "tags": ["OAuth"],
+        "tags": [
+          "OAuth"
+        ],
         "description": "Store OAuth authorization code from deep link callback (internal API)",
         "requestBody": {
           "content": {
@@ -2937,7 +3499,10 @@
                     "minLength": 1
                   }
                 },
-                "required": ["state", "code"]
+                "required": [
+                  "state",
+                  "code"
+                ]
               }
             }
           },
@@ -2958,7 +3523,10 @@
                       "type": "string"
                     }
                   },
-                  "required": ["success", "message"],
+                  "required": [
+                    "success",
+                    "message"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2975,7 +3543,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2992,7 +3562,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3004,7 +3576,9 @@
     "/api/chat": {
       "get": {
         "operationId": "getChats",
-        "tags": ["Chat"],
+        "tags": [
+          "Chat"
+        ],
         "description": "Get all chats",
         "responses": {
           "200": {
@@ -3024,7 +3598,9 @@
       },
       "post": {
         "operationId": "createChat",
-        "tags": ["Chat"],
+        "tags": [
+          "Chat"
+        ],
         "description": "Create new chat",
         "requestBody": {
           "content": {
@@ -3053,7 +3629,9 @@
     "/api/chat/{id}": {
       "get": {
         "operationId": "getChatById",
-        "tags": ["Chat"],
+        "tags": [
+          "Chat"
+        ],
         "description": "Get single chat with messages",
         "parameters": [
           {
@@ -3087,7 +3665,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3097,7 +3677,9 @@
       },
       "patch": {
         "operationId": "updateChat",
-        "tags": ["Chat"],
+        "tags": [
+          "Chat"
+        ],
         "description": "Update chat",
         "requestBody": {
           "content": {
@@ -3112,7 +3694,9 @@
                       },
                       {
                         "nullable": true,
-                        "enum": [null]
+                        "enum": [
+                          null
+                        ]
                       }
                     ]
                   }
@@ -3153,7 +3737,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3163,7 +3749,9 @@
       },
       "delete": {
         "operationId": "deleteChat",
-        "tags": ["Chat"],
+        "tags": [
+          "Chat"
+        ],
         "description": "Delete chat",
         "parameters": [
           {
@@ -3190,7 +3778,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3202,7 +3792,9 @@
     "/api/cloud-providers/available": {
       "get": {
         "operationId": "getAvailableCloudProviders",
-        "tags": ["Cloud Providers"],
+        "tags": [
+          "Cloud Providers"
+        ],
         "description": "Get all available cloud providers with configuration status",
         "responses": {
           "200": {
@@ -3224,7 +3816,9 @@
     "/api/cloud-providers": {
       "post": {
         "operationId": "configureCloudProvider",
-        "tags": ["Cloud Providers"],
+        "tags": [
+          "Cloud Providers"
+        ],
         "description": "Configure a cloud provider with API key",
         "requestBody": {
           "content": {
@@ -3239,7 +3833,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["type", "apiKey"]
+                "required": [
+                  "type",
+                  "apiKey"
+                ]
               }
             }
           },
@@ -3257,7 +3854,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3269,7 +3868,9 @@
     "/api/cloud-providers/{type}": {
       "delete": {
         "operationId": "deleteCloudProvider",
-        "tags": ["Cloud Providers"],
+        "tags": [
+          "Cloud Providers"
+        ],
         "description": "Remove cloud provider configuration",
         "parameters": [
           {
@@ -3293,7 +3894,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3305,7 +3908,9 @@
     "/api/cloud-providers/models": {
       "get": {
         "operationId": "getCloudProviderModels",
-        "tags": ["Cloud Providers"],
+        "tags": [
+          "Cloud Providers"
+        ],
         "description": "Get all available models from configured providers",
         "responses": {
           "200": {
@@ -3327,7 +3932,9 @@
     "/api/external_mcp_client": {
       "get": {
         "operationId": "getConnectedExternalMcpClients",
-        "tags": ["External MCP Client"],
+        "tags": [
+          "External MCP Client"
+        ],
         "description": "Get all connected external MCP clients",
         "responses": {
           "200": {
@@ -3349,7 +3956,9 @@
     "/api/external_mcp_client/supported": {
       "get": {
         "operationId": "getSupportedExternalMcpClients",
-        "tags": ["External MCP Client"],
+        "tags": [
+          "External MCP Client"
+        ],
         "description": "Get supported external MCP client names",
         "responses": {
           "200": {
@@ -3371,7 +3980,9 @@
     "/api/external_mcp_client/connect": {
       "post": {
         "operationId": "connectExternalMcpClient",
-        "tags": ["External MCP Client"],
+        "tags": [
+          "External MCP Client"
+        ],
         "description": "Connect an external MCP client",
         "requestBody": {
           "content": {
@@ -3383,7 +3994,9 @@
                     "$ref": "#/components/schemas/ExternalMcpClientNameInput"
                   }
                 },
-                "required": ["clientName"]
+                "required": [
+                  "clientName"
+                ]
               }
             }
           },
@@ -3401,7 +4014,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3413,7 +4028,9 @@
     "/api/external_mcp_client/{clientName}/disconnect": {
       "delete": {
         "operationId": "disconnectExternalMcpClient",
-        "tags": ["External MCP Client"],
+        "tags": [
+          "External MCP Client"
+        ],
         "description": "Disconnect an external MCP client",
         "parameters": [
           {
@@ -3437,7 +4054,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3449,7 +4068,9 @@
     "/api/mcp_server/start_oauth": {
       "post": {
         "operationId": "startGenericOAuth",
-        "tags": ["OAuth"],
+        "tags": [
+          "OAuth"
+        ],
         "description": "Start generic OAuth flow for MCP server installation",
         "requestBody": {
           "content": {
@@ -3461,7 +4082,9 @@
                     "$ref": "#/components/schemas/McpServerInstallInput"
                   }
                 },
-                "required": ["installData"]
+                "required": [
+                  "installData"
+                ]
               }
             }
           },
@@ -3485,7 +4108,11 @@
                       "type": "string"
                     }
                   },
-                  "required": ["server", "authUrl", "message"],
+                  "required": [
+                    "server",
+                    "authUrl",
+                    "message"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3502,7 +4129,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3519,7 +4148,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3531,7 +4162,9 @@
     "/api/mcp_server/complete_oauth": {
       "post": {
         "operationId": "completeGenericOAuth",
-        "tags": ["OAuth"],
+        "tags": [
+          "OAuth"
+        ],
         "description": "Complete generic OAuth flow with authorization code",
         "requestBody": {
           "content": {
@@ -3539,9 +4172,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "serverId": {
-                    "type": "string"
-                  },
                   "code": {
                     "type": "string"
                   },
@@ -3549,7 +4179,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["serverId", "code", "state"]
+                "required": [
+                  "code",
+                  "state"
+                ]
               }
             }
           },
@@ -3570,7 +4203,10 @@
                       "type": "string"
                     }
                   },
-                  "required": ["server", "message"],
+                  "required": [
+                    "server",
+                    "message"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3587,7 +4223,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3604,7 +4242,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3616,7 +4256,9 @@
     "/api/mcp_request_log": {
       "get": {
         "operationId": "getMcpRequestLogs",
-        "tags": ["MCP Request Log"],
+        "tags": [
+          "MCP Request Log"
+        ],
         "description": "Get MCP request logs with filtering and pagination",
         "parameters": [
           {
@@ -3722,7 +4364,12 @@
                       "type": "number"
                     }
                   },
-                  "required": ["data", "total", "page", "pageSize"],
+                  "required": [
+                    "data",
+                    "total",
+                    "page",
+                    "pageSize"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3732,7 +4379,9 @@
       },
       "delete": {
         "operationId": "clearMcpRequestLogs",
-        "tags": ["MCP Request Log"],
+        "tags": [
+          "MCP Request Log"
+        ],
         "description": "Clear MCP request logs",
         "requestBody": {
           "content": {
@@ -3744,7 +4393,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["clearAll"]
+                "required": [
+                  "clearAll"
+                ]
               }
             }
           },
@@ -3762,7 +4413,9 @@
                       "type": "number"
                     }
                   },
-                  "required": ["cleared"],
+                  "required": [
+                    "cleared"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3774,7 +4427,9 @@
     "/api/mcp_request_log/{id}": {
       "get": {
         "operationId": "getMcpRequestLogById",
-        "tags": ["MCP Request Log"],
+        "tags": [
+          "MCP Request Log"
+        ],
         "description": "Get a single MCP request log by ID",
         "parameters": [
           {
@@ -3808,7 +4463,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3820,7 +4477,9 @@
     "/api/mcp_request_log/stats": {
       "get": {
         "operationId": "getMcpRequestLogStats",
-        "tags": ["MCP Request Log"],
+        "tags": [
+          "MCP Request Log"
+        ],
         "description": "Get MCP request log statistics",
         "parameters": [
           {
@@ -3897,7 +4556,9 @@
     "/api/mcp_server": {
       "get": {
         "operationId": "getMcpServers",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Get all installed MCP servers",
         "responses": {
           "200": {
@@ -3919,7 +4580,9 @@
     "/api/mcp_server/install": {
       "post": {
         "operationId": "installMcpServer",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Install an MCP server. Either from the catalog, or a customer server",
         "requestBody": {
           "content": {
@@ -3952,7 +4615,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3969,7 +4634,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -3981,7 +4648,9 @@
     "/api/mcp_server/{id}": {
       "delete": {
         "operationId": "uninstallMcpServer",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Uninstall MCP server",
         "parameters": [
           {
@@ -4005,7 +4674,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4017,7 +4688,9 @@
     "/mcp_proxy/{id}/logs": {
       "get": {
         "operationId": "getMcpServerLogs",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Get logs for a specific MCP server container",
         "parameters": [
           {
@@ -4060,7 +4733,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4072,7 +4747,9 @@
     "/api/mcp_server/tools": {
       "get": {
         "operationId": "getAvailableTools",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Get all available tools from connected MCP servers",
         "responses": {
           "200": {
@@ -4094,7 +4771,9 @@
     "/api/mcp_server/oauth_install": {
       "post": {
         "operationId": "installMcpServerWithOauth",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Install MCP server with OAuth authentication",
         "requestBody": {
           "content": {
@@ -4106,7 +4785,9 @@
                     "$ref": "#/components/schemas/McpServerInstallInput"
                   }
                 },
-                "required": ["installData"]
+                "required": [
+                  "installData"
+                ]
               }
             }
           },
@@ -4124,7 +4805,9 @@
                       "$ref": "#/components/schemas/McpServer"
                     }
                   },
-                  "required": ["server"],
+                  "required": [
+                    "server"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4141,7 +4824,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4158,7 +4843,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4170,7 +4857,9 @@
     "/api/memories": {
       "get": {
         "operationId": "getAllMemories",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Get all memory entries for the current user",
         "responses": {
           "200": {
@@ -4187,7 +4876,9 @@
       },
       "delete": {
         "operationId": "deleteAllMemories",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Delete all memory entries for the current user",
         "responses": {
           "200": {
@@ -4206,7 +4897,9 @@
     "/api/memories/{name}": {
       "get": {
         "operationId": "getMemoryByName",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Get a specific memory entry by name",
         "parameters": [
           {
@@ -4233,7 +4926,9 @@
       },
       "put": {
         "operationId": "setMemory",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Create or update a memory entry",
         "requestBody": {
           "content": {
@@ -4245,7 +4940,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["value"]
+                "required": [
+                  "value"
+                ]
               }
             }
           },
@@ -4276,7 +4973,9 @@
       },
       "delete": {
         "operationId": "deleteMemory",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Delete a specific memory entry by name",
         "parameters": [
           {
@@ -4305,7 +5004,9 @@
     "/api/memory": {
       "get": {
         "operationId": "getMemory",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Get the current user memory (legacy format)",
         "responses": {
           "200": {
@@ -4322,7 +5023,9 @@
       },
       "put": {
         "operationId": "updateMemory",
-        "tags": ["Memory"],
+        "tags": [
+          "Memory"
+        ],
         "description": "Update the current user memory (legacy format)",
         "requestBody": {
           "content": {
@@ -4345,7 +5048,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["success"],
+                  "required": [
+                    "success"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4367,7 +5072,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["model"]
+                "required": [
+                  "model"
+                ]
               }
             }
           },
@@ -4388,7 +5095,10 @@
                       "type": "string"
                     }
                   },
-                  "required": ["success", "message"],
+                  "required": [
+                    "success",
+                    "message"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4405,7 +5115,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4417,7 +5129,9 @@
     "/api/ollama/required-models": {
       "get": {
         "operationId": "getOllamaRequiredModelsStatus",
-        "tags": ["MCP Server"],
+        "tags": [
+          "MCP Server"
+        ],
         "description": "Get the status of all Ollama required models",
         "responses": {
           "200": {
@@ -4434,7 +5148,9 @@
                       }
                     }
                   },
-                  "required": ["models"],
+                  "required": [
+                    "models"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4446,7 +5162,9 @@
     "/api/sandbox/restart": {
       "post": {
         "operationId": "restartSandbox",
-        "tags": ["Sandbox"],
+        "tags": [
+          "Sandbox"
+        ],
         "description": "Restart the Archestra MCP Sandbox (podman machine + all MCP servers)",
         "responses": {
           "200": {
@@ -4470,7 +5188,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4482,7 +5202,9 @@
     "/api/sandbox/reset": {
       "post": {
         "operationId": "resetSandbox",
-        "tags": ["Sandbox"],
+        "tags": [
+          "Sandbox"
+        ],
         "description": "Clean/purge all data (uninstall all MCP servers + reset podman machine)",
         "responses": {
           "200": {
@@ -4506,7 +5228,9 @@
                       "type": "string"
                     }
                   },
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -4518,7 +5242,9 @@
     "/api/user": {
       "get": {
         "operationId": "getUser",
-        "tags": ["User"],
+        "tags": [
+          "User"
+        ],
         "description": "Get the current user",
         "responses": {
           "200": {
@@ -4535,7 +5261,9 @@
       },
       "patch": {
         "operationId": "updateUser",
-        "tags": ["User"],
+        "tags": [
+          "User"
+        ],
         "description": "Update user settings",
         "requestBody": {
           "content": {

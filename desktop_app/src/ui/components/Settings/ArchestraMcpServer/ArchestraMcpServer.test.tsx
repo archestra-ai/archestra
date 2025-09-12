@@ -20,6 +20,7 @@ describe('ArchestraMcpServer', () => {
       oauthClientInfo: null,
       oauthServerMetadata: null,
       oauthResourceMetadata: null,
+      oauthConfig: null,
       status: 'installed',
       serverType: 'local',
       remoteUrl: null,

@@ -51,6 +51,9 @@ export default class SandboxedMcpServer {
   private podmanContainer?: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
+  
+  // Assigned HTTP port for streamable HTTP servers (stored in memory)
+  assignedHttpPort?: number;
   private analysisUpdateInterval: NodeJS.Timeout | null = null;
 
   tools: McpTools = {};
@@ -96,6 +99,25 @@ export default class SandboxedMcpServer {
 
     // Set up periodic updates for cached analysis
     this.startPeriodicAnalysisUpdates();
+  }
+
+  /**
+   * Get the assigned HTTP port for streamable HTTP servers
+   */
+  getAssignedHttpPort(): number | undefined {
+    return this.podmanContainer?.assignedHttpPort;
+  }
+
+  /**
+   * Check if this server is a streamable HTTP server based on OAuth config
+   */
+  isStreamableHttpServer(): boolean {
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      return !!oauthConfig?.streamable_http_url;
+    } catch {
+      return false;
+    }
   }
 
   /**

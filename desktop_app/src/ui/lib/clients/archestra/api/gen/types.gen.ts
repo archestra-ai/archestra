@@ -282,6 +282,7 @@ export type McpServerInput = {
   oauthClientInfo: OAuthClientInformationInput | null;
   oauthServerMetadata: AuthorizationServerMetadataInput | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadataInput | null;
+  oauthConfig: string | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -710,6 +711,7 @@ export type McpServer = {
   oauthClientInfo: OAuthClientInformation | null;
   oauthServerMetadata: AuthorizationServerMetadata | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadata | null;
+  oauthConfig: string | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -1209,7 +1211,6 @@ export type StartGenericOAuthResponse = StartGenericOAuthResponses[keyof StartGe
 
 export type CompleteGenericOAuthData = {
   body: {
-    serverId: string;
     code: string;
     state: string;
   };

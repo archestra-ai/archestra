@@ -305,7 +305,9 @@ export default class SandboxedMcpServer {
             };
 
             if (areTokensExpired(tokensWithDefaults, 5)) {
-              log.warn(`OAuth tokens for ${this.mcpServerId} are expired or expiring soon. You may need to reinstall the server to refresh OAuth tokens.`);
+              log.warn(
+                `OAuth tokens for ${this.mcpServerId} are expired or expiring soon. You may need to reinstall the server to refresh OAuth tokens.`
+              );
             }
 
             headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;

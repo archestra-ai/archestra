@@ -42,6 +42,7 @@ const getArchitecture = (): SupportedArchitecture => {
     case 'x64':
       return 'x86_64';
     default:
+      throw new Error(`Unsupported architecture: ${arch()}`);
   }
 };
 

@@ -188,6 +188,7 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
     }),
     new MakerDeb({
@@ -195,6 +196,7 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
     }),
     /**

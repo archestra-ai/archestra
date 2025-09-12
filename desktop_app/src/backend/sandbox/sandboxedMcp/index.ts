@@ -477,11 +477,8 @@ export default class SandboxedMcpServer {
 
         await this.pingMcpServerContainerUntilHealthy();
 
-        // Add extra delay for OAuth servers to fully initialize after health check passes
-        if (this.mcpServer.oauthTokens) {
-          log.info(`Adding additional startup delay for OAuth server: ${this.mcpServer.name}`);
-          await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 second delay
-        }
+        // OAuth servers are now properly health-checked via MCP client connection
+        // No additional delay needed since createMcpClient() + tools() call verifies readiness
 
         await this.createMcpClient();
         await this.fetchTools();

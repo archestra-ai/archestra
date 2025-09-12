@@ -44,11 +44,11 @@ export default class ChatModel {
    */
   static async getSelectedTools(chatId: number): Promise<string[] | null> {
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chatId)).limit(1);
-    
+
     if (!chat) {
       throw new Error(`Chat not found: ${chatId}`);
     }
-    
+
     return chat.selectedTools as string[] | null;
   }
 
@@ -65,7 +65,7 @@ export default class ChatModel {
         updatedAt: new Date().toISOString(),
       })
       .where(eq(chatsTable.id, chatId));
-    
+
     // Broadcast the update via WebSocket
     WebSocketService.broadcast({
       type: 'chat-tools-updated',
@@ -83,16 +83,16 @@ export default class ChatModel {
    */
   static async addSelectedTools(chatId: number, toolIds: string[]): Promise<string[]> {
     const currentTools = await this.getSelectedTools(chatId);
-    
+
     let updatedTools: string[];
-    
+
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list
       // Get all available tools and ensure the new ones are included
       const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
       const allAvailableTools = toolAggregator.getAllAvailableTools();
-      const allToolIds = allAvailableTools.map(tool => tool.id);
-      
+      const allToolIds = allAvailableTools.map((tool) => tool.id);
+
       // Make sure all tools including the new ones are in the list
       const toolSet = new Set([...allToolIds, ...toolIds]);
       updatedTools = Array.from(toolSet);
@@ -101,7 +101,7 @@ export default class ChatModel {
       const toolSet = new Set([...currentTools, ...toolIds]);
       updatedTools = Array.from(toolSet);
     }
-    
+
     await this.updateSelectedTools(chatId, updatedTools);
     return updatedTools;
   }
@@ -113,16 +113,16 @@ export default class ChatModel {
    */
   static async removeSelectedTools(chatId: number, toolIds: string[]): Promise<string[]> {
     const currentTools = await this.getSelectedTools(chatId);
-    
+
     let updatedTools: string[];
-    
+
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list first
       // then remove the specified tools
       const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
       const allAvailableTools = toolAggregator.getAllAvailableTools();
-      const allToolIds = allAvailableTools.map(tool => tool.id);
-      
+      const allToolIds = allAvailableTools.map((tool) => tool.id);
+
       // Remove specified tools from the full list
       const toolSet = new Set(allToolIds);
       for (const toolId of toolIds) {
@@ -137,7 +137,7 @@ export default class ChatModel {
       }
       updatedTools = Array.from(toolSet);
     }
-    
+
     await this.updateSelectedTools(chatId, updatedTools);
     return updatedTools;
   }

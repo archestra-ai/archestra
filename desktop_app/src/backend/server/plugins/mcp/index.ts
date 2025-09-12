@@ -418,27 +418,28 @@ export const createArchestraMcpServer = () => {
             ],
           };
         }
-        
+
         // Get all available tools
         const allTools = toolAggregator.getAllAvailableTools();
-        
+
         // Get selected tools for the chat
         const selectedTools = await ChatModel.getSelectedTools(chatId);
-        
+
         // Create a set of selected tool IDs for quick lookup
-        const selectedSet = selectedTools === null 
-          ? new Set(allTools.map(t => t.id)) // null means all selected
-          : new Set(selectedTools);
-        
+        const selectedSet =
+          selectedTools === null
+            ? new Set(allTools.map((t) => t.id)) // null means all selected
+            : new Set(selectedTools);
+
         // Group tools by MCP server
         const toolsByServer: Record<string, any[]> = {};
-        
+
         for (const tool of allTools) {
           const serverName = tool.mcpServerName || 'Unknown Server';
           if (!toolsByServer[serverName]) {
             toolsByServer[serverName] = [];
           }
-          
+
           toolsByServer[serverName].push({
             id: tool.id,
             name: tool.name,
@@ -447,31 +448,33 @@ export const createArchestraMcpServer = () => {
             analysis: tool.analysis,
           });
         }
-        
+
         // Format the output
         const formattedOutput = Object.entries(toolsByServer)
           .map(([serverName, tools]) => {
-            const enabledCount = tools.filter(t => t.selected).length;
+            const enabledCount = tools.filter((t) => t.selected).length;
             const header = `**${serverName}** (${enabledCount}/${tools.length} enabled)`;
-            
+
             const toolList = tools
-              .map(t => {
+              .map((t) => {
                 const status = t.selected ? '✓' : '✗';
-                const analysisInfo = t.analysis?.is_read !== null 
-                  ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
-                  : '';
+                const analysisInfo =
+                  t.analysis?.is_read !== null
+                    ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
+                    : '';
                 return `  ${status} ${t.name}${analysisInfo}: ${t.description || 'No description'}`;
               })
               .join('\n');
-            
+
             return `${header}\n${toolList}`;
           })
           .join('\n\n');
-        
-        const summary = selectedTools === null
-          ? 'All tools are currently enabled (default)'
-          : `${selectedSet.size} out of ${allTools.length} tools enabled`;
-        
+
+        const summary =
+          selectedTools === null
+            ? 'All tools are currently enabled (default)'
+            : `${selectedSet.size} out of ${allTools.length} tools enabled`;
+
         return {
           content: [
             {
@@ -497,13 +500,15 @@ export const createArchestraMcpServer = () => {
     'enable_tools',
     'Enable specific tools for use in the current chat',
     z.object({
-      toolIds: z.array(z.string()).describe('Array of tool IDs to enable (e.g., ["google__gmail_send", "filesystem__read_file"])'),
+      toolIds: z
+        .array(z.string())
+        .describe('Array of tool IDs to enable (e.g., ["google__gmail_send", "filesystem__read_file"])'),
     }) as any,
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
       const { toolIds } = global._mcpToolArguments || {};
       const chatId = ArchestraMcpContext.getCurrentChatId();
-      
+
       try {
         if (!chatId) {
           return {
@@ -515,7 +520,7 @@ export const createArchestraMcpServer = () => {
             ],
           };
         }
-        
+
         if (!toolIds || !Array.isArray(toolIds)) {
           return {
             content: [
@@ -526,9 +531,9 @@ export const createArchestraMcpServer = () => {
             ],
           };
         }
-        
+
         const updatedTools = await ChatModel.addSelectedTools(chatId, toolIds);
-        
+
         return {
           content: [
             {
@@ -560,7 +565,7 @@ export const createArchestraMcpServer = () => {
       // Workaround for fastify-mcp bug: get arguments from global
       const { toolIds } = global._mcpToolArguments || {};
       const chatId = ArchestraMcpContext.getCurrentChatId();
-      
+
       try {
         if (!chatId) {
           return {
@@ -572,7 +577,7 @@ export const createArchestraMcpServer = () => {
             ],
           };
         }
-        
+
         if (!toolIds || !Array.isArray(toolIds)) {
           return {
             content: [
@@ -583,9 +588,9 @@ export const createArchestraMcpServer = () => {
             ],
           };
         }
-        
+
         const updatedTools = await ChatModel.removeSelectedTools(chatId, toolIds);
-        
+
         return {
           content: [
             {

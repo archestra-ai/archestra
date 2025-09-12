@@ -1,10 +1,19 @@
 import { create } from 'zustand';
 
 import config from '@ui/config';
-import { createChat, deleteChat, getChatById, getChatSelectedTools, getChats, selectChatTools, updateChat } from '@ui/lib/clients/archestra/api/gen';
+import {
+  createChat,
+  deleteChat,
+  getChatById,
+  getChatSelectedTools,
+  getChats,
+  selectChatTools,
+  updateChat,
+} from '@ui/lib/clients/archestra/api/gen';
 import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
+
 import { useToolsStore } from './tools-store';
 
 interface ChatState {
@@ -100,7 +109,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         try {
           await selectChatTools({
             path: { id: initializedChat.id.toString() },
-            body: { toolIds: Array.from(toolsStore.selectedToolIds) }
+            body: { toolIds: Array.from(toolsStore.selectedToolIds) },
           });
         } catch (error) {
           console.error('Failed to save initial tool selection to new chat:', error);
@@ -134,20 +143,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const { data: toolsData } = await getChatSelectedTools({ path: { id: chatId.toString() } });
           if (toolsData) {
             const toolsStore = useToolsStore.getState();
-            
+
             // Clear current selection first
             toolsStore.selectedToolIds.clear();
-            
+
             if (toolsData.selectedTools === null) {
               // null means all tools are selected
-              const allToolIds = toolsData.availableTools.map(tool => tool.id);
-              allToolIds.forEach(id => toolsStore.selectedToolIds.add(id));
+              const allToolIds = toolsData.availableTools.map((tool) => tool.id);
+              allToolIds.forEach((id) => toolsStore.selectedToolIds.add(id));
             } else if (toolsData.selectedTools.length > 0) {
               // Add only the selected tools
-              toolsData.selectedTools.forEach(id => toolsStore.selectedToolIds.add(id));
+              toolsData.selectedTools.forEach((id) => toolsStore.selectedToolIds.add(id));
             }
             // If selectedTools is empty array, keep the selection empty
-            
+
             // Trigger a re-render by creating a new Set
             useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
           }
@@ -185,7 +194,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       const { chats, draftMessages } = get();
       const newChats = chats.filter((chat) => chat.id !== currentChat.id);
-      
+
       // Clean up draft message for deleted chat
       const newDrafts = new Map(draftMessages);
       newDrafts.delete(currentChat.id);

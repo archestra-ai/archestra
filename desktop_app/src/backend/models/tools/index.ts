@@ -168,11 +168,7 @@ export class ToolModel {
 
       // Get existing tools from database to check which ones are already analyzed
       const existingTools = await ToolModel.getByMcpServerId(mcpServerId);
-      const analyzedToolIds = new Set(
-        existingTools
-          .filter(tool => tool.analyzed_at !== null)
-          .map(tool => tool.id)
-      );
+      const analyzedToolIds = new Set(existingTools.filter((tool) => tool.analyzed_at !== null).map((tool) => tool.id));
 
       // Prepare tools for analysis, filtering out already analyzed ones
       const allToolsForAnalysis = Object.entries(tools).map(([name, tool]) => ({
@@ -183,7 +179,7 @@ export class ToolModel {
       }));
 
       // Filter to only unanalyzed tools
-      const toolsForAnalysis = allToolsForAnalysis.filter(tool => !analyzedToolIds.has(tool.id));
+      const toolsForAnalysis = allToolsForAnalysis.filter((tool) => !analyzedToolIds.has(tool.id));
 
       if (toolsForAnalysis.length === 0) {
         log.info(`All ${totalTools} tools for MCP server ${mcpServerId} are already analyzed, skipping analysis`);
@@ -192,7 +188,7 @@ export class ToolModel {
 
       const unanalyzedCount = toolsForAnalysis.length;
       const alreadyAnalyzedCount = totalTools - unanalyzedCount;
-      
+
       log.info(`Found ${unanalyzedCount} unanalyzed tools out of ${totalTools} for MCP server ${mcpServerId}`);
 
       // Broadcast start of analysis for unanalyzed tools only

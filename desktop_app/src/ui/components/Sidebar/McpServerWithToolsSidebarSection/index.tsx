@@ -160,24 +160,24 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
 
   // Step 2: Add MCP servers that don't have unselected tools
   installedMcpServers.forEach((server) => {
-      // Check if this server already has unselected tools showing
-      const serverAlreadyShowing = Object.values(toolsByServer).some((group) => group.serverId === server.id);
+    // Check if this server already has unselected tools showing
+    const serverAlreadyShowing = Object.values(toolsByServer).some((group) => group.serverId === server.id);
 
-      // If server is not already showing, add it (regardless of state)
-      // This ensures running servers without tools still appear as "Loading..."
-      // BUT don't overwrite if it already exists (which would clear the tools)
-      if (!serverAlreadyShowing && !toolsByServer[server.name]) {
-        toolsByServer[server.name] = {
-          tools: [],
-          commonPrefix: '',
-          serverId: server.id,
-          readOnlyCount: 0,
-          writeOnlyCount: 0,
-          readWriteCount: 0,
-          otherCount: 0,
-        };
-      }
-    });
+    // If server is not already showing, add it (regardless of state)
+    // This ensures running servers without tools still appear as "Loading..."
+    // BUT don't overwrite if it already exists (which would clear the tools)
+    if (!serverAlreadyShowing && !toolsByServer[server.name]) {
+      toolsByServer[server.name] = {
+        tools: [],
+        commonPrefix: '',
+        serverId: server.id,
+        readOnlyCount: 0,
+        writeOnlyCount: 0,
+        readWriteCount: 0,
+        otherCount: 0,
+      };
+    }
+  });
 
   // Step 3: Calculate common prefixes for tool names and sort tools
   Object.values(toolsByServer).forEach((group) => {
@@ -282,17 +282,19 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 {(() => {
                                   // Check the actual server state to determine what icon to show
                                   const server = installedMcpServers.find((s) => s.id === serverData.serverId);
-                                  const isActuallyInitializing = server && (
-                                    server.state === 'not_created' ||
-                                    server.state === 'created' ||
-                                    server.state === 'initializing'
-                                  );
-                                  
+                                  const isActuallyInitializing =
+                                    server &&
+                                    (server.state === 'not_created' ||
+                                      server.state === 'created' ||
+                                      server.state === 'initializing');
+
                                   if (isError) {
                                     return <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />;
                                   }
                                   if (serverData.tools.length === 0 && isActuallyInitializing) {
-                                    return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />;
+                                    return (
+                                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                                    );
                                   }
                                   return null;
                                 })()}
@@ -333,15 +335,15 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 if (isError) {
                                   return 'Error';
                                 }
-                                
+
                                 // Check the actual server state to determine what to show
                                 const server = installedMcpServers.find((s) => s.id === serverData.serverId);
-                                const isActuallyInitializing = server && (
-                                  server.state === 'not_created' ||
-                                  server.state === 'created' ||
-                                  server.state === 'initializing'
-                                );
-                                
+                                const isActuallyInitializing =
+                                  server &&
+                                  (server.state === 'not_created' ||
+                                    server.state === 'created' ||
+                                    server.state === 'initializing');
+
                                 // Show "Loading..." only for servers that are actually initializing
                                 if (serverData.tools.length === 0) {
                                   if (isActuallyInitializing) {
@@ -350,7 +352,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                   // Server is running or in another state but has no tools
                                   return 'No tools available';
                                 }
-                                
+
                                 const parts = [];
                                 if (serverData.readOnlyCount > 0) parts.push(`${serverData.readOnlyCount} read`);
                                 if (serverData.writeOnlyCount > 0) parts.push(`${serverData.writeOnlyCount} write`);
@@ -369,9 +371,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       {serverData.tools.length === 0 ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                            {isError
-                              ? 'Server error - check Settings'
-                              : 'Loading tools...'}
+                            {isError ? 'Server error - check Settings' : 'Loading tools...'}
                           </div>
                         </SidebarMenuItem>
                       ) : (

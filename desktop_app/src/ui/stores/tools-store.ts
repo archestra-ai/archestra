@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { deselectAllChatTools, deselectChatTools, getAvailableTools, selectAllChatTools, selectChatTools } from '@ui/lib/clients/archestra/api/gen';
+import {
+  deselectAllChatTools,
+  deselectChatTools,
+  getAvailableTools,
+  selectAllChatTools,
+  selectChatTools,
+} from '@ui/lib/clients/archestra/api/gen';
 import websocketService from '@ui/lib/websocket';
 import type { AvailableToolsMap, Tool, ToolChoice } from '@ui/types/tools';
+
 import { useChatStore } from './chat-store';
 
 interface ToolsState {
@@ -48,7 +55,7 @@ export const useToolsStore = create<ToolsStore>()(
       // Actions
       addSelectedTool: async (toolId: string) => {
         const currentChat = useChatStore.getState().getCurrentChat();
-        
+
         set(({ selectedToolIds }) => ({
           selectedToolIds: new Set(selectedToolIds).add(toolId),
         }));
@@ -59,7 +66,7 @@ export const useToolsStore = create<ToolsStore>()(
             // Just call selectChatTools - backend handles null->explicit conversion
             await selectChatTools({
               path: { id: currentChat.id.toString() },
-              body: { toolIds: [toolId] }
+              body: { toolIds: [toolId] },
             });
           } catch (error) {
             console.error('Failed to save tool selection to backend:', error);
@@ -69,7 +76,7 @@ export const useToolsStore = create<ToolsStore>()(
 
       removeSelectedTool: async (toolId: string) => {
         const currentChat = useChatStore.getState().getCurrentChat();
-        
+
         set(({ selectedToolIds }) => {
           const newSelectedToolIds = new Set(selectedToolIds);
           newSelectedToolIds.delete(toolId);
@@ -84,7 +91,7 @@ export const useToolsStore = create<ToolsStore>()(
             // Just call deselectChatTools - backend handles null->explicit conversion
             await deselectChatTools({
               path: { id: currentChat.id.toString() },
-              body: { toolIds: [toolId] }
+              body: { toolIds: [toolId] },
             });
           } catch (error) {
             console.error('Failed to save tool deselection to backend:', error);

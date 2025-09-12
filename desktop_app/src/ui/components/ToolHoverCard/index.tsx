@@ -5,7 +5,6 @@ import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
 import type { Tool } from '@ui/types';
 
-
 interface ToolHoverCardProps extends React.PropsWithChildren {
   tool: Tool;
   side?: 'top' | 'right' | 'bottom' | 'left';
@@ -39,9 +38,7 @@ export function ToolHoverCard({
             <p className="text-xs text-muted-foreground">From {mcpServerName}</p>
           </div>
 
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
 
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">Access:</span>

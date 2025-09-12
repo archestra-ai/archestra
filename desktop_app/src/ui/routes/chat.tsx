@@ -27,7 +27,7 @@ function ChatPage() {
   const currentChatSessionId = currentChat?.sessionId || '';
   const currentChatMessages = currentChat?.messages || [];
   const currentChatTitle = getCurrentChatTitle();
-  
+
   // Get current input from draft messages
   const currentInput = currentChat ? getDraftMessage(currentChat.id) : '';
 
@@ -190,7 +190,7 @@ function ChatPage() {
 
   // Simple debounce implementation
   const debounceRef = useRef<NodeJS.Timeout>();
-  
+
   const debouncedSaveDraft = useCallback((chatId: number, content: string) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);

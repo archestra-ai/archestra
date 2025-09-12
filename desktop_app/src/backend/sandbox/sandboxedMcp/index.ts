@@ -237,11 +237,7 @@ export default class SandboxedMcpServer {
         const cachedAnalysis = this.cachedToolAnalysis.get(tool.name);
 
         // Check if this tool's analysis has changed
-        if (
-          !cachedAnalysis ||
-          cachedAnalysis.is_read !== tool.is_read ||
-          cachedAnalysis.is_write !== tool.is_write
-        ) {
+        if (!cachedAnalysis || cachedAnalysis.is_read !== tool.is_read || cachedAnalysis.is_write !== tool.is_write) {
           // Update cache with whatever data we have (nulls are fine)
           this.cachedToolAnalysis.set(tool.name, {
             is_read: tool.is_read,
@@ -582,10 +578,7 @@ export default class SandboxedMcpServer {
       const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
 
       // Check if the tool has actually been analyzed (at least one non-null value)
-      const hasAnalysis =
-        cachedAnalysis &&
-        (cachedAnalysis.is_read !== null ||
-          cachedAnalysis.is_write !== null);
+      const hasAnalysis = cachedAnalysis && (cachedAnalysis.is_read !== null || cachedAnalysis.is_write !== null);
 
       return {
         id,

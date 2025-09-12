@@ -298,12 +298,12 @@ class OllamaClient {
     const exampleOutput = {
       getTodo: {
         is_read: true,
-        is_write: false
+        is_write: false,
       },
       createTodo: {
         is_read: false,
-        is_write: true
-      }
+        is_write: true,
+      },
     };
 
     const prompt = `You are an expert at analyzing API tools. Your task is to analyze tools and output ONLY valid JSON.
@@ -376,8 +376,12 @@ Output ONLY the JSON object, starting with { and ending with }`;
 
           // Ensure both required fields are present
           const validatedAnalysis = {
-            is_read: typeof analysis.is_read === 'boolean' ? analysis.is_read : this.inferIsRead(toolName, tool.description),
-            is_write: typeof analysis.is_write === 'boolean' ? analysis.is_write : this.inferIsWrite(toolName, tool.description),
+            is_read:
+              typeof analysis.is_read === 'boolean' ? analysis.is_read : this.inferIsRead(toolName, tool.description),
+            is_write:
+              typeof analysis.is_write === 'boolean'
+                ? analysis.is_write
+                : this.inferIsWrite(toolName, tool.description),
           };
 
           // Validate with schema
@@ -425,12 +429,28 @@ Output ONLY the JSON object, starting with { and ending with }`;
     const combined = `${lowerName} ${lowerDesc}`;
 
     const readPatterns = [
-      'get', 'list', 'read', 'search', 'fetch', 'find', 'query', 'retrieve',
-      'show', 'view', 'describe', 'check', 'verify', 'examine', 'inspect',
-      'status', 'info', 'detail', 'lookup'
+      'get',
+      'list',
+      'read',
+      'search',
+      'fetch',
+      'find',
+      'query',
+      'retrieve',
+      'show',
+      'view',
+      'describe',
+      'check',
+      'verify',
+      'examine',
+      'inspect',
+      'status',
+      'info',
+      'detail',
+      'lookup',
     ];
 
-    return readPatterns.some(pattern => combined.includes(pattern));
+    return readPatterns.some((pattern) => combined.includes(pattern));
   }
 
   /**
@@ -442,13 +462,37 @@ Output ONLY the JSON object, starting with { and ending with }`;
     const combined = `${lowerName} ${lowerDesc}`;
 
     const writePatterns = [
-      'create', 'update', 'delete', 'add', 'remove', 'set', 'write', 'modify',
-      'edit', 'change', 'insert', 'append', 'replace', 'clear', 'reset',
-      'submit', 'post', 'put', 'patch', 'destroy', 'drop', 'truncate',
-      'execute', 'run', 'apply', 'commit', 'save', 'store'
+      'create',
+      'update',
+      'delete',
+      'add',
+      'remove',
+      'set',
+      'write',
+      'modify',
+      'edit',
+      'change',
+      'insert',
+      'append',
+      'replace',
+      'clear',
+      'reset',
+      'submit',
+      'post',
+      'put',
+      'patch',
+      'destroy',
+      'drop',
+      'truncate',
+      'execute',
+      'run',
+      'apply',
+      'commit',
+      'save',
+      'store',
     ];
 
-    return writePatterns.some(pattern => combined.includes(pattern));
+    return writePatterns.some((pattern) => combined.includes(pattern));
   }
 
   /**

@@ -75,11 +75,11 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Get tools based on chat selection or requested tools
         let tools = {};
-        
+
         if (chatId) {
           // Get chat-specific tool selection
           const chatSelectedTools = await Chat.getSelectedTools(chatId);
-          
+
           if (chatSelectedTools === null) {
             // null means all tools are selected
             tools = toolAggregator.getAllTools();
@@ -117,16 +117,14 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // Truncate tool names to 64 characters for LLM compatibility
           const truncatedTools: typeof tools = {};
           for (const [toolId, tool] of Object.entries(tools)) {
-            const truncatedToolName = tool.name && tool.name.length > 64 
-              ? tool.name.substring(0, 64) 
-              : tool.name;
-            
+            const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
+
             truncatedTools[toolId] = {
               ...tool,
-              name: truncatedToolName
+              name: truncatedToolName,
             };
           }
-          
+
           streamConfig.tools = truncatedTools;
           streamConfig.toolChoice = toolChoice || 'auto';
         }

@@ -1,8 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-import ChatModel, { ChatWithMessagesSchema } from '@backend/models/chat';
 import toolAggregator from '@backend/llms/toolAggregator';
+import ChatModel, { ChatWithMessagesSchema } from '@backend/models/chat';
 import { AvailableToolSchema } from '@backend/sandbox/schemas';
 import { ErrorResponseSchema, StringNumberIdSchema } from '@backend/schemas';
 
@@ -153,7 +153,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const selectedTools = await ChatModel.getSelectedTools(id);
         const availableTools = toolAggregator.getAllAvailableTools();
-        
+
         return reply.code(200).send({
           selectedTools,
           availableTools,

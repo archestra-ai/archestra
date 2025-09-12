@@ -222,6 +222,16 @@ async function startBackendServer(): Promise<void> {
       // Continue anyway - the app can work without Archestra tools
     }
 
+    // Start Ollama server first
+    await OllamaServer.startServer();
+
+    /**
+     * Ensure that ollama models that're required for various app functionality are available,
+     * downloading them if necessary. This must be done BEFORE starting MCP servers
+     * so that tool analysis can proceed without waiting forever.
+     */
+    await OllamaClient.ensureModelsAvailable();
+
     // Now start the sandbox manager which will connect MCP clients
     McpServerSandboxManager.onSandboxStartupSuccess = () => {
       log.info('Sandbox startup successful');
@@ -230,14 +240,6 @@ async function startBackendServer(): Promise<void> {
       log.error('Sandbox startup error:', error);
     };
     McpServerSandboxManager.start();
-
-    await OllamaServer.startServer();
-
-    /**
-     * Ensure that ollama models that're required for various app functionality are available,
-     * downloading them if necessary
-     */
-    await OllamaClient.ensureModelsAvailable();
 
     log.info('Backend server started successfully in main process');
   } catch (error) {

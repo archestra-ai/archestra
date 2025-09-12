@@ -167,10 +167,10 @@ class ArchestraMcpClient {
         analysis: {
           status: 'completed',
           error: null,
-          is_read: toolName === 'list_installed_mcp_servers',
-          is_write: toolName !== 'list_installed_mcp_servers',
-          idempotent: toolName === 'list_installed_mcp_servers',
-          reversible: toolName === 'uninstall_mcp_server',
+          is_read: ['list_installed_mcp_servers', 'list_memories', 'get_memory', 'search_mcp_servers'].includes(toolName),
+          is_write: ['install_mcp_server', 'uninstall_mcp_server', 'set_memory', 'delete_memory'].includes(toolName),
+          idempotent: ['list_installed_mcp_servers', 'list_memories', 'get_memory', 'search_mcp_servers', 'set_memory'].includes(toolName),
+          reversible: ['uninstall_mcp_server', 'delete_memory'].includes(toolName),
         },
       };
     });

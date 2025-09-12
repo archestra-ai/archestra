@@ -5,6 +5,7 @@ import { Tool, ToolAnalysisResult, ToolSchema, toolsTable } from '@backend/datab
 import { OllamaClient } from '@backend/ollama';
 import { McpTools } from '@backend/sandbox/sandboxedMcp';
 import log from '@backend/utils/logger';
+import WebSocketService from '@backend/websocket';
 
 export class ToolModel {
   /**
@@ -48,14 +49,20 @@ export class ToolModel {
       .onConflictDoUpdate({
         target: toolsTable.id,
         set: {
+          // Always update tool metadata with latest values
           name: sql`excluded.name`,
           description: sql`excluded.description`,
           input_schema: sql`excluded.input_schema`,
-          is_read: sql`excluded.is_read`,
-          is_write: sql`excluded.is_write`,
-          idempotent: sql`excluded.idempotent`,
-          reversible: sql`excluded.reversible`,
-          analyzed_at: sql`excluded.analyzed_at`,
+          // IMPORTANT: Preserve existing analysis values if new values are NULL
+          // This prevents loss of analysis data when tools are re-discovered on app restart
+          // COALESCE uses the first non-null value, so:
+          // - If excluded (new) value has analysis data, it will be used
+          // - If excluded value is NULL (tool re-discovered without analysis), existing data is preserved
+          is_read: sql`COALESCE(excluded.is_read, tools.is_read)`,
+          is_write: sql`COALESCE(excluded.is_write, tools.is_write)`,
+          idempotent: sql`COALESCE(excluded.idempotent, tools.idempotent)`,
+          reversible: sql`COALESCE(excluded.reversible, tools.reversible)`,
+          analyzed_at: sql`COALESCE(excluded.analyzed_at, tools.analyzed_at)`,
           updated_at: sql`excluded.updated_at`,
         },
       })
@@ -158,7 +165,20 @@ export class ToolModel {
    */
   private static async performBackgroundAnalysis(tools: McpTools, mcpServerId: string): Promise<void> {
     try {
-      log.info(`Starting background analysis for ${Object.keys(tools).length} tools of MCP server ${mcpServerId}`);
+      const totalTools = Object.keys(tools).length;
+      log.info(`Starting background analysis for ${totalTools} tools of MCP server ${mcpServerId}`);
+
+      // Broadcast start of analysis
+      WebSocketService.broadcast({
+        type: 'tool-analysis-progress',
+        payload: {
+          mcpServerId,
+          status: 'started',
+          totalTools,
+          analyzedTools: 0,
+          message: `Analyzing ${totalTools} tools for ${mcpServerId}...`,
+        },
+      });
 
       // Prepare tools for analysis
       const toolsForAnalysis = Object.entries(tools).map(([name, tool]) => ({
@@ -168,32 +188,81 @@ export class ToolModel {
         inputSchema: tool.inputSchema,
       }));
 
-      // Analyze tools in batches
-      const batchSize = 10;
-      for (let i = 0; i < toolsForAnalysis.length; i += batchSize) {
-        const batch = toolsForAnalysis.slice(i, i + batchSize);
+      let analyzedCount = 0;
 
+      // Analyze tools one by one
+      for (const toolData of toolsForAnalysis) {
         try {
-          // This will wait for the model if it's not available yet
-          const analysisResults = await OllamaClient.analyzeTools(batch);
+          // Broadcast progress for current tool
+          WebSocketService.broadcast({
+            type: 'tool-analysis-progress',
+            payload: {
+              mcpServerId,
+              status: 'analyzing',
+              totalTools,
+              analyzedTools: analyzedCount,
+              currentTool: toolData.name,
+              progress: Math.round((analyzedCount / totalTools) * 100),
+              message: `Analyzing ${toolData.name} (${analyzedCount + 1}/${totalTools})...`,
+            },
+          });
 
-          // Update tools with analysis results
-          for (const toolData of batch) {
-            const analysis = analysisResults[toolData.name];
-            if (analysis) {
-              await ToolModel.updateAnalysisResults(toolData.id, analysis);
-              log.info(`Updated analysis for tool ${toolData.name}`);
-            }
+          // Analyze single tool - this will wait for the model if it's not available yet
+          const analysisResults = await OllamaClient.analyzeTools([toolData]);
+          
+          // Update tool with analysis results
+          const analysis = analysisResults[toolData.name];
+          if (analysis) {
+            await ToolModel.updateAnalysisResults(toolData.id, analysis);
+            analyzedCount++;
+            log.info(`Updated analysis for tool ${toolData.name}`);
+            
+            // Broadcast progress after successful analysis
+            WebSocketService.broadcast({
+              type: 'tool-analysis-progress',
+              payload: {
+                mcpServerId,
+                status: 'analyzing',
+                totalTools,
+                analyzedTools: analyzedCount,
+                progress: Math.round((analyzedCount / totalTools) * 100),
+                message: `Analyzed ${analyzedCount}/${totalTools} tools...`,
+              },
+            });
           }
         } catch (error) {
-          log.error(`Failed to analyze batch of tools in background:`, error);
-          // Continue with next batch even if this one fails
+          log.error(`Failed to analyze tool ${toolData.name}:`, error);
+          // Continue with next tool even if this one fails
         }
       }
+
+      // Broadcast completion
+      WebSocketService.broadcast({
+        type: 'tool-analysis-progress',
+        payload: {
+          mcpServerId,
+          status: 'completed',
+          totalTools,
+          analyzedTools: analyzedCount,
+          progress: 100,
+          message: `Completed analysis of ${analyzedCount} tools for ${mcpServerId}`,
+        },
+      });
 
       log.info(`Completed background analysis for MCP server ${mcpServerId}`);
     } catch (error) {
       log.error(`Background analysis failed for MCP server ${mcpServerId}:`, error);
+      
+      // Broadcast error
+      WebSocketService.broadcast({
+        type: 'tool-analysis-progress',
+        payload: {
+          mcpServerId,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Analysis failed',
+          message: `Failed to analyze tools for ${mcpServerId}`,
+        },
+      });
     }
   }
 }

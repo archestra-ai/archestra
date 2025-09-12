@@ -1,6 +1,8 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 import { getAvailableTools } from '@ui/lib/clients/archestra/api/gen';
+import websocketService from '@ui/lib/websocket';
 import type { AvailableToolsMap, Tool, ToolChoice } from '@ui/types/tools';
 
 interface ToolsState {
@@ -9,6 +11,7 @@ interface ToolsState {
   errorLoadingAvailableTools: Error | null;
 
   selectedToolIds: Set<string>;
+  hasInitializedSelection: boolean;
 
   toolChoice: ToolChoice;
 }
@@ -27,13 +30,16 @@ interface ToolsActions {
 
 type ToolsStore = ToolsState & ToolsActions;
 
-export const useToolsStore = create<ToolsStore>((set, get) => ({
+export const useToolsStore = create<ToolsStore>()(
+  persist(
+    (set, get) => ({
   // State
   availableTools: [],
   loadingAvailableTools: true,
   errorLoadingAvailableTools: null,
 
   selectedToolIds: new Set(),
+  hasInitializedSelection: false,
 
   toolChoice: 'auto',
 
@@ -64,9 +70,9 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
     try {
       const { data } = await getAvailableTools();
       if (data) {
-        const { selectedToolIds: currentSelection } = get();
-        // Only auto-select tools if no tools are currently selected
-        const shouldAutoSelectAll = currentSelection.size === 0;
+        const { selectedToolIds: currentSelection, hasInitializedSelection } = get();
+        // Only auto-select tools on first load, not when user has deselected all
+        const shouldAutoSelectAll = !hasInitializedSelection && currentSelection.size === 0;
         const selectedToolIds = shouldAutoSelectAll
           ? new Set(data.map((tool) => tool.id))
           : new Set([...currentSelection].filter((id) => data.some((tool) => tool.id === id)));
@@ -74,6 +80,7 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
         set({
           availableTools: data,
           selectedToolIds,
+          hasInitializedSelection: true,
         });
       }
     } catch {
@@ -84,9 +91,9 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
   },
 
   setAvailableTools: (tools: Tool[]) => {
-    const { selectedToolIds: currentSelection } = get();
-    // Only auto-select tools if no tools are currently selected
-    const shouldAutoSelectAll = currentSelection.size === 0;
+    const { selectedToolIds: currentSelection, hasInitializedSelection } = get();
+    // Only auto-select tools on first load, not when user has deselected all
+    const shouldAutoSelectAll = !hasInitializedSelection && currentSelection.size === 0;
     const selectedToolIds = shouldAutoSelectAll
       ? new Set(tools.map((tool) => tool.id))
       : new Set([...currentSelection].filter((id) => tools.some((tool) => tool.id === id)));
@@ -94,6 +101,7 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
     set({
       availableTools: tools,
       selectedToolIds,
+      hasInitializedSelection: true,
     });
   },
 
@@ -103,6 +111,31 @@ export const useToolsStore = create<ToolsStore>((set, get) => ({
       return acc;
     }, {} as AvailableToolsMap);
   },
-}));
+    }),
+    {
+      name: 'tools-selection-storage',
+      // Only persist the selection state, not the tools data
+      partialize: (state) => ({
+        selectedToolIds: Array.from(state.selectedToolIds),
+        hasInitializedSelection: state.hasInitializedSelection,
+        toolChoice: state.toolChoice,
+      }),
+      // Convert array back to Set on rehydration
+      onRehydrateStorage: () => (state) => {
+        if (state && state.selectedToolIds) {
+          state.selectedToolIds = new Set(state.selectedToolIds as any);
+        }
+      },
+    }
+  )
+);
 
+// Initial fetch of available tools
 useToolsStore.getState().fetchAvailableTools();
+
+// Subscribe to tools updates via WebSocket
+websocketService.subscribe('tools-updated', ({ payload }) => {
+  console.log('Tools updated for MCP server:', payload.mcpServerId);
+  // Refetch available tools when any MCP server's tools are updated
+  useToolsStore.getState().fetchAvailableTools();
+});

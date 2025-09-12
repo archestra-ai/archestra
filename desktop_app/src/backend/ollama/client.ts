@@ -333,15 +333,41 @@ CRITICAL REQUIREMENTS:
       });
 
       const rawResult = JSON.parse(response.response);
+      
+      // Debug log to see what the model actually returned
+      log.info('Raw analysis response from Ollama:', JSON.stringify(rawResult, null, 2));
 
       const result: Record<string, z.infer<typeof ToolAnalysisResultSchema>> = {};
 
       // Validate each tool's analysis results
       for (const [toolName, analysis] of Object.entries(rawResult)) {
         try {
-          result[toolName] = ToolAnalysisResultSchema.parse(analysis);
+          // Check if the analysis is a boolean (wrong format) or an object (correct format)
+          if (typeof analysis === 'boolean' || typeof analysis !== 'object' || analysis === null) {
+            log.warn(`Tool ${toolName} has invalid format (not an object):`, analysis);
+            // Try to infer based on tool name
+            const isRead = toolName.toLowerCase().includes('get') || 
+                          toolName.toLowerCase().includes('list') || 
+                          toolName.toLowerCase().includes('read') ||
+                          toolName.toLowerCase().includes('search');
+            const isWrite = toolName.toLowerCase().includes('create') || 
+                           toolName.toLowerCase().includes('update') || 
+                           toolName.toLowerCase().includes('delete') ||
+                           toolName.toLowerCase().includes('add') ||
+                           toolName.toLowerCase().includes('remove');
+            
+            result[toolName] = {
+              is_read: isRead,
+              is_write: isWrite,
+              idempotent: isRead,
+              reversible: false,
+            };
+          } else {
+            result[toolName] = ToolAnalysisResultSchema.parse(analysis);
+          }
         } catch (error) {
           log.warn(`Invalid analysis result for tool ${toolName}:`, error);
+          log.warn(`Raw analysis data:`, analysis);
           // Provide default values if parsing fails
           result[toolName] = {
             is_read: false,

@@ -55,7 +55,7 @@ export function ToolHoverCard({
           )}
 
           <div className="flex items-center gap-2 pt-2 border-t">
-            <ToolStatusIcon enabled={isSelected} />
+            <ToolStatusIcon enabled={isSelected} isRead={is_read} isWrite={is_write} />
             <span className="text-xs text-muted-foreground">{!isSelected ? 'Disabled' : 'Available'}</span>
           </div>
 
@@ -82,19 +82,19 @@ export function ToolHoverCard({
             {status === 'completed' &&
               (is_read !== null || is_write !== null || idempotent !== null || reversible !== null) && (
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {is_read !== null && (
+                  {(is_read !== null || is_write !== null) && (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">Read-only:</span>
-                      <span className={cn('text-xs font-medium', is_read ? 'text-green-600' : 'text-orange-600')}>
-                        {is_read ? 'Yes' : 'No'}
-                      </span>
-                    </div>
-                  )}
-                  {is_write !== null && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">Writes data:</span>
-                      <span className={cn('text-xs font-medium', is_write ? 'text-orange-600' : 'text-green-600')}>
-                        {is_write ? 'Yes' : 'No'}
+                      <span className="text-xs text-muted-foreground">Access:</span>
+                      <span className={cn('text-xs font-medium', 
+                        is_read && is_write ? 'text-blue-600' :
+                        is_read ? 'text-green-600' :
+                        is_write ? 'text-orange-600' :
+                        'text-gray-600'
+                      )}>
+                        {is_read && is_write ? 'Read/Write' :
+                         is_read ? 'Read' :
+                         is_write ? 'Write' :
+                         'None'}
                       </span>
                     </div>
                   )}

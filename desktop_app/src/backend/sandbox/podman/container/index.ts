@@ -71,7 +71,7 @@ export default class PodmanContainer {
   private statusError: string | null = null;
 
   private socketPath: string | null = null;
-  
+
   // Assigned HTTP port for streamable HTTP servers (when random port is assigned by Podman)
   assignedHttpPort?: number;
 
@@ -145,7 +145,7 @@ export default class PodmanContainer {
   private async discoverAssignedHttpPort(): Promise<void> {
     try {
       log.info(`Discovering assigned HTTP port for container: ${this.containerName}`);
-      
+
       const inspectResponse = await containerInspectLibpod({
         path: { name: this.containerName },
       });
@@ -155,11 +155,29 @@ export default class PodmanContainer {
       }
 
       const portBindings = inspectResponse.data?.NetworkSettings?.Ports;
-      if (portBindings && portBindings['8000/tcp']?.[0]?.HostPort) {
-        this.assignedHttpPort = parseInt(portBindings['8000/tcp'][0].HostPort, 10);
-        log.info(`Assigned HTTP port discovered: ${this.assignedHttpPort}`);
+      log.info(`Available port bindings:`, Object.keys(portBindings || {}));
+      
+      if (portBindings) {
+        // Look for any TCP port mapping (for existing containers)
+        const tcpPorts = Object.keys(portBindings).filter(key => key.endsWith('/tcp'));
+        
+        if (tcpPorts.length > 0) {
+          // Use the first available TCP port mapping
+          const portKey = tcpPorts[0];
+          const hostPort = portBindings[portKey]?.[0]?.HostPort;
+          
+          if (hostPort) {
+            this.assignedHttpPort = parseInt(hostPort, 10);
+            const containerPort = portKey.replace('/tcp', '');
+            log.info(`Assigned HTTP port discovered: ${this.assignedHttpPort} (container port: ${containerPort})`);
+          } else {
+            log.warn(`Port binding found (${portKey}) but no HostPort assigned`);
+          }
+        } else {
+          log.warn(`No TCP port bindings found in container inspection`);
+        }
       } else {
-        log.warn('Could not find assigned HTTP port in container inspection');
+        log.warn(`No port bindings found in container inspection`);
       }
     } catch (error) {
       log.error('Failed to discover assigned HTTP port:', error);
@@ -590,6 +608,15 @@ export default class PodmanContainer {
       if (response.status === 304) {
         log.info(`MCP server container ${this.containerName} is already running.`);
 
+        // For existing containers, we still need to discover the assigned port
+        const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+        const isStreamableHttp = oauthConfig?.streamable_http_url;
+        
+        if (isStreamableHttp) {
+          log.info(`Discovering port for existing streamable HTTP container`);
+          await this.discoverAssignedHttpPort();
+        }
+
         // Update state
         this.setContainerAsRunning();
 
@@ -662,14 +689,18 @@ export default class PodmanContainer {
       // Check if this is a streamable HTTP server and add port bindings
       const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
       const isStreamableHttp = oauthConfig?.streamable_http_url;
-      
+
       if (isStreamableHttp) {
-        log.info(`Detected streamable HTTP server, exposing container port 8000 with random host port`);
-        createBody.portmappings = [{
-          container_port: 8000,
-          host_port: 0, // 0 = random available port
-          protocol: 'tcp'
-        }];
+        const containerPort = oauthConfig?.streamable_http_port || 8000; // Default to 8000 if not specified
+
+        log.info(`Detected streamable HTTP server, exposing container port ${containerPort} with random host port`);
+        createBody.portmappings = [
+          {
+            container_port: containerPort,
+            host_port: 0, // 0 = random available port
+            protocol: 'tcp',
+          },
+        ];
       }
 
       const response = await containerCreateLibpod({

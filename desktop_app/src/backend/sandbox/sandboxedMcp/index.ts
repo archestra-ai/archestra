@@ -51,7 +51,7 @@ export default class SandboxedMcpServer {
   private podmanContainer?: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
-  
+
   // Assigned HTTP port for streamable HTTP servers (stored in memory)
   assignedHttpPort?: number;
   private analysisUpdateInterval: NodeJS.Timeout | null = null;
@@ -84,14 +84,23 @@ export default class SandboxedMcpServer {
       this.mcpServerUrl = remoteUrl;
       log.info(`Creating SandboxedMcpServer for remote server: ${mcpServer.name} at ${remoteUrl}`);
     } else {
-      // For local servers, use the proxy URL and set up container
+      // For local servers, set up container first
       if (!podmanSocketPath) {
         throw new Error(`Local server ${mcpServer.id} requires podmanSocketPath`);
       }
-      this.mcpServerUrl = this.mcpServerProxyUrl;
       this.podmanSocketPath = podmanSocketPath;
       this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
-      log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
+
+      // For streamable HTTP servers, use direct container URL instead of proxy
+      if (this.isStreamableHttpServer()) {
+        // We'll set this dynamically after container starts and port is discovered
+        this.mcpServerUrl = 'http://localhost:0/mcp'; // Placeholder, will be updated
+        log.info(`Creating SandboxedMcpServer for local streamable HTTP server: ${mcpServer.name} (direct connection)`);
+      } else {
+        // For stdio servers, use the proxy URL
+        this.mcpServerUrl = this.mcpServerProxyUrl;
+        log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
+      }
     }
 
     // Try to fetch cached tools on initialization
@@ -117,6 +126,35 @@ export default class SandboxedMcpServer {
       return !!oauthConfig?.streamable_http_url;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Update the MCP server URL for streamable HTTP servers after port discovery
+   */
+  updateStreamableHttpUrl(): void {
+    if (!this.isStreamableHttpServer() || !this.podmanContainer) {
+      return;
+    }
+
+    const assignedPort = this.podmanContainer.assignedHttpPort;
+    if (!assignedPort) {
+      log.warn(`Cannot update streamable HTTP URL: no assigned port for ${this.mcpServerId}`);
+      return;
+    }
+
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      const streamableHttpUrl = oauthConfig?.streamable_http_url;
+
+      if (streamableHttpUrl) {
+        const url = new URL(streamableHttpUrl);
+        url.port = assignedPort.toString();
+        this.mcpServerUrl = url.toString();
+        log.info(`Updated streamable HTTP URL for ${this.mcpServerId}: ${this.mcpServerUrl}`);
+      }
+    } catch (error) {
+      log.error(`Failed to update streamable HTTP URL for ${this.mcpServerId}:`, error);
     }
   }
 
@@ -344,24 +382,43 @@ export default class SandboxedMcpServer {
       );
 
       try {
-        const response = await fetch(this.mcpServerProxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: uuidv4(),
-            method: 'ping',
-          }),
-        });
+        // Use direct URL for streamable HTTP servers, proxy URL for others
+        const pingUrl = this.isStreamableHttpServer() ? this.mcpServerUrl : this.mcpServerProxyUrl;
 
-        if (response.ok) {
-          log.info(`MCP server container ${this.mcpServerId} is healthy after ${attempts + 1} attempts!`);
-          return;
-        } else {
-          log.info(`MCP server container ${this.mcpServerId} ping failed with status ${response.status}, retrying...`);
+        // Prepare headers - include Accept header to avoid 406 errors
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'Archestra-Desktop-App/1.0.0',
+        };
+
+        // Add OAuth token for streamable HTTP servers
+        if (this.isStreamableHttpServer() && this.mcpServer.oauthTokens) {
+          try {
+            const tokens =
+              typeof this.mcpServer.oauthTokens === 'string'
+                ? JSON.parse(this.mcpServer.oauthTokens)
+                : this.mcpServer.oauthTokens;
+            if (tokens.access_token) {
+              headers['Authorization'] = `Bearer ${tokens.access_token}`;
+            }
+          } catch (error) {
+            log.warn(`Failed to parse OAuth tokens for ping: ${error}`);
+          }
         }
+
+        log.info(`Pinging ${this.isStreamableHttpServer() ? 'direct' : 'proxy'} URL: ${pingUrl}`);
+
+        // Initialize MCP client connection for this ping attempt
+        if (!this.mcpClient) {
+          await this.createMcpClient();
+        }
+        
+        // Use MCP client's tools() method as a health check (we know this method exists)
+        await this.mcpClient.tools();
+        
+        log.info(`MCP server container ${this.mcpServerId} is healthy after ${attempts + 1} attempts!`);
+        return;
       } catch (error) {
         log.info(
           `MCP server container ${this.mcpServerId} ping failed with error: ${error instanceof Error ? error.message : 'Unknown error'}, retrying...`
@@ -412,6 +469,12 @@ export default class SandboxedMcpServer {
 
       try {
         await this.podmanContainer.startOrCreateContainer();
+
+        // For streamable HTTP servers, update the URL with the discovered port
+        if (this.isStreamableHttpServer()) {
+          this.updateStreamableHttpUrl();
+        }
+
         await this.pingMcpServerContainerUntilHealthy();
 
         // Add extra delay for OAuth servers to fully initialize after health check passes

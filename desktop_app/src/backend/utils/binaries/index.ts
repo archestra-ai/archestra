@@ -29,6 +29,7 @@ const getPlatform = (): SupportedPlatform => {
 };
 
 const getArchitecture = (): SupportedArchitecture => {
+  console.log('arch()', arch());
   switch (arch()) {
     // 32-bit ARM, different from aarch64
     // case 'arm':

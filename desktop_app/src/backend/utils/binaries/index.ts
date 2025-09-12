@@ -40,11 +40,8 @@ const getArchitecture = (): SupportedArchitecture => {
       return 'arm64';
     // this is the same as x86_64
     case 'x64':
-      // return 'x86_64';
-      // TODO: DON'T MERGE THIS! THIS IS A TEMPORARY CHANGE TO TEST SOMETHING ON WINDOWS
-      return 'arm64';
+      return 'x86_64';
     default:
-      throw new Error(`Unsupported architecture: ${arch()}`);
   }
 };
 

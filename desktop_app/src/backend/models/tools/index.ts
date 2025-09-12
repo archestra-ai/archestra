@@ -166,29 +166,50 @@ export class ToolModel {
       const totalTools = Object.keys(tools).length;
       log.info(`Starting background analysis for ${totalTools} tools of MCP server ${mcpServerId}`);
 
-      // Broadcast start of analysis
-      WebSocketService.broadcast({
-        type: 'tool-analysis-progress',
-        payload: {
-          mcpServerId,
-          status: 'started',
-          totalTools,
-          analyzedTools: 0,
-          message: `Analyzing ${totalTools} tools for ${mcpServerId}...`,
-        },
-      });
+      // Get existing tools from database to check which ones are already analyzed
+      const existingTools = await ToolModel.getByMcpServerId(mcpServerId);
+      const analyzedToolIds = new Set(
+        existingTools
+          .filter(tool => tool.analyzed_at !== null)
+          .map(tool => tool.id)
+      );
 
-      // Prepare tools for analysis
-      const toolsForAnalysis = Object.entries(tools).map(([name, tool]) => ({
+      // Prepare tools for analysis, filtering out already analyzed ones
+      const allToolsForAnalysis = Object.entries(tools).map(([name, tool]) => ({
         id: `${mcpServerId}__${name}`,
         name,
         description: tool.description || '',
         inputSchema: tool.inputSchema,
       }));
 
+      // Filter to only unanalyzed tools
+      const toolsForAnalysis = allToolsForAnalysis.filter(tool => !analyzedToolIds.has(tool.id));
+
+      if (toolsForAnalysis.length === 0) {
+        log.info(`All ${totalTools} tools for MCP server ${mcpServerId} are already analyzed, skipping analysis`);
+        return;
+      }
+
+      const unanalyzedCount = toolsForAnalysis.length;
+      const alreadyAnalyzedCount = totalTools - unanalyzedCount;
+      
+      log.info(`Found ${unanalyzedCount} unanalyzed tools out of ${totalTools} for MCP server ${mcpServerId}`);
+
+      // Broadcast start of analysis for unanalyzed tools only
+      WebSocketService.broadcast({
+        type: 'tool-analysis-progress',
+        payload: {
+          mcpServerId,
+          status: 'started',
+          totalTools: unanalyzedCount,
+          analyzedTools: 0,
+          message: `Analyzing ${unanalyzedCount} new tools for ${mcpServerId} (${alreadyAnalyzedCount} already analyzed)...`,
+        },
+      });
+
       let analyzedCount = 0;
 
-      // Analyze tools one by one
+      // Analyze only unanalyzed tools one by one
       for (const toolData of toolsForAnalysis) {
         try {
           // Broadcast progress for current tool
@@ -197,11 +218,11 @@ export class ToolModel {
             payload: {
               mcpServerId,
               status: 'analyzing',
-              totalTools,
+              totalTools: unanalyzedCount,
               analyzedTools: analyzedCount,
               currentTool: toolData.name,
-              progress: Math.round((analyzedCount / totalTools) * 100),
-              message: `Analyzing ${toolData.name} (${analyzedCount + 1}/${totalTools})...`,
+              progress: Math.round((analyzedCount / unanalyzedCount) * 100),
+              message: `Analyzing ${toolData.name} (${analyzedCount + 1}/${unanalyzedCount})...`,
             },
           });
 
@@ -221,10 +242,10 @@ export class ToolModel {
               payload: {
                 mcpServerId,
                 status: 'analyzing',
-                totalTools,
+                totalTools: unanalyzedCount,
                 analyzedTools: analyzedCount,
-                progress: Math.round((analyzedCount / totalTools) * 100),
-                message: `Analyzed ${analyzedCount}/${totalTools} tools...`,
+                progress: Math.round((analyzedCount / unanalyzedCount) * 100),
+                message: `Analyzed ${analyzedCount}/${unanalyzedCount} tools...`,
               },
             });
           }
@@ -240,10 +261,10 @@ export class ToolModel {
         payload: {
           mcpServerId,
           status: 'completed',
-          totalTools,
+          totalTools: unanalyzedCount,
           analyzedTools: analyzedCount,
           progress: 100,
-          message: `Completed analysis of ${analyzedCount} tools for ${mcpServerId}`,
+          message: `Completed analysis of ${analyzedCount} new tools for ${mcpServerId}`,
         },
       });
 

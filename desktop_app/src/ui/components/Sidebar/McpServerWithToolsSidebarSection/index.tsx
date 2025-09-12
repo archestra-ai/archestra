@@ -100,11 +100,24 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
     }
   }, [availableTools, hasInitialized]);
 
+  // Debug logging
+  console.log('[McpServerSidebar] Debug info:', {
+    availableToolsCount: availableTools.length,
+    selectedToolIdsCount: selectedToolIds.size,
+    installedServersCount: installedMcpServers.length,
+    githubTools: availableTools.filter(t => t.id.includes('github')).slice(0, 3),
+    installedServerNames: installedMcpServers.map(s => ({ id: s.id, name: s.name })),
+  });
+
   // Step 1: Filter and group UNSELECTED tools by server
   const toolsByServer = availableTools
     .filter((tool) => {
       // Only show tools that are NOT selected
-      return !selectedToolIds.has(tool.id);
+      const isSelected = selectedToolIds.has(tool.id);
+      if (tool.id.includes('github') && !isSelected) {
+        console.log('[McpServerSidebar] GitHub tool not selected:', tool.id, tool.mcpServerName);
+      }
+      return !isSelected;
     })
     .reduce(
       (
@@ -157,14 +170,37 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
       {}
     );
 
+  // Debug: Check what's in toolsByServer
+  console.log('[McpServerSidebar] toolsByServer:', {
+    serverNames: Object.keys(toolsByServer),
+    githubEntry: toolsByServer['github MCP'] || toolsByServer['GitHub'] || 'not found',
+    allEntries: Object.entries(toolsByServer).map(([name, data]) => ({
+      name,
+      toolCount: data.tools.length,
+      serverId: data.serverId
+    }))
+  });
+
   // Step 2: Add MCP servers that don't have unselected tools
   installedMcpServers.forEach((server) => {
       // Check if this server already has unselected tools showing
       const serverAlreadyShowing = Object.values(toolsByServer).some((group) => group.serverId === server.id);
+      
+      // Debug log for GitHub
+      if (server.id.includes('github')) {
+        console.log('[McpServerSidebar] GitHub server check:', {
+          serverId: server.id,
+          serverName: server.name,
+          serverAlreadyShowing,
+          toolsByServerHasIt: server.name in toolsByServer,
+          exactMatch: toolsByServer[server.name],
+        });
+      }
 
       // If server is not already showing, add it (regardless of state)
       // This ensures running servers without tools still appear as "Loading..."
-      if (!serverAlreadyShowing) {
+      // BUT don't overwrite if it already exists (which would clear the tools)
+      if (!serverAlreadyShowing && !toolsByServer[server.name]) {
         toolsByServer[server.name] = {
           tools: [],
           commonPrefix: '',
@@ -277,10 +313,23 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {serverData.tools.length === 0 && !isError && (
-                                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
-                                )}
-                                {isError && <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />}
+                                {(() => {
+                                  // Check the actual server state to determine what icon to show
+                                  const server = installedMcpServers.find((s) => s.id === serverData.serverId);
+                                  const isActuallyInitializing = server && (
+                                    server.state === 'not_created' ||
+                                    server.state === 'created' ||
+                                    server.state === 'initializing'
+                                  );
+                                  
+                                  if (isError) {
+                                    return <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />;
+                                  }
+                                  if (serverData.tools.length === 0 && isActuallyInitializing) {
+                                    return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />;
+                                  }
+                                  return null;
+                                })()}
                                 <span className="text-sm font-medium capitalize truncate">{serverName}</span>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
@@ -318,10 +367,24 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 if (isError) {
                                   return 'Error';
                                 }
-                                // Show "Loading..." for any server (initializing or running) that has no tools
+                                
+                                // Check the actual server state to determine what to show
+                                const server = installedMcpServers.find((s) => s.id === serverData.serverId);
+                                const isActuallyInitializing = server && (
+                                  server.state === 'not_created' ||
+                                  server.state === 'created' ||
+                                  server.state === 'initializing'
+                                );
+                                
+                                // Show "Loading..." only for servers that are actually initializing
                                 if (serverData.tools.length === 0) {
-                                  return 'Loading...';
+                                  if (isActuallyInitializing) {
+                                    return 'Loading...';
+                                  }
+                                  // Server is running or in another state but has no tools
+                                  return 'No tools available';
                                 }
+                                
                                 const parts = [];
                                 if (serverData.readOnlyCount > 0) parts.push(`${serverData.readOnlyCount} read`);
                                 if (serverData.writeOnlyCount > 0) parts.push(`${serverData.writeOnlyCount} write`);

@@ -3,6 +3,9 @@ import { FastifyPluginAsync } from 'fastify';
 import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
 
+import ArchestraMcpContext from '@backend/archestraMcp/context';
+import toolAggregator from '@backend/llms/toolAggregator';
+import ChatModel from '@backend/models/chat';
 import McpServerModel from '@backend/models/mcpServer';
 import MemoryModel from '@backend/models/memory';
 import log from '@backend/utils/logger';
@@ -391,6 +394,212 @@ export const createArchestraMcpServer = () => {
             {
               type: 'text',
               text: `Error searching MCP servers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  // Tool management tools
+  archestraMcpServer.tool(
+    'list_available_tools',
+    'List all available MCP tools showing which are selected for the current chat',
+    async () => {
+      try {
+        const chatId = ArchestraMcpContext.getCurrentChatId();
+        if (!chatId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
+              },
+            ],
+          };
+        }
+        
+        // Get all available tools
+        const allTools = toolAggregator.getAllAvailableTools();
+        
+        // Get selected tools for the chat
+        const selectedTools = await ChatModel.getSelectedTools(chatId);
+        
+        // Create a set of selected tool IDs for quick lookup
+        const selectedSet = selectedTools === null 
+          ? new Set(allTools.map(t => t.id)) // null means all selected
+          : new Set(selectedTools);
+        
+        // Group tools by MCP server
+        const toolsByServer: Record<string, any[]> = {};
+        
+        for (const tool of allTools) {
+          const serverName = tool.mcpServerName || 'Unknown Server';
+          if (!toolsByServer[serverName]) {
+            toolsByServer[serverName] = [];
+          }
+          
+          toolsByServer[serverName].push({
+            id: tool.id,
+            name: tool.name,
+            description: tool.description,
+            selected: selectedSet.has(tool.id),
+            analysis: tool.analysis,
+          });
+        }
+        
+        // Format the output
+        const formattedOutput = Object.entries(toolsByServer)
+          .map(([serverName, tools]) => {
+            const selectedCount = tools.filter(t => t.selected).length;
+            const header = `**${serverName}** (${selectedCount}/${tools.length} selected)`;
+            
+            const toolList = tools
+              .map(t => {
+                const status = t.selected ? '✓' : '✗';
+                const analysisInfo = t.analysis?.is_read !== null 
+                  ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
+                  : '';
+                return `  ${status} ${t.name}${analysisInfo}: ${t.description || 'No description'}`;
+              })
+              .join('\n');
+            
+            return `${header}\n${toolList}`;
+          })
+          .join('\n\n');
+        
+        const summary = selectedTools === null
+          ? 'All tools are currently selected (default)'
+          : `${selectedSet.size} out of ${allTools.length} tools selected`;
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${summary}\n\n${formattedOutput}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error listing tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  archestraMcpServer.tool(
+    'select_tools',
+    'Select specific tools for use in the current chat',
+    z.object({
+      toolIds: z.array(z.string()).describe('Array of tool IDs to select (e.g., ["google__gmail_send", "filesystem__read_file"])'),
+    }) as any,
+    async (context: any) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { toolIds } = global._mcpToolArguments || {};
+      const chatId = ArchestraMcpContext.getCurrentChatId();
+      
+      try {
+        if (!chatId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
+              },
+            ],
+          };
+        }
+        
+        if (!toolIds || !Array.isArray(toolIds)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: toolIds must be an array of tool IDs',
+              },
+            ],
+          };
+        }
+        
+        const updatedTools = await ChatModel.addSelectedTools(chatId, toolIds);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Successfully selected ${toolIds.length} tool(s). Total selected: ${updatedTools.length}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error selecting tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  archestraMcpServer.tool(
+    'deselect_tools',
+    'Deselect specific tools from the current chat',
+    z.object({
+      toolIds: z.array(z.string()).describe('Array of tool IDs to deselect'),
+    }) as any,
+    async (context: any) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { toolIds } = global._mcpToolArguments || {};
+      const chatId = ArchestraMcpContext.getCurrentChatId();
+      
+      try {
+        if (!chatId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
+              },
+            ],
+          };
+        }
+        
+        if (!toolIds || !Array.isArray(toolIds)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: toolIds must be an array of tool IDs',
+              },
+            ],
+          };
+        }
+        
+        const updatedTools = await ChatModel.removeSelectedTools(chatId, toolIds);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Successfully deselected ${toolIds.length} tool(s). Remaining selected: ${updatedTools.length}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error deselecting tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
             },
           ],
         };

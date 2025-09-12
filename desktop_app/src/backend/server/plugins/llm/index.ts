@@ -6,6 +6,7 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
+import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
@@ -67,6 +68,11 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice, chatId } = request.body;
 
       try {
+        // Set the chat context for Archestra MCP tools
+        if (chatId) {
+          ArchestraMcpContext.setCurrentChatId(chatId);
+        }
+
         // Get tools based on chat selection or requested tools
         let tools = {};
         

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.5-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.4-alpha...desktop_app-v0.0.5-alpha) (2025-09-12)
+
+
+### Bug Fixes
+
+* db migrations +  call `createWindow` BEFORE calling `startBackendServer` (heavily improves boot-up speed) ([#357](https://github.com/archestra-ai/archestra/issues/357)) ([47a47bc](https://github.com/archestra-ai/archestra/commit/47a47bcaf328e62f4e5f2e58a529bd02cb0a0564))
+* make sentry user id consistent ([b1753c8](https://github.com/archestra-ai/archestra/commit/b1753c8114e03e6e9d01ac6ca546c52a5a4e2d23))
+
 ## [0.0.4-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.3-alpha...desktop_app-v0.0.4-alpha) (2025-09-12)
 
 

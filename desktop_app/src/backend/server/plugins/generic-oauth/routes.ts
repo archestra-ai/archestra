@@ -28,7 +28,7 @@ async function handleGenericOAuthInstall(
     const placeholderServer = await McpServerModel.create({
       id: serverId,
       name: installData.displayName,
-      serverConfig: installData.serverConfig.mcp_config || installData.serverConfig,
+      serverConfig: installData.serverConfig,
       userConfigValues: installData.userConfigValues || null,
       serverType: installData.serverType || 'local',
       remoteUrl: installData.remote_url || null,
@@ -145,7 +145,6 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: 'Complete generic OAuth flow with authorization code',
         tags: ['OAuth'],
         body: z.object({
-          serverId: z.string(),
           code: z.string(),
           state: z.string(),
         }),
@@ -160,19 +159,18 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      const { serverId, code, state } = body;
+      const { code, state } = body;
 
       try {
-        // Get the server record to find the OAuth config
-        const servers = await McpServerModel.getById(serverId);
-        if (!servers.length) {
-          return reply.code(400).send({ error: 'Server not found' });
+        // Find the server with oauth_pending status (should be unique for the state)
+        const allServers = await McpServerModel.getAll();
+        const server = allServers.find((s) => s.status === 'oauth_pending');
+
+        if (!server) {
+          return reply.code(400).send({ error: 'No server found with oauth_pending status' });
         }
 
-        const server = servers[0];
-        if (server.status !== 'oauth_pending') {
-          return reply.code(400).send({ error: 'Server is not in OAuth pending state' });
-        }
+        const serverId = server.id;
 
         // Retrieve the OAuth config from the stored client info
         const storedConfig = server.oauthClientInfo?.generic_oauth_config;
@@ -180,19 +178,12 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'OAuth config not found in server record' });
         }
 
-        // Complete the generic OAuth flow (this handles token storage with env vars)
+        // Complete the generic OAuth flow (this handles token storage, status update, and server startup)
         const tokens = await completeGenericOAuthFlow(storedConfig as OAuthServerConfig, serverId, code, state);
 
-        // Update server record with installed status only (tokens already stored by completeGenericOAuthFlow)
-        const [updatedServer] = await McpServerModel.update(serverId, {
-          status: 'installed',
-          oauthClientInfo: null, // Clear the temporary config storage
-        });
-
-        // Start the MCP server if it's a local server
-        if (server.serverType === 'local') {
-          await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
-        }
+        // Get the updated server record
+        const servers = await McpServerModel.getById(serverId);
+        const updatedServer = servers[0];
 
         return reply.send({
           server: updatedServer,

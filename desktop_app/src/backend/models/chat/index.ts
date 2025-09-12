@@ -8,7 +8,9 @@ import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
+import ollamaClient from '@backend/ollama/client';
 import log from '@backend/utils/logger';
+import WebSocketService from '@backend/websocket';
 
 const TransformedMessageSchema = DatabaseMessageRepresentationSchema.extend({
   /**
@@ -34,6 +36,57 @@ type ChatWithMessages = z.infer<typeof ChatWithMessagesSchema>;
 export default class ChatModel {
   static generateCompositeMessageId = (chat: Chat, message: DatabaseMessage): string =>
     `${chat.sessionId}-${message.id}`;
+
+  static async generateAndUpdateChatTitle(chatId: number, messages: UIMessage[]): Promise<void> {
+    try {
+      // Extract text content from the first few messages for title generation
+      const messageTexts: string[] = [];
+
+      for (const msg of messages.slice(0, 4)) {
+        // UIMessage has a parts array, extract text from text parts
+        let textContent = '';
+
+        if (msg.parts) {
+          for (const part of msg.parts) {
+            if (part.type === 'text' && part.text) {
+              textContent += part.text + ' ';
+            }
+          }
+        }
+
+        if (textContent.trim()) {
+          messageTexts.push(`${msg.role}: ${textContent.trim()}`);
+        }
+      }
+
+      if (messageTexts.length > 0) {
+        const title = await ollamaClient.generateChatTitle(messageTexts);
+
+        // Update the chat with the generated title
+        await db
+          .update(chatsTable)
+          .set({
+            title,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(chatsTable.id, chatId));
+
+        // Broadcast the title update via WebSocket
+        WebSocketService.broadcast({
+          type: 'chat-title-updated',
+          payload: {
+            chatId,
+            title,
+          },
+        });
+
+        log.info(`Generated title for chat ${chatId}: ${title}`);
+      }
+    } catch (error) {
+      log.error(`Failed to generate title for chat ${chatId}:`, error);
+      // Don't throw - title generation failure shouldn't break message saving
+    }
+  }
 
   static async getAllChats(): Promise<ChatWithMessages[]> {
     const rows = await db
@@ -172,6 +225,11 @@ export default class ChatModel {
         content: message, // Store the entire UIMessage
         createdAt: timestamp, // Explicit timestamp with order preservation
       });
+    }
+
+    // Generate a title if the chat has 4+ messages and no title yet
+    if (messages.length >= 4 && !chat.title) {
+      await this.generateAndUpdateChatTitle(chat.id, messages);
     }
   }
 }

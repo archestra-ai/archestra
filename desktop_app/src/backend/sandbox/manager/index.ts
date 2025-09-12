@@ -109,7 +109,7 @@ class McpServerSandboxManager {
     const sandboxedMcpServer = new SandboxedMcpServer(mcpServer, this.socketPath);
 
     /**
-     * TODO: this is a bit sub-optimal.. register the sandboxedMcpServer in mcpServerIdToSandboxedMcpServerMap
+     * Register the sandboxedMcpServer in mcpServerIdToSandboxedMcpServerMap
      * BEFORE calling sandboxedMcpServer.start because, internally, start calls POST /mcp_proxy/:mcp_server_id
      * which does a check against McpServerSandboxManager.mcpServerIdToSandboxedMcpServerMap to make sure
      * that the sandboxed mcp server "exists"
@@ -117,7 +117,18 @@ class McpServerSandboxManager {
     this.mcpServerIdToSandboxedMcpServerMap.set(id, sandboxedMcpServer);
     log.info(`Registered sandboxed MCP server ${id} in map`);
 
-    await sandboxedMcpServer.start();
+    try {
+      await sandboxedMcpServer.start();
+      log.info(`Successfully started and registered MCP server ${id} (${name})`);
+    } catch (error) {
+      log.error(`Failed to start MCP server ${id} (${name}):`, error);
+
+      // Clean up registration on startup failure
+      this.mcpServerIdToSandboxedMcpServerMap.delete(id);
+      log.info(`Removed failed MCP server ${id} from registration map`);
+
+      throw error;
+    }
   }
 
   /**
@@ -143,8 +154,11 @@ class McpServerSandboxManager {
       log.info(`✅ Remote MCP server ${name} started successfully`);
     } catch (error) {
       log.error(`Failed to start remote MCP server ${name}:`, error);
-      // Clean up on failure
+
+      // Clean up registration on startup failure
       this.mcpServerIdToSandboxedMcpServerMap.delete(id);
+      log.info(`Removed failed remote MCP server ${id} from registration map`);
+
       throw error;
     }
   }

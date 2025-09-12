@@ -36,9 +36,6 @@ export const McpServerConfigSchema = z
     args: z.array(z.string()).optional(),
     env: z.record(z.string(), z.string()).optional(),
     inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
-    type: z.string().optional(),
-    entry_point: z.string().optional(),
-    mcp_config: z.any().optional(),
   })
   .passthrough();
 
@@ -91,6 +88,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    */
   oauthResourceMetadata: text('oauth_resource_metadata', { mode: 'json' }).$type<OAuthProtectedResourceMetadata>(),
   /**
+   * OAuth server configuration from catalog (contains streamable_http_url, etc.)
+   */
+  oauthConfig: text('oauth_config', { mode: 'json' }),
+  /**
    * Current status of the MCP server installation/OAuth flow
    */
   status: text().notNull().default('installing').$type<McpServerStatus>(),
@@ -120,6 +121,7 @@ export const McpServerSchema = z.object({
   oauthClientInfo: OAuthClientInformationSchema.nullable(),
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
+  oauthConfig: z.unknown().nullable(), // JSON object containing OAuth config from catalog (parsed by Drizzle)
   status: McpServerStatusSchema,
   serverType: McpServerTypeSchema,
   remoteUrl: z.string().nullable(),

@@ -376,8 +376,8 @@ The title should capture the main topic or theme of the conversation. Respond wi
         prompt,
         stream: false,
         options: {
-          temperature: 0.7,
-          num_predict: 20,
+          temperature: 0.5,
+          num_predict: 15,
         },
       });
 
@@ -428,6 +428,8 @@ The title should capture the main topic or theme of the conversation. Respond wi
 
       if (modelsToDownload.length === 0) {
         log.info('All required models are already available');
+        // Warm up the already installed models
+        await this.warmUpModels(config.ollama.requiredModels.map((m) => m.model));
         return;
       }
 
@@ -449,10 +451,49 @@ The title should capture the main topic or theme of the conversation. Respond wi
       await Promise.all(downloadPromises);
 
       log.info('Finished downloading required models');
+
+      // Warm up all successfully downloaded models
+      const availableModels = config.ollama.requiredModels
+        .filter(({ model }) => this.modelAvailability[model])
+        .map((m) => m.model);
+
+      if (availableModels.length > 0) {
+        await this.warmUpModels(availableModels);
+      }
     } catch (error) {
       log.error('Failed to ensure models are available:', error);
       // Don't throw here - server should still work even if models aren't downloaded
     }
+  }
+
+  /**
+   * Warm up models by loading them into memory
+   * This prevents the first generation from being slow
+   */
+  private async warmUpModels(modelNames: string[]): Promise<void> {
+    log.info(`Warming up ${modelNames.length} models...`);
+
+    const warmUpPromises = modelNames.map(async (modelName) => {
+      try {
+        log.info(`Loading model '${modelName}' into memory...`);
+        // Send a minimal generation request to load the model
+        await this.generate({
+          model: modelName,
+          prompt: 'Hi',
+          stream: false,
+          options: {
+            num_predict: 1,
+          },
+        });
+        log.info(`Model '${modelName}' is ready`);
+      } catch (error) {
+        log.warn(`Failed to warm up model '${modelName}':`, error);
+        // Don't throw - other models should still warm up
+      }
+    });
+
+    await Promise.all(warmUpPromises);
+    log.info('Finished warming up models');
   }
 }
 

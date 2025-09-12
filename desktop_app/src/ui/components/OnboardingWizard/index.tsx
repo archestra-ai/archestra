@@ -1,9 +1,14 @@
-import { ChevronRight, Rocket, Shield, Sparkles, Zap } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Dialog, DialogContent } from '@ui/components/ui/dialog';
-import { useChatStore, useUserStore } from '@ui/stores';
+import { useUserStore } from '@ui/stores';
+
+import getStartedImage from '/images/a-group-of-people-building-a-vessel-in-the-distanc.png';
+import welcomeImage from '/images/a-group-of-people-connecting-mechanisms-with-wires.png';
+import privacyImage from '/images/a-group-of-people-next-to-the-open-door--green-lan.png';
+import featuresImage from '/images/a-group-of-people-surrounded-by-a-massive-wooden-f.png';
 
 enum OnboardingStep {
   Welcome = 0,
@@ -23,22 +28,12 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
   const [isButtonEnabled, setIsButtonEnabled] = useState(false);
 
   const { user, markOnboardingCompleted } = useUserStore();
-  const { chats, loadChats } = useChatStore();
 
   useEffect(() => {
-    // Load chats to check if user has existing memories
-    loadChats();
-  }, []);
-
-  useEffect(() => {
-    // Skip onboarding if user has existing chats (memories)
-    if (user && !user.hasCompletedOnboarding && chats.length === 0) {
+    if (user && !user.hasCompletedOnboarding) {
       setIsOpen(true);
-    } else if (user && !user.hasCompletedOnboarding && chats.length > 0) {
-      // Auto-complete onboarding if user has existing chats
-      markOnboardingCompleted();
     }
-  }, [user, chats]);
+  }, [user]);
 
   useEffect(() => {
     onOpenChange?.(isOpen);
@@ -93,19 +88,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           <div className="flex gap-12 h-full">
             <div className="flex-[1.5] min-w-0 flex items-center h-full">
               <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-connecting-mechanisms-with-wires.png"
-                  alt="Welcome to Archestra"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-32 h-32 text-blue-500" />
-                </div>
+                <img src={welcomeImage} alt="Welcome to Archestra" className="w-full h-full object-cover rounded-lg" />
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-center">
@@ -144,19 +127,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           <div className="flex gap-12 h-full">
             <div className="flex-[1.5] min-w-0 flex items-center h-full">
               <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-surrounded-by-a-massive-wooden-f.png"
-                  alt="Powerful Features"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-green-100 to-teal-100 dark:from-green-900/20 dark:to-teal-900/20 rounded-lg flex items-center justify-center">
-                  <Zap className="w-32 h-32 text-green-500" />
-                </div>
+                <img src={featuresImage} alt="Powerful Features" className="w-full h-full object-cover rounded-lg" />
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-center">
@@ -222,19 +193,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           <div className="flex gap-12 h-full">
             <div className="flex-[1.5] min-w-0 flex items-center h-full">
               <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-next-to-the-open-door--green-lan.png"
-                  alt="Your Privacy Matters"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg flex items-center justify-center">
-                  <Shield className="w-32 h-32 text-indigo-500" />
-                </div>
+                <img src={privacyImage} alt="Your Privacy Matters" className="w-full h-full object-cover rounded-lg" />
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-center">
@@ -270,19 +229,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           <div className="flex gap-12 h-full">
             <div className="flex-[1.5] min-w-0 flex items-center h-full">
               <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-building-a-vessel-in-the-distanc.png"
-                  alt="Get Started"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/20 dark:to-red-900/20 rounded-lg flex items-center justify-center">
-                  <Rocket className="w-32 h-32 text-orange-500" />
-                </div>
+                <img src={getStartedImage} alt="Get Started" className="w-full h-full object-cover rounded-lg" />
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-center">

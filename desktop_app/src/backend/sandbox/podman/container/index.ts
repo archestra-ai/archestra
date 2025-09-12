@@ -9,8 +9,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
 import {
+  Mount,
+  SpecGenerator,
   containerCreateLibpod,
   containerDeleteLibpod,
+  containerInspectLibpod,
   containerStartLibpod,
   containerStopLibpod,
   containerWaitLibpod,
@@ -18,6 +21,7 @@ import {
 import config from '@backend/config';
 import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@backend/models/mcpServer';
 import log from '@backend/utils/logger';
+import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
 
 export const PodmanContainerStateSchema = z.enum([
@@ -31,6 +35,8 @@ export const PodmanContainerStateSchema = z.enum([
   'stopped',
   'exited',
 ]);
+
+export const PROJECTS_BASE = '/home/mcp/projects';
 
 export const PodmanContainerStatusSummarySchema = z.object({
   /**
@@ -58,7 +64,9 @@ type PodmanContainerStatusSummary = z.infer<typeof PodmanContainerStatusSummaryS
 export default class PodmanContainer {
   containerName: string;
   private serverConfig: McpServerConfig;
+  private mcpServer: McpServer; // Store the full McpServer object for OAuth access
 
+  private userConfigValues: McpServerUserConfigValues | null;
   private command: string;
   private args: string[];
   private envVars: Record<string, string>;
@@ -69,6 +77,9 @@ export default class PodmanContainer {
   private statusError: string | null = null;
 
   private socketPath: string | null = null;
+
+  // Assigned HTTP port for streamable HTTP servers (when random port is assigned by Podman)
+  assignedHttpPort?: number;
 
   // Connection pooling for MCP server communication
   private mcpSocket: Duplex | null = null;
@@ -89,9 +100,12 @@ export default class PodmanContainer {
 
   private customImage: string | null = null;
 
-  constructor({ name, serverConfig, userConfigValues }: McpServer, socketPath: string) {
+  constructor(mcpServer: McpServer, socketPath: string) {
+    const { name, serverConfig, userConfigValues } = mcpServer;
     this.containerName = PodmanContainer.prettifyServerNameIntoContainerName(name);
     this.serverConfig = serverConfig;
+    this.mcpServer = mcpServer; // Store full object for OAuth access
+    this.userConfigValues = userConfigValues;
     const { command, args, env } = PodmanContainer.injectUserConfigValuesIntoServerConfig(
       serverConfig,
       userConfigValues
@@ -106,20 +120,6 @@ export default class PodmanContainer {
       this.args = dockerConfig.args;
       // Merge environment variables - OAuth tokens from env override Docker config placeholders
       this.envVars = { ...dockerConfig.env, ...env };
-    } else if (env.GOOGLE_OAUTH_TOKEN && env.GOOGLE_OAUTH_EMAIL) {
-      // Check if Google OAuth tokens are present and wrap command if needed
-      // Wrap the command to create the credentials file on startup
-      const originalCommand = [command, ...(args || [])].join(' ');
-      const email = env.GOOGLE_OAUTH_EMAIL;
-
-      this.command = 'sh';
-      this.args = [
-        '-c',
-        `mkdir -p ~/.google_workspace_mcp/credentials && ` +
-          `echo '{"token": "'$GOOGLE_OAUTH_TOKEN'"}' > ~/.google_workspace_mcp/credentials/${email}.json && ` +
-          `${originalCommand}`,
-      ];
-      this.envVars = env;
     } else {
       this.command = command;
       this.args = args || [];
@@ -144,6 +144,52 @@ export default class PodmanContainer {
    */
   private static prettifyServerNameIntoContainerName = (serverName: string) =>
     `archestra-ai-${serverName.replace(/ /g, '-').toLowerCase()}-mcp-server`;
+
+  /**
+   * Discover the assigned host port for streamable HTTP servers
+   * This queries the container inspection API to get the actual port assigned by Podman
+   */
+  private async discoverAssignedHttpPort(): Promise<void> {
+    try {
+      log.info(`Discovering assigned HTTP port for container: ${this.containerName}`);
+
+      const inspectResponse = await containerInspectLibpod({
+        path: { name: this.containerName },
+      });
+
+      if (inspectResponse.response.status !== 200) {
+        throw new Error(`Failed to inspect container: ${inspectResponse.response.status}`);
+      }
+
+      const portBindings = inspectResponse.data?.NetworkSettings?.Ports;
+      log.info(`Available port bindings:`, Object.keys(portBindings || {}));
+
+      if (portBindings) {
+        // Look for any TCP port mapping (for existing containers)
+        const tcpPorts = Object.keys(portBindings).filter((key) => key.endsWith('/tcp'));
+
+        if (tcpPorts.length > 0) {
+          // Use the first available TCP port mapping
+          const portKey = tcpPorts[0];
+          const hostPort = portBindings[portKey]?.[0]?.HostPort;
+
+          if (hostPort) {
+            this.assignedHttpPort = parseInt(hostPort, 10);
+            const containerPort = portKey.replace('/tcp', '');
+            log.info(`Assigned HTTP port discovered: ${this.assignedHttpPort} (container port: ${containerPort})`);
+          } else {
+            log.warn(`Port binding found (${portKey}) but no HostPort assigned`);
+          }
+        } else {
+          log.warn(`No TCP port bindings found in container inspection`);
+        }
+      } else {
+        log.warn(`No port bindings found in container inspection`);
+      }
+    } catch (error) {
+      log.error('Failed to discover assigned HTTP port:', error);
+    }
+  }
 
   /**
    * Parse Docker/Podman run command arguments to extract image and configuration
@@ -493,6 +539,11 @@ export default class PodmanContainer {
     serverConfig: McpServerConfig,
     userConfigValues: McpServerUserConfigValues | null
   ) => {
+    const hostToContainerPath = (hostPath: string): string => {
+      const baseName = path.basename(hostPath);
+      const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      return path.posix.join(PROJECTS_BASE, sanitizedBaseName);
+    };
     const replaceTemplateVariables = (str: string): string => {
       if (!userConfigValues) return str;
 
@@ -503,6 +554,14 @@ export default class PodmanContainer {
           log.warn(`Template variable ${match} not found in user config values`);
           return match; // Return the original template if no value found
         }
+        // Special handling for allowed_directories - map host paths to container paths
+        if (key === 'allowed_directories' && Array.isArray(value)) {
+          const containerPaths = value
+            .filter((p) => typeof p === 'string' && p.trim() !== '')
+            .map((p) => hostToContainerPath(p));
+          return containerPaths.join(',');
+        }
+
         // Convert the value to string (handles string, number, boolean)
         // For arrays, join them with commas
         if (Array.isArray(value)) {
@@ -515,8 +574,25 @@ export default class PodmanContainer {
     // Process command
     const processedCommand = serverConfig.command ? replaceTemplateVariables(serverConfig.command) : '';
 
-    // Process args if they exist
-    const processedArgs = serverConfig.args?.map((arg) => replaceTemplateVariables(arg));
+    // Process args if they exist; expand ${user_config.allowed_directories} into multiple args
+    const processedArgs = serverConfig.args
+      ? (() => {
+          const out: string[] = [];
+          for (const arg of serverConfig.args!) {
+            if (arg === '${user_config.allowed_directories}') {
+              if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+                const containerPaths = userConfigValues.allowed_directories
+                  .filter((p) => typeof p === 'string' && p.trim() !== '')
+                  .map((p) => hostToContainerPath(p));
+                out.push(...containerPaths);
+                continue;
+              }
+            }
+            out.push(replaceTemplateVariables(arg));
+          }
+          return out;
+        })()
+      : undefined;
 
     // Process environment variables if they exist
     const processedEnv: Record<string, string> = {};
@@ -569,6 +645,15 @@ export default class PodmanContainer {
       if (response.status === 304) {
         log.info(`MCP server container ${this.containerName} is already running.`);
 
+        // For existing containers, we still need to discover the assigned port
+        const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+        const isStreamableHttp = oauthConfig?.streamable_http_url;
+
+        if (isStreamableHttp) {
+          log.info(`Discovering port for existing streamable HTTP container`);
+          await this.discoverAssignedHttpPort();
+        }
+
         // Update state
         this.setContainerAsRunning();
 
@@ -614,7 +699,7 @@ export default class PodmanContainer {
       this.statusMessage = 'Creating container';
 
       // Only include command if it's not empty
-      const createBody: any = {
+      const createBody: SpecGenerator = {
         name: this.containerName,
         image: this.customImage || config.sandbox.baseDockerImage,
         env: this.envVars,
@@ -633,9 +718,29 @@ export default class PodmanContainer {
         createBody.command = [this.command, ...this.args];
       }
 
-      // Handle file injection if specified
-      if (this.serverConfig.inject_file) {
-        await this.injectFiles(createBody);
+      // Configures volume mounts with necessary directories and files
+      try {
+        await this.configureVolumeMounts(createBody, this.userConfigValues);
+      } catch (e) {
+        log.warn('Failed to configure volume mounts into container create body', e);
+        throw e;
+      }
+
+      // Check if this is a streamable HTTP server and add port bindings
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      const isStreamableHttp = oauthConfig?.streamable_http_url;
+
+      if (isStreamableHttp) {
+        const containerPort = oauthConfig?.streamable_http_port || 8000; // Default to 8000 if not specified
+
+        log.info(`Detected streamable HTTP server, exposing container port ${containerPort} with random host port`);
+        createBody.portmappings = [
+          {
+            container_port: containerPort,
+            host_port: 0, // 0 = random available port
+            protocol: 'tcp',
+          },
+        ];
       }
 
       const response = await containerCreateLibpod({
@@ -643,6 +748,9 @@ export default class PodmanContainer {
       });
 
       if (response.response.status !== 201) {
+        log.error(`Container creation failed with status ${response.response.status}`);
+        log.error(`Full createBody sent to API:`, JSON.stringify(createBody, null, 2));
+        log.error(`Full API response:`, JSON.stringify(response, null, 2));
         throw new Error(`Failed to create container: ${response.response.status}`);
       }
 
@@ -657,6 +765,11 @@ export default class PodmanContainer {
       this.statusMessage = 'Container created, starting it';
 
       await this.startContainer();
+
+      // If this is a streamable HTTP server, discover the assigned host port after starting
+      if (isStreamableHttp) {
+        await this.discoverAssignedHttpPort();
+      }
 
       // Wait for container to be healthy
       log.info(`MCP server container ${this.containerName} started, waiting for it to be healthy...`);
@@ -1115,57 +1228,99 @@ export default class PodmanContainer {
     }
   }
 
-  /**
-   * Inject files into the container by creating temporary host files and mounting them
-   */
-  private async injectFiles(createBody: any): Promise<void> {
-    if (!this.serverConfig.inject_file) {
-      return;
+  private buildMount(hostPath: string, destination: string, readOnly: boolean): Mount {
+    return {
+      Type: 'bind',
+      Source: hostPath,
+      Destination: destination,
+      ReadOnly: readOnly,
+      BindOptions: { CreateMountpoint: true },
+      RW: !readOnly,
+    };
+  }
+
+  private async configureVolumeMounts(
+    createBody: SpecGenerator,
+    userConfigValues: McpServerUserConfigValues | null
+  ): Promise<void> {
+    const mounts: Mount[] = [];
+    if (this.serverConfig.inject_file) {
+      //  Inject files into the container by creating temporary host files and mounting them
+      log.info(
+        `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      );
+      const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+
+      try {
+        // Create temp directory
+        await fs.promises.mkdir(tempDir, { recursive: true });
+
+        // Create each file and add it as a mount
+        for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
+          const hostFilePath = path.join(tempDir, path.basename(filename));
+          const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
+
+          // Write file content to temp location
+          await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
+          log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
+
+          // Add as bind mount to container
+          mounts.push(this.buildMount(hostFilePath, containerFilePath, true));
+        }
+
+        log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
+      } catch (error) {
+        log.error(`Failed to setup file injection for ${this.containerName}:`, error);
+        // Clean up temp directory on error
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+        }
+        throw error;
+      }
     }
 
+    // Handle mounts from userConfigValues.allowed_directories
     log.info(
-      `Injecting ${Object.keys(this.serverConfig.inject_file).length} files into container ${this.containerName}`
+      `Checking userConfigValues for mount configuration: allowed_directories present=${Array.isArray(userConfigValues?.allowed_directories)}, read_only=${parseBoolean(userConfigValues?.read_only)}`
     );
+    if (userConfigValues && Array.isArray(userConfigValues.allowed_directories)) {
+      log.info(`Processing ${userConfigValues.allowed_directories.length} allowed_directories for mounting`);
+      const readOnly = parseBoolean(userConfigValues.read_only);
+      for (const hostPathRaw of userConfigValues.allowed_directories) {
+        if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
+        const hostPath = hostPathRaw.trim();
 
-    const tempDir = path.join(os.tmpdir(), `archestra-inject-${this.containerName}-${uuidv4()}`);
+        // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
+        // Check that the directory exists
+        try {
+          const stats = await fs.promises.stat(hostPath);
+          if (!stats.isDirectory()) {
+            log.warn(`Path is not a directory, skipping: ${hostPath}`);
+            continue;
+          }
+        } catch (error) {
+          log.warn(`Directory does not exist, skipping: ${hostPath}`, error);
+          continue;
+        }
 
-    try {
-      // Create temp directory
-      await fs.promises.mkdir(tempDir, { recursive: true });
+        const baseName = path.basename(hostPath);
+        const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
 
-      // Initialize mounts array if not exists
-      if (!createBody.mounts) {
-        createBody.mounts = [];
+        log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
+        // Use SpecGenerator Mount shape (capitalized keys)
+        mounts.push(this.buildMount(hostPath, target, readOnly));
       }
-
-      // Create each file and add it as a mount
-      for (const [filename, content] of Object.entries(this.serverConfig.inject_file)) {
-        const hostFilePath = path.join(tempDir, path.basename(filename));
-        const containerFilePath = filename.startsWith('/') ? filename : `/tmp/${filename}`;
-
-        // Write file content to temp location
-        await fs.promises.writeFile(hostFilePath, content as string, 'utf-8');
-        log.info(`Created inject file: ${hostFilePath} -> ${containerFilePath}`);
-
-        // Add as bind mount to container
-        createBody.mounts.push({
-          type: 'bind',
-          source: hostFilePath,
-          target: containerFilePath,
-          options: ['ro'], // Read-only mount
-        });
-      }
-
-      log.info(`Successfully configured ${Object.keys(this.serverConfig.inject_file).length} file injection mounts`);
-    } catch (error) {
-      log.error(`Failed to setup file injection for ${this.containerName}:`, error);
-      // Clean up temp directory on error
-      try {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        log.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
-      }
-      throw error;
+    } else {
+      log.info(
+        `No mount configuration: userConfigValues=${!!userConfigValues}, allowed_directories type=${userConfigValues?.allowed_directories ? typeof userConfigValues.allowed_directories : 'undefined'}`
+      );
+    }
+    if (!createBody.mounts) createBody.mounts = [];
+    for (const m of mounts) {
+      createBody.mounts.push(m);
     }
   }
 }

@@ -47,6 +47,10 @@ export type OAuthServerConfigInput = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
+  streamable_http_url?: string;
+  streamable_http_port?: number;
 };
 
 export type ToolAnalysisResultInput = {
@@ -251,9 +255,6 @@ export type McpServerConfigInput = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string
@@ -280,6 +281,7 @@ export type McpServerInput = {
   oauthClientInfo: OAuthClientInformationInput | null;
   oauthServerMetadata: AuthorizationServerMetadataInput | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadataInput | null;
+  oauthConfig: unknown | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -299,6 +301,7 @@ export type McpServerInstallInput = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogsInput = {
@@ -419,8 +422,10 @@ export type SandboxActionResponseInput = {
 
 export type UserInput = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -472,6 +477,10 @@ export type OAuthServerConfig = {
   token_endpoint?: string;
   access_token_env_var?: string;
   requires_proxy?: boolean;
+  provider_name?: string;
+  browser_auth?: boolean;
+  streamable_http_url?: string;
+  streamable_http_port?: number;
 };
 
 export type ToolAnalysisResult = {
@@ -676,9 +685,6 @@ export type McpServerConfig = {
   inject_file?: {
     [key: string]: string;
   };
-  type?: string;
-  entry_point?: string;
-  mcp_config?: unknown;
   [key: string]:
     | unknown
     | string
@@ -705,6 +711,7 @@ export type McpServer = {
   oauthClientInfo: OAuthClientInformation | null;
   oauthServerMetadata: AuthorizationServerMetadata | null;
   oauthResourceMetadata: OAuthProtectedResourceMetadata | null;
+  oauthConfig: unknown | null;
   status: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType: 'local' | 'remote';
   remoteUrl: string | null;
@@ -724,6 +731,7 @@ export type McpServerInstall = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
+  archestra_config?: unknown;
 };
 
 export type McpServerContainerLogs = {
@@ -844,11 +852,52 @@ export type SandboxActionResponse = {
 
 export type User = {
   id: number;
+  uniqueId: string | null;
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
+  collectAnalyticsData: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+export type StoreOAuthCodeData = {
+  body: {
+    state: string;
+    code: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/oauth/store-code';
+};
+
+export type StoreOAuthCodeErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type StoreOAuthCodeError = StoreOAuthCodeErrors[keyof StoreOAuthCodeErrors];
+
+export type StoreOAuthCodeResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type StoreOAuthCodeResponse = StoreOAuthCodeResponses[keyof StoreOAuthCodeResponses];
 
 export type GetChatsData = {
   body?: never;
@@ -1164,7 +1213,6 @@ export type StartGenericOAuthResponse = StartGenericOAuthResponses[keyof StartGe
 
 export type CompleteGenericOAuthData = {
   body: {
-    serverId: string;
     code: string;
     state: string;
   };
@@ -1582,45 +1630,6 @@ export type UpdateMemoryResponses = {
 
 export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
 
-export type StoreOAuthCodeData = {
-  body: {
-    state: string;
-    code: string;
-  };
-  path?: never;
-  query?: never;
-  url: '/api/oauth/store-code';
-};
-
-export type StoreOAuthCodeErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-  };
-  /**
-   * Default Response
-   */
-  500: {
-    error: string;
-  };
-};
-
-export type StoreOAuthCodeError = StoreOAuthCodeErrors[keyof StoreOAuthCodeErrors];
-
-export type StoreOAuthCodeResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-    message: string;
-  };
-};
-
-export type StoreOAuthCodeResponse = StoreOAuthCodeResponses[keyof StoreOAuthCodeResponses];
-
 export type PostApiOllamaPullData = {
   body: {
     /**
@@ -1749,6 +1758,7 @@ export type UpdateUserData = {
   body?: {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
+    collectAnalyticsData?: boolean;
   };
   path?: never;
   query?: never;

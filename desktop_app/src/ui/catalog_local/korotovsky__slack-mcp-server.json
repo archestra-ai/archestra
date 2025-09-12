@@ -123,6 +123,7 @@
       "required": true
     },
     "browser_based": {
+      "provider": "slack-browser",
       "required": true
     }
   },

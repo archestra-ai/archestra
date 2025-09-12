@@ -145,6 +145,19 @@
           },
           "requires_proxy": {
             "type": "boolean"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "browser_auth": {
+            "type": "boolean"
+          },
+          "streamable_http_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "streamable_http_port": {
+            "type": "number"
           }
         },
         "required": [
@@ -989,14 +1002,7 @@
             "additionalProperties": {
               "type": "string"
             }
-          },
-          "type": {
-            "type": "string"
-          },
-          "entry_point": {
-            "type": "string"
-          },
-          "mcp_config": {}
+          }
         },
         "additionalProperties": {}
       },
@@ -1089,6 +1095,15 @@
               }
             ]
           },
+          "oauthConfig": {
+            "anyOf": [
+              {},
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": ["installing", "oauth_pending", "installed", "failed"]
@@ -1121,6 +1136,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -1168,7 +1184,8 @@
           },
           "remote_url": {
             "type": "string"
-          }
+          },
+          "archestra_config": {}
         },
         "required": ["displayName", "serverConfig"]
       },
@@ -1419,10 +1436,24 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
           "collectTelemetryData": {
+            "type": "boolean"
+          },
+          "collectAnalyticsData": {
             "type": "boolean"
           },
           "createdAt": {
@@ -1432,7 +1463,15 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"]
+        "required": [
+          "id",
+          "uniqueId",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ]
       },
       "OAuthTokens": {
         "type": "object",
@@ -1573,6 +1612,19 @@
           },
           "requires_proxy": {
             "type": "boolean"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "browser_auth": {
+            "type": "boolean"
+          },
+          "streamable_http_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "streamable_http_port": {
+            "type": "number"
           }
         },
         "required": [
@@ -2440,14 +2492,7 @@
             "additionalProperties": {
               "type": "string"
             }
-          },
-          "type": {
-            "type": "string"
-          },
-          "entry_point": {
-            "type": "string"
-          },
-          "mcp_config": {}
+          }
         },
         "additionalProperties": {}
       },
@@ -2540,6 +2585,15 @@
               }
             ]
           },
+          "oauthConfig": {
+            "anyOf": [
+              {},
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "enum": ["installing", "oauth_pending", "installed", "failed"]
@@ -2572,6 +2626,7 @@
           "oauthClientInfo",
           "oauthServerMetadata",
           "oauthResourceMetadata",
+          "oauthConfig",
           "status",
           "serverType",
           "remoteUrl",
@@ -2620,7 +2675,8 @@
           },
           "remote_url": {
             "type": "string"
-          }
+          },
+          "archestra_config": {}
         },
         "required": ["displayName", "serverConfig"],
         "additionalProperties": false
@@ -2884,10 +2940,24 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "uniqueId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "hasCompletedOnboarding": {
             "type": "boolean"
           },
           "collectTelemetryData": {
+            "type": "boolean"
+          },
+          "collectAnalyticsData": {
             "type": "boolean"
           },
           "createdAt": {
@@ -2897,12 +2967,104 @@
             "type": "string"
           }
         },
-        "required": ["id", "hasCompletedOnboarding", "collectTelemetryData", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "uniqueId",
+          "hasCompletedOnboarding",
+          "collectTelemetryData",
+          "collectAnalyticsData",
+          "createdAt",
+          "updatedAt"
+        ],
         "additionalProperties": false
       }
     }
   },
   "paths": {
+    "/api/oauth/store-code": {
+      "post": {
+        "operationId": "storeOAuthCode",
+        "tags": ["OAuth"],
+        "description": "Store OAuth authorization code from deep link callback (internal API)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["state", "code"]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["success", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/chat": {
       "get": {
         "operationId": "getChats",
@@ -3441,9 +3603,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "serverId": {
-                    "type": "string"
-                  },
                   "code": {
                     "type": "string"
                   },
@@ -3451,7 +3610,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["serverId", "code", "state"]
+                "required": ["code", "state"]
               }
             }
           },
@@ -4256,90 +4415,6 @@
         }
       }
     },
-    "/api/oauth/store-code": {
-      "post": {
-        "operationId": "storeOAuthCode",
-        "tags": ["OAuth"],
-        "description": "Store OAuth authorization code from deep link callback (internal API)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "state": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "code": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": ["state", "code"]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["success", "message"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/ollama/pull": {
       "post": {
         "requestBody": {
@@ -4533,6 +4608,9 @@
                     "type": "boolean"
                   },
                   "collectTelemetryData": {
+                    "type": "boolean"
+                  },
+                  "collectAnalyticsData": {
                     "type": "boolean"
                   }
                 }

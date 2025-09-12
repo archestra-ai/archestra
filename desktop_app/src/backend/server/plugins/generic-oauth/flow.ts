@@ -12,7 +12,7 @@ import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider
-import { authCodeStore, storeAuthorizationCode } from '../mcp-oauth/provider';
+import { authCodeStore } from '../mcp-oauth/provider';
 
 export interface GenericOAuthTokens {
   access_token: string;
@@ -153,7 +153,7 @@ async function storeTokensWithEnvVar(
     // Update environment variables if access_token_env_var is specified
     if (config.access_token_env_var) {
       updatedServerConfig.env = {
-        ...currentServer.serverConfig.mcp_config?.env,
+        ...currentServer.serverConfig.env,
         [config.access_token_env_var]: tokens.access_token,
       };
     }
@@ -317,6 +317,35 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   // Store tokens in database with environment variable injection
   await storeTokensWithEnvVar(serverId, tokens, config);
 
+  // Update server status to installed and start the server
+  const { default: McpServerModel } = await import('@backend/models/mcpServer');
+  const [updatedServer] = await McpServerModel.update(serverId, {
+    status: 'installed',
+    oauthClientInfo: null, // Clear the temporary config storage
+  });
+
+  // Start the MCP server if it's a local server
+  if (updatedServer.serverType === 'local') {
+    try {
+      await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
+      log.info(`✅ Generic OAuth MCP server ${updatedServer.name} started successfully after OAuth completion`);
+    } catch (startupError) {
+      log.error(
+        `❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`,
+        startupError
+      );
+
+      // Rollback server status to 'failed' if startup fails
+      await McpServerModel.update(serverId, {
+        status: 'failed',
+      });
+
+      throw new Error(
+        `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`
+      );
+    }
+  }
+
   log.info('✅ Generic OAuth flow completed successfully');
   return authUrl;
 }
@@ -343,6 +372,35 @@ export async function completeGenericOAuthFlow(
 
   // Store tokens and optionally inject into environment variables
   await storeTokensWithEnvVar(serverId, tokens, config);
+
+  // Update server status to installed and start the server
+  const { default: McpServerModel } = await import('@backend/models/mcpServer');
+  const [updatedServer] = await McpServerModel.update(serverId, {
+    status: 'installed',
+    oauthClientInfo: null, // Clear the temporary config storage
+  });
+
+  // Start the MCP server if it's a local server
+  if (updatedServer.serverType === 'local') {
+    try {
+      await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
+      log.info(`✅ Generic OAuth MCP server ${updatedServer.name} started successfully after OAuth completion`);
+    } catch (startupError) {
+      log.error(
+        `❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`,
+        startupError
+      );
+
+      // Rollback server status to 'failed' if startup fails
+      await McpServerModel.update(serverId, {
+        status: 'failed',
+      });
+
+      throw new Error(
+        `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`
+      );
+    }
+  }
 
   log.info(`✅ Generic OAuth flow completed for ${config.name}`);
   return tokens;

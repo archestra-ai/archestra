@@ -3942,6 +3942,7 @@ export type LibpodImageSummary = {
   Os?: string;
   ParentId?: string;
   ReadOnly?: boolean;
+  RW?: boolean; // Podman API compatibility - inverse of ReadOnly
   RepoDigests?: Array<string>;
   RepoTags?: Array<string>;
   SharedSize?: number;
@@ -5045,12 +5046,22 @@ export type Metadata = {
 /**
  * Mount represents a mount (volume).
  */
+/**
+ * PODMAN TYPES FIXED - Added compatibility fields
+ * - Added Mount.Destination alongside Mount.Target for Podman API
+ * - Added Mount.RW alongside Mount.ReadOnly for Podman API compatibility
+ *
+ * Usage:
+ * - Docker API: use Target and ReadOnly
+ * - Podman API: use Destination, ReadOnly or RW
+ */
 export type Mount = {
   BindOptions?: BindOptions;
   ClusterOptions?: ClusterOptions;
   Consistency?: Consistency;
   ImageOptions?: ImageOptions;
   ReadOnly?: boolean;
+  RW?: boolean; // Podman API compatibility - inverse of ReadOnly
   /**
    * Source specifies the name of the mount. Depending on mount type, this
    * may be a volume name or a host path, or even ignored.
@@ -5058,6 +5069,7 @@ export type Mount = {
    */
   Source?: string;
   Target?: string;
+  Destination?: string; // Podman API compatibility
   TmpfsOptions?: TmpfsOptions;
   Type?: Type;
   VolumeOptions?: VolumeOptions;

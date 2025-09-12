@@ -3,7 +3,7 @@
 import { IpcRendererEvent, contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  appVersion: () => ipcRenderer.invoke('get-app-version'),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeOAuthCallbackListener: () => {
     ipcRenderer.removeAllListeners('oauth-callback');
   },
+  // Native open dialog (files / directories)
+  showOpenDialog: (options: { properties: string[] }) => ipcRenderer.invoke('show-open-dialog', options),
 });

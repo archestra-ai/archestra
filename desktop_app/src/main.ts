@@ -7,7 +7,6 @@ import { updateElectronApp } from 'update-electron-app';
 
 import ArchestraMcpClient from '@backend/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
-import { ToolModel } from '@backend/models/tools';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
@@ -22,8 +21,15 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 // Load environment variables from .env file
 dotenvConfig();
 
-// Initialize Sentry early for error tracking
-sentryClient.initialize();
+/**
+ * Initialize Sentry early for error tracking
+ *
+ * Don't initialize Sentry when running in codegen mode as it leads to some issues
+ * with the code generation process.
+ */
+if (!process.env.CODEGEN) {
+  sentryClient.initialize();
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {

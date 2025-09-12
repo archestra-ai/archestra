@@ -164,12 +164,12 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         // Find the server with oauth_pending status (should be unique for the state)
         const allServers = await McpServerModel.getAll();
-        const server = allServers.find(s => s.status === 'oauth_pending');
-        
+        const server = allServers.find((s) => s.status === 'oauth_pending');
+
         if (!server) {
           return reply.code(400).send({ error: 'No server found with oauth_pending status' });
         }
-        
+
         const serverId = server.id;
 
         // Retrieve the OAuth config from the stored client info

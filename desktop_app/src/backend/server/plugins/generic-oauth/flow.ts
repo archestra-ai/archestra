@@ -330,14 +330,19 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
       await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
       log.info(`✅ Generic OAuth MCP server ${updatedServer.name} started successfully after OAuth completion`);
     } catch (startupError) {
-      log.error(`❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`, startupError);
-      
+      log.error(
+        `❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`,
+        startupError
+      );
+
       // Rollback server status to 'failed' if startup fails
-      await McpServerModel.update(serverId, { 
-        status: 'failed'
+      await McpServerModel.update(serverId, {
+        status: 'failed',
       });
-      
-      throw new Error(`OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`);
+
+      throw new Error(
+        `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`
+      );
     }
   }
 
@@ -381,14 +386,19 @@ export async function completeGenericOAuthFlow(
       await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
       log.info(`✅ Generic OAuth MCP server ${updatedServer.name} started successfully after OAuth completion`);
     } catch (startupError) {
-      log.error(`❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`, startupError);
-      
+      log.error(
+        `❌ Failed to start generic OAuth MCP server ${updatedServer.name} after OAuth completion:`,
+        startupError
+      );
+
       // Rollback server status to 'failed' if startup fails
-      await McpServerModel.update(serverId, { 
-        status: 'failed'
+      await McpServerModel.update(serverId, {
+        status: 'failed',
       });
-      
-      throw new Error(`OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`);
+
+      throw new Error(
+        `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`
+      );
     }
   }
 

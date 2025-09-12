@@ -118,6 +118,7 @@ export type ArchestraMcpServerManifest = {
     browser_based?: {
       required: boolean;
     };
+    works_in_archestra: boolean;
   };
   github_info?: {
     owner: string;
@@ -272,6 +273,7 @@ export type ArchestraMcpServerManifestWithScoreBreakdown = {
     browser_based?: {
       required: boolean;
     };
+    works_in_archestra: boolean;
   };
   github_info?: {
     owner: string;
@@ -369,6 +371,10 @@ export type SearchMcpServerCatalogData = {
      * Filter by programming language
      */
     language?: string;
+    /**
+     * Filter by whether the server is confirmed to work in the Archestra Desktop app
+     */
+    worksInArchestra?: boolean;
     /**
      * Sort results by field
      */

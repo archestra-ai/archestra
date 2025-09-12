@@ -388,7 +388,7 @@ export default class SandboxedMcpServer {
         // Prepare headers - include Accept header to avoid 406 errors
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'User-Agent': 'Archestra-Desktop-App/1.0.0',
         };
 
@@ -413,10 +413,10 @@ export default class SandboxedMcpServer {
         if (!this.mcpClient) {
           await this.createMcpClient();
         }
-        
+
         // Use MCP client's tools() method as a health check (we know this method exists)
         await this.mcpClient.tools();
-        
+
         log.info(`MCP server container ${this.mcpServerId} is healthy after ${attempts + 1} attempts!`);
         return;
       } catch (error) {

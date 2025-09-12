@@ -1,5 +1,4 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { request } from 'undici';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 
@@ -209,7 +208,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (sandboxedMcpServer.isStreamableHttpServer()) {
           throw new Error('Streamable HTTP servers should connect directly, not through proxy');
         }
-        
+
         // Stream the request to the container via stdio for stdio-based MCP servers
         await sandboxedMcpServer.streamToContainer(body, reply.raw);
 

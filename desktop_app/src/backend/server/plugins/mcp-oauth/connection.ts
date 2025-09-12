@@ -32,14 +32,16 @@ export async function connectMcpServer(
 
     // Check if this is a remote server (has remote_url)
     const isRemoteServer = !!remote_url;
-    
+
     if (!isRemoteServer) {
       log.info('🔌 Local server detected - skipping MCP connection test (container not started yet)');
       // For local servers, return a mock client since the container isn't running yet
       // The real MCP connection will be established when the container is started
       const mockClient = {
-        close: async () => { /* no-op for mock client */ },
-        listTools: async () => ({ tools: [] })
+        close: async () => {
+          /* no-op for mock client */
+        },
+        listTools: async () => ({ tools: [] }),
       } as unknown as Client;
       return { client: mockClient, accessToken };
     } else {

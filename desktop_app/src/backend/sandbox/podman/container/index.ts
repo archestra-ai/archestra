@@ -156,16 +156,16 @@ export default class PodmanContainer {
 
       const portBindings = inspectResponse.data?.NetworkSettings?.Ports;
       log.info(`Available port bindings:`, Object.keys(portBindings || {}));
-      
+
       if (portBindings) {
         // Look for any TCP port mapping (for existing containers)
-        const tcpPorts = Object.keys(portBindings).filter(key => key.endsWith('/tcp'));
-        
+        const tcpPorts = Object.keys(portBindings).filter((key) => key.endsWith('/tcp'));
+
         if (tcpPorts.length > 0) {
           // Use the first available TCP port mapping
           const portKey = tcpPorts[0];
           const hostPort = portBindings[portKey]?.[0]?.HostPort;
-          
+
           if (hostPort) {
             this.assignedHttpPort = parseInt(hostPort, 10);
             const containerPort = portKey.replace('/tcp', '');
@@ -611,7 +611,7 @@ export default class PodmanContainer {
         // For existing containers, we still need to discover the assigned port
         const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
         const isStreamableHttp = oauthConfig?.streamable_http_url;
-        
+
         if (isStreamableHttp) {
           log.info(`Discovering port for existing streamable HTTP container`);
           await this.discoverAssignedHttpPort();

@@ -124,7 +124,7 @@ export const McpServerSchema = z.object({
   oauthClientInfo: OAuthClientInformationSchema.nullable(),
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
-  oauthConfig: z.string().nullable(), // JSON string containing OAuth config from catalog
+  oauthConfig: z.unknown().nullable(), // JSON object containing OAuth config from catalog (parsed by Drizzle)
   status: McpServerStatusSchema,
   serverType: McpServerTypeSchema,
   remoteUrl: z.string().nullable(),

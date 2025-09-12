@@ -56,8 +56,6 @@ export type OAuthServerConfigInput = {
 export type ToolAnalysisResultInput = {
   is_read: boolean;
   is_write: boolean;
-  idempotent: boolean;
-  reversible: boolean;
 };
 
 export type ToolInput = {
@@ -76,8 +74,6 @@ export type ToolInput = {
     | null;
   is_read: boolean | null;
   is_write: boolean | null;
-  idempotent: boolean | null;
-  reversible: boolean | null;
   analyzed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -354,14 +350,6 @@ export type AvailableToolInput = {
      * Whether the tool writes data
      */
     is_write: boolean | null;
-    /**
-     * Whether the tool is idempotent
-     */
-    idempotent: boolean | null;
-    /**
-     * Whether the tool actions are reversible
-     */
-    reversible: boolean | null;
   };
 };
 
@@ -486,8 +474,6 @@ export type OAuthServerConfig = {
 export type ToolAnalysisResult = {
   is_read: boolean;
   is_write: boolean;
-  idempotent: boolean;
-  reversible: boolean;
 };
 
 export type Tool = {
@@ -506,8 +492,6 @@ export type Tool = {
     | null;
   is_read: boolean | null;
   is_write: boolean | null;
-  idempotent: boolean | null;
-  reversible: boolean | null;
   analyzed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -784,14 +768,6 @@ export type AvailableTool = {
      * Whether the tool writes data
      */
     is_write: boolean | null;
-    /**
-     * Whether the tool is idempotent
-     */
-    idempotent: boolean | null;
-    /**
-     * Whether the tool actions are reversible
-     */
-    reversible: boolean | null;
   };
 };
 

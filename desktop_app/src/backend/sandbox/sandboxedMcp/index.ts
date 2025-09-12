@@ -63,8 +63,6 @@ export default class SandboxedMcpServer {
     {
       is_read: boolean | null;
       is_write: boolean | null;
-      idempotent: boolean | null;
-      reversible: boolean | null;
     }
   > = new Map();
 
@@ -191,8 +189,6 @@ export default class SandboxedMcpServer {
           this.cachedToolAnalysis.set(cachedTool.name, {
             is_read: cachedTool.is_read,
             is_write: cachedTool.is_write,
-            idempotent: cachedTool.idempotent,
-            reversible: cachedTool.reversible,
           });
 
           // Log caching for Google tools
@@ -200,8 +196,6 @@ export default class SandboxedMcpServer {
             log.info(`[fetchCachedTools] Caching Google tool: ${cachedTool.name}`, {
               is_read: cachedTool.is_read,
               is_write: cachedTool.is_write,
-              idempotent: cachedTool.idempotent,
-              reversible: cachedTool.reversible,
               analyzed_at: cachedTool.analyzed_at,
             });
           }
@@ -246,16 +240,12 @@ export default class SandboxedMcpServer {
         if (
           !cachedAnalysis ||
           cachedAnalysis.is_read !== tool.is_read ||
-          cachedAnalysis.is_write !== tool.is_write ||
-          cachedAnalysis.idempotent !== tool.idempotent ||
-          cachedAnalysis.reversible !== tool.reversible
+          cachedAnalysis.is_write !== tool.is_write
         ) {
           // Update cache with whatever data we have (nulls are fine)
           this.cachedToolAnalysis.set(tool.name, {
             is_read: tool.is_read,
             is_write: tool.is_write,
-            idempotent: tool.idempotent,
-            reversible: tool.reversible,
           });
           hasUpdates = true;
           log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
@@ -620,9 +610,7 @@ export default class SandboxedMcpServer {
       const hasAnalysis =
         cachedAnalysis &&
         (cachedAnalysis.is_read !== null ||
-          cachedAnalysis.is_write !== null ||
-          cachedAnalysis.idempotent !== null ||
-          cachedAnalysis.reversible !== null);
+          cachedAnalysis.is_write !== null);
 
       // Log analysis status for Google tools
       if (this.mcpServerId.includes('google') || toolName.includes('gmail') || toolName.includes('drive')) {
@@ -647,16 +635,12 @@ export default class SandboxedMcpServer {
               error: null,
               is_read: cachedAnalysis.is_read,
               is_write: cachedAnalysis.is_write,
-              idempotent: cachedAnalysis.idempotent,
-              reversible: cachedAnalysis.reversible,
             }
           : {
               status: 'awaiting_ollama_model',
               error: null,
               is_read: null,
               is_write: null,
-              idempotent: null,
-              reversible: null,
             },
       };
     });

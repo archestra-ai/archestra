@@ -18,8 +18,6 @@ export const AvailableToolSchema = z.object({
       error: z.string().nullable().describe('Error message if analysis failed'),
       is_read: z.boolean().nullable().describe('Whether the tool is read-only'),
       is_write: z.boolean().nullable().describe('Whether the tool writes data'),
-      idempotent: z.boolean().nullable().describe('Whether the tool is idempotent'),
-      reversible: z.boolean().nullable().describe('Whether the tool actions are reversible'),
     })
     .describe('Tool analysis results'),
 });

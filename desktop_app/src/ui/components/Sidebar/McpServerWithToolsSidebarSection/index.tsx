@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Checkbox } from '@ui/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
-import { Input } from '@ui/components/ui/input';
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -23,7 +22,6 @@ interface McpServerWithToolsSidebarSectionProps {}
 export default function McpServerWithToolsSidebarSection(_props: McpServerWithToolsSidebarSectionProps) {
   const navigate = useNavigate();
 
-  const [toolSearchQuery, setToolSearchQuery] = useState('');
   const { availableTools, loadingAvailableTools, selectedToolIds, addSelectedTool, removeSelectedTool } =
     useToolsStore();
   const { installedMcpServers, archestraMcpServer } = useMcpServersStore();
@@ -102,25 +100,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
     }
   }, [availableTools, hasInitialized]);
 
-  const toolSearchQueryIsEmpty = !toolSearchQuery.trim();
-
   // Step 1: Filter and group UNSELECTED tools by server
   const toolsByServer = availableTools
     .filter((tool) => {
       // Only show tools that are NOT selected
-      if (selectedToolIds.has(tool.id)) return false;
-
-      // Apply search filter if searching
-      if (!toolSearchQueryIsEmpty) {
-        const searchLower = toolSearchQuery.toLowerCase();
-        return (
-          tool.name?.toLowerCase().includes(searchLower) ||
-          tool.description?.toLowerCase().includes(searchLower) ||
-          tool.mcpServerName?.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return true;
+      return !selectedToolIds.has(tool.id);
     })
     .reduce(
       (
@@ -173,22 +157,13 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
       {}
     );
 
-  // Step 2: Add MCP servers that are still initializing (only when not searching)
-  if (toolSearchQueryIsEmpty) {
-    installedMcpServers.forEach((server) => {
-      // Show servers that are initializing OR in error state
-      const isInitializing =
-        server.state === 'not_created' ||
-        server.state === 'created' ||
-        server.state === 'initializing' ||
-        server.state === 'error';
-
-      if (!isInitializing) return;
-
+  // Step 2: Add MCP servers that don't have unselected tools
+  installedMcpServers.forEach((server) => {
       // Check if this server already has unselected tools showing
       const serverAlreadyShowing = Object.values(toolsByServer).some((group) => group.serverId === server.id);
 
-      // If server is initializing and not already showing, add it
+      // If server is not already showing, add it (regardless of state)
+      // This ensures running servers without tools still appear as "Loading..."
       if (!serverAlreadyShowing) {
         toolsByServer[server.name] = {
           tools: [],
@@ -201,7 +176,6 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
         };
       }
     });
-  }
 
   // Step 3: Calculate common prefixes for tool names and sort tools
   Object.values(toolsByServer).forEach((group) => {
@@ -264,14 +238,6 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>Unused tools: {unusedToolsCount}</SidebarGroupLabel>
       <SidebarGroupContent>
-        <div className="px-4 pb-2">
-          <Input
-            placeholder="Search tools..."
-            value={toolSearchQuery}
-            onChange={(e) => setToolSearchQuery(e.target.value)}
-            className="h-7 text-xs"
-          />
-        </div>
         <SidebarMenu>
           {loadingAvailableTools ? (
             // Show loading state while fetching tools
@@ -285,11 +251,9 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
             // No unselected tools to show
             <SidebarMenuItem>
               <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                {toolSearchQuery
-                  ? `No tools found matching "${toolSearchQuery}"`
-                  : selectedToolIds.size === availableTools.length && availableTools.length > 0
-                    ? 'All tools are selected'
-                    : 'No tools available'}
+                {selectedToolIds.size === availableTools.length && availableTools.length > 0
+                  ? 'All tools are selected'
+                  : 'No tools available'}
               </div>
             </SidebarMenuItem>
           ) : (
@@ -309,11 +273,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       <div className="flex items-center gap-1">
                         <CollapsibleTrigger className="flex-1 min-w-0">
                           <div
-                            className={`px-2 py-1.5 bg-muted/50 rounded-md transition-colors w-full ${isInitializing && !isError ? 'opacity-60' : 'cursor-pointer hover:bg-muted/70'}`}
+                            className={`px-2 py-1.5 bg-muted/50 rounded-md transition-colors w-full ${serverData.tools.length === 0 && !isError ? 'opacity-60' : 'cursor-pointer hover:bg-muted/70'}`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {isInitializing && !isError && (
+                                {serverData.tools.length === 0 && !isError && (
                                   <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
                                 )}
                                 {isError && <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />}
@@ -323,23 +287,23 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (!isInitializing || (isInitializing && serverData.tools.length > 0)) {
+                                    if (serverData.tools.length > 0) {
                                       // Add all tools from this server
                                       serverData.tools.forEach((tool) => addSelectedTool(tool.id));
                                     }
                                   }}
-                                  className={`p-0.5 rounded transition-colors ${isInitializing && serverData.tools.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted-foreground/20'}`}
+                                  className={`p-0.5 rounded transition-colors ${serverData.tools.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted-foreground/20'}`}
                                   title={
                                     isError
                                       ? `${serverName} has an error`
-                                      : isInitializing && serverData.tools.length === 0
-                                        ? `${serverName} is still initializing`
+                                      : serverData.tools.length === 0
+                                        ? `${serverName} is loading tools`
                                         : `Add all ${serverName} tools`
                                   }
-                                  disabled={isInitializing && serverData.tools.length === 0}
+                                  disabled={serverData.tools.length === 0}
                                 >
                                   <PlusCircle
-                                    className={`h-4 w-4 ${isInitializing && serverData.tools.length === 0 ? 'text-muted-foreground/50' : 'text-muted-foreground hover:text-foreground'}`}
+                                    className={`h-4 w-4 ${serverData.tools.length === 0 ? 'text-muted-foreground/50' : 'text-muted-foreground hover:text-foreground'}`}
                                   />
                                 </button>
                                 {isExpanded ? (
@@ -351,11 +315,12 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                             </div>
                             <div className="text-xs text-muted-foreground mt-0.5 text-left">
                               {(() => {
-                                if (isInitializing && !isError && serverData.tools.length === 0) {
-                                  return 'Loading...';
-                                }
                                 if (isError) {
                                   return 'Error';
+                                }
+                                // Show "Loading..." for any server (initializing or running) that has no tools
+                                if (serverData.tools.length === 0) {
+                                  return 'Loading...';
                                 }
                                 const parts = [];
                                 if (serverData.readOnlyCount > 0) parts.push(`${serverData.readOnlyCount} read`);
@@ -377,9 +342,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
                             {isError
                               ? 'Server error - check Settings'
-                              : isInitializing
-                                ? 'Loading tools...'
-                                : 'No tools available'}
+                              : 'Loading tools...'}
                           </div>
                         </SidebarMenuItem>
                       ) : (
@@ -448,18 +411,16 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                 );
               })}
 
-              {toolSearchQueryIsEmpty && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    className="justify-start text-muted-foreground"
-                    onClick={() => navigate({ to: '/connectors' })}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add more</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  className="justify-start text-muted-foreground"
+                  onClick={() => navigate({ to: '/connectors' })}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add more</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </>
           )}
         </SidebarMenu>

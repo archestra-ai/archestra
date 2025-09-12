@@ -299,8 +299,6 @@ class OllamaClient {
 For each tool, evaluate:
 1. is_read: Does this tool primarily read or retrieve data without modifying state?
 2. is_write: Does this tool create, update, or delete data?
-3. idempotent: Can this tool be safely called multiple times with the same parameters without changing the result beyond the initial call?
-4. reversible: Can the effects of this tool be undone or rolled back? (e.g., sending an email is NOT reversible)
 
 Consider the tool's name, description, input schema, and any annotations provided.
 
@@ -311,9 +309,7 @@ Return a JSON object with tool names as keys and analysis results as values. The
 {
   "toolName": {
     "is_read": boolean,
-    "is_write": boolean,
-    "idempotent": boolean,
-    "reversible": boolean
+    "is_write": boolean
   }
 }
 
@@ -361,8 +357,6 @@ CRITICAL REQUIREMENTS:
             result[toolName] = {
               is_read: isRead,
               is_write: isWrite,
-              idempotent: isRead,
-              reversible: false,
             };
           } else {
             result[toolName] = ToolAnalysisResultSchema.parse(analysis);
@@ -374,8 +368,6 @@ CRITICAL REQUIREMENTS:
           result[toolName] = {
             is_read: false,
             is_write: false,
-            idempotent: false,
-            reversible: false,
           };
         }
       }

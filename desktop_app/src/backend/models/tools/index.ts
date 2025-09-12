@@ -60,8 +60,6 @@ export class ToolModel {
           // - If excluded value is NULL (tool re-discovered without analysis), existing data is preserved
           is_read: sql`COALESCE(excluded.is_read, tools.is_read)`,
           is_write: sql`COALESCE(excluded.is_write, tools.is_write)`,
-          idempotent: sql`COALESCE(excluded.idempotent, tools.idempotent)`,
-          reversible: sql`COALESCE(excluded.reversible, tools.reversible)`,
           analyzed_at: sql`COALESCE(excluded.analyzed_at, tools.analyzed_at)`,
           updated_at: sql`excluded.updated_at`,
         },

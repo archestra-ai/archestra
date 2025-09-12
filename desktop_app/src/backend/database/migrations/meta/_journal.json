@@ -113,6 +113,20 @@
       "when": 1757642664482,
       "tag": "0015_gifted_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1757701194335,
+      "tag": "0016_big_wasp",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1757701617142,
+      "tag": "0017_cool_bromley",
+      "breakpoints": true
     }
   ]
 }

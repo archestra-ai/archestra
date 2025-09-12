@@ -127,9 +127,7 @@ export const useToolsStore = create<ToolsStore>()(
               currentTool.description !== newTool.description ||
               currentTool.analysis?.status !== newTool.analysis?.status ||
               currentTool.analysis?.is_read !== newTool.analysis?.is_read ||
-              currentTool.analysis?.is_write !== newTool.analysis?.is_write ||
-              currentTool.analysis?.idempotent !== newTool.analysis?.idempotent ||
-              currentTool.analysis?.reversible !== newTool.analysis?.reversible;
+              currentTool.analysis?.is_write !== newTool.analysis?.is_write;
 
             // Return the new tool if changed, otherwise keep the existing reference
             return hasChanged ? newTool : currentTool;

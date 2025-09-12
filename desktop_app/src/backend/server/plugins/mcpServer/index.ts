@@ -29,8 +29,6 @@ z.globalRegistry.add(McpServerInstallSchema, { id: 'McpServerInstall' });
 z.globalRegistry.add(McpServerContainerLogsSchema, { id: 'McpServerContainerLogs' });
 z.globalRegistry.add(AvailableToolSchema, { id: 'AvailableTool' });
 
-// Note: proxyHttpRequest function removed - streamable HTTP servers now connect directly
-
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     '/api/mcp_server',
@@ -145,8 +143,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let errorMessage: string | null = null;
 
       try {
-        fastify.log.info(`Proxying request to MCP server ${id}: ${JSON.stringify(body)}`);
-
         // Hijack the response to handle streaming manually!
         reply.hijack();
 

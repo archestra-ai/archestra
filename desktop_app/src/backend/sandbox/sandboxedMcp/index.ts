@@ -95,11 +95,9 @@ export default class SandboxedMcpServer {
       if (this.isStreamableHttpServer()) {
         // We'll set this dynamically after container starts and port is discovered
         this.mcpServerUrl = 'http://localhost:0/mcp'; // Placeholder, will be updated
-        log.info(`Creating SandboxedMcpServer for local streamable HTTP server: ${mcpServer.name} (direct connection)`);
       } else {
         // For stdio servers, use the proxy URL
         this.mcpServerUrl = this.mcpServerProxyUrl;
-        log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
       }
     }
 
@@ -151,7 +149,6 @@ export default class SandboxedMcpServer {
         const url = new URL(streamableHttpUrl);
         url.port = assignedPort.toString();
         this.mcpServerUrl = url.toString();
-        log.info(`Updated streamable HTTP URL for ${this.mcpServerId}: ${this.mcpServerUrl}`);
       }
     } catch (error) {
       log.error(`Failed to update streamable HTTP URL for ${this.mcpServerId}:`, error);
@@ -289,14 +286,10 @@ export default class SandboxedMcpServer {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        log.info(`Creating MCP client for ${this.mcpServerId} (attempt ${attempt}/${maxRetries})...`);
-
         // Check if this MCP server has OAuth tokens
         const headers: Record<string, string> = {};
 
         if (this.mcpServer.oauthTokens?.access_token) {
-          log.info(`Using OAuth authentication for MCP server ${this.mcpServerId}`);
-
           try {
             // Try to refresh tokens if needed
             const { ensureValidTokens, McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
@@ -312,14 +305,10 @@ export default class SandboxedMcpServer {
             };
 
             if (areTokensExpired(tokensWithDefaults, 5)) {
-              log.warn(
-                `OAuth tokens for ${this.mcpServerId} are expired or expiring soon. Token refresh not implemented yet.`
-              );
-              log.warn(`If connection fails, you may need to reinstall the server to refresh OAuth tokens.`);
+              log.warn(`OAuth tokens for ${this.mcpServerId} are expired or expiring soon. You may need to reinstall the server to refresh OAuth tokens.`);
             }
 
             headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
-            log.info(`OAuth token validation completed for ${this.mcpServerId}`);
           } catch (error) {
             log.warn(`Failed to validate OAuth tokens for ${this.mcpServerId}:`, error);
             // Fall back to using existing token
@@ -335,12 +324,6 @@ export default class SandboxedMcpServer {
         });
 
         this.mcpClient = await experimental_createMCPClient({ transport });
-
-        if (this.mcpServer.oauthTokens?.access_token) {
-          log.info(`✅ MCP client connected with OAuth authentication for ${this.mcpServerId}`);
-        } else {
-          log.info(`✅ MCP client connected for ${this.mcpServerId}`);
-        }
 
         // Success - break out of retry loop
         return;
@@ -372,76 +355,38 @@ export default class SandboxedMcpServer {
    * TODO: this should be baked into the MCP Server Dockfile's health check (to replace the current one)
    */
   private async pingMcpServerContainerUntilHealthy() {
-    const MAX_PING_ATTEMPTS = 30; // Increased from 10 to allow for slower OAuth container startup
-    const BASE_PING_INTERVAL_MS = 1000; // Increased from 500ms for more realistic timing
+    const MAX_PING_ATTEMPTS = 30;
+    const BASE_PING_INTERVAL_MS = 1000;
     let attempts = 0;
 
     while (attempts < MAX_PING_ATTEMPTS) {
-      log.info(
-        `Pinging MCP server container ${this.mcpServerId} until healthy (attempt ${attempts + 1}/${MAX_PING_ATTEMPTS})...`
-      );
-
       try {
-        // Use direct URL for streamable HTTP servers, proxy URL for others
-        const pingUrl = this.isStreamableHttpServer() ? this.mcpServerUrl : this.mcpServerProxyUrl;
-
-        // Prepare headers - include Accept header to avoid 406 errors
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'User-Agent': 'Archestra-Desktop-App/1.0.0',
-        };
-
-        // Add OAuth token for streamable HTTP servers
-        if (this.isStreamableHttpServer() && this.mcpServer.oauthTokens) {
-          try {
-            const tokens =
-              typeof this.mcpServer.oauthTokens === 'string'
-                ? JSON.parse(this.mcpServer.oauthTokens)
-                : this.mcpServer.oauthTokens;
-            if (tokens.access_token) {
-              headers['Authorization'] = `Bearer ${tokens.access_token}`;
-            }
-          } catch (error) {
-            log.warn(`Failed to parse OAuth tokens for ping: ${error}`);
-          }
-        }
-
-        log.info(`Pinging ${this.isStreamableHttpServer() ? 'direct' : 'proxy'} URL: ${pingUrl}`);
-
         // Initialize MCP client connection for this ping attempt
         if (!this.mcpClient) {
           await this.createMcpClient();
         }
 
-        // Use MCP client's tools() method as a health check (we know this method exists)
+        // Use MCP client's tools() method as a health check
         await this.mcpClient.tools();
 
-        log.info(`MCP server container ${this.mcpServerId} is healthy after ${attempts + 1} attempts!`);
         return;
       } catch (error) {
-        log.info(
-          `MCP server container ${this.mcpServerId} ping failed with error: ${error instanceof Error ? error.message : 'Unknown error'}, retrying...`
-        );
-      }
+        attempts++;
 
-      attempts++;
+        if (attempts >= MAX_PING_ATTEMPTS) {
+          const errorMsg = `MCP server container ${this.mcpServerId} failed to become healthy after ${MAX_PING_ATTEMPTS} attempts`;
+          log.error(errorMsg);
+          throw new Error(errorMsg);
+        }
 
-      // Exponential backoff with jitter for OAuth containers
-      const backoffMultiplier = this.mcpServer.oauthTokens ? 1.2 : 1.0; // Slightly longer waits for OAuth servers
-      const jitter = Math.random() * 200; // Add 0-200ms jitter to prevent thundering herd
-      const waitTime = Math.min(BASE_PING_INTERVAL_MS * Math.pow(backoffMultiplier, attempts) + jitter, 5000); // Cap at 5s
+        // Exponential backoff with jitter for OAuth containers
+        const backoffMultiplier = this.mcpServer.oauthTokens ? 1.2 : 1.0;
+        const jitter = Math.random() * 200;
+        const waitTime = Math.min(BASE_PING_INTERVAL_MS * Math.pow(backoffMultiplier, attempts) + jitter, 5000);
 
-      if (attempts < MAX_PING_ATTEMPTS) {
-        log.info(`Waiting ${Math.round(waitTime)}ms before next attempt...`);
         await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
     }
-
-    // If we get here, all attempts failed
-    const errorMsg = `MCP server container ${this.mcpServerId} failed to become healthy after ${MAX_PING_ATTEMPTS} attempts (${(MAX_PING_ATTEMPTS * BASE_PING_INTERVAL_MS) / 1000}+ seconds)`;
-    log.error(errorMsg);
-    throw new Error(errorMsg);
   }
 
   async start() {
@@ -455,14 +400,8 @@ export default class SandboxedMcpServer {
       log.info(`Starting local MCP server: ${this.mcpServer.name}`);
 
       // Validate OAuth tokens are properly set if this is an OAuth server
-      if (this.mcpServer.oauthTokens) {
-        log.info(`Validating OAuth tokens for MCP server: ${this.mcpServer.name}`);
-
-        if (!this.mcpServer.oauthTokens.access_token) {
-          throw new Error(`OAuth MCP server ${this.mcpServer.name} is missing access_token - cannot start container`);
-        }
-
-        log.info(`OAuth tokens validated for MCP server: ${this.mcpServer.name}`);
+      if (this.mcpServer.oauthTokens && !this.mcpServer.oauthTokens.access_token) {
+        throw new Error(`OAuth MCP server ${this.mcpServer.name} is missing access_token - cannot start container`);
       }
 
       this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
@@ -476,10 +415,6 @@ export default class SandboxedMcpServer {
         }
 
         await this.pingMcpServerContainerUntilHealthy();
-
-        // OAuth servers are now properly health-checked via MCP client connection
-        // No additional delay needed since createMcpClient() + tools() call verifies readiness
-
         await this.createMcpClient();
         await this.fetchTools();
 

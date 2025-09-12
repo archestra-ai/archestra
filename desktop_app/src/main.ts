@@ -458,8 +458,14 @@ if (!gotTheLock) {
  * Some APIs can only be used after this event occurs.
  */
 app.on('ready', async () => {
-  await startBackendServer();
+  /**
+   * IMPORTANT: create the main app window before starting the backend server.
+   * Don't await for startBackendServer() to complete before creating the window as this
+   * will lead to the main app window feeling like it's taking forever to boot up
+   */
   createWindow();
+
+  await startBackendServer();
 
   // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
   if (process.platform === 'darwin') {

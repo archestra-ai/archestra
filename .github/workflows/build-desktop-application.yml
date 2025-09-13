@@ -125,43 +125,30 @@ jobs:
       - name: Install Google Cloud KMS CNG Provider
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
         run: |
-          # Find and download the Google Cloud KMS CNG Provider installer
-          Write-Host "Finding latest Google Cloud KMS CNG Provider release..."
+          Write-Host "Downloading Google Cloud KMS CNG Provider v1.2..."
 
-          # Get the latest release info from GitHub API
-          $headers = @{}
-          if ($env:GITHUB_TOKEN) {
-            $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
-          }
+          $downloadUrl = "https://github.com/GoogleCloudPlatform/kms-integrations/releases/download/cng-v1.2/kmscng-1.2-windows-amd64.zip"
+          $zipPath = "$env:RUNNER_TEMP\kmscng.zip"
+          $extractPath = "$env:RUNNER_TEMP\kmscng"
 
-          $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/GoogleCloudPlatform/kms-integrations/releases/latest" -Headers $headers
-          Write-Host "Latest release: $($releaseInfo.tag_name)"
+          Write-Host "Downloading from: $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath
 
-          # Find the CNG provider MSI in the assets - looking for various possible naming patterns
-          $msiAsset = $releaseInfo.assets | Where-Object { 
-            $_.name -like "*cng*provider*windows*.msi" -or 
-            $_.name -like "*cng*x64*.msi" -or 
-            $_.name -eq "gcpkms_cng_provider_windows_amd64.msi" -or
-            $_.name -like "gcpkms-cng-*.msi"
-          } | Select-Object -First 1
+          Write-Host "Extracting CNG Provider..."
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
 
-          if (-not $msiAsset) {
-            Write-Host "Available assets:"
-            $releaseInfo.assets | ForEach-Object { Write-Host "  - $($_.name)" }
-            Write-Error "Could not find CNG provider MSI in latest release"
+          # Find the MSI file in the extracted contents
+          $msiFile = Get-ChildItem -Path $extractPath -Filter "*.msi" -Recurse | Select-Object -First 1
+
+          if ($msiFile) {
+            Write-Host "Found MSI: $($msiFile.FullName)"
+            Write-Host "Installing Google Cloud KMS CNG Provider..."
+            Start-Process msiexec.exe -ArgumentList "/i", $msiFile.FullName, "/quiet", "/norestart" -Wait
+            Write-Host "Google Cloud KMS CNG Provider installed successfully"
+          } else {
+            Write-Error "MSI file not found in the extracted archive"
             exit 1
           }
-
-          $installerUrl = $msiAsset.browser_download_url
-          $installerPath = "$env:RUNNER_TEMP\gcpkms-cng-provider.msi"
-
-          Write-Host "Downloading $($msiAsset.name) from: $installerUrl"
-          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -Headers $headers
-
-          Write-Host "Installing Google Cloud KMS CNG Provider..."
-          Start-Process msiexec.exe -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -Wait
-
-          Write-Host "Google Cloud KMS CNG Provider installed successfully"
 
       - name: Build desktop application
         env:

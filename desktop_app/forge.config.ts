@@ -1,12 +1,14 @@
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerRpm } from '@electron-forge/maker-rpm';
+import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import type { HASHES } from '@electron/windows-sign/dist/cjs/types';
 import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
@@ -172,17 +174,34 @@ const forgeConfig: ForgeConfig = {
     },
   },
   makers: [
+    new MakerSquirrel({
+      name: productName,
+      authors,
+      description,
+      setupIcon: './assets/icons/icon.ico',
+      ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID
+        ? {
+            windowsSign: {
+              /**
+               * SignTool parameters for Windows code signing with Google Cloud KMS HSM:
+               * /n "gcpkms://..." - Specifies the subject name of the signing certificate using the Cloud KMS key resource ID
+               *                      The gcpkms:// prefix tells signtool to use the Google Cloud KMS CNG provider
+               * /fd SHA256        - Specifies the file digest algorithm (SHA256 for modern Windows signing)
+               * /td SHA256        - Specifies the timestamp digest algorithm (SHA256 for RFC 3161 timestamps)
+               * /tr <url>         - Specifies the RFC 3161 timestamp server URL for timestamping the signature
+               * /v                - Verbose output for debugging and verification
+               */
+              signWithParams: `/n "gcpkms://${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID}" /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v`,
+              timestampServer: 'http://timestamp.digicert.com',
+              hashes: ['sha256' as HASHES],
+            },
+          }
+        : {}),
+    }),
     /**
-     * TODO: Re-enable Squirrel for Windows once we have proper code signing setup
-     * For now, just create ZIP files for Windows to avoid build failures
+     * NOTE: zips are still required for macOS and Windows as these are needed for the auto-updater to function properly
      */
-    // new MakerSquirrel({
-    //   name: productName,
-    //   authors,
-    //   description,
-    //   setupIcon: './icons/icon.ico',
-    // }),
-    new MakerZIP({}, ['win32']),
+    new MakerZIP({}, ['win32', 'darwin']),
     new MakerRpm({
       options: {
         name: productName,

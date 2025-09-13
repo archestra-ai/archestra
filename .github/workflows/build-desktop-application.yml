@@ -25,6 +25,12 @@ on:
         required: true
       APPLE_TEAM_ID:
         required: true
+      WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID:
+        required: false
+      WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER:
+        required: false
+      WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT:
+        required: false
 
 jobs:
   build-desktop-application:
@@ -106,6 +112,28 @@ jobs:
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
+      - name: Authenticate to Google Cloud via Workload Identity Federation
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        uses: google-github-actions/auth@6fc4af4b145ae7821d527454aa9bd537d1f2dc5f # v2.1.7
+        with:
+          workload_identity_provider: ${{ secrets.WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER }}
+          service_account: ${{ secrets.WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT }}
+
+      - name: Install Google Cloud KMS CNG Provider
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        run: |
+          # Download the Google Cloud KMS CNG Provider installer
+          $installerUrl = "https://github.com/GoogleCloudPlatform/kms-integrations/releases/latest/download/gcpkms-cng-provider-x64.msi"
+          $installerPath = "$env:RUNNER_TEMP\gcpkms-cng-provider.msi"
+
+          Write-Host "Downloading Google Cloud KMS CNG Provider..."
+          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+
+          Write-Host "Installing Google Cloud KMS CNG Provider..."
+          Start-Process msiexec.exe -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -Wait
+
+          Write-Host "Google Cloud KMS CNG Provider installed successfully"
+
       - name: Build desktop application
         env:
           # Use app token if available, fallback to GITHUB_TOKEN for fork PRs
@@ -114,6 +142,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID: ${{ secrets.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID }} # Windows signing credentials
+          # Enable verbose debug output for Windows signing
+          DEBUG: ${{ matrix.os == 'windows' && inputs.dry_run == false && 'electron-windows-sign' || '' }}
         run: pnpm run publish${{ inputs.dry_run && ' --dry-run' || '' }}
 
       # https://brunoscheufler.com/blog/2023-11-12-setting-up-hosted-macos-github-actions-workflows-for-electron-builds

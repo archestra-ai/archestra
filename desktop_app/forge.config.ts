@@ -8,7 +8,7 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import type { HASHES } from '@electron/windows-sign/dist/cjs/types';
+import type { WindowsSignOptions } from '@electron/packager';
 import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
@@ -31,6 +31,29 @@ for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
   const binaryFilePath = path.join(BINARIES_DIRECTORY, binaryFileName);
   binaryFilePaths.push(binaryFilePath);
 }
+
+/**
+ * Windows signing configuration for Google Cloud KMS HSM
+ *
+ * SignTool parameters for Windows code signing with Google Cloud KMS HSM:
+ * /csp "Google Cloud KMS Provider" - Specifies the Cryptographic Service Provider to use
+ * /kc <key_path>    - Specifies the key container (full Cloud KMS key resource path)
+ * /fd SHA256        - Specifies the file digest algorithm (SHA256 for modern Windows signing)
+ * /td SHA256        - Specifies the timestamp digest algorithm (SHA256 for RFC 3161 timestamps)
+ * /tr <url>         - Specifies the RFC 3161 timestamp server URL for timestamping the signature
+ * /v                - Verbose output for debugging and verification
+ * /debug            - Additional debug output for troubleshooting
+ *
+ * Note: We're using the /csp and /kc approach as documented in Google Cloud KMS docs
+ * instead of the /n "gcpkms://..." approach
+ *
+ * See https://cloud.google.com/kms/docs/reference/cng-signtool for more information
+ */
+const windowsSignConfig: WindowsSignOptions = {
+  signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID} /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v /debug`,
+  timestampServer: 'http://timestamp.digicert.com',
+  hashes: ['sha256' as any],
+};
 
 const forgeConfig: ForgeConfig = {
   packagerConfig: {
@@ -107,6 +130,9 @@ const forgeConfig: ForgeConfig = {
            */
           osxSign: undefined,
         }),
+
+    // Windows signing configuration for packagerConfig
+    ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID ? { windowsSign: windowsSignConfig } : {}),
   },
   /**
    * NOTE: regarding rebuildConfig and hooks.. this is a bit of a pain to get to work with native modules (ie. better-sqlite3)
@@ -129,6 +155,24 @@ const forgeConfig: ForgeConfig = {
             console.log(`Signing ${binaryFilePath}...`);
             execSync(`codesign --force --verbose --sign "${signingIdentityName}" "${binaryFilePath}"`, {
               stdio: 'inherit',
+            });
+          } catch (error) {
+            console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
+          }
+        }
+      }
+
+      // Sign Windows bundled binaries before packaging
+      if (IS_WINDOWS && windowsSignConfig) {
+        console.log('Signing bundled Windows binaries...');
+        const { sign } = await import('@electron/windows-sign');
+
+        for (const binaryFilePath of binaryFilePaths) {
+          try {
+            console.log(`Signing ${binaryFilePath}...`);
+            await sign({
+              files: [binaryFilePath],
+              ...windowsSignConfig,
             });
           } catch (error) {
             console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
@@ -179,30 +223,7 @@ const forgeConfig: ForgeConfig = {
       authors,
       description,
       setupIcon: './assets/icons/icon.ico',
-      ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID
-        ? {
-            windowsSign: {
-              /**
-               * SignTool parameters for Windows code signing with Google Cloud KMS HSM:
-               * /csp "Google Cloud KMS Provider" - Specifies the Cryptographic Service Provider to use
-               * /kc <key_path>    - Specifies the key container (full Cloud KMS key resource path)
-               * /fd SHA256        - Specifies the file digest algorithm (SHA256 for modern Windows signing)
-               * /td SHA256        - Specifies the timestamp digest algorithm (SHA256 for RFC 3161 timestamps)
-               * /tr <url>         - Specifies the RFC 3161 timestamp server URL for timestamping the signature
-               * /v                - Verbose output for debugging and verification
-               * /debug            - Additional debug output for troubleshooting
-               *
-               * Note: We're using the /csp and /kc approach as documented in Google Cloud KMS docs
-               * instead of the /n "gcpkms://..." approach
-               *
-               * See https://cloud.google.com/kms/docs/reference/cng-signtool for more information
-               */
-              signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID} /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v /debug`,
-              timestampServer: 'http://timestamp.digicert.com',
-              hashes: ['sha256' as HASHES],
-            },
-          }
-        : {}),
+      ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID ? { windowsSign: windowsSignConfig } : {}),
     }),
     /**
      * NOTE: zips are still required for macOS and Windows as these are needed for the auto-updater to function properly

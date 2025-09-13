@@ -34,6 +34,8 @@ jobs:
       # publisher requires write permissions to the repo's contents to create new releases
       # https://www.electronforge.io/config/publishers/github#authentication
       contents: write
+      # TODO: remove the following line when done testing...
+      id-token: write # Required for Workload Identity Federation
     with:
       # TODO: remove this when done testing...
       dry_run: false

@@ -63,6 +63,8 @@ jobs:
       # publisher requires write permissions to the repo's contents to create new releases
       # https://www.electronforge.io/config/publishers/github#authentication
       contents: write
+      # Required for Workload Identity Federation (OIDC) authentication
+      id-token: write
     defaults:
       run:
         working-directory: desktop_app

@@ -67,6 +67,7 @@ jobs:
       # publisher requires write permissions to the repo's contents to create new releases
       # https://www.electronforge.io/config/publishers/github#authentication
       contents: write
+      id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/build-desktop-application.yml
     with:
       dry_run: false

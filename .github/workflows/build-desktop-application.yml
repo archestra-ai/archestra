@@ -121,15 +121,42 @@ jobs:
           workload_identity_provider: ${{ secrets.WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER }}
           service_account: ${{ secrets.WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT }}
 
+      # See https://cloud.google.com/kms/docs/reference/cng-signtool for useful information/references
       - name: Install Google Cloud KMS CNG Provider
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
         run: |
-          # Download the Google Cloud KMS CNG Provider installer
-          $installerUrl = "https://github.com/GoogleCloudPlatform/kms-integrations/releases/latest/download/gcpkms-cng-provider-x64.msi"
+          # Find and download the Google Cloud KMS CNG Provider installer
+          Write-Host "Finding latest Google Cloud KMS CNG Provider release..."
+
+          # Get the latest release info from GitHub API
+          $headers = @{}
+          if ($env:GITHUB_TOKEN) {
+            $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+          }
+
+          $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/GoogleCloudPlatform/kms-integrations/releases/latest" -Headers $headers
+          Write-Host "Latest release: $($releaseInfo.tag_name)"
+
+          # Find the CNG provider MSI in the assets - looking for various possible naming patterns
+          $msiAsset = $releaseInfo.assets | Where-Object { 
+            $_.name -like "*cng*provider*windows*.msi" -or 
+            $_.name -like "*cng*x64*.msi" -or 
+            $_.name -eq "gcpkms_cng_provider_windows_amd64.msi" -or
+            $_.name -like "gcpkms-cng-*.msi"
+          } | Select-Object -First 1
+
+          if (-not $msiAsset) {
+            Write-Host "Available assets:"
+            $releaseInfo.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+            Write-Error "Could not find CNG provider MSI in latest release"
+            exit 1
+          }
+
+          $installerUrl = $msiAsset.browser_download_url
           $installerPath = "$env:RUNNER_TEMP\gcpkms-cng-provider.msi"
 
-          Write-Host "Downloading Google Cloud KMS CNG Provider..."
-          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+          Write-Host "Downloading $($msiAsset.name) from: $installerUrl"
+          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -Headers $headers
 
           Write-Host "Installing Google Cloud KMS CNG Provider..."
           Start-Process msiexec.exe -ArgumentList "/i", $installerPath, "/quiet", "/norestart" -Wait

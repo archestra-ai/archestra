@@ -48,6 +48,7 @@
     "@electron-forge/shared-types": "^7.9.0",
     "@electron/fuses": "^2.0.0",
     "@electron/rebuild": "^4.0.1",
+    "@electron/windows-sign": "^2.0.2",
     "@hey-api/openapi-ts": "^0.80.14",
     "@tailwindcss/vite": "^4.1.12",
     "@tanstack/router-plugin": "^1.131.27",
@@ -150,13 +151,14 @@
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "electron",
+      "electron-winstaller",
       "fs-xattr",
       "macos-alias"
     ],
     "ignoredBuiltDependencies": [
       "@tailwindcss/oxide",
       "bufferutil",
-      "electron-winstaller",
+      "core-js",
       "esbuild",
       "sharp",
       "utf-8-validate"

@@ -35,7 +35,8 @@ jobs:
       # https://www.electronforge.io/config/publishers/github#authentication
       contents: write
     with:
-      dry_run: true
+      # TODO: remove this when done testing...
+      dry_run: false
     secrets:
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
@@ -45,3 +46,6 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID: ${{ secrets.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID }}
+      WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER: ${{ secrets.WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER }}
+      WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT: ${{ secrets.WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT }}

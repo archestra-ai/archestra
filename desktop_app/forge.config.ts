@@ -50,7 +50,7 @@ for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
  * See https://cloud.google.com/kms/docs/reference/cng-signtool for more information
  */
 const windowsSignConfig: WindowsSignOptions = {
-  signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID} /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /v /debug`,
+  signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID} /v /debug`,
   timestampServer: 'http://timestamp.digicert.com',
   hashes: ['sha256' as any],
 };

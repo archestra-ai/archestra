@@ -81,13 +81,36 @@ function ChatPage() {
     });
   }, [currentChatSessionId, getCurrentChat]);
 
-  const { sendMessage, messages, setMessages, stop, status, error, regenerate } = useChat({
+  const { sendMessage, messages, setMessages, stop, status, regenerate } = useChat({
     id: currentChatSessionId || 'temp-id', // use the provided chat ID or a temp ID
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
     },
   });
+
+  // ================ Running on background logic ================ //
+  const pendingPrompts = useChatStore((s) => s.pendingPrompts);
+  const setPendingPrompts = useChatStore((s) => s.setPendingPrompts);
+  const removePendingPrompt = useChatStore((s) => s.removePendingPrompt);
+
+  const pendingPrompt = pendingPrompts.get(currentChatSessionId);
+
+  // When streaming finishes and there is an assistant reply and the second to
+  // last message is the same as the pending prompt, remove the pending prompt
+  useEffect(() => {
+    if (status === 'ready' && currentChatSessionId) {
+      const secondToLastMessage = messages.at(-2);
+      const lastMessage = messages.at(-1);
+
+      const isSecondToLastMessageSameAsPendingPrompt =
+        secondToLastMessage?.parts?.[0]?.type === 'text' && secondToLastMessage?.parts?.[0]?.text === pendingPrompt;
+      const isLastMessageAssistant = lastMessage?.role === 'assistant';
+
+      if (isLastMessageAssistant && isSecondToLastMessageSameAsPendingPrompt) removePendingPrompt(currentChatSessionId);
+    }
+  }, [status, currentChatSessionId, messages]);
+  // ================================== //
 
   const isLoading = status === 'streaming';
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
@@ -194,10 +217,10 @@ function ChatPage() {
       // Clear messages when no chat or empty chat
       setMessages([]);
     }
-  }, [currentChatSessionId]); // Only depend on session ID to avoid infinite loop
+  }, [currentChatSessionId, currentChatMessages]); // Now also depend on currentChatMessages
 
   // Simple debounce implementation
-  const debounceRef = useRef<NodeJS.Timeout | undefined>();
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const debouncedSaveDraft = useCallback((chatId: number, content: string) => {
     if (debounceRef.current) {
@@ -251,6 +274,7 @@ function ChatPage() {
 
   const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
+    if (isSubmittingDisabled) return;
     if (currentInput.trim() && currentChat) {
       // Load memories before sending the first message
       await loadMemoriesIfNeeded();
@@ -275,6 +299,7 @@ ${currentInput}`;
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
       sendMessage({ text: messageText });
+      setPendingPrompts(currentChatSessionId, messageText);
       clearDraftMessage(currentChat.id);
     }
   };
@@ -289,23 +314,27 @@ ${currentInput}`;
     sendMessage({ text: prompt });
   };
 
+  const isSubmittingDisabled = !currentInput.trim() || isLoading || isSubmitting || !!pendingPrompt;
+
   if (!currentChat) {
     // TODO: this is a temporary solution, maybe let's make some cool loading animations with a mascot?
     return null;
   }
 
-  // Check if the chat is empty (no messages)
   const isChatEmpty = messages.length === 0;
 
   return (
     <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
-      {isChatEmpty ? (
+      {isChatEmpty && !pendingPrompt ? (
         <div className="flex-1 min-h-0 overflow-auto">
           <EmptyChatState onPromptSelect={handlePromptSelect} />
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-hidden max-w-full">
           <ChatHistory
+            chatId={currentChat.id}
+            pendingPrompt={pendingPrompt}
+            sessionId={currentChatSessionId}
             messages={regeneratingIndex !== null && fullMessagesBackup.length > 0 ? fullMessagesBackup : messages}
             editingMessageId={editingMessageId}
             editingContent={editingContent}
@@ -324,13 +353,14 @@ ${currentInput}`;
       )}
 
       <SystemPrompt />
+
       <div className="flex-shrink-0">
         <ChatInput
           input={currentInput}
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isLoading={isLoading}
-          isSubmitting={isSubmitting}
+          disabled={isSubmittingDisabled}
           stop={stop}
           onTooManyTools={setHasTooManyTools}
         />

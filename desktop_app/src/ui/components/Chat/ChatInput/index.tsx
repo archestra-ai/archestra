@@ -34,7 +34,7 @@ interface ChatInputProps {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e?: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
-  isSubmitting?: boolean;
+  disabled: boolean;
   stop: () => void;
   onTooManyTools?: (hasTooMany: boolean) => void;
 }
@@ -44,7 +44,7 @@ export default function ChatInput({
   handleInputChange,
   handleSubmit,
   isLoading,
-  isSubmitting = false,
+  disabled,
   stop,
   onTooManyTools,
 }: ChatInputProps) {
@@ -546,10 +546,7 @@ export default function ChatInput({
             </Tooltip>
           </AIInputTools>
 
-          <AIInputSubmit
-            onClick={isLoading ? stop : undefined}
-            disabled={!input.trim() && !isLoading && !isSubmitting}
-          />
+          <AIInputSubmit onClick={isLoading ? stop : undefined} disabled={disabled} />
         </AIInputToolbar>
       </AIInput>
     </TooltipProvider>

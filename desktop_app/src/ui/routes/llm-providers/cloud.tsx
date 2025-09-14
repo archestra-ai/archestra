@@ -56,12 +56,7 @@ function CloudProviders() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span>
-                          <Button
-                            className="cursor-not-allowed opacity-50"
-                            variant="default"
-                            size="sm"
-                            disabled
-                          >
+                          <Button className="cursor-not-allowed opacity-50" variant="default" size="sm" disabled>
                             Configure
                           </Button>
                         </span>
@@ -75,12 +70,7 @@ function CloudProviders() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
-                            <Button
-                              className="cursor-not-allowed opacity-50"
-                              variant="outline"
-                              size="sm"
-                              disabled
-                            >
+                            <Button className="cursor-not-allowed opacity-50" variant="outline" size="sm" disabled>
                               Reconfigure
                             </Button>
                           </span>

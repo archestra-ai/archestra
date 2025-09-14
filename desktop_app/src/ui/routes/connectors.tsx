@@ -144,7 +144,8 @@ function ConnectorCatalogPage() {
         <div>
           <h1 className="text-3xl font-bold">MCP Сonnectors</h1>
           <p className="text-muted-foreground mt-1">
-            MCP Connectors allow AI to access your data. Archestra is able to run hundreds of local MCP servers and connect to the remote ones.
+            MCP Connectors allow AI to access your data. Archestra is able to run hundreds of local MCP servers and
+            connect to the remote ones.
           </p>
         </div>
 
@@ -205,7 +206,8 @@ function ConnectorCatalogPage() {
 
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {/* Request MCP Server Tile - Always First */}
-        <Card className="transition-all duration-200 hover:shadow-md border-dashed cursor-pointer group"
+        <Card
+          className="transition-all duration-200 hover:shadow-md border-dashed cursor-pointer group"
           onClick={() => window.electronAPI.openExternal('https://github.com/archestra-ai/archestra/issues')}
         >
           <CardHeader className="p-3 pb-2">
@@ -228,7 +230,7 @@ function ConnectorCatalogPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         {connectorCatalog.map((connectorCatalogMcpServer) => (
           <McpServer
             key={connectorCatalogMcpServer.name}

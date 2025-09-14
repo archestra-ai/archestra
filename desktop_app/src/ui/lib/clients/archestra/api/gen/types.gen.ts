@@ -133,6 +133,13 @@ export type WebSocketMessageInput =
       };
     }
   | {
+      type: 'chat-tools-updated';
+      payload: {
+        chatId: number;
+        selectedTools: Array<string> | null;
+      };
+    }
+  | {
       type: 'sandbox-status-update';
       payload: SandboxStatusSummaryInput;
     }
@@ -150,6 +157,24 @@ export type WebSocketMessageInput =
           createdAt: string;
           updatedAt: string;
         }>;
+      };
+    }
+  | {
+      type: 'tools-updated';
+      payload: {
+        mcpServerId: string;
+        message: string;
+      };
+    }
+  | {
+      type: 'tool-analysis-progress';
+      payload: {
+        mcpServerId?: string;
+        status: 'started' | 'analyzing' | 'completed' | 'error';
+        progress?: number;
+        totalTools?: number;
+        message: string;
+        error?: string;
       };
     };
 
@@ -560,6 +585,13 @@ export type WebSocketMessage =
       };
     }
   | {
+      type: 'chat-tools-updated';
+      payload: {
+        chatId: number;
+        selectedTools: Array<string> | null;
+      };
+    }
+  | {
       type: 'sandbox-status-update';
       payload: SandboxStatusSummary;
     }
@@ -577,6 +609,24 @@ export type WebSocketMessage =
           createdAt: string;
           updatedAt: string;
         }>;
+      };
+    }
+  | {
+      type: 'tools-updated';
+      payload: {
+        mcpServerId: string;
+        message: string;
+      };
+    }
+  | {
+      type: 'tool-analysis-progress';
+      payload: {
+        mcpServerId?: string;
+        status: 'started' | 'analyzing' | 'completed' | 'error';
+        progress?: number;
+        totalTools?: number;
+        message: string;
+        error?: string;
       };
     };
 
@@ -1765,6 +1815,18 @@ export type SetMemoryData = {
   url: '/api/memories/{name}';
 };
 
+export type SetMemoryErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+    message: string;
+  };
+};
+
+export type SetMemoryError = SetMemoryErrors[keyof SetMemoryErrors];
+
 export type SetMemoryResponses = {
   /**
    * Default Response
@@ -1796,6 +1858,18 @@ export type UpdateMemoryData = {
   query?: never;
   url: '/api/memory';
 };
+
+export type UpdateMemoryErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+    message: string;
+  };
+};
+
+export type UpdateMemoryError = UpdateMemoryErrors[keyof UpdateMemoryErrors];
 
 export type UpdateMemoryResponses = {
   /**

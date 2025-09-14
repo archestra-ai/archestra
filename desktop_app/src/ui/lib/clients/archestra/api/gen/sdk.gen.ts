@@ -94,6 +94,7 @@ import type {
   SelectChatToolsErrors,
   SelectChatToolsResponses,
   SetMemoryData,
+  SetMemoryErrors,
   SetMemoryResponses,
   StartGenericOAuthData,
   StartGenericOAuthErrors,
@@ -107,6 +108,7 @@ import type {
   UpdateChatErrors,
   UpdateChatResponses,
   UpdateMemoryData,
+  UpdateMemoryErrors,
   UpdateMemoryResponses,
   UpdateUserData,
   UpdateUserResponses,
@@ -619,7 +621,7 @@ export const getMemoryByName = <ThrowOnError extends boolean = false>(
  * Create or update a memory entry
  */
 export const setMemory = <ThrowOnError extends boolean = false>(options: Options<SetMemoryData, ThrowOnError>) => {
-  return (options.client ?? _heyApiClient).put<SetMemoryResponses, unknown, ThrowOnError>({
+  return (options.client ?? _heyApiClient).put<SetMemoryResponses, SetMemoryErrors, ThrowOnError>({
     url: '/api/memories/{name}',
     ...options,
     headers: {
@@ -645,7 +647,7 @@ export const getMemory = <ThrowOnError extends boolean = false>(options?: Option
 export const updateMemory = <ThrowOnError extends boolean = false>(
   options?: Options<UpdateMemoryData, ThrowOnError>
 ) => {
-  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, unknown, ThrowOnError>({
+  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, UpdateMemoryErrors, ThrowOnError>({
     url: '/api/memory',
     ...options,
     headers: {

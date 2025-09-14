@@ -502,7 +502,9 @@ export const createArchestraMcpServer = () => {
     z.object({
       toolIds: z
         .array(z.string())
-        .describe('Array of tool IDs from list_available_tools output. Example: ["archestra__list_memories", "filesystem__read_file", "remote-mcp__create_issue"]'),
+        .describe(
+          'Array of tool IDs from list_available_tools output. Example: ["archestra__list_memories", "filesystem__read_file", "remote-mcp__create_issue"]'
+        ),
     }) as any,
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
@@ -534,18 +536,19 @@ export const createArchestraMcpServer = () => {
 
         // Get all available tools to validate the tool IDs exist
         const allTools = toolAggregator.getAllAvailableTools();
-        const availableToolIds = new Set(allTools.map(t => t.id));
-        
+        const availableToolIds = new Set(allTools.map((t) => t.id));
+
         // Get currently selected tools for the chat
         const currentSelectedTools = await ChatModel.getSelectedTools(chatId);
-        const currentEnabledSet = currentSelectedTools === null 
-          ? new Set(availableToolIds) // null means all tools are enabled
-          : new Set(currentSelectedTools);
+        const currentEnabledSet =
+          currentSelectedTools === null
+            ? new Set(availableToolIds) // null means all tools are enabled
+            : new Set(currentSelectedTools);
 
         // Validate each tool ID
         const errors: string[] = [];
         const validToolsToEnable: string[] = [];
-        
+
         for (const toolId of toolIds) {
           if (!availableToolIds.has(toolId)) {
             errors.push(`Tool '${toolId}' does not exist`);
@@ -639,18 +642,19 @@ export const createArchestraMcpServer = () => {
 
         // Get all available tools to validate the tool IDs exist
         const allTools = toolAggregator.getAllAvailableTools();
-        const availableToolIds = new Set(allTools.map(t => t.id));
-        
+        const availableToolIds = new Set(allTools.map((t) => t.id));
+
         // Get currently selected tools for the chat
         const currentSelectedTools = await ChatModel.getSelectedTools(chatId);
-        const currentEnabledSet = currentSelectedTools === null 
-          ? new Set(availableToolIds) // null means all tools are enabled
-          : new Set(currentSelectedTools);
+        const currentEnabledSet =
+          currentSelectedTools === null
+            ? new Set(availableToolIds) // null means all tools are enabled
+            : new Set(currentSelectedTools);
 
         // Validate each tool ID
         const errors: string[] = [];
         const validToolsToDisable: string[] = [];
-        
+
         for (const toolId of toolIds) {
           if (!availableToolIds.has(toolId)) {
             errors.push(`Tool '${toolId}' does not exist`);

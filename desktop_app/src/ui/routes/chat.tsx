@@ -33,7 +33,7 @@ function ChatPage() {
 
   // Get current input from draft messages
   const currentInput = currentChat ? getDraftMessage(currentChat.id) : '';
-  
+
   // Reset memory loading flag when chat changes
   useEffect(() => {
     setHasLoadedMemories(false);
@@ -253,17 +253,15 @@ function ChatPage() {
         const { data } = await getAllMemories();
         if (data && data.memories && data.memories.length > 0) {
           // Format memories as a system message to include in context
-          const memoriesText = data.memories
-            .map((m) => `${m.name}: ${m.value}`)
-            .join('\n');
-          
+          const memoriesText = data.memories.map((m) => `${m.name}: ${m.value}`).join('\n');
+
           // Add a system message with the memories
           const systemMessage: UIMessage = {
             id: 'system-memories',
             role: 'system',
             content: `Previous memories loaded:\n${memoriesText}`,
           };
-          
+
           // Prepend the system message to the messages
           setMessages([systemMessage]);
         }
@@ -282,14 +280,14 @@ function ChatPage() {
     if (currentInput.trim() && currentChat) {
       // Load memories before sending the first message
       await loadMemoriesIfNeeded();
-      
+
       let messageText = currentInput;
-      
+
       // If more than 20 tools are selected, adjust the tools and message
       if (hasTooManyTools) {
         // Set only the list_available_tools and enable_tools from Archestra
         await setOnlyTools(['archestra__list_available_tools', 'archestra__enable_tools', 'archestra__disable_tools']);
-        
+
         // Prepend instruction to the message
         messageText = `You currently have only list_available_tools and enable_tools enabled. Follow these steps:
 1. Call list_available_tools to see all available tool IDs
@@ -299,7 +297,7 @@ function ChatPage() {
 
 ${currentInput}`;
       }
-      
+
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
       sendMessage({ text: messageText });
@@ -311,7 +309,7 @@ ${currentInput}`;
   const handlePromptSelect = async (prompt: string) => {
     // Load memories before sending the first message
     await loadMemoriesIfNeeded();
-    
+
     setIsSubmitting(true);
     setSubmissionStartTime(Date.now());
     // Directly send the prompt when a tile is clicked
@@ -320,15 +318,15 @@ ${currentInput}`;
 
   const handleRerunAgent = async () => {
     // Get the first user message (the original prompt)
-    const firstUserMessage = messages.find(msg => msg.role === 'user');
-    
+    const firstUserMessage = messages.find((msg) => msg.role === 'user');
+
     if (!firstUserMessage) {
       return;
     }
-    
+
     // Extract text content from the message
     let messageText = '';
-    
+
     // Check for parts property (AI SDK format)
     if ((firstUserMessage as any).parts) {
       const textPart = (firstUserMessage as any).parts.find((part: any) => part.type === 'text');
@@ -344,20 +342,20 @@ ${currentInput}`;
         messageText = textPart.text;
       }
     }
-    
+
     if (!messageText) {
       return;
     }
-    
+
     // Clear all messages to start fresh
     setMessages([]);
-    
+
     // Reset memory loading flag to load memories again
     setHasLoadedMemories(false);
-    
+
     // Load memories if needed
     await loadMemoriesIfNeeded();
-    
+
     // Re-run with the first user message
     setIsSubmitting(true);
     setSubmissionStartTime(Date.now());

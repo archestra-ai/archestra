@@ -43,15 +43,15 @@ interface ChatInputProps {
 
 const PLACEHOLDER_EXAMPLES = [
   "For example: Read my gmail inbox, find all questions from investors, check slack's #general channel and prepare answers as email drafts",
-  "For example: Open my linkedin and find all people who mention AI in their profile. Give me a list sorted by mutual connections",
-  "For example: Analyze my calendar for next week and suggest optimal meeting times for a 2-hour workshop",
-  "For example: Review my GitHub PRs, summarize the feedback, and draft responses for each comment",
-  "For example: Check my Notion tasks, prioritize them by deadline, and create a daily schedule for tomorrow",
-  "For example: Search my Google Drive for quarterly reports, extract key metrics, and create a summary table",
-  "For example: Monitor my Twitter mentions, identify customer complaints, and draft personalized responses",
-  "For example: Scan my Jira tickets, identify blockers, and suggest solutions based on similar resolved issues",
-  "For example: Review my email subscriptions, identify unused services, and draft cancellation emails",
-  "For example: Analyze my Spotify listening history and create a personalized workout playlist based on BPM"
+  'For example: Open my linkedin and find all people who mention AI in their profile. Give me a list sorted by mutual connections',
+  'For example: Analyze my calendar for next week and suggest optimal meeting times for a 2-hour workshop',
+  'For example: Review my GitHub PRs, summarize the feedback, and draft responses for each comment',
+  'For example: Check my Notion tasks, prioritize them by deadline, and create a daily schedule for tomorrow',
+  'For example: Search my Google Drive for quarterly reports, extract key metrics, and create a summary table',
+  'For example: Monitor my Twitter mentions, identify customer complaints, and draft personalized responses',
+  'For example: Scan my Jira tickets, identify blockers, and suggest solutions based on similar resolved issues',
+  'For example: Review my email subscriptions, identify unused services, and draft cancellation emails',
+  'For example: Analyze my Spotify listening history and create a personalized workout playlist based on BPM',
 ];
 
 export default function ChatInput({
@@ -70,16 +70,16 @@ export default function ChatInput({
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
-  
+
   // Rotating placeholder state
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  
+
   // Rotate placeholder every 7 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_EXAMPLES.length);
     }, 7000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -278,247 +278,248 @@ export default function ChatInput({
         ) : (
           <div className="p-3 pb-0">
             <div className={cn('flex flex-wrap gap-2')}>
-            {Object.entries(groupedTools).map(([serverName, data]) => {
-              const parts = [];
-              if (data.readOnlyCount > 0) parts.push(`${data.readOnlyCount} read`);
-              if (data.writeOnlyCount > 0) parts.push(`${data.writeOnlyCount} write`);
-              if (data.readWriteCount > 0) parts.push(`${data.readWriteCount} read/write`);
-              if (data.otherCount > 0) parts.push(`${data.otherCount} other`);
-              const countText = parts.join(' + ');
+              {Object.entries(groupedTools).map(([serverName, data]) => {
+                const parts = [];
+                if (data.readOnlyCount > 0) parts.push(`${data.readOnlyCount} read`);
+                if (data.writeOnlyCount > 0) parts.push(`${data.writeOnlyCount} write`);
+                if (data.readWriteCount > 0) parts.push(`${data.readWriteCount} read/write`);
+                if (data.otherCount > 0) parts.push(`${data.otherCount} other`);
+                const countText = parts.join(' + ');
 
-              return (
-                <Tooltip key={serverName}>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-full border border-muted-foreground/10 group hover:bg-muted/40 transition-colors cursor-default">
-                      <span className="text-sm font-medium">{serverName}</span>
-                      {countText && <span className="text-xs text-muted-foreground">({countText})</span>}
-                      <button
-                        onClick={() => {
-                          // Remove all tools from this server
-                          data.tools.forEach((tool) => removeSelectedTool(tool.id));
-                        }}
-                        className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
-                        type="button"
-                        title={`Remove all ${serverName} tools`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-md max-h-96 overflow-y-auto p-0">
-                    <div className="space-y-2 p-2">
-                      {/* Server status indicator if initializing or error */}
-                      {(data.isInitializing || data.serverState === 'error') && (
-                        <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/50 rounded-md">
-                          {data.serverState === 'error' ? (
-                            <>
-                              <AlertCircle className="h-3 w-3 text-red-500" />
-                              <span className="text-xs text-red-500">Server error - check Settings</span>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Server initializing...</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Read-only tools */}
-                      {data.readOnlyTools.length > 0 && (
-                        <div>
-                          <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1 px-2">
-                            Read Tools ({data.readOnlyTools.length})
+                return (
+                  <Tooltip key={serverName}>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-full border border-muted-foreground/10 group hover:bg-muted/40 transition-colors cursor-default">
+                        <span className="text-sm font-medium">{serverName}</span>
+                        {countText && <span className="text-xs text-muted-foreground">({countText})</span>}
+                        <button
+                          onClick={() => {
+                            // Remove all tools from this server
+                            data.tools.forEach((tool) => removeSelectedTool(tool.id));
+                          }}
+                          className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+                          type="button"
+                          title={`Remove all ${serverName} tools`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-md max-h-96 overflow-y-auto p-0">
+                      <div className="space-y-2 p-2">
+                        {/* Server status indicator if initializing or error */}
+                        {(data.isInitializing || data.serverState === 'error') && (
+                          <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/50 rounded-md">
+                            {data.serverState === 'error' ? (
+                              <>
+                                <AlertCircle className="h-3 w-3 text-red-500" />
+                                <span className="text-xs text-red-500">Server error - check Settings</span>
+                              </>
+                            ) : (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">Server initializing...</span>
+                              </>
+                            )}
                           </div>
-                          <div className="flex flex-col">
-                            {data.readOnlyTools.map((tool) => {
-                              const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix
-                                ? fullName.slice(data.commonPrefix.length)
-                                : fullName;
-                              return (
-                                <ToolHoverCard
-                                  key={tool.id}
-                                  tool={tool}
-                                  side="left"
-                                  align="start"
-                                  showInstructions={true}
-                                  instructionText="Click to remove this tool"
-                                >
-                                  <button
-                                    onClick={() => removeSelectedTool(tool.id)}
-                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
-                                    type="button"
+                        )}
+
+                        {/* Read-only tools */}
+                        {data.readOnlyTools.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1 px-2">
+                              Read Tools ({data.readOnlyTools.length})
+                            </div>
+                            <div className="flex flex-col">
+                              {data.readOnlyTools.map((tool) => {
+                                const fullName = formatToolName(tool.name || tool.id);
+                                const displayName = data.commonPrefix
+                                  ? fullName.slice(data.commonPrefix.length)
+                                  : fullName;
+                                return (
+                                  <ToolHoverCard
+                                    key={tool.id}
+                                    tool={tool}
+                                    side="left"
+                                    align="start"
+                                    showInstructions={true}
+                                    instructionText="Click to remove this tool"
                                   >
-                                    {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                    tool.analysis?.status === 'in_progress' ? (
-                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
-                                    ) : tool.analysis?.status === 'error' ? (
-                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
-                                    ) : data.isInitializing ? (
-                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
-                                    ) : (
-                                      <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
-                                    )}
-                                    <span className="text-xs truncate flex-1">{displayName}</span>
-                                  </button>
-                                </ToolHoverCard>
-                              );
-                            })}
+                                    <button
+                                      onClick={() => removeSelectedTool(tool.id)}
+                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                      type="button"
+                                    >
+                                      {/* Status indicator */}
+                                      {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                      tool.analysis?.status === 'in_progress' ? (
+                                        <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                      ) : tool.analysis?.status === 'error' ? (
+                                        <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                      ) : data.isInitializing ? (
+                                        <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                                      )}
+                                      <span className="text-xs truncate flex-1">{displayName}</span>
+                                    </button>
+                                  </ToolHoverCard>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Read/Write tools */}
-                      {data.readWriteTools.length > 0 && (
-                        <div>
-                          <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 px-2">
-                            Read/Write Tools ({data.readWriteTools.length})
-                          </div>
-                          <div className="flex flex-col">
-                            {data.readWriteTools.map((tool) => {
-                              const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix
-                                ? fullName.slice(data.commonPrefix.length)
-                                : fullName;
-                              return (
-                                <ToolHoverCard
-                                  key={tool.id}
-                                  tool={tool}
-                                  side="left"
-                                  align="start"
-                                  showInstructions={true}
-                                  instructionText="Click to remove this tool"
-                                >
-                                  <button
-                                    onClick={() => removeSelectedTool(tool.id)}
-                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
-                                    type="button"
+                        {/* Read/Write tools */}
+                        {data.readWriteTools.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 px-2">
+                              Read/Write Tools ({data.readWriteTools.length})
+                            </div>
+                            <div className="flex flex-col">
+                              {data.readWriteTools.map((tool) => {
+                                const fullName = formatToolName(tool.name || tool.id);
+                                const displayName = data.commonPrefix
+                                  ? fullName.slice(data.commonPrefix.length)
+                                  : fullName;
+                                return (
+                                  <ToolHoverCard
+                                    key={tool.id}
+                                    tool={tool}
+                                    side="left"
+                                    align="start"
+                                    showInstructions={true}
+                                    instructionText="Click to remove this tool"
                                   >
-                                    {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                    tool.analysis?.status === 'in_progress' ? (
-                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
-                                    ) : tool.analysis?.status === 'error' ? (
-                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
-                                    ) : data.isInitializing ? (
-                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
-                                    ) : (
-                                      <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
-                                    )}
-                                    <span className="text-xs truncate flex-1">{displayName}</span>
-                                  </button>
-                                </ToolHoverCard>
-                              );
-                            })}
+                                    <button
+                                      onClick={() => removeSelectedTool(tool.id)}
+                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                      type="button"
+                                    >
+                                      {/* Status indicator */}
+                                      {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                      tool.analysis?.status === 'in_progress' ? (
+                                        <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                      ) : tool.analysis?.status === 'error' ? (
+                                        <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                      ) : data.isInitializing ? (
+                                        <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                                      )}
+                                      <span className="text-xs truncate flex-1">{displayName}</span>
+                                    </button>
+                                  </ToolHoverCard>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Write-only tools */}
-                      {data.writeOnlyTools.length > 0 && (
-                        <div>
-                          <div className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 px-2">
-                            Write Tools ({data.writeOnlyTools.length})
-                          </div>
-                          <div className="flex flex-col">
-                            {data.writeOnlyTools.map((tool) => {
-                              const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix
-                                ? fullName.slice(data.commonPrefix.length)
-                                : fullName;
-                              return (
-                                <ToolHoverCard
-                                  key={tool.id}
-                                  tool={tool}
-                                  side="left"
-                                  align="start"
-                                  showInstructions={true}
-                                  instructionText="Click to remove this tool"
-                                >
-                                  <button
-                                    onClick={() => removeSelectedTool(tool.id)}
-                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
-                                    type="button"
+                        {/* Write-only tools */}
+                        {data.writeOnlyTools.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 px-2">
+                              Write Tools ({data.writeOnlyTools.length})
+                            </div>
+                            <div className="flex flex-col">
+                              {data.writeOnlyTools.map((tool) => {
+                                const fullName = formatToolName(tool.name || tool.id);
+                                const displayName = data.commonPrefix
+                                  ? fullName.slice(data.commonPrefix.length)
+                                  : fullName;
+                                return (
+                                  <ToolHoverCard
+                                    key={tool.id}
+                                    tool={tool}
+                                    side="left"
+                                    align="start"
+                                    showInstructions={true}
+                                    instructionText="Click to remove this tool"
                                   >
-                                    {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                    tool.analysis?.status === 'in_progress' ? (
-                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
-                                    ) : tool.analysis?.status === 'error' ? (
-                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
-                                    ) : data.isInitializing ? (
-                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
-                                    ) : (
-                                      <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
-                                    )}
-                                    <span className="text-xs truncate flex-1">{displayName}</span>
-                                  </button>
-                                </ToolHoverCard>
-                              );
-                            })}
+                                    <button
+                                      onClick={() => removeSelectedTool(tool.id)}
+                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                      type="button"
+                                    >
+                                      {/* Status indicator */}
+                                      {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                      tool.analysis?.status === 'in_progress' ? (
+                                        <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                      ) : tool.analysis?.status === 'error' ? (
+                                        <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                      ) : data.isInitializing ? (
+                                        <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
+                                      )}
+                                      <span className="text-xs truncate flex-1">{displayName}</span>
+                                    </button>
+                                  </ToolHoverCard>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Other tools */}
-                      {data.otherTools.length > 0 && (
-                        <div>
-                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 px-2">
-                            Other Tools ({data.otherTools.length})
-                          </div>
-                          <div className="flex flex-col">
-                            {data.otherTools.map((tool) => {
-                              const fullName = formatToolName(tool.name || tool.id);
-                              const displayName = data.commonPrefix
-                                ? fullName.slice(data.commonPrefix.length)
-                                : fullName;
-                              return (
-                                <ToolHoverCard
-                                  key={tool.id}
-                                  tool={tool}
-                                  side="left"
-                                  align="start"
-                                  showInstructions={true}
-                                  instructionText="Click to remove this tool"
-                                >
-                                  <button
-                                    onClick={() => removeSelectedTool(tool.id)}
-                                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
-                                    type="button"
+                        {/* Other tools */}
+                        {data.otherTools.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 px-2">
+                              Other Tools ({data.otherTools.length})
+                            </div>
+                            <div className="flex flex-col">
+                              {data.otherTools.map((tool) => {
+                                const fullName = formatToolName(tool.name || tool.id);
+                                const displayName = data.commonPrefix
+                                  ? fullName.slice(data.commonPrefix.length)
+                                  : fullName;
+                                return (
+                                  <ToolHoverCard
+                                    key={tool.id}
+                                    tool={tool}
+                                    side="left"
+                                    align="start"
+                                    showInstructions={true}
+                                    instructionText="Click to remove this tool"
                                   >
-                                    {/* Status indicator */}
-                                    {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                    tool.analysis?.status === 'in_progress' ? (
-                                      <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
-                                    ) : tool.analysis?.status === 'error' ? (
-                                      <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
-                                    ) : data.isInitializing ? (
-                                      <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
-                                    ) : (
-                                      <div className="w-2 h-2 bg-gray-500 rounded-full flex-shrink-0" />
-                                    )}
-                                    <span className="text-xs truncate flex-1">{displayName}</span>
-                                  </button>
-                                </ToolHoverCard>
-                              );
-                            })}
+                                    <button
+                                      onClick={() => removeSelectedTool(tool.id)}
+                                      className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 transition-colors cursor-pointer text-left w-full rounded-sm"
+                                      type="button"
+                                    >
+                                      {/* Status indicator */}
+                                      {tool.analysis?.status === 'awaiting_ollama_model' ||
+                                      tool.analysis?.status === 'in_progress' ? (
+                                        <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
+                                      ) : tool.analysis?.status === 'error' ? (
+                                        <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                      ) : data.isInitializing ? (
+                                        <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full flex-shrink-0" />
+                                      )}
+                                      <span className="text-xs truncate flex-1">{displayName}</span>
+                                    </button>
+                                  </ToolHoverCard>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-            {selectedToolIds.size > 20 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-full border border-green-500/20 group">
-                <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                  {selectedToolIds.size} tools connected, it may overwhelm the AI. The next call will disable all tools and enable only those needed for the task.
-                </span>
-              </div>
-            )}
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+              {selectedToolIds.size > 20 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-full border border-green-500/20 group">
+                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                    {selectedToolIds.size} tools connected, it may overwhelm the AI. The next call will disable all
+                    tools and enable only those needed for the task.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -538,8 +539,9 @@ export default function ChatInput({
               <div className="relative w-full h-full pt-2.5 px-4">
                 {PLACEHOLDER_EXAMPLES.map((example, index) => {
                   const isActive = index === placeholderIndex;
-                  const isPrevious = index === (placeholderIndex - 1 + PLACEHOLDER_EXAMPLES.length) % PLACEHOLDER_EXAMPLES.length;
-                  
+                  const isPrevious =
+                    index === (placeholderIndex - 1 + PLACEHOLDER_EXAMPLES.length) % PLACEHOLDER_EXAMPLES.length;
+
                   return (
                     <div
                       key={index}
@@ -547,11 +549,7 @@ export default function ChatInput({
                       style={{
                         transition: 'all 2s ease-in-out',
                         opacity: isActive ? 1 : 0,
-                        transform: isActive 
-                          ? 'translateY(0px)' 
-                          : isPrevious
-                          ? 'translateY(20px)'
-                          : 'translateY(-20px)',
+                        transform: isActive ? 'translateY(0px)' : isPrevious ? 'translateY(20px)' : 'translateY(-20px)',
                       }}
                     >
                       <span className="text-sm">{example}</span>
@@ -610,12 +608,7 @@ export default function ChatInput({
             {hasMessages && onRerunAgent && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <AIInputButton 
-                    onClick={onRerunAgent} 
-                    disabled={false}
-                    type="button"
-                    className="px-3"
-                  >
+                  <AIInputButton onClick={onRerunAgent} disabled={false} type="button" className="px-3">
                     <RefreshCw size={16} />
                     <span className="ml-1.5 text-sm">Restart Agent</span>
                   </AIInputButton>

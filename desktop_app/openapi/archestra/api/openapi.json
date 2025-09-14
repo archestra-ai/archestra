@@ -513,6 +513,39 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["chat-tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "selectedTools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  }
+                },
+                "required": ["chatId", "selectedTools"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["sandbox-status-update"]
               },
               "payload": {
@@ -570,6 +603,65 @@
                   }
                 },
                 "required": ["memories"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["mcpServerId", "message"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-analysis-progress"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["started", "analyzing", "completed", "error"]
+                  },
+                  "progress": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "totalTools": {
+                    "type": "number"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "message"]
               }
             },
             "required": ["type", "payload"]
@@ -1973,6 +2065,41 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["chat-tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "selectedTools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  }
+                },
+                "required": ["chatId", "selectedTools"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["sandbox-status-update"]
               },
               "payload": {
@@ -2033,6 +2160,69 @@
                   }
                 },
                 "required": ["memories"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["mcpServerId", "message"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-analysis-progress"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["started", "analyzing", "completed", "error"]
+                  },
+                  "progress": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "totalTools": {
+                    "type": "number"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "message"],
                 "additionalProperties": false
               }
             },
@@ -4673,6 +4863,26 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       },
@@ -4748,6 +4958,26 @@
                     }
                   },
                   "required": ["success"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
                   "additionalProperties": false
                 }
               }

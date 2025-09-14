@@ -298,23 +298,23 @@ websocketService.subscribe('tool-analysis-progress', ({ payload }) => {
 websocketService.subscribe('chat-tools-updated', ({ payload }) => {
   const { chatId, selectedTools } = payload;
   const currentChat = useChatStore.getState().getCurrentChat();
-  
+
   // Only update if it's for the current chat
   if (currentChat && currentChat.id === chatId) {
     const { availableTools } = useToolsStore.getState();
-    
+
     if (selectedTools === null) {
       // null means all tools are selected
       useToolsStore.setState({
-        selectedToolIds: new Set(availableTools.map(tool => tool.id))
+        selectedToolIds: new Set(availableTools.map((tool) => tool.id)),
       });
     } else {
       // Update to the specific set of tools
       useToolsStore.setState({
-        selectedToolIds: new Set(selectedTools)
+        selectedToolIds: new Set(selectedTools),
       });
     }
-    
+
     console.log(`Tools updated for chat ${chatId}:`, selectedTools?.length ?? 'all', 'tools selected');
   }
 });

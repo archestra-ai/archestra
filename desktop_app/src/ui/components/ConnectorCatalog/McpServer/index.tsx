@@ -25,7 +25,6 @@ import { Separator } from '@ui/components/ui/separator';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useMcpServersStore, useSandboxStore } from '@ui/stores';
 
-
 interface McpServerProps {
   server: ArchestraMcpServerManifest | LocalMcpServerManifest;
   onInstallClick: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
@@ -112,7 +111,9 @@ export default function McpServer({
 
   return (
     <>
-      <Card className={`transition-all duration-200 hover:shadow-md overflow-hidden ${isInstalled ? 'ring-1 ring-green-500/30' : ''}`}>
+      <Card
+        className={`transition-all duration-200 hover:shadow-md overflow-hidden ${isInstalled ? 'ring-1 ring-green-500/30' : ''}`}
+      >
         <CardHeader className="p-3 pb-2">
           <div className="space-y-1">
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-1 max-w-full">
@@ -177,92 +178,94 @@ export default function McpServer({
 
           {/* Actions */}
           <div className="pt-2">
-              {!sandboxIsRunning ? (
-                <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  Initializing...
-                </Button>
-              ) : isInstalled ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onUninstallClick(name)}
-                  disabled={isUninstalling}
-                  className="w-full h-7 text-xs text-destructive hover:text-destructive cursor-pointer"
-                >
-                  {isUninstalling ? (
-                    <>
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
-                      Uninstalling...
-                    </>
-                  ) : (
-                    'Uninstall'
-                  )}
-                </Button>
-              ) : isInstalling ? (
-                <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
-                  Installing...
-                </Button>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {/* For Remote MCP, only show Install (OAuth) button */}
-                  {isRemoteMcp ? (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => onOAuthInstallClick?.(server)}
-                      disabled={isInstalling}
-                      className="w-full h-7 text-xs cursor-pointer"
-                    >
-                      Install
-                    </Button>
-                  ) : (
-                    <>
-                      {!requiresOAuthSetup && !requiresBrowserBasedSetup && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => onInstallClick(server)}
-                          disabled={isInstalling}
-                          className="w-full h-7 text-xs cursor-pointer"
-                        >
-                          {server.user_config && Object.keys(server.user_config).length > 0 ? 'Install (config)' : 'Install'}
-                        </Button>
-                      )}
-                      {requiresOAuthSetup && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => onOAuthInstallClick?.(server)}
-                          disabled={isInstalling}
-                          className="w-full h-7 text-xs cursor-pointer"
-                        >
-                          Install (OAuth)
-                        </Button>
-                      )}
-                      {requiresBrowserBasedSetup && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => {
-                            if (onBrowserInstallClick) {
-                              onBrowserInstallClick(server);
-                            } else {
-                              onInstallClick(server);
-                            }
-                          }}
-                          disabled={isInstalling}
-                          className="w-full h-7 text-xs cursor-pointer"
-                        >
-                          Install (Browser)
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+            {!sandboxIsRunning ? (
+              <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Initializing...
+              </Button>
+            ) : isInstalled ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onUninstallClick(name)}
+                disabled={isUninstalling}
+                className="w-full h-7 text-xs text-destructive hover:text-destructive cursor-pointer"
+              >
+                {isUninstalling ? (
+                  <>
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
+                    Uninstalling...
+                  </>
+                ) : (
+                  'Uninstall'
+                )}
+              </Button>
+            ) : isInstalling ? (
+              <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
+                Installing...
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {/* For Remote MCP, only show Install (OAuth) button */}
+                {isRemoteMcp ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => onOAuthInstallClick?.(server)}
+                    disabled={isInstalling}
+                    className="w-full h-7 text-xs cursor-pointer"
+                  >
+                    Install
+                  </Button>
+                ) : (
+                  <>
+                    {!requiresOAuthSetup && !requiresBrowserBasedSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onInstallClick(server)}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        {server.user_config && Object.keys(server.user_config).length > 0
+                          ? 'Install (config)'
+                          : 'Install'}
+                      </Button>
+                    )}
+                    {requiresOAuthSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onOAuthInstallClick?.(server)}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        Install (OAuth)
+                      </Button>
+                    )}
+                    {requiresBrowserBasedSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => {
+                          if (onBrowserInstallClick) {
+                            onBrowserInstallClick(server);
+                          } else {
+                            onInstallClick(server);
+                          }
+                        }}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        Install (Browser)
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </>

@@ -1,5 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AlertCircle, Bot, Check, CheckCircle, Clock, Cpu, Download, HardDrive, Loader2, Search, Type, Wrench } from 'lucide-react';
+import {
+  AlertCircle,
+  Bot,
+  Check,
+  CheckCircle,
+  Clock,
+  Cpu,
+  Download,
+  HardDrive,
+  Loader2,
+  Search,
+  Type,
+  Wrench,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
@@ -21,7 +34,15 @@ function OllamaProviderPage() {
   const [selectedLabel, setSelectedLabel] = useState<string>('all');
   const [toolCallsOnly, setToolCallsOnly] = useState(false);
 
-  const { installedModels, downloadModel, downloadProgress, modelsBeingDownloaded, requiredModelsStatus, requiredModelsDownloadProgress, loadingRequiredModels } = useOllamaStore();
+  const {
+    installedModels,
+    downloadModel,
+    downloadProgress,
+    modelsBeingDownloaded,
+    requiredModelsStatus,
+    requiredModelsDownloadProgress,
+    loadingRequiredModels,
+  } = useOllamaStore();
 
   const availableModels = useAvailableModels();
   const allAvailableModelLabels = useAllAvailableModelLabels();
@@ -69,8 +90,8 @@ function OllamaProviderPage() {
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Required Models</h3>
               <p className="text-sm text-muted-foreground">
-                We ensure that the following models are installed and available for use for various AI features throughout
-                the application.
+                We ensure that the following models are installed and available for use for various AI features
+                throughout the application.
               </p>
               {loadingRequiredModels ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">

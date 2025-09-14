@@ -125,11 +125,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const toolsStore = useToolsStore.getState();
       // Clear current selection first
       toolsStore.selectedToolIds.clear();
-      
+
       // Add the default tools that were set in the backend
       const defaultTools = ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'];
       defaultTools.forEach((id) => toolsStore.selectedToolIds.add(id));
-      
+
       // Trigger a re-render by creating a new Set
       useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
 
@@ -231,12 +231,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
 
         const initializedChat = initializeChat(data);
-        
+
         // Update state atomically with the new chat already created
-        set({ 
-          chats: [initializedChat], 
-          currentChatSessionId: initializedChat.sessionId, 
-          draftMessages: newDrafts 
+        set({
+          chats: [initializedChat],
+          currentChatSessionId: initializedChat.sessionId,
+          draftMessages: newDrafts,
         });
 
         // Set the tools store to match the new chat's default tools

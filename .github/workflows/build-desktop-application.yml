@@ -33,6 +33,8 @@ on:
         required: false
       WINDOWS_SIGNING_CERT_BASE64:
         required: false
+      WINDOWS_CODE_SIGNING_GCP_KMS_PROJECT_ID:
+        required: false
 
 jobs:
   build-desktop-application:
@@ -118,12 +120,21 @@ jobs:
 
       - name: Authenticate to Google Cloud via Workload Identity Federation
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        id: auth
         uses: google-github-actions/auth@6fc4af4b145ae7821d527454aa9bd537d1f2dc5f # v2.1.7
         with:
           workload_identity_provider: ${{ secrets.WINDOWS_CODE_SIGNING_WORKFLOW_IDENTITY_FEDERATION_PROVIDER }}
           service_account: ${{ secrets.WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT }}
+          # Explicitly create a credentials file for the Google Cloud KMS CNG Provider.
+          # The CNG Provider needs Application Default Credentials to authenticate with KMS.
+          # This creates a JSON credentials file and sets GOOGLE_APPLICATION_CREDENTIALS.
+          # See: https://github.com/google-github-actions/auth?tab=readme-ov-file#inputs-miscellaneous
+          create_credentials_file: true
 
-      # See https://cloud.google.com/kms/docs/reference/cng-signtool for useful information/references
+      # See the following resources for more information:
+      #
+      # https://cloud.google.com/kms/docs/reference/cng-signtool
+      # https://github.com/electron/windows-sign?tab=readme-ov-file#use-with-cloud-hsm-providers
       - name: Install Google Cloud KMS CNG Provider
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
         run: |
@@ -151,6 +162,29 @@ jobs:
             Write-Error "MSI file not found in the extracted archive"
             exit 1
           }
+
+      - name: Set up gcloud CLI
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
+        with:
+          project_id: ${{ secrets.WINDOWS_CODE_SIGNING_GCP_KMS_PROJECT_ID }}
+
+      # TODO: remove this when done testing...
+      - name: Verify Google Cloud authentication for CNG Provider
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        run: |
+          Write-Host "Checking Google Cloud credentials..."
+
+          # Display credential file location for debugging
+          Write-Host "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
+
+          # The auth action should have configured gcloud automatically
+          # Verify the configuration
+          gcloud config list
+
+          # Test KMS access to verify authentication is working
+          Write-Host "Testing KMS access..."
+          gcloud kms keys list --location=europe-west1 --keyring=windows-code-signing
 
       - name: Generate and install Windows signing certificate
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
@@ -197,6 +231,8 @@ jobs:
         env:
           # Use app token if available, fallback to GITHUB_TOKEN for fork PRs
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
+          # Pass Google Cloud credentials to the build process for Windows signing
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           # These will be empty for fork PRs, which is fine - forge.config.ts handles it
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}

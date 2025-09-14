@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertCircle, FileText, Loader2, X } from 'lucide-react';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
@@ -36,6 +36,7 @@ interface ChatInputProps {
   isLoading: boolean;
   isSubmitting?: boolean;
   stop: () => void;
+  onTooManyTools?: (hasTooMany: boolean) => void;
 }
 
 export default function ChatInput({
@@ -45,6 +46,7 @@ export default function ChatInput({
   isLoading,
   isSubmitting = false,
   stop,
+  onTooManyTools,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
@@ -55,6 +57,13 @@ export default function ChatInput({
   // Use the selected model from Ollama store
   const currentModel = selectedModel || '';
   const handleModelChange = setSelectedModel;
+
+  // Notify parent when tool count exceeds 20
+  useEffect(() => {
+    if (onTooManyTools) {
+      onTooManyTools(selectedToolIds.size > 10);
+    }
+  }, [selectedToolIds.size, onTooManyTools]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -238,7 +247,8 @@ export default function ChatInput({
             </div>
           </div>
         ) : (
-          <div className={cn('flex flex-wrap gap-2 p-3 pb-0')}>
+          <div className="p-3 pb-0">
+            <div className={cn('flex flex-wrap gap-2')}>
             {Object.entries(groupedTools).map(([serverName, data]) => {
               const parts = [];
               if (data.readOnlyCount > 0) parts.push(`${data.readOnlyCount} read`);
@@ -473,6 +483,14 @@ export default function ChatInput({
                 </Tooltip>
               );
             })}
+            {selectedToolIds.size > 20 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-full border border-green-500/20 group">
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  {selectedToolIds.size} tools connected, it may overwhelm the AI. The next call will disable all tools and enable only those needed for the task.
+                </span>
+              </div>
+            )}
+            </div>
           </div>
         )}
         <AIInputTextarea

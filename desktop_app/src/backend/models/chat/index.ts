@@ -283,7 +283,10 @@ export default class ChatModel {
     // defined in the schema (see chat.ts schema file)
     const [chat] = await db
       .insert(chatsTable)
-      .values({}) // No required fields, all handled by defaults
+      .values({
+        // Set default tools for new chats
+        selectedTools: ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'],
+      })
       .returning(); // SQLite returns the inserted row
 
     return {

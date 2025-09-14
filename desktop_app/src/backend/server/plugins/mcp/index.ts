@@ -462,7 +462,7 @@ export const createArchestraMcpServer = () => {
                   t.analysis?.is_read !== null
                     ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
                     : '';
-                return `  ${status} ${t.name}${analysisInfo}: ${t.description || 'No description'}`;
+                return `  ${status} ${t.id}${analysisInfo}: ${t.description || 'No description'}`;
               })
               .join('\n');
 
@@ -498,11 +498,11 @@ export const createArchestraMcpServer = () => {
 
   archestraMcpServer.tool(
     'enable_tools',
-    'Enable specific tools for use in the current chat',
+    'Enable specific tools for use in the current chat. First call list_available_tools to see tool IDs, then pass them here. Example: {"toolIds": ["filesystem__read_file", "filesystem__write_file", "remote-mcp__search_repositories"]}',
     z.object({
       toolIds: z
         .array(z.string())
-        .describe('Array of tool IDs to enable (e.g., ["google__gmail_send", "filesystem__read_file"])'),
+        .describe('Array of tool IDs from list_available_tools output. Example: ["archestra__list_memories", "filesystem__read_file", "remote-mcp__create_issue"]'),
     }) as any,
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global

@@ -9,6 +9,7 @@ import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { useMessageActions } from '@ui/hooks/useMessageActions';
+import { getAllMemories } from '@ui/lib/clients/archestra/api/gen';
 import { useChatStore, useCloudProvidersStore, useOllamaStore, useToolsStore } from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
@@ -18,10 +19,12 @@ export const Route = createFileRoute('/chat')({
 
 function ChatPage() {
   const { getCurrentChat, getCurrentChatTitle, saveDraftMessage, getDraftMessage, clearDraftMessage } = useChatStore();
-  const { selectedToolIds } = useToolsStore();
+  const { selectedToolIds, setOnlyTools } = useToolsStore();
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
+  const [hasTooManyTools, setHasTooManyTools] = useState(false);
+  const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
@@ -30,6 +33,11 @@ function ChatPage() {
 
   // Get current input from draft messages
   const currentInput = currentChat ? getDraftMessage(currentChat.id) : '';
+  
+  // Reset memory loading flag when chat changes
+  useEffect(() => {
+    setHasLoadedMemories(false);
+  }, [currentChatSessionId]);
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
   // Without ref, switching models/providers wouldn't work - it would always use the old values.
@@ -189,7 +197,7 @@ function ChatPage() {
   }, [currentChatSessionId]); // Only depend on session ID to avoid infinite loop
 
   // Simple debounce implementation
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<NodeJS.Timeout | undefined>();
 
   const debouncedSaveDraft = useCallback((chatId: number, content: string) => {
     if (debounceRef.current) {
@@ -211,17 +219,70 @@ function ChatPage() {
     }
   };
 
-  const handleSubmit = (e?: React.FormEvent<HTMLFormElement>) => {
+  const loadMemoriesIfNeeded = async () => {
+    // Only load memories for the first message in a chat
+    if (messages.length === 0 && !hasLoadedMemories) {
+      try {
+        const { data } = await getAllMemories();
+        if (data && data.memories && data.memories.length > 0) {
+          // Format memories as a system message to include in context
+          const memoriesText = data.memories
+            .map((m) => `${m.name}: ${m.value}`)
+            .join('\n');
+          
+          // Add a system message with the memories
+          const systemMessage: UIMessage = {
+            id: 'system-memories',
+            role: 'system',
+            content: `Previous memories loaded:\n${memoriesText}`,
+          };
+          
+          // Prepend the system message to the messages
+          setMessages([systemMessage]);
+        }
+        setHasLoadedMemories(true);
+      } catch (error) {
+        console.error('Failed to load memories:', error);
+        // Continue even if memory loading fails
+        setHasLoadedMemories(true);
+      }
+    }
+  };
+
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (currentInput.trim() && currentChat) {
+      // Load memories before sending the first message
+      await loadMemoriesIfNeeded();
+      
+      let messageText = currentInput;
+      
+      // If more than 20 tools are selected, adjust the tools and message
+      if (hasTooManyTools) {
+        // Set only the list_available_tools and enable_tools from Archestra
+        await setOnlyTools(['archestra__list_available_tools', 'archestra__enable_tools', 'archestra__disable_tools']);
+        
+        // Prepend instruction to the message
+        messageText = `You currently have only list_available_tools and enable_tools enabled. Follow these steps:
+1. Call list_available_tools to see all available tool IDs
+2. Call enable_tools with the specific tool IDs you need, for example: {"toolIds": ["filesystem__read_file", "filesystem__write_file"]}
+3. After enabling the necessary tools, disable Archestra tools using disable_tools.
+4. After, proceed with this task: 
+
+${currentInput}`;
+      }
+      
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
-      sendMessage({ text: currentInput });
+      sendMessage({ text: messageText });
       clearDraftMessage(currentChat.id);
     }
   };
 
-  const handlePromptSelect = (prompt: string) => {
+  const handlePromptSelect = async (prompt: string) => {
+    // Load memories before sending the first message
+    await loadMemoriesIfNeeded();
+    
     setIsSubmitting(true);
     setSubmissionStartTime(Date.now());
     // Directly send the prompt when a tile is clicked
@@ -271,6 +332,7 @@ function ChatPage() {
           isLoading={isLoading}
           isSubmitting={isSubmitting}
           stop={stop}
+          onTooManyTools={setHasTooManyTools}
         />
       </div>
     </div>

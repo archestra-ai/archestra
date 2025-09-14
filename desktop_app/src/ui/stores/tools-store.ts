@@ -27,6 +27,8 @@ interface ToolsState {
 interface ToolsActions {
   addSelectedTool: (toolId: string) => void;
   removeSelectedTool: (toolId: string) => void;
+  clearAllTools: () => void;
+  setOnlyTools: (toolIds: string[]) => void;
 
   setToolChoice: (choice: ToolChoice) => void;
 
@@ -95,6 +97,49 @@ export const useToolsStore = create<ToolsStore>()(
             });
           } catch (error) {
             console.error('Failed to save tool deselection to backend:', error);
+          }
+        }
+      },
+
+      clearAllTools: async () => {
+        const currentChat = useChatStore.getState().getCurrentChat();
+
+        set({ selectedToolIds: new Set() });
+
+        // Save to backend if we have a current chat
+        if (currentChat) {
+          try {
+            await deselectAllChatTools({
+              path: { id: currentChat.id.toString() },
+            });
+          } catch (error) {
+            console.error('Failed to clear all tools in backend:', error);
+          }
+        }
+      },
+
+      setOnlyTools: async (toolIds: string[]) => {
+        const currentChat = useChatStore.getState().getCurrentChat();
+
+        set({ selectedToolIds: new Set(toolIds) });
+
+        // Save to backend if we have a current chat
+        if (currentChat) {
+          try {
+            // First clear all tools
+            await deselectAllChatTools({
+              path: { id: currentChat.id.toString() },
+            });
+
+            // Then select only the specified tools
+            if (toolIds.length > 0) {
+              await selectChatTools({
+                path: { id: currentChat.id.toString() },
+                body: { toolIds },
+              });
+            }
+          } catch (error) {
+            console.error('Failed to set only specified tools in backend:', error);
           }
         }
       },
@@ -247,4 +292,29 @@ websocketService.subscribe('tool-analysis-progress', ({ payload }) => {
   // Log progress but don't refetch - wait for tools-updated event with actual data
   console.log('Tool analysis progress:', payload);
   // The actual tool updates will come through tools-updated event
+});
+
+// Subscribe to chat tools selection updates (when enable_tools/disable_tools are called)
+websocketService.subscribe('chat-tools-updated', ({ payload }) => {
+  const { chatId, selectedTools } = payload;
+  const currentChat = useChatStore.getState().getCurrentChat();
+  
+  // Only update if it's for the current chat
+  if (currentChat && currentChat.id === chatId) {
+    const { availableTools } = useToolsStore.getState();
+    
+    if (selectedTools === null) {
+      // null means all tools are selected
+      useToolsStore.setState({
+        selectedToolIds: new Set(availableTools.map(tool => tool.id))
+      });
+    } else {
+      // Update to the specific set of tools
+      useToolsStore.setState({
+        selectedToolIds: new Set(selectedTools)
+      });
+    }
+    
+    console.log(`Tools updated for chat ${chatId}:`, selectedTools?.length ?? 'all', 'tools selected');
+  }
 });

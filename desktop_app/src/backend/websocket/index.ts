@@ -31,8 +31,14 @@ const MemoryUpdatedPayloadSchema = z.object({
   ),
 });
 
+const ChatToolsUpdatedPayloadSchema = z.object({
+  chatId: z.number(),
+  selectedTools: z.array(z.string()).nullable(),
+});
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
+  z.object({ type: z.literal('chat-tools-updated'), payload: ChatToolsUpdatedPayloadSchema }),
   z.object({ type: z.literal('sandbox-status-update'), payload: SandboxStatusSummarySchema }),
   z.object({
     type: z.literal('ollama-model-download-progress'),

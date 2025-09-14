@@ -102,20 +102,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         currentChatSessionId: initializedChat.sessionId,
       }));
 
-      // Save the current tool selection to the new chat
+      // Set the tools store to match the new chat's default tools
       const toolsStore = useToolsStore.getState();
-      if (toolsStore.selectedToolIds.size > 0) {
-        // If specific tools are selected, save them to the new chat
-        try {
-          await selectChatTools({
-            path: { id: initializedChat.id.toString() },
-            body: { toolIds: Array.from(toolsStore.selectedToolIds) },
-          });
-        } catch (error) {
-          console.error('Failed to save initial tool selection to new chat:', error);
-        }
-      }
-      // If no tools selected or all tools selected, leave as null (default)
+      // Clear current selection first
+      toolsStore.selectedToolIds.clear();
+      
+      // Add the default tools that were set in the backend
+      const defaultTools = ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'];
+      defaultTools.forEach((id) => toolsStore.selectedToolIds.add(id));
+      
+      // Trigger a re-render by creating a new Set
+      useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
 
       return initializedChat;
     } catch (error) {

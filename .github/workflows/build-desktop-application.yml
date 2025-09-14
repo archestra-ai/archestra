@@ -41,18 +41,28 @@ jobs:
           - platform: macos-13 # Intel (x64)
             os: macos
             arch: x64
-          - platform: windows-11-arm
-            os: windows
-            arch: arm64
-          - platform: windows-latest
-            os: windows
-            arch: x64
-          - platform: ubuntu-latest
-            os: linux
-            arch: x64
-          - platform: ubuntu-24.04-arm
-            os: linux
-            arch: arm64
+          # TODO: windows and linux builds are currently not working. Once the following issues are resolved,
+          # uncomment the following lines:
+          #
+          # Linux:
+          # - https://github.com/archestra-ai/archestra/issues/361
+          #
+          # Windows:
+          # - https://github.com/archestra-ai/archestra/issues/364
+          # - working code signing on CI (https://github.com/archestra-ai/archestra/pull/367)
+          #
+          # - platform: windows-11-arm
+          #   os: windows
+          #   arch: arm64
+          # - platform: windows-latest
+          #   os: windows
+          #   arch: x64
+          # - platform: ubuntu-latest
+          #   os: linux
+          #   arch: x64
+          # - platform: ubuntu-24.04-arm
+          #   os: linux
+          #   arch: arm64
     permissions:
       # publisher requires write permissions to the repo's contents to create new releases
       # https://www.electronforge.io/config/publishers/github#authentication

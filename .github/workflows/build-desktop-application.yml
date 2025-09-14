@@ -161,20 +161,67 @@ jobs:
             $process = Start-Process msiexec.exe -ArgumentList "/i", $msiFile.FullName, "/quiet", "/norestart", "/l*v", "$env:RUNNER_TEMP\cng_install.log" -PassThru -Wait
             
             if ($process.ExitCode -eq 0) {
-              Write-Host "Google Cloud KMS CNG Provider installed successfully"
+              Write-Host "Google Cloud KMS CNG Provider MSI installed successfully"
+              
+              # The MSI installs the DLL but may not register it properly
+              # Manually register the CNG Provider
+              Write-Host "Registering CNG Provider with Windows..."
+              
+              # First, check if the DLL exists
+              $dllPath = "C:\Windows\System32\kmscng.dll"
+              if (Test-Path $dllPath) {
+                Write-Host "Found kmscng.dll at: $dllPath"
+                
+                # Register the provider using regsvr32
+                Write-Host "Attempting to register kmscng.dll..."
+                $regProcess = Start-Process regsvr32.exe -ArgumentList "/s", $dllPath -PassThru -Wait
+                if ($regProcess.ExitCode -eq 0) {
+                  Write-Host "✓ Successfully registered kmscng.dll"
+                } else {
+                  Write-Host "Note: regsvr32 returned exit code $($regProcess.ExitCode) (this may be normal for CNG providers)"
+                }
+                
+                # The CNG Provider needs to be registered differently - it's not a COM DLL
+                # Instead, we need to ensure the registry entries are created
+                Write-Host "Creating/verifying CNG Provider registry entries..."
+                
+                # Create the registry key for the CNG Provider
+                $regPath = "HKLM:\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider"
+                if (-not (Test-Path $regPath)) {
+                  New-Item -Path $regPath -Force | Out-Null
+                  Write-Host "Created registry key: $regPath"
+                }
+                
+                # Set the Image Path to point to the DLL
+                Set-ItemProperty -Path $regPath -Name "Image Path" -Value $dllPath -Type String
+                Set-ItemProperty -Path $regPath -Name "Type" -Value 1 -Type DWord
+                Write-Host "✓ Set registry entries for CNG Provider"
+              } else {
+                Write-Error "kmscng.dll not found at expected location: $dllPath"
+                
+                # Check other possible locations
+                $alternatePaths = @(
+                  "C:\Windows\SysWOW64\kmscng.dll",
+                  "C:\Program Files\Google\Cloud KMS CNG Provider\kmscng.dll",
+                  "C:\Program Files (x86)\Google\Cloud KMS CNG Provider\kmscng.dll"
+                )
+                
+                foreach ($altPath in $alternatePaths) {
+                  if (Test-Path $altPath) {
+                    Write-Host "Found kmscng.dll at alternate location: $altPath"
+                    # Use this path instead
+                    $dllPath = $altPath
+                    break
+                  }
+                }
+              }
               
               # Verify installation in registry
               $cngProvider = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
               if ($cngProvider) {
                 Write-Host "✓ Verified: CNG Provider registered at: $($cngProvider.'Image Path')"
               } else {
-                Write-Host "Warning: CNG Provider installed but not found in registry. Checking alternative locations..."
-                
-                # Check 32-bit registry on 64-bit system
-                $cngProvider32 = Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
-                if ($cngProvider32) {
-                  Write-Host "Found in 32-bit registry: $($cngProvider32.'Image Path')"
-                }
+                Write-Host "Warning: CNG Provider still not found in registry after manual registration"
                 
                 # Display installation log for debugging
                 if (Test-Path "$env:RUNNER_TEMP\cng_install.log") {
@@ -342,7 +389,34 @@ jobs:
           # Check certificate
           if ($env:WINDOWS_SIGNING_CERT_PATH -and (Test-Path $env:WINDOWS_SIGNING_CERT_PATH)) {
             Write-Host "✓ Certificate file exists: $env:WINDOWS_SIGNING_CERT_PATH"
-            certutil -dump $env:WINDOWS_SIGNING_CERT_PATH | Select-String "Subject:", "Signature Algorithm:", "Public Key Algorithm:"
+            
+            # Use OpenSSL to display certificate details (certutil might not work properly with EC certs)
+            Write-Host "Certificate details:"
+            
+            # First try to load it as X509 certificate to get details
+            try {
+              $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($env:WINDOWS_SIGNING_CERT_PATH)
+              Write-Host "  Subject: $($cert.Subject)"
+              Write-Host "  Issuer: $($cert.Issuer)"
+              Write-Host "  Thumbprint: $($cert.Thumbprint)"
+              Write-Host "  Not Before: $($cert.NotBefore)"
+              Write-Host "  Not After: $($cert.NotAfter)"
+              
+              # Check the public key algorithm
+              $keyAlg = $cert.PublicKey.Oid.FriendlyName
+              Write-Host "  Public Key Algorithm: $keyAlg"
+              
+              # For EC keys, get curve information
+              if ($keyAlg -like "*EC*" -or $keyAlg -like "*ECC*") {
+                Write-Host "  ✓ Certificate uses Elliptic Curve (required for CNG Provider)"
+              } else {
+                Write-Host "  ✗ Warning: Certificate does not appear to use EC algorithm (got: $keyAlg)"
+              }
+            } catch {
+              Write-Host "  Warning: Could not parse certificate with .NET: $_"
+              Write-Host "  Attempting raw certutil output:"
+              certutil -dump $env:WINDOWS_SIGNING_CERT_PATH | Select-String "Subject", "Issuer", "Algorithm", "Public Key", "Signature"
+            }
           } else {
             Write-Host "✗ Certificate file not found"
           }

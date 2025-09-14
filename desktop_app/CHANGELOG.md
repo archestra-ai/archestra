@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.7-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.6-alpha...desktop_app-v0.0.7-alpha) (2025-09-14)
+
+
+### Bug Fixes
+
+* cut/disable unstable features ([#373](https://github.com/archestra-ai/archestra/issues/373)) ([1abf08a](https://github.com/archestra-ai/archestra/commit/1abf08adca5f540572d0f00f4ce2e1e5825956a2))
+* publish `.zip` build artifacts for mac ([4e11595](https://github.com/archestra-ai/archestra/commit/4e1159591dc82e1c75e1a7abd564e1ee35900adc))
+
 ## [0.0.6-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.5-alpha...desktop_app-v0.0.6-alpha) (2025-09-14)
 
 

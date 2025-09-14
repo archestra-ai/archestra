@@ -31,6 +31,8 @@ on:
         required: false
       WINDOWS_CODE_SIGNING_SERVICE_ACCOUNT:
         required: false
+      WINDOWS_SIGNING_CERT_BASE64:
+        required: false
 
 jobs:
   build-desktop-application:
@@ -148,6 +150,47 @@ jobs:
           } else {
             Write-Error "MSI file not found in the extracted archive"
             exit 1
+          }
+
+      - name: Generate and install Windows signing certificate
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        env:
+          WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+        run: |
+          Write-Host "Installing Windows signing certificate..."
+
+          # Decode the certificate from base64
+          $certPath = "$env:RUNNER_TEMP\archestra-signing.crt"
+
+          if ($env:WINDOWS_SIGNING_CERT_BASE64) {
+            Write-Host "Using certificate from GitHub secret"
+            [System.IO.File]::WriteAllBytes($certPath, [System.Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_BASE64))
+          } else {
+            Write-Host "Warning: No certificate found in WINDOWS_SIGNING_CERT_BASE64 secret"
+            Write-Host "Attempting to continue without certificate (may fail during signing)"
+          }
+
+          # Install certificate to Windows certificate store if it exists
+          if (Test-Path $certPath) {
+            Write-Host "Installing certificate to Windows certificate store..."
+
+            # Import to CurrentUser\My (Personal) store
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("My", "CurrentUser")
+            $store.Open("ReadWrite")
+            $store.Add($cert)
+            $store.Close()
+
+            Write-Host "Certificate installed successfully. Thumbprint: $($cert.Thumbprint)"
+            Write-Host "Subject: $($cert.Subject)"
+
+            # Also try using certutil for additional installation
+            certutil -user -addstore "My" $certPath
+
+            # Set environment variable for forge config to use
+            echo "WINDOWS_SIGNING_CERT_PATH=$certPath" >> $env:GITHUB_ENV
+          } else {
+            Write-Host "No certificate file found, continuing without certificate installation"
           }
 
       - name: Build desktop application

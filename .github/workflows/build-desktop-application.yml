@@ -170,15 +170,36 @@ jobs:
           project_id: ${{ secrets.WINDOWS_CODE_SIGNING_GCP_KMS_PROJECT_ID }}
 
       # TODO: remove this when done testing...
-      - name: Verify Google Cloud authentication for CNG Provider
+      - name: Configure CNG Provider authentication
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
         run: |
-          Write-Host "Checking Google Cloud credentials..."
+          Write-Host "Setting up Google Cloud authentication for CNG Provider..."
 
-          # Display credential file location for debugging
+          # Display credential file location
           Write-Host "GOOGLE_APPLICATION_CREDENTIALS: $env:GOOGLE_APPLICATION_CREDENTIALS"
 
-          # The auth action should have configured gcloud automatically
+          # The CNG Provider may need credentials in specific Windows locations
+          # Copy credentials to standard Windows locations where Google Cloud tools expect them
+          $credFile = $env:GOOGLE_APPLICATION_CREDENTIALS
+
+          # Create necessary directories
+          $appDataPath = "$env:APPDATA\gcloud"
+          if (-not (Test-Path $appDataPath)) {
+            New-Item -ItemType Directory -Path $appDataPath -Force | Out-Null
+          }
+
+          # Copy credentials to AppData location
+          Copy-Item -Path $credFile -Destination "$appDataPath\application_default_credentials.json" -Force
+          Write-Host "Copied credentials to $appDataPath\application_default_credentials.json"
+
+          # Also set up for the CNG Provider which may check ProgramData
+          $programDataPath = "C:\ProgramData\Google\Auth"
+          if (-not (Test-Path $programDataPath)) {
+            New-Item -ItemType Directory -Path $programDataPath -Force | Out-Null
+          }
+          Copy-Item -Path $credFile -Destination "$programDataPath\application_default_credentials.json" -Force
+          Write-Host "Copied credentials to $programDataPath\application_default_credentials.json"
+
           # Verify the configuration
           gcloud config list
 
@@ -186,12 +207,53 @@ jobs:
           Write-Host "Testing KMS access..."
           gcloud kms keys list --location=europe-west1 --keyring=windows-code-signing
 
-      - name: Generate and install Windows signing certificate
+          # List the key versions to check algorithm
+          Write-Host "Checking key algorithm..."
+          gcloud kms keys versions list --key=archestra-windows-signing-ec --keyring=windows-code-signing --location=europe-west1
+
+      - name: Install Windows signing certificate and verify SignTool
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
         env:
           WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
         run: |
           Write-Host "Installing Windows signing certificate..."
+
+          # CRITICAL: Ensure we're using x64 SignTool (not x86)
+          # The CNG Provider requires x64 SignTool to work properly
+          Write-Host "Checking SignTool architecture..."
+
+          # Find all SignTool versions
+          $signTools = @()
+          $kitPaths = @(
+            "C:\Program Files (x86)\Windows Kits\10\bin",
+            "C:\Program Files\Windows Kits\10\bin"
+          )
+
+          foreach ($kitPath in $kitPaths) {
+            if (Test-Path $kitPath) {
+              $versions = Get-ChildItem -Path $kitPath -Directory | Sort-Object Name -Descending
+              foreach ($version in $versions) {
+                $x64SignTool = Join-Path $version.FullName "x64\signtool.exe"
+                if (Test-Path $x64SignTool) {
+                  $signTools += $x64SignTool
+                  Write-Host "Found x64 SignTool: $x64SignTool"
+                }
+              }
+            }
+          }
+
+          if ($signTools.Count -eq 0) {
+            Write-Error "No x64 SignTool found! Windows signing will fail."
+            exit 1
+          }
+
+          # Use the first (newest) x64 SignTool found
+          $signToolPath = $signTools[0]
+          Write-Host "Using SignTool: $signToolPath"
+
+          # Set environment variable for Electron Forge to use
+          echo "SIGNTOOL_PATH=$signToolPath" >> $env:GITHUB_ENV
+          Write-Host "Set SIGNTOOL_PATH environment variable"
 
           # Decode the certificate from base64
           $certPath = "$env:RUNNER_TEMP\archestra-signing.crt"
@@ -227,12 +289,70 @@ jobs:
             Write-Host "No certificate file found, continuing without certificate installation"
           }
 
+      - name: Verify Windows signing configuration
+        if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        run: |
+          Write-Host "=== Windows Signing Configuration Verification ==="
+
+          # Check SignTool path
+          if ($env:SIGNTOOL_PATH) {
+            Write-Host "✓ SignTool path is set: $env:SIGNTOOL_PATH"
+            & $env:SIGNTOOL_PATH /? 2>&1 | Select-Object -First 2
+          } else {
+            Write-Host "✗ SIGNTOOL_PATH not set"
+          }
+
+          # Check certificate
+          if ($env:WINDOWS_SIGNING_CERT_PATH -and (Test-Path $env:WINDOWS_SIGNING_CERT_PATH)) {
+            Write-Host "✓ Certificate file exists: $env:WINDOWS_SIGNING_CERT_PATH"
+            certutil -dump $env:WINDOWS_SIGNING_CERT_PATH | Select-String "Subject:", "Signature Algorithm:", "Public Key Algorithm:"
+          } else {
+            Write-Host "✗ Certificate file not found"
+          }
+
+          # Check KMS key resource ID
+          if ($env:WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID) {
+            Write-Host "✓ KMS key resource ID is set: $env:WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID"
+          } else {
+            Write-Host "✗ KMS key resource ID not set"
+          }
+
+          # Check Google Cloud authentication files
+          Write-Host "`nAuthentication file locations:"
+          $authLocations = @(
+            $env:GOOGLE_APPLICATION_CREDENTIALS,
+            "$env:APPDATA\gcloud\application_default_credentials.json",
+            "C:\ProgramData\Google\Auth\application_default_credentials.json"
+          )
+
+          foreach ($location in $authLocations) {
+            if ($location -and (Test-Path $location)) {
+              Write-Host "✓ Found: $location"
+            } else {
+              Write-Host "✗ Missing: $location"
+            }
+          }
+
+          # Test CNG Provider is installed
+          Write-Host "`nChecking CNG Provider installation..."
+          $cngProvider = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
+          if ($cngProvider) {
+            Write-Host "✓ Google Cloud KMS CNG Provider is installed"
+            Write-Host "  Image Path: $($cngProvider.'Image Path')"
+          } else {
+            Write-Host "✗ Google Cloud KMS CNG Provider not found in registry"
+          }
+
+          Write-Host "=== End Configuration Verification ==="
+
       - name: Build desktop application
         env:
           # Use app token if available, fallback to GITHUB_TOKEN for fork PRs
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pass Google Cloud credentials to the build process for Windows signing
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+          # Pass the x64 SignTool path if found
+          SIGNTOOL_PATH: ${{ env.SIGNTOOL_PATH }}
           # These will be empty for fork PRs, which is fine - forge.config.ts handles it
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}

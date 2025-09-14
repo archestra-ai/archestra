@@ -44,6 +44,9 @@ for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
  * /v                - Verbose output for debugging and verification
  * /debug            - Additional debug output for troubleshooting
  *
+ * IMPORTANT: The Google Cloud KMS CNG Provider requires the x64 version of SignTool.
+ * Using the x86 version will result in "No private key is available" errors.
+ *
  * Note: We're using the /csp and /kc approach as documented in Google Cloud KMS docs
  * instead of the /n "gcpkms://..." approach
  *
@@ -53,6 +56,8 @@ const windowsSignConfig = {
   signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID}${process.env.WINDOWS_SIGNING_CERT_PATH ? ` /f ${process.env.WINDOWS_SIGNING_CERT_PATH}` : ''} /v /debug`,
   timestampServer: 'http://timestamp.digicert.com',
   hashes: ['sha256'],
+  // Use the x64 SignTool if specified in environment (set by CI)
+  ...(process.env.SIGNTOOL_PATH ? { signToolPath: process.env.SIGNTOOL_PATH } : {}),
 } as any;
 
 const forgeConfig: ForgeConfig = {

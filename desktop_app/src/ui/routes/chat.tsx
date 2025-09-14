@@ -318,6 +318,55 @@ ${currentInput}`;
     sendMessage({ text: prompt });
   };
 
+  const handleRerunAgent = async () => {
+    // Get the first user message (the original prompt)
+    const firstUserMessage = messages.find(msg => msg.role === 'user');
+    
+    if (!firstUserMessage) {
+      return;
+    }
+    
+    // Extract text content from the message
+    let messageText = '';
+    
+    // Check for parts property (AI SDK format)
+    if ((firstUserMessage as any).parts) {
+      const textPart = (firstUserMessage as any).parts.find((part: any) => part.type === 'text');
+      if (textPart?.text) {
+        messageText = textPart.text;
+      }
+    } else if (typeof firstUserMessage.content === 'string') {
+      messageText = firstUserMessage.content;
+    } else if (Array.isArray(firstUserMessage.content)) {
+      // Handle array of content parts
+      const textPart = firstUserMessage.content.find((part: any) => part.type === 'text');
+      if (textPart?.text) {
+        messageText = textPart.text;
+      }
+    }
+    
+    if (!messageText) {
+      return;
+    }
+    
+    // Clear all messages to start fresh
+    setMessages([]);
+    
+    // Reset memory loading flag to load memories again
+    setHasLoadedMemories(false);
+    
+    // Load memories if needed
+    await loadMemoriesIfNeeded();
+    
+    // Re-run with the first user message
+    setIsSubmitting(true);
+    setSubmissionStartTime(Date.now());
+    sendMessage({ text: messageText });
+    if (currentChat) {
+      setPendingPrompts(currentChatSessionId, messageText);
+    }
+  };
+
   const isSubmittingDisabled = !currentInput.trim() || isLoading || isSubmitting || !!pendingPrompt;
 
   if (!currentChat) {
@@ -335,13 +384,13 @@ ${currentInput}`;
           <EmptyChatState onPromptSelect={handlePromptSelect} />
         </div>
         <ChatInput
-          currentInput=""
-          isDisabled={true}
+          input=""
+          disabled={true}
           isLoading={false}
-          onInputChange={() => {}}
-          onSubmit={() => {}}
-          onStop={() => {}}
-          submissionStartTime={0}
+          handleInputChange={() => {}}
+          handleSubmit={() => {}}
+          stop={() => {}}
+          hasMessages={false}
         />
       </div>
     );
@@ -388,6 +437,7 @@ ${currentInput}`;
           stop={stop}
           onTooManyTools={setHasTooManyTools}
           hasMessages={messages.length > 0}
+          onRerunAgent={handleRerunAgent}
         />
       </div>
     </div>

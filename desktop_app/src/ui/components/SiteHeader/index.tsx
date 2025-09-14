@@ -33,8 +33,12 @@ export function SiteHeader() {
   } | null>(null);
 
   useEffect(() => {
-    window.electronAPI.getAppInfo().then(setAppInfo);
-    window.electronAPI.getSystemInfo().then(setSystemInfo);
+    if (window.electronAPI?.getAppInfo) {
+      window.electronAPI.getAppInfo().then(setAppInfo);
+    }
+    if (window.electronAPI?.getSystemInfo) {
+      window.electronAPI.getSystemInfo().then(setSystemInfo);
+    }
   }, []);
 
   let breadcrumbs: string[] = [];
@@ -92,12 +96,20 @@ What actually happened?
 
     const issueTitle = encodeURIComponent('[Put the Bug title here] ');
     const url = `https://github.com/archestra-ai/archestra/issues/new?title=${issueTitle}&body=${issueBody}`;
-    window.electronAPI.openExternal(url);
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const handleGHStar = () => {
     const url = `https://github.com/archestra-ai/archestra`;
-    window.electronAPI.openExternal(url);
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   return (

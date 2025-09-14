@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, FileText, Loader2, X } from 'lucide-react';
+import { AlertCircle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
@@ -38,6 +38,7 @@ interface ChatInputProps {
   stop: () => void;
   onTooManyTools?: (hasTooMany: boolean) => void;
   hasMessages?: boolean;
+  onRerunAgent?: () => void;
 }
 
 const PLACEHOLDER_EXAMPLES = [
@@ -62,6 +63,7 @@ export default function ChatInput({
   stop,
   onTooManyTools,
   hasMessages = false,
+  onRerunAgent,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
@@ -604,7 +606,27 @@ export default function ChatInput({
             </Tooltip>
           </AIInputTools>
 
-          <AIInputSubmit onClick={isLoading ? stop : undefined} disabled={disabled} />
+          <div className="flex items-center gap-2">
+            {hasMessages && onRerunAgent && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AIInputButton 
+                    onClick={onRerunAgent} 
+                    disabled={false}
+                    type="button"
+                    className="px-3"
+                  >
+                    <RefreshCw size={16} />
+                    <span className="ml-1.5 text-sm">Restart Agent</span>
+                  </AIInputButton>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <span>Will remove all agent chat history and run the agent again</span>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <AIInputSubmit onClick={isLoading ? stop : undefined} disabled={disabled} />
+          </div>
         </AIInputToolbar>
       </AIInput>
     </TooltipProvider>

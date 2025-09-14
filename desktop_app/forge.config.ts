@@ -8,7 +8,7 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import type { WindowsSignOptions } from '@electron/packager';
+import { sign } from '@electron/windows-sign';
 import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
@@ -49,11 +49,11 @@ for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
  *
  * See https://cloud.google.com/kms/docs/reference/cng-signtool for more information
  */
-const windowsSignConfig: WindowsSignOptions = {
+const windowsSignConfig = {
   signWithParams: `/csp "Google Cloud KMS Provider" /kc ${process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID} /v /debug`,
   timestampServer: 'http://timestamp.digicert.com',
-  hashes: ['sha256' as any],
-};
+  hashes: ['sha256'],
+} as any;
 
 const forgeConfig: ForgeConfig = {
   packagerConfig: {
@@ -90,7 +90,7 @@ const forgeConfig: ForgeConfig = {
     ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
           osxSign: {
-            optionsForFile: (filePath) => ({
+            optionsForFile: (_filePath) => ({
               /**
                * Use entitlements to allow necessary exceptions
                */
@@ -165,7 +165,6 @@ const forgeConfig: ForgeConfig = {
       // Sign Windows bundled binaries before packaging
       if (IS_WINDOWS && windowsSignConfig) {
         console.log('Signing bundled Windows binaries...');
-        const { sign } = await import('@electron/windows-sign');
 
         for (const binaryFilePath of binaryFilePaths) {
           try {
@@ -173,7 +172,7 @@ const forgeConfig: ForgeConfig = {
             await sign({
               files: [binaryFilePath],
               ...windowsSignConfig,
-            });
+            } as any);
           } catch (error) {
             console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
           }
@@ -223,7 +222,7 @@ const forgeConfig: ForgeConfig = {
       authors,
       description,
       setupIcon: './assets/icons/icon.ico',
-      ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID ? { windowsSign: windowsSignConfig } : {}),
+      ...(process.env.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID ? { windowsSign: windowsSignConfig as any } : {}),
     }),
     /**
      * NOTE: zips are still required for macOS and Windows as these are needed for the auto-updater to function properly

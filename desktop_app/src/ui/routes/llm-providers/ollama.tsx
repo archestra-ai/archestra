@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Check, Clock, Cpu, Download, HardDrive, Loader2, Search, Type, Wrench } from 'lucide-react';
+import { AlertCircle, Bot, Check, CheckCircle, Clock, Cpu, Download, HardDrive, Loader2, Search, Type, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
+import DetailedProgressBar from '@ui/components/DetailedProgressBar';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@ui/components/ui/card';
@@ -20,7 +21,7 @@ function OllamaProviderPage() {
   const [selectedLabel, setSelectedLabel] = useState<string>('all');
   const [toolCallsOnly, setToolCallsOnly] = useState(false);
 
-  const { installedModels, downloadModel, downloadProgress, modelsBeingDownloaded } = useOllamaStore();
+  const { installedModels, downloadModel, downloadProgress, modelsBeingDownloaded, requiredModelsStatus, requiredModelsDownloadProgress, loadingRequiredModels } = useOllamaStore();
 
   const availableModels = useAvailableModels();
   const allAvailableModelLabels = useAllAvailableModelLabels();
@@ -56,10 +57,66 @@ function OllamaProviderPage() {
 
   return (
     <>
+      <div className="space-y-3 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5" />
+              Local Models
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Required Models</h3>
+              <p className="text-sm text-muted-foreground">
+                We ensure that the following models are installed and available for use for various AI features throughout
+                the application.
+              </p>
+              {loadingRequiredModels ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking model status...
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {requiredModelsStatus.map(({ model: modelName, reason, installed }) => {
+                    const modelDownloadProgress = requiredModelsDownloadProgress[modelName];
+                    const iconDownloadProgressStatusMap = {
+                      downloading: <Loader2 className="h-4 w-4 animate-spin" />,
+                      verifying: <CheckCircle className="h-4 w-4 text-green-500" />,
+                      completed: <CheckCircle className="h-4 w-4 text-green-500" />,
+                      error: <AlertCircle className="h-4 w-4 text-red-500" />,
+                    };
+                    let icon: React.JSX.Element;
+
+                    if (installed) {
+                      icon = iconDownloadProgressStatusMap['completed'];
+                    } else {
+                      icon = iconDownloadProgressStatusMap[modelDownloadProgress?.status || 'verifying'];
+                    }
+
+                    return (
+                      <DetailedProgressBar
+                        key={modelName}
+                        icon={icon}
+                        title={modelName}
+                        description={reason}
+                        percentage={modelDownloadProgress?.progress}
+                        error={modelDownloadProgress?.status === 'error' ? modelDownloadProgress?.message : null}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Ollama Model Library</h1>
-          <p className="text-muted-foreground">Discover and download AI models from the Ollama library</p>
+          <h1 className="text-2xl font-bold">Local Model Library</h1>
+          <p className="text-muted-foreground">Discover and download AI models to run locally on your device</p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4">

@@ -35,7 +35,7 @@ export default function CloudProviderConfigDialog({ provider, onClose }: CloudPr
         </DialogHeader>
 
         <div className="space-y-4">
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="apiKey">API Key</Label>
             <Input
               id="apiKey"
@@ -43,17 +43,19 @@ export default function CloudProviderConfigDialog({ provider, onClose }: CloudPr
               placeholder={provider.apiKeyPlaceholder}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
+              className="mt-1"
             />
           </div>
 
-          <a
-            href={provider.apiKeyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-blue-500 hover:underline"
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              window.electronAPI.openExternal(provider.apiKeyUrl);
+            }}
+            className="text-sm text-blue-500 hover:underline text-left"
           >
             Get API Key →
-          </a>
+          </button>
 
           <div className="text-sm text-muted-foreground">
             Note: API keys are currently stored in the local database. Secure storage with OS-level encryption is coming

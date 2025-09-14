@@ -217,13 +217,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (newChats.length === 0) {
         /**
-         * Remove the deleted chat from the state and then create a new one
-         *
-         * there should never be a case where no chat exists..
+         * Create a new chat first before clearing the old state
+         * to avoid a state where there's no current chat
          */
-        set({ chats: [], currentChatSessionId: null, draftMessages: newDrafts });
+        const { data } = await createChat({
+          body: {
+            llm_provider: 'ollama',
+          },
+        });
 
-        await get().createNewChat();
+        if (!data) {
+          throw new Error('No data returned from create chat API');
+        }
+
+        const initializedChat = initializeChat(data);
+        
+        // Update state atomically with the new chat already created
+        set({ 
+          chats: [initializedChat], 
+          currentChatSessionId: initializedChat.sessionId, 
+          draftMessages: newDrafts 
+        });
+
+        // Set the tools store to match the new chat's default tools
+        const toolsStore = useToolsStore.getState();
+        toolsStore.selectedToolIds.clear();
+        const defaultTools = ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'];
+        defaultTools.forEach((id) => toolsStore.selectedToolIds.add(id));
+        useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
       } else {
         set({ chats: newChats, currentChatSessionId: newChats[0].sessionId, draftMessages: newDrafts });
       }

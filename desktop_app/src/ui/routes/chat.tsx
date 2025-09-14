@@ -210,14 +210,18 @@ function ChatPage() {
 
   // Load messages from database when chat changes
   useEffect(() => {
-    if (currentChatMessages && currentChatMessages.length > 0) {
-      // Messages are already UIMessage type
-      setMessages(currentChatMessages);
-    } else {
-      // Clear messages when no chat or empty chat
-      setMessages([]);
+    // Only update messages if we have a valid chat
+    if (currentChat && currentChatSessionId) {
+      if (currentChatMessages && currentChatMessages.length > 0) {
+        // Messages are already UIMessage type
+        setMessages(currentChatMessages);
+      } else {
+        // Clear messages when chat exists but has no messages
+        setMessages([]);
+      }
     }
-  }, [currentChatSessionId, currentChatMessages]); // Now also depend on currentChatMessages
+    // Don't call setMessages when there's no chat to avoid triggering updates during deletion
+  }, [currentChatSessionId, currentChatMessages, currentChat]); // Now also depend on currentChat
 
   // Simple debounce implementation
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -323,6 +327,26 @@ ${currentInput}`;
 
   const isChatEmpty = messages.length === 0;
 
+  // Early return if no current chat exists (e.g., during deletion)
+  if (!currentChat) {
+    return (
+      <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <EmptyChatState onPromptSelect={handlePromptSelect} />
+        </div>
+        <ChatInput
+          currentInput=""
+          isDisabled={true}
+          isLoading={false}
+          onInputChange={() => {}}
+          onSubmit={() => {}}
+          onStop={() => {}}
+          submissionStartTime={0}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
       {isChatEmpty && !pendingPrompt ? (
@@ -363,6 +387,7 @@ ${currentInput}`;
           disabled={isSubmittingDisabled}
           stop={stop}
           onTooManyTools={setHasTooManyTools}
+          hasMessages={messages.length > 0}
         />
       </div>
     </div>

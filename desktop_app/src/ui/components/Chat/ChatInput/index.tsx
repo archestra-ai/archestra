@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertCircle, FileText, Loader2, X } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
@@ -37,7 +37,21 @@ interface ChatInputProps {
   disabled: boolean;
   stop: () => void;
   onTooManyTools?: (hasTooMany: boolean) => void;
+  hasMessages?: boolean;
 }
+
+const PLACEHOLDER_EXAMPLES = [
+  "For example: Read my gmail inbox, find all questions from investors, check slack's #general channel and prepare answers as email drafts",
+  "For example: Open my linkedin and find all people who mention AI in their profile. Give me a list sorted by mutual connections",
+  "For example: Analyze my calendar for next week and suggest optimal meeting times for a 2-hour workshop",
+  "For example: Review my GitHub PRs, summarize the feedback, and draft responses for each comment",
+  "For example: Check my Notion tasks, prioritize them by deadline, and create a daily schedule for tomorrow",
+  "For example: Search my Google Drive for quarterly reports, extract key metrics, and create a summary table",
+  "For example: Monitor my Twitter mentions, identify customer complaints, and draft personalized responses",
+  "For example: Scan my Jira tickets, identify blockers, and suggest solutions based on similar resolved issues",
+  "For example: Review my email subscriptions, identify unused services, and draft cancellation emails",
+  "For example: Analyze my Spotify listening history and create a personalized workout playlist based on BPM"
+];
 
 export default function ChatInput({
   input,
@@ -47,12 +61,25 @@ export default function ChatInput({
   disabled,
   stop,
   onTooManyTools,
+  hasMessages = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
+  
+  // Rotating placeholder state
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  
+  // Rotate placeholder every 7 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_EXAMPLES.length);
+    }, 7000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Use the selected model from Ollama store
   const currentModel = selectedModel || '';
@@ -493,15 +520,46 @@ export default function ChatInput({
             </div>
           </div>
         )}
-        <AIInputTextarea
-          value={input}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="What would you like to know?"
-          disabled={false}
-          minHeight={48}
-          maxHeight={164}
-        />
+        <div className="relative">
+          <AIInputTextarea
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder=""
+            disabled={false}
+            minHeight={48}
+            maxHeight={164}
+            className="relative z-10"
+          />
+          {!input && !hasMessages && (
+            <div className="absolute inset-0 flex items-start pointer-events-none overflow-hidden">
+              <div className="relative w-full h-full pt-2.5 px-4">
+                {PLACEHOLDER_EXAMPLES.map((example, index) => {
+                  const isActive = index === placeholderIndex;
+                  const isPrevious = index === (placeholderIndex - 1 + PLACEHOLDER_EXAMPLES.length) % PLACEHOLDER_EXAMPLES.length;
+                  
+                  return (
+                    <div
+                      key={index}
+                      className="absolute inset-x-4 text-muted-foreground"
+                      style={{
+                        transition: 'all 2s ease-in-out',
+                        opacity: isActive ? 1 : 0,
+                        transform: isActive 
+                          ? 'translateY(0px)' 
+                          : isPrevious
+                          ? 'translateY(20px)'
+                          : 'translateY(-20px)',
+                      }}
+                    >
+                      <span className="text-sm">{example}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
         <AIInputToolbar>
           <AIInputTools>
             <AIInputModelSelect value={currentModel} onValueChange={handleModelChange} disabled={false}>

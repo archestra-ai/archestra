@@ -33,12 +33,12 @@ export function DeleteChatConfirmation({ onDelete }: DeleteChatConfirmationProps
           className="opacity-0 group-hover/chat-item:opacity-100 transition-opacity ml-1 cursor-pointer"
         >
           <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-          <span className="sr-only">Delete chat</span>
+          <span className="sr-only">Delete agent</span>
         </button>
       </PopoverTrigger>
       <PopoverContent side="right" align="center" className="w-auto p-3" onClick={(e) => e.stopPropagation()}>
         <div className="space-y-2">
-          <p className="text-sm font-medium">Delete this chat?</p>
+          <p className="text-sm font-medium">Delete this agent?</p>
           <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
           <div className="flex gap-2 pt-2">
             <Button size="sm" variant="destructive" className="cursor-pointer" onClick={handleDelete}>

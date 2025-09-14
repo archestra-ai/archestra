@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ThemeToggler } from '@ui/components/ThemeToggler';
 import { Button } from '@ui/components/ui/button';
 import { useSidebar } from '@ui/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { useChatStore } from '@ui/stores';
 
 import { Breadcrumbs } from './Breadcrumbs';
@@ -40,25 +41,15 @@ export function SiteHeader() {
   const path = location.pathname;
 
   if (path.startsWith('/chat')) {
-    breadcrumbs = ['Chat', getCurrentChatTitle()];
-  } else if (path.startsWith('/llm-providers')) {
-    breadcrumbs = ['LLM Providers'];
-    if (path.includes('/ollama')) {
-      breadcrumbs.push('Ollama');
-    } else if (path.includes('/cloud')) {
-      breadcrumbs.push('Cloud');
-    }
+    breadcrumbs = ['Agents', getCurrentChatTitle()];
+  } else if (path === '/llm-providers/ollama') {
+    breadcrumbs = ['Local models'];
+  } else if (path === '/llm-providers/cloud') {
+    breadcrumbs = ['Cloud models'];
   } else if (path.startsWith('/connectors')) {
-    breadcrumbs = ['Connectors'];
-  } else if (path.startsWith('/settings')) {
-    breadcrumbs = ['Settings'];
-    if (path.includes('/mcp-servers')) {
-      breadcrumbs.push('Servers');
-    } else if (path.includes('/mcp-clients')) {
-      breadcrumbs.push('Clients');
-    } else if (path.includes('/ollama')) {
-      breadcrumbs.push('Ollama');
-    }
+    breadcrumbs = ['MCP Connectors'];
+  } else if (path === '/settings/mcp-clients') {
+    breadcrumbs = ['Use as MCP Proxy'];
   }
 
   const appVersion = appInfo?.version;
@@ -126,20 +117,26 @@ What actually happened?
         >
           <SidebarIcon />
         </Button>
-        <Button
-          className="h-8 cursor-pointer hidden sm:flex"
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            await createNewChat();
-            navigate({ to: '/chat' });
-          }}
-          // @ts-expect-error - WebkitAppRegion is not a valid property
-          style={{ WebkitAppRegion: 'no-drag' }}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          <span className="hidden lg:inline">New Chat</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Button
+                className="h-8 cursor-not-allowed opacity-50 hidden sm:flex"
+                variant="ghost"
+                size="sm"
+                disabled
+                // @ts-expect-error - WebkitAppRegion is not a valid property
+                style={{ WebkitAppRegion: 'no-drag' }}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                <span className="hidden lg:inline">New Agent</span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Sorry, it's an early alpha version, parallel agents are under development. Check back soon!</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
       <div
         className="flex h-[var(--header-height)] flex-1 items-center justify-between px-2 sm:px-4 min-w-0 overflow-hidden"

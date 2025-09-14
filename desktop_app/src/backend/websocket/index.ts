@@ -36,6 +36,20 @@ const ChatToolsUpdatedPayloadSchema = z.object({
   selectedTools: z.array(z.string()).nullable(),
 });
 
+const ToolsUpdatedPayloadSchema = z.object({
+  mcpServerId: z.string(),
+  message: z.string(),
+});
+
+const ToolAnalysisProgressPayloadSchema = z.object({
+  mcpServerId: z.string().optional(),
+  status: z.enum(['started', 'analyzing', 'completed', 'error']),
+  progress: z.number().min(0).max(100).optional(),
+  totalTools: z.number().optional(),
+  message: z.string(),
+  error: z.string().optional(),
+});
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
   z.object({ type: z.literal('chat-tools-updated'), payload: ChatToolsUpdatedPayloadSchema }),
@@ -45,6 +59,8 @@ export const WebSocketMessageSchema = z.discriminatedUnion('type', [
     payload: OllamaModelDownloadProgressWebsocketPayloadSchema,
   }),
   z.object({ type: z.literal('memory-updated'), payload: MemoryUpdatedPayloadSchema }),
+  z.object({ type: z.literal('tools-updated'), payload: ToolsUpdatedPayloadSchema }),
+  z.object({ type: z.literal('tool-analysis-progress'), payload: ToolAnalysisProgressPayloadSchema }),
 ]);
 
 // type ChatTitleUpdatedPayload = z.infer<typeof ChatTitleUpdatedPayloadSchema>;

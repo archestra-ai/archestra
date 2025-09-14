@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.6-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.5-alpha...desktop_app-v0.0.6-alpha) (2025-09-14)
+
+
+### Bug Fixes
+
+* chat running in the background ([#368](https://github.com/archestra-ai/archestra/issues/368)) ([66ef1b8](https://github.com/archestra-ai/archestra/commit/66ef1b8db390597930c204d8565b41cd9a1fd872))
+
 ## [0.0.5-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.4-alpha...desktop_app-v0.0.5-alpha) (2025-09-12)
 
 

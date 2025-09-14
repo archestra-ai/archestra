@@ -156,8 +156,43 @@ jobs:
           if ($msiFile) {
             Write-Host "Found MSI: $($msiFile.FullName)"
             Write-Host "Installing Google Cloud KMS CNG Provider..."
-            Start-Process msiexec.exe -ArgumentList "/i", $msiFile.FullName, "/quiet", "/norestart" -Wait
-            Write-Host "Google Cloud KMS CNG Provider installed successfully"
+            
+            # Install the MSI
+            $process = Start-Process msiexec.exe -ArgumentList "/i", $msiFile.FullName, "/quiet", "/norestart", "/l*v", "$env:RUNNER_TEMP\cng_install.log" -PassThru -Wait
+            
+            if ($process.ExitCode -eq 0) {
+              Write-Host "Google Cloud KMS CNG Provider installed successfully"
+              
+              # Verify installation in registry
+              $cngProvider = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
+              if ($cngProvider) {
+                Write-Host "✓ Verified: CNG Provider registered at: $($cngProvider.'Image Path')"
+              } else {
+                Write-Host "Warning: CNG Provider installed but not found in registry. Checking alternative locations..."
+                
+                # Check 32-bit registry on 64-bit system
+                $cngProvider32 = Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
+                if ($cngProvider32) {
+                  Write-Host "Found in 32-bit registry: $($cngProvider32.'Image Path')"
+                }
+                
+                # Display installation log for debugging
+                if (Test-Path "$env:RUNNER_TEMP\cng_install.log") {
+                  Write-Host "Installation log tail:"
+                  Get-Content "$env:RUNNER_TEMP\cng_install.log" -Tail 20
+                }
+              }
+            } else {
+              Write-Error "MSI installation failed with exit code: $($process.ExitCode)"
+              
+              # Display installation log for debugging
+              if (Test-Path "$env:RUNNER_TEMP\cng_install.log") {
+                Write-Host "Installation log:"
+                Get-Content "$env:RUNNER_TEMP\cng_install.log"
+              }
+              
+              exit 1
+            }
           } else {
             Write-Error "MSI file not found in the extracted archive"
             exit 1
@@ -291,6 +326,8 @@ jobs:
 
       - name: Verify Windows signing configuration
         if: matrix.os == 'windows' && github.event.pull_request.head.repo.fork == false && inputs.dry_run == false
+        env:
+          WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID: ${{ secrets.WINDOWS_CODE_SIGNING_GCP_KMS_KEY_RESOURCE_ID }}
         run: |
           Write-Host "=== Windows Signing Configuration Verification ==="
 
@@ -336,11 +373,31 @@ jobs:
           # Test CNG Provider is installed
           Write-Host "`nChecking CNG Provider installation..."
           $cngProvider = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
+          $cngProvider32 = Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Cryptography\Defaults\Provider\Google Cloud KMS Provider" -ErrorAction SilentlyContinue
+          
           if ($cngProvider) {
-            Write-Host "✓ Google Cloud KMS CNG Provider is installed"
+            Write-Host "✓ Google Cloud KMS CNG Provider is installed (64-bit)"
             Write-Host "  Image Path: $($cngProvider.'Image Path')"
+          } elseif ($cngProvider32) {
+            Write-Host "✓ Google Cloud KMS CNG Provider is installed (32-bit)"
+            Write-Host "  Image Path: $($cngProvider32.'Image Path')"
           } else {
             Write-Host "✗ Google Cloud KMS CNG Provider not found in registry"
+            Write-Host "  Checking if DLL exists directly..."
+            
+            # Check common installation paths
+            $dllPaths = @(
+              "C:\Windows\System32\kmscng.dll",
+              "C:\Windows\SysWOW64\kmscng.dll",
+              "C:\Program Files\Google\Cloud KMS CNG Provider\kmscng.dll",
+              "C:\Program Files (x86)\Google\Cloud KMS CNG Provider\kmscng.dll"
+            )
+            
+            foreach ($dllPath in $dllPaths) {
+              if (Test-Path $dllPath) {
+                Write-Host "  Found DLL at: $dllPath"
+              }
+            }
           }
 
           Write-Host "=== End Configuration Verification ==="

@@ -239,6 +239,15 @@ function ChatPage() {
     }, 500);
   }, []);
 
+  // Cleanup timeout on unmount to prevent memory leak
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     if (currentChat) {
@@ -249,7 +258,7 @@ function ChatPage() {
     }
   };
 
-  const loadMemoriesIfNeeded = async (forceLoad = false) => {
+  const loadMemoriesIfNeeded = async (forceLoad = false): Promise<boolean> => {
     // Only load memories for the first message in a chat
     if ((forceLoad || messages.length === 0) && !hasLoadedMemories && !isLoadingMemories) {
       setIsLoadingMemories(true);
@@ -279,18 +288,27 @@ function ChatPage() {
           } else {
             setMessages((prevMessages) => [systemMessage, ...prevMessages]);
           }
+          
+          // Wait for next tick to ensure state is updated
+          await new Promise(resolve => setTimeout(resolve, 0));
+          
+          setHasLoadedMemories(true);
+          return true;
         } else {
           console.log('No memories found to load');
+          setHasLoadedMemories(true);
+          return false;
         }
-        setHasLoadedMemories(true);
       } catch (error) {
         console.error('Failed to load memories:', error);
         // Continue even if memory loading fails
         setHasLoadedMemories(true);
+        return false;
       } finally {
         setIsLoadingMemories(false);
       }
     }
+    return false;
   };
 
   const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
@@ -319,9 +337,8 @@ function ChatPage() {
     // If this is the first message in the chat, load memories first
     if (messages.length === 0 && !hasLoadedMemories) {
       // Load memories before sending the first message
+      // The function now properly waits for state updates
       await loadMemoriesIfNeeded();
-      // Small delay to ensure memories are set in state before sending the prompt
-      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Check if more than 20 tools are selected and reset to default if so

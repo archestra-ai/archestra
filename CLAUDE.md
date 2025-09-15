@@ -424,7 +424,7 @@ Key tables (snake_case naming):
   - **Workflow Structure**:
     - `claude-code.yml` and `claude-pull-requests.yml`: Reusable workflow templates
     - `user-scoped-claude-code.yml` and `user-scoped-claude-pull-requests.yml`: User-specific orchestrators
-  - **Authorized Users**: Currently configured for `joeyorlando`, `Matvey-Kuk`, and `iskhakov`
+  - **Authorized Users**: Currently configured for `joeyorlando` and `iskhakov`
   - **Compliance**: Ensures adherence to Anthropic's single-account OAuth token policy
   - **Adding New Users**: Add repository secret `USERNAME_CLAUDE_CODE_OAUTH_TOKEN` and update user-scoped workflows
 

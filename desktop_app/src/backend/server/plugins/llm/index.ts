@@ -139,13 +139,13 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // Truncate tool IDs to 64 characters for LLM compatibility if needed
           const truncatedTools: McpTools = {};
           for (const [toolId, tool] of Object.entries(tools)) {
-            // Skip undefined or null tools
-            if (!tool) {
+            // Skip undefined, null tools, or tools without a name property
+            if (!tool || !tool.name || typeof tool.name !== 'string') {
               continue;
             }
             
             // Truncate the tool name if it's too long (keep the tool ID as is)
-            const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
+            const truncatedToolName = tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
 
             truncatedTools[toolId] = {
               ...tool,

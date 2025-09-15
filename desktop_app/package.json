@@ -34,7 +34,7 @@
     "codegen:archestra:api": "ELECTRON_RUN_AS_NODE=1 CODEGEN=1 pnpm exec electron ./node_modules/tsx/dist/cli.mjs openapi/archestra/api/generate-openapi.ts && ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/archestra/api/openapi-ts.config.ts",
     "codegen:archestra:catalog": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/archestra/catalog/openapi-ts.config.ts"
   },
-  "packageManager": "pnpm@10.15.1",
+  "packageManager": "pnpm@10.16.1",
   "devDependencies": {
     "@electron-forge/cli": "^7.9.0",
     "@electron-forge/maker-deb": "^7.9.0",

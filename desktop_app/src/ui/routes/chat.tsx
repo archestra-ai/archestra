@@ -346,17 +346,9 @@ function ChatPage() {
     let messageText = '';
 
     // Check for parts property (AI SDK format)
-    if ((firstUserMessage as any).parts) {
-      const textPart = (firstUserMessage as any).parts.find((part: any) => part.type === 'text');
-      if (textPart?.text) {
-        messageText = textPart.text;
-      }
-    } else if (typeof firstUserMessage.content === 'string') {
-      messageText = firstUserMessage.content;
-    } else if (Array.isArray(firstUserMessage.content)) {
-      // Handle array of content parts
-      const textPart = firstUserMessage.content.find((part: any) => part.type === 'text');
-      if (textPart?.text) {
+    if (firstUserMessage.parts) {
+      const textPart = firstUserMessage.parts.find((part) => part.type === 'text');
+      if (textPart && 'text' in textPart) {
         messageText = textPart.text;
       }
     }

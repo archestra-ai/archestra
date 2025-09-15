@@ -7,6 +7,7 @@ import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
 import ArchestraMcpContext from '@backend/archestraMcp/context';
+import { type McpTools } from '@backend/archestraMcp';
 import config from '@backend/config';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
@@ -74,7 +75,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         // Get tools based on chat selection or requested tools
-        let tools = {};
+        let tools: McpTools = {};
 
         if (chatId) {
           // Get chat-specific tool selection
@@ -134,20 +135,17 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Only add tools and toolChoice if tools are available
         if (tools && Object.keys(tools).length > 0) {
-          // Truncate tool names to 64 characters for LLM compatibility
-          const truncatedTools: typeof tools = {};
+          // Truncate tool IDs to 64 characters for LLM compatibility if needed
+          const truncatedTools: McpTools = {};
           for (const [toolId, tool] of Object.entries(tools)) {
             // Skip undefined or null tools
             if (!tool) {
               continue;
             }
             
-            const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
-
-            truncatedTools[toolId] = {
-              ...tool,
-              name: truncatedToolName,
-            };
+            // Truncate the tool ID if it's too long (tools are indexed by ID, not name)
+            const truncatedId = toolId.length > 64 ? toolId.substring(0, 64) : toolId;
+            truncatedTools[truncatedId] = tool;
           }
 
           // Only set tools if we have valid tools after filtering
@@ -165,16 +163,18 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
-            onFinish: ({ messages: finalMessages, usage }) => {
+            onFinish: (result) => {
               if (sessionId) {
-                Chat.saveMessages(sessionId, finalMessages);
+                Chat.saveMessages(sessionId, result.messages);
               }
 
               // Log OpenAI cache metrics if available
-              if (shouldLogCache) {
-                const cachedTokens = (usage as any)?.cachedPromptTokens;
-                if (cachedTokens !== undefined) {
-                  fastify.log.info(`OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${usage?.promptTokens || 0}, Cache hit rate: ${usage?.promptTokens ? ((cachedTokens / usage.promptTokens) * 100).toFixed(1) : 0}%`);
+              if (shouldLogCache && 'usage' in result && result.usage) {
+                const usage = result.usage as any;
+                const cachedTokens = usage?.cachedPromptTokens;
+                const promptTokens = usage?.promptTokens;
+                if (cachedTokens !== undefined && promptTokens) {
+                  fastify.log.info(`OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`);
                 }
               }
             },

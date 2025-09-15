@@ -100,10 +100,11 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Detect if we're using OpenAI provider
         const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
-        const isOpenAIProvider = provider === 'openai' || 
-                                 providerConfig?.provider?.type === 'openai' || 
-                                 (!provider && !providerConfig && model.startsWith('gpt-')) ||
-                                 (!provider && !providerConfig && model.startsWith('o1-'));
+        const isOpenAIProvider =
+          provider === 'openai' ||
+          providerConfig?.provider?.type === 'openai' ||
+          (!provider && !providerConfig && model.startsWith('gpt-')) ||
+          (!provider && !providerConfig && model.startsWith('o1-'));
 
         // Create the stream with the appropriate model
         const streamConfig: any = {
@@ -141,7 +142,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             if (!tool) {
               continue;
             }
-            
+
             const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
 
             truncatedTools[toolId] = {
@@ -174,7 +175,9 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
               if (shouldLogCache) {
                 const cachedTokens = (usage as any)?.cachedPromptTokens;
                 if (cachedTokens !== undefined) {
-                  fastify.log.info(`OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${usage?.promptTokens || 0}, Cache hit rate: ${usage?.promptTokens ? ((cachedTokens / usage.promptTokens) * 100).toFixed(1) : 0}%`);
+                  fastify.log.info(
+                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${usage?.promptTokens || 0}, Cache hit rate: ${usage?.promptTokens ? ((cachedTokens / usage.promptTokens) * 100).toFixed(1) : 0}%`
+                  );
                 }
               }
             },

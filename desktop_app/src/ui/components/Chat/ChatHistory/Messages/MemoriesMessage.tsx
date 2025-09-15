@@ -1,6 +1,6 @@
-import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
-import { useState } from 'react';
 import { type TextUIPart, UIMessage } from 'ai';
+import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
 
 interface MemoriesMessageProps {
   message: UIMessage;
@@ -21,7 +21,7 @@ export default function MemoriesMessage({ message }: MemoriesMessageProps) {
   // Parse memories from the text content
   const lines = textContent.split('\n');
   const headerText = lines[0] || 'Previous memories loaded';
-  const memories = lines.slice(1).filter(line => line.trim());
+  const memories = lines.slice(1).filter((line) => line.trim());
 
   return (
     <div className="bg-green-500/10 border border-green-500/20 rounded-lg overflow-hidden">
@@ -39,21 +39,17 @@ export default function MemoriesMessage({ message }: MemoriesMessageProps) {
           <ChevronRight className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
         )}
       </button>
-      
+
       {isExpanded && memories.length > 0 && (
         <div className="px-3 py-2 border-t border-green-500/20 space-y-1">
           {memories.map((memory, index) => {
             const [key, ...valueParts] = memory.split(':');
             const value = valueParts.join(':').trim();
-            
+
             return (
               <div key={index} className="text-sm">
-                <span className="font-medium text-green-700 dark:text-green-300">
-                  {key}:
-                </span>
-                <span className="text-green-600 dark:text-green-400 ml-2">
-                  {value}
-                </span>
+                <span className="font-medium text-green-700 dark:text-green-300">{key}:</span>
+                <span className="text-green-600 dark:text-green-400 ml-2">{value}</span>
               </div>
             );
           })}

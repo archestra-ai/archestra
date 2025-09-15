@@ -4,10 +4,6 @@ import { Link } from '@tanstack/react-router';
 import { AlertCircle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { SYSTEM_MODEL_NAMES } from '../../../../constants';
-
-import './chat-input.css';
-
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
   AIInput,
@@ -33,6 +29,10 @@ import {
   useToolsStore,
 } from '@ui/stores';
 import type { Tool } from '@ui/types/tools';
+
+import { SYSTEM_MODEL_NAMES } from '../../../../constants';
+
+import './chat-input.css';
 
 interface ChatInputProps {
   input: string;
@@ -71,12 +71,10 @@ export default function ChatInput({
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
-  
+
   // Filter out only the system models (phi3:3.8b and llama-guard3:1b)
   // Keep the recommended Qwen model in the list
-  const userSelectableModels = installedModels.filter(
-    model => !SYSTEM_MODEL_NAMES.includes(model.model)
-  );
+  const userSelectableModels = installedModels.filter((model) => !SYSTEM_MODEL_NAMES.includes(model.model));
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
 
@@ -96,7 +94,6 @@ export default function ChatInput({
   // Convert empty string to undefined so the placeholder shows
   const currentModel = !selectedModel || selectedModel === '' ? undefined : selectedModel;
   const handleModelChange = setSelectedModel;
-
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -567,16 +564,19 @@ export default function ChatInput({
         <AIInputToolbar>
           <AIInputTools>
             <AIInputModelSelect value={currentModel} onValueChange={handleModelChange} disabled={false}>
-              <AIInputModelSelectTrigger className={!currentModel ? 'green-shimmer-with-pulse border border-green-500' : ''}>
-                <AIInputModelSelectValue placeholder="No model selected, choose one!" className={!currentModel ? 'text-green-600 font-medium' : ''} />
+              <AIInputModelSelectTrigger
+                className={!currentModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
+              >
+                <AIInputModelSelectValue
+                  placeholder="No model selected, choose one!"
+                  className={!currentModel ? 'text-green-600 font-medium' : ''}
+                />
               </AIInputModelSelectTrigger>
               <AIInputModelSelectContent>
                 {/* Local Ollama Models */}
                 {userSelectableModels.length > 0 ? (
                   <>
-                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
-                      Local (best privacy)
-                    </div>
+                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">Local (best privacy)</div>
                     {userSelectableModels.map((model) => (
                       <AIInputModelSelectItem key={model.model} value={model.model}>
                         {model.name || model.model}
@@ -584,8 +584,8 @@ export default function ChatInput({
                     ))}
                   </>
                 ) : (
-                  <Link 
-                    to="/llm-providers/ollama" 
+                  <Link
+                    to="/llm-providers/ollama"
                     className="block px-2 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   >
                     For privacy, set up local models →
@@ -605,8 +605,8 @@ export default function ChatInput({
                     ))}
                   </>
                 ) : (
-                  <Link 
-                    to="/llm-providers/cloud" 
+                  <Link
+                    to="/llm-providers/cloud"
                     className="block px-2 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   >
                     For efficiency, set up cloud models →

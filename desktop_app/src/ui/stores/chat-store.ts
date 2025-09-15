@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import config from '@ui/config';
 import {
   createChat,
@@ -15,6 +14,7 @@ import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
 
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import { useToolsStore } from './tools-store';
 
 interface ChatState {

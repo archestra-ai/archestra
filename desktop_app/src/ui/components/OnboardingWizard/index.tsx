@@ -2,8 +2,8 @@ import { ChevronRight, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@ui/components/ui/popover';
 import { Label } from '@ui/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@ui/components/ui/popover';
 import { Switch } from '@ui/components/ui/switch';
 import { useUserStore } from '@ui/stores';
 
@@ -32,7 +32,8 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const { user, markOnboardingCompleted, toggleTelemetryCollectionStatus, toggleAnalyticsCollectionStatus } = useUserStore();
+  const { user, markOnboardingCompleted, toggleTelemetryCollectionStatus, toggleAnalyticsCollectionStatus } =
+    useUserStore();
 
   useEffect(() => {
     if (user && !user.hasCompletedOnboarding) {
@@ -99,13 +100,18 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
       case OnboardingStep.Welcome:
         return (
           <div className="relative w-full h-full overflow-hidden">
-            <img src={welcomeImage} alt="Welcome to Archestra" className="absolute inset-0 w-full h-full object-cover" />
+            <img
+              src={welcomeImage}
+              alt="Welcome to Archestra"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             <div className="absolute bottom-8 left-8 right-8">
               <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
                 <h2 className="text-2xl font-bold">Premier MCP Orchestrator Built for Business</h2>
                 <p className="text-lg text-muted-foreground mt-4">
-                  We're entering the era of applied agents in enterprise environments. Archestra is the missing component to connect AI and corporate data to make it a reality.
+                  We're entering the era of applied agents in enterprise environments. Archestra is the missing
+                  component to connect AI and corporate data to make it a reality.
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -142,7 +148,8 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">1</span>
                     </div>
                     <p className="ml-3 text-base text-muted-foreground mt-0.5">
-                      All data processing occurs <span className="font-semibold">locally on your machine</span>, never through cloud services.
+                      All data processing occurs <span className="font-semibold">locally on your machine</span>, never
+                      through cloud services.
                     </p>
                   </div>
                   <div className="flex items-start">
@@ -150,7 +157,8 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">2</span>
                     </div>
                     <p className="ml-3 text-base text-muted-foreground mt-0.5">
-                      MCP connectors operate within <span className="font-semibold">isolated virtual machines</span> for enhanced security.
+                      MCP connectors operate within <span className="font-semibold">isolated virtual machines</span> for
+                      enhanced security.
                     </p>
                   </div>
                   <div className="flex items-start">
@@ -163,7 +171,8 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                   </div>
                 </div>
                 <p className="text-base text-muted-foreground mt-6 leading-relaxed">
-                  Archestra team is dedicated to delivering state-of-the-art agentic security measures, more to come, stay tuned!
+                  Archestra team is dedicated to delivering state-of-the-art agentic security measures, more to come,
+                  stay tuned!
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -186,13 +195,21 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
       case OnboardingStep.Privacy:
         return (
           <div className="relative w-full h-full">
-            <img src={privacyImage} alt="Your Privacy Matters" className="absolute inset-0 w-full h-full object-cover" />
+            <img
+              src={privacyImage}
+              alt="Your Privacy Matters"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             <div className="absolute bottom-8 left-8 right-8">
               <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
                 <h2 className="text-2xl font-bold">For Everyone, Not Only Engineers</h2>
                 <p className="text-lg text-muted-foreground mt-3 leading-relaxed">
-                  MCP protocol launched in November 2024 to connect AI with data. While engineers quickly adopted it, non-technical users were left behind. Archestra changes that - <span className="font-semibold">no API keys, no complex setup</span>. Enabling <span className="font-semibold">secure, reliable and easy to use AI agents</span> for finance, legal, and every other team.
+                  MCP protocol launched in November 2024 to connect AI with data. While engineers quickly adopted it,
+                  non-technical users were left behind. Archestra changes that -{' '}
+                  <span className="font-semibold">no API keys, no complex setup</span>. Enabling{' '}
+                  <span className="font-semibold">secure, reliable and easy to use AI agents</span> for finance, legal,
+                  and every other team.
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -221,10 +238,12 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
               <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
                 <h2 className="text-2xl font-bold">Early Access Program</h2>
                 <p className="text-lg text-muted-foreground mt-2">
-                  You're among the first to experience Archestra. Your feedback shapes our development - please report any issues on GitHub.
+                  You're among the first to experience Archestra. Your feedback shapes our development - please report
+                  any issues on GitHub.
                 </p>
                 <p className="text-base text-muted-foreground mt-4">
-                  We collect anonymous usage analytics and error reports to improve the product. You can opt out of data collection{' '}
+                  We collect anonymous usage analytics and error reports to improve the product. You can opt out of data
+                  collection{' '}
                   <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                     <PopoverTrigger asChild>
                       <button className="text-blue-600/80 dark:text-blue-400/80 underline hover:text-blue-700 dark:hover:text-blue-300 font-medium">
@@ -245,40 +264,27 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                               <Label htmlFor="telemetry" className="text-sm font-medium">
                                 Error Reporting
                               </Label>
-                              <p className="text-xs text-muted-foreground">
-                                Help us fix crashes and bugs
-                              </p>
+                              <p className="text-xs text-muted-foreground">Help us fix crashes and bugs</p>
                             </div>
-                            <Switch
-                              id="telemetry"
-                              checked={telemetryEnabled}
-                              onCheckedChange={handleTelemetryToggle}
-                            />
+                            <Switch id="telemetry" checked={telemetryEnabled} onCheckedChange={handleTelemetryToggle} />
                           </div>
                           <div className="flex items-center justify-between">
                             <div className="space-y-0.5">
                               <Label htmlFor="analytics" className="text-sm font-medium">
                                 Usage Analytics
                               </Label>
-                              <p className="text-xs text-muted-foreground">
-                                Help us understand feature usage
-                              </p>
+                              <p className="text-xs text-muted-foreground">Help us understand feature usage</p>
                             </div>
-                            <Switch
-                              id="analytics"
-                              checked={analyticsEnabled}
-                              onCheckedChange={handleAnalyticsToggle}
-                            />
+                            <Switch id="analytics" checked={analyticsEnabled} onCheckedChange={handleAnalyticsToggle} />
                           </div>
                         </div>
                         <div className="pt-2 border-t">
-                          <p className="text-xs text-muted-foreground">
-                            Changes are saved automatically
-                          </p>
+                          <p className="text-xs text-muted-foreground">Changes are saved automatically</p>
                         </div>
                       </div>
                     </PopoverContent>
-                  </Popover>.
+                  </Popover>
+                  .
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -287,9 +293,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                     </Button>
                   )}
                   <Button onClick={handleNext} className="min-w-[120px] relative">
-                    <span className="flex items-center">
-                      Get Started
-                    </span>
+                    <span className="flex items-center">Get Started</span>
                   </Button>
                 </div>
               </div>
@@ -320,15 +324,11 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
       <div className="fixed inset-0 z-50 bg-black">
         {/* Previous step (stays visible during transition) */}
         {previousStep !== null && isTransitioning && (
-          <div className="absolute inset-0">
-            {renderStepContent(previousStep)}
-          </div>
+          <div className="absolute inset-0">{renderStepContent(previousStep)}</div>
         )}
-        
+
         {/* Current step (fades in on top) */}
-        <div className={`absolute inset-0 ${isTransitioning ? 'fade-in' : ''}`}>
-          {renderStepContent(currentStep)}
-        </div>
+        <div className={`absolute inset-0 ${isTransitioning ? 'fade-in' : ''}`}>{renderStepContent(currentStep)}</div>
       </div>
     </>
   );

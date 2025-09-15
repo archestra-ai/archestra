@@ -21,7 +21,6 @@ export const createArchestraMcpServer = () => {
     version: '1.0.0',
   }) as any;
 
-
   // Memory CRUD tools
   archestraMcpServer.tool('list_memories', 'List all stored memory entries with their names and values', async () => {
     log.info('list_memories called');
@@ -215,7 +214,6 @@ export const createArchestraMcpServer = () => {
       }
     }
   );
-
 
   // Tool management tools
   archestraMcpServer.tool(

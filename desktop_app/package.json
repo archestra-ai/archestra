@@ -67,7 +67,7 @@
     "drizzle-kit": "^0.31.4",
     "electron": "37.3.1",
     "husky": "^9.1.7",
-    "jsdom": "^26.1.0",
+    "jsdom": "^27.0.0",
     "lint-staged": "^16.1.5",
     "prettier": "3.6.2",
     "sharp": "^0.34.3",

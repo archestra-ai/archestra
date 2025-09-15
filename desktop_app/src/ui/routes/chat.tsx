@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { DefaultChatTransport, UIMessage } from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import ChatHistory from '@ui/components/Chat/ChatHistory';
 import ChatInput from '@ui/components/Chat/ChatInput';
 import EmptyChatState from '@ui/components/Chat/EmptyChatState';
@@ -23,8 +24,8 @@ function ChatPage() {
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
-  const [hasTooManyTools, setHasTooManyTools] = useState(false);
   const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
@@ -37,6 +38,7 @@ function ChatPage() {
   // Reset memory loading flag when chat changes
   useEffect(() => {
     setHasLoadedMemories(false);
+    setIsLoadingMemories(false);
   }, [currentChatSessionId]);
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
@@ -246,30 +248,46 @@ function ChatPage() {
     }
   };
 
-  const loadMemoriesIfNeeded = async () => {
+  const loadMemoriesIfNeeded = async (forceLoad = false) => {
     // Only load memories for the first message in a chat
-    if (messages.length === 0 && !hasLoadedMemories) {
+    if ((forceLoad || messages.length === 0) && !hasLoadedMemories && !isLoadingMemories) {
+      setIsLoadingMemories(true);
       try {
         const { data } = await getAllMemories();
         if (data && data.memories && data.memories.length > 0) {
-          // Format memories as a system message to include in context
+          // Format memories for logging
           const memoriesText = data.memories.map((m) => `${m.name}: ${m.value}`).join('\n');
+          
+          // Log memories to console instead of showing in UI
+          console.log('Previous memories loaded:');
+          console.log(memoriesText);
+          console.log(`Total memories loaded: ${data.memories.length}`);
 
-          // Add a system message with the memories
+          // Add a system message with the memories (but don't display it)
           const systemMessage: UIMessage = {
             id: 'system-memories',
             role: 'system',
-            content: `Previous memories loaded:\n${memoriesText}`,
+            parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
           };
 
           // Prepend the system message to the messages
-          setMessages([systemMessage]);
+          // If forceLoad is true (restart scenario), replace all messages
+          // Otherwise, prepend to existing messages
+          if (forceLoad) {
+            setMessages([systemMessage]);
+          } else {
+            setMessages(prevMessages => [systemMessage, ...prevMessages]);
+          }
+        } else {
+          console.log('No memories found to load');
         }
         setHasLoadedMemories(true);
       } catch (error) {
         console.error('Failed to load memories:', error);
         // Continue even if memory loading fails
         setHasLoadedMemories(true);
+      } finally {
+        setIsLoadingMemories(false);
       }
     }
   };
@@ -281,22 +299,12 @@ function ChatPage() {
       // Load memories before sending the first message
       await loadMemoriesIfNeeded();
 
-      let messageText = currentInput;
-
-      // If more than 20 tools are selected, adjust the tools and message
-      if (hasTooManyTools) {
-        // Set only the list_available_tools and enable_tools from Archestra
-        await setOnlyTools(['archestra__list_available_tools', 'archestra__enable_tools', 'archestra__disable_tools']);
-
-        // Prepend instruction to the message
-        messageText = `You currently have only list_available_tools and enable_tools enabled. Follow these steps:
-1. Call list_available_tools to see all available tool IDs
-2. Call enable_tools with the specific tool IDs you need, for example: {"toolIds": ["filesystem__read_file", "filesystem__write_file"]}
-3. After enabling the necessary tools, disable Archestra tools using disable_tools.
-4. After, proceed with this task: 
-
-${currentInput}`;
+      // Check if more than 20 tools are selected and reset to default if so
+      if (selectedToolIds.size > 20) {
+        await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
       }
+
+      const messageText = currentInput;
 
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
@@ -307,8 +315,18 @@ ${currentInput}`;
   };
 
   const handlePromptSelect = async (prompt: string) => {
-    // Load memories before sending the first message
-    await loadMemoriesIfNeeded();
+    // If this is the first message in the chat, load memories first
+    if (messages.length === 0 && !hasLoadedMemories) {
+      // Load memories before sending the first message
+      await loadMemoriesIfNeeded();
+      // Small delay to ensure memories are set in state before sending the prompt
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Check if more than 20 tools are selected and reset to default if so
+    if (selectedToolIds.size > 20) {
+      await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
+    }
 
     setIsSubmitting(true);
     setSubmissionStartTime(Date.now());
@@ -350,11 +368,20 @@ ${currentInput}`;
     // Clear all messages to start fresh
     setMessages([]);
 
-    // Reset memory loading flag to load memories again
+    // Reset memory loading flags to load memories again
     setHasLoadedMemories(false);
+    setIsLoadingMemories(false);
 
-    // Load memories if needed
-    await loadMemoriesIfNeeded();
+    // Small delay to ensure state updates are processed
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Force load memories even though messages might not be empty yet
+    await loadMemoriesIfNeeded(true);
+
+    // Check if more than 20 tools are selected and reset to default if so
+    if (selectedToolIds.size > 20) {
+      await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
+    }
 
     // Re-run with the first user message
     setIsSubmitting(true);
@@ -433,7 +460,6 @@ ${currentInput}`;
           isLoading={isLoading}
           disabled={isSubmittingDisabled}
           stop={stop}
-          onTooManyTools={setHasTooManyTools}
           hasMessages={messages.length > 0}
           onRerunAgent={handleRerunAgent}
         />

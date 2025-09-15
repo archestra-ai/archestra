@@ -20,7 +20,7 @@ interface OllamaState {
   downloadProgress: Record<string, number>;
   loadingInstalledModels: boolean;
   loadingInstalledModelsError: Error | null;
-  selectedModel: string;
+  selectedModel: string | undefined;
   modelsBeingDownloaded: Set<string>;
 
   requiredModelsStatus: OllamaRequiredModelStatus[];
@@ -45,7 +45,7 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
   downloadProgress: {},
   loadingInstalledModels: false,
   loadingInstalledModelsError: null,
-  selectedModel: OllamaLocalStorage.getSelectedModel() || '',
+  selectedModel: OllamaLocalStorage.getSelectedModel() || undefined,
   modelsBeingDownloaded: new Set(),
   requiredModelsStatus: [],
   requiredModelsDownloadProgress: {},
@@ -63,10 +63,11 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
         const { models } = await ollamaClient.list();
         set({ installedModels: models });
 
-        const firstInstalledModel = models[0];
-        if (!selectedModel && firstInstalledModel && firstInstalledModel.model) {
-          get().setSelectedModel(firstInstalledModel.model);
-        }
+        // Don't auto-select a model - let user choose
+        // const firstInstalledModel = models[0];
+        // if (!selectedModel && firstInstalledModel && firstInstalledModel.model) {
+        //   get().setSelectedModel(firstInstalledModel.model);
+        // }
 
         return true;
       } catch (error) {

@@ -2,6 +2,7 @@ import { type UIMessage } from 'ai';
 import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
 import db from '@backend/database';
 import { SelectChatSchema, chatsTable } from '@backend/database/schema/chat';
 import {
@@ -284,8 +285,8 @@ export default class ChatModel {
     const [chat] = await db
       .insert(chatsTable)
       .values({
-        // Set default tools for new chats
-        selectedTools: ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'],
+        // Set default tools for new chats (excluding delete_memory and disable_tools)
+        selectedTools: DEFAULT_ARCHESTRA_TOOLS,
       })
       .returning(); // SQLite returns the inserted row
 

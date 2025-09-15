@@ -98,6 +98,13 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         const modelInstance = await createModelInstance(model, provider);
 
+        // Detect if we're using OpenAI provider
+        const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
+        const isOpenAIProvider = provider === 'openai' || 
+                                 providerConfig?.provider?.type === 'openai' || 
+                                 (!provider && !providerConfig && model.startsWith('gpt-')) ||
+                                 (!provider && !providerConfig && model.startsWith('o1-'));
+
         // Create the stream with the appropriate model
         const streamConfig: any = {
           model: modelInstance,
@@ -112,11 +119,29 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // },
         };
 
+        // Add OpenAI prompt caching configuration if using OpenAI provider
+        if (isOpenAIProvider) {
+          streamConfig.experimental = {
+            providerOptions: {
+              openai: {
+                // Use chatId or sessionId as cache key for better hit rates
+                // This ensures similar conversations share cached prefixes
+                promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
+              },
+            },
+          };
+        }
+
         // Only add tools and toolChoice if tools are available
-        if (Object.keys(tools).length > 0) {
+        if (tools && Object.keys(tools).length > 0) {
           // Truncate tool names to 64 characters for LLM compatibility
           const truncatedTools: typeof tools = {};
           for (const [toolId, tool] of Object.entries(tools)) {
+            // Skip undefined or null tools
+            if (!tool) {
+              continue;
+            }
+            
             const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
 
             truncatedTools[toolId] = {
@@ -125,18 +150,32 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             };
           }
 
-          streamConfig.tools = truncatedTools;
-          streamConfig.toolChoice = toolChoice || 'auto';
+          // Only set tools if we have valid tools after filtering
+          if (Object.keys(truncatedTools).length > 0) {
+            streamConfig.tools = truncatedTools;
+            streamConfig.toolChoice = toolChoice || 'auto';
+          }
         }
 
         const result = streamText(streamConfig);
 
+        // Store isOpenAIProvider for use in callback
+        const shouldLogCache = isOpenAIProvider;
+
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
-            onFinish: ({ messages: finalMessages }) => {
+            onFinish: ({ messages: finalMessages, usage }) => {
               if (sessionId) {
                 Chat.saveMessages(sessionId, finalMessages);
+              }
+
+              // Log OpenAI cache metrics if available
+              if (shouldLogCache) {
+                const cachedTokens = (usage as any)?.cachedPromptTokens;
+                if (cachedTokens !== undefined) {
+                  fastify.log.info(`OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${usage?.promptTokens || 0}, Cache hit rate: ${usage?.promptTokens ? ((cachedTokens / usage.promptTokens) * 100).toFixed(1) : 0}%`);
+                }
               }
             },
           })

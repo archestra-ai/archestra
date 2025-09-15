@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.8-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.7-alpha...desktop_app-v0.0.8-alpha) (2025-09-15)
+
+
+### Bug Fixes
+
+* small bug w/ "dragging" of `SiteHeader` ([#375](https://github.com/archestra-ai/archestra/issues/375)) ([3ed5b60](https://github.com/archestra-ai/archestra/commit/3ed5b604f14aec5a7dcda3a9514101142f940f44))
+
+
+### Dependencies
+
+* **frontend:** bump jsdom from 26.1.0 to 27.0.0 in /desktop_app ([#379](https://github.com/archestra-ai/archestra/issues/379)) ([37cd3fd](https://github.com/archestra-ai/archestra/commit/37cd3fd6f3c5a31cbcece22a409433eac82dec4f))
+
 ## [0.0.7-alpha](https://github.com/archestra-ai/archestra/compare/desktop_app-v0.0.6-alpha...desktop_app-v0.0.7-alpha) (2025-09-14)
 
 

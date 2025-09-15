@@ -1,15 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import {
-  AlertCircle,
-  Bot,
-  Check,
-  CheckCircle,
-  Clock,
-  Cpu,
-  Download,
-  HardDrive,
-  Loader2,
-} from 'lucide-react';
+import { AlertCircle, Bot, Check, CheckCircle, Clock, Cpu, Download, HardDrive, Loader2 } from 'lucide-react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
 import { Badge } from '@ui/components/ui/badge';
@@ -59,7 +49,7 @@ function OllamaProviderPage() {
             Local Models
           </h1>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Required Models</CardTitle>
@@ -109,91 +99,91 @@ function OllamaProviderPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {availableModels.map((model) => (
-          <Card key={model.name} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">{model.name}</CardTitle>
-              <p className="text-sm text-muted-foreground leading-relaxed">{model.description}</p>
-            </CardHeader>
+          {availableModels.map((model) => (
+            <Card key={model.name} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">{model.name}</CardTitle>
+                <p className="text-sm text-muted-foreground leading-relaxed">{model.description}</p>
+              </CardHeader>
 
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {model.labels.map((label) => (
-                  <Badge key={label} variant="outline" className="text-xs">
-                    {label}
-                  </Badge>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <div className="text-sm font-medium flex items-center gap-1">
-                  <HardDrive className="h-4 w-4" />
-                  Available Sizes
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {model.labels.map((label) => (
+                    <Badge key={label} variant="outline" className="text-xs">
+                      {label}
+                    </Badge>
+                  ))}
                 </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {model.tags.map(({ tag, context, size, inputs }) => {
-                    const fullModelName = `${model.name}:${tag}`;
-                    const progress = downloadProgress[fullModelName];
-                    const isDownloading = modelsBeingDownloaded.has(fullModelName);
-                    const isInstalled = isModelInstalled(fullModelName);
 
-                    return (
-                      <div key={tag} className="p-2 rounded border flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            <Cpu className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-mono font-medium">{tag}</span>
+                <div className="space-y-3">
+                  <div className="text-sm font-medium flex items-center gap-1">
+                    <HardDrive className="h-4 w-4" />
+                    Available Sizes
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {model.tags.map(({ tag, context, size, inputs }) => {
+                      const fullModelName = `${model.name}:${tag}`;
+                      const progress = downloadProgress[fullModelName];
+                      const isDownloading = modelsBeingDownloaded.has(fullModelName);
+                      const isInstalled = isModelInstalled(fullModelName);
+
+                      return (
+                        <div key={tag} className="p-2 rounded border flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <Cpu className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-mono font-medium">{tag}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              {size && (
+                                <div className="flex items-center gap-1">
+                                  <HardDrive className="h-3 w-3" />
+                                  <span>{formatFileSize(size)}</span>
+                                </div>
+                              )}
+                              {context && (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{context}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            {size && (
+
+                          <Button
+                            size="sm"
+                            variant={isInstalled ? 'secondary' : 'default'}
+                            disabled={isDownloading}
+                            onClick={() => downloadModel(fullModelName)}
+                            className="h-7 px-2 cursor-pointer"
+                          >
+                            {isDownloading ? (
                               <div className="flex items-center gap-1">
-                                <HardDrive className="h-3 w-3" />
-                                <span>{formatFileSize(size)}</span>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span className="text-xs">{progress ? `${progress}%` : '...'}</span>
+                              </div>
+                            ) : isInstalled ? (
+                              <div className="flex items-center gap-1">
+                                <Check className="h-3 w-3" />
+                                <span className="text-xs">Installed</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Download className="h-3 w-3" />
+                                <span className="text-xs">Download</span>
                               </div>
                             )}
-                            {context && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                <span>{context}</span>
-                              </div>
-                            )}
-                          </div>
+                          </Button>
                         </div>
-
-                        <Button
-                          size="sm"
-                          variant={isInstalled ? 'secondary' : 'default'}
-                          disabled={isDownloading}
-                          onClick={() => downloadModel(fullModelName)}
-                          className="h-7 px-2 cursor-pointer"
-                        >
-                          {isDownloading ? (
-                            <div className="flex items-center gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              <span className="text-xs">{progress ? `${progress}%` : '...'}</span>
-                            </div>
-                          ) : isInstalled ? (
-                            <div className="flex items-center gap-1">
-                              <Check className="h-3 w-3" />
-                              <span className="text-xs">Installed</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Download className="h-3 w-3" />
-                              <span className="text-xs">Download</span>
-                            </div>
-                          )}
-                        </Button>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </>

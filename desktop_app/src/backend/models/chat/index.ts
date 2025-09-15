@@ -2,7 +2,6 @@ import { type UIMessage } from 'ai';
 import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
 import db from '@backend/database';
 import { SelectChatSchema, chatsTable } from '@backend/database/schema/chat';
 import {
@@ -12,6 +11,8 @@ import {
 import ollamaClient from '@backend/ollama/client';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
+
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
 
 const TransformedMessageSchema = DatabaseMessageRepresentationSchema.extend({
   /**

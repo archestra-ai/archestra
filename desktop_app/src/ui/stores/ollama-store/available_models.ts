@@ -144,7 +144,7 @@ export const AVAILABLE_MODELS: OllamaModel[] = [
   {
     name: 'gpt-oss',
     description:
-      'GPT-OSS is OpenAI\'s open-weight language model family with MXFP4 quantization for efficient deployment. Features native capabilities for function calling, web browsing, and structured outputs under Apache 2.0 license.',
+      "GPT-OSS is OpenAI's open-weight language model family with MXFP4 quantization for efficient deployment. Features native capabilities for function calling, web browsing, and structured outputs under Apache 2.0 license.",
     labels: ['tools', 'reasoning', 'openai', 'efficient'],
     tags: [
       {

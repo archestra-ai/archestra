@@ -10,7 +10,7 @@ const OLLAMA_GENERAL_MODEL = SYSTEM_MODELS.GENERAL;
 // Determine recommended Qwen3 model based on system RAM
 const getRecommendedQwenModel = () => {
   const totalMemoryGB = Math.floor(os.totalmem() / (1024 * 1024 * 1024));
-  
+
   if (totalMemoryGB >= 32) {
     return { model: 'qwen3:14b', reason: 'Recommended model for chat (32GB+ RAM, 14B parameters)' };
   } else if (totalMemoryGB >= 16) {

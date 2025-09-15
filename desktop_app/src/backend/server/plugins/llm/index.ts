@@ -101,10 +101,11 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Detect if we're using OpenAI provider
         const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
-        const isOpenAIProvider = provider === 'openai' || 
-                                 providerConfig?.provider?.type === 'openai' || 
-                                 (!provider && !providerConfig && model.startsWith('gpt-')) ||
-                                 (!provider && !providerConfig && model.startsWith('o1-'));
+        const isOpenAIProvider =
+          provider === 'openai' ||
+          providerConfig?.provider?.type === 'openai' ||
+          (!provider && !providerConfig && model.startsWith('gpt-')) ||
+          (!provider && !providerConfig && model.startsWith('o1-'));
 
         // Create the stream with the appropriate model
         const streamConfig: any = {
@@ -143,9 +144,13 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
               continue;
             }
             
-            // Truncate the tool ID if it's too long (tools are indexed by ID, not name)
-            const truncatedId = toolId.length > 64 ? toolId.substring(0, 64) : toolId;
-            truncatedTools[truncatedId] = tool;
+            // Truncate the tool name if it's too long (keep the tool ID as is)
+            const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
+
+            truncatedTools[toolId] = {
+              ...tool,
+              name: truncatedToolName,
+            };
           }
 
           // Only set tools if we have valid tools after filtering
@@ -174,7 +179,9 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
                 const cachedTokens = usage?.cachedPromptTokens;
                 const promptTokens = usage?.promptTokens;
                 if (cachedTokens !== undefined && promptTokens) {
-                  fastify.log.info(`OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`);
+                  fastify.log.info(
+                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`
+                  );
                 }
               }
             },

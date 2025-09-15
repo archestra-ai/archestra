@@ -30,6 +30,8 @@
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: greenShimmer 2s ease-in-out infinite, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation:
+    greenShimmer 2s ease-in-out infinite,
+    pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   border-color: rgb(34, 197, 94) !important;
 }

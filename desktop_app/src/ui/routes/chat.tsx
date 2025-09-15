@@ -3,7 +3,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import { DefaultChatTransport, UIMessage } from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import ChatHistory from '@ui/components/Chat/ChatHistory';
 import ChatInput from '@ui/components/Chat/ChatInput';
 import EmptyChatState from '@ui/components/Chat/EmptyChatState';
@@ -13,6 +12,8 @@ import { useMessageActions } from '@ui/hooks/useMessageActions';
 import { getAllMemories } from '@ui/lib/clients/archestra/api/gen';
 import { useChatStore, useCloudProvidersStore, useOllamaStore, useToolsStore } from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
+
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
@@ -257,7 +258,7 @@ function ChatPage() {
         if (data && data.memories && data.memories.length > 0) {
           // Format memories for logging
           const memoriesText = data.memories.map((m) => `${m.name}: ${m.value}`).join('\n');
-          
+
           // Log memories to console instead of showing in UI
           console.log('Previous memories loaded:');
           console.log(memoriesText);
@@ -276,7 +277,7 @@ function ChatPage() {
           if (forceLoad) {
             setMessages([systemMessage]);
           } else {
-            setMessages(prevMessages => [systemMessage, ...prevMessages]);
+            setMessages((prevMessages) => [systemMessage, ...prevMessages]);
           }
         } else {
           console.log('No memories found to load');
@@ -320,7 +321,7 @@ function ChatPage() {
       // Load memories before sending the first message
       await loadMemoriesIfNeeded();
       // Small delay to ensure memories are set in state before sending the prompt
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Check if more than 20 tools are selected and reset to default if so
@@ -365,7 +366,7 @@ function ChatPage() {
     setIsLoadingMemories(false);
 
     // Small delay to ensure state updates are processed
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Force load memories even though messages might not be empty yet
     await loadMemoriesIfNeeded(true);

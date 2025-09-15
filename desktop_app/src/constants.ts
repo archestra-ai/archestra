@@ -18,5 +18,5 @@ export const DEFAULT_ARCHESTRA_TOOLS = [
   'archestra__get_memory',
   'archestra__set_memory',
   'archestra__list_available_tools',
-  'archestra__enable_tools'
+  'archestra__enable_tools',
 ];

@@ -6,8 +6,8 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
-import ArchestraMcpContext from '@backend/archestraMcp/context';
 import { type McpTools } from '@backend/archestraMcp';
+import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
@@ -143,7 +143,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             if (!tool) {
               continue;
             }
-            
+
             // Truncate the tool name if it's too long (keep the tool ID as is)
             const truncatedToolName = tool.name && tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
 

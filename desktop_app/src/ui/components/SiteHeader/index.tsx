@@ -162,7 +162,7 @@ What actually happened?
           <Breadcrumbs breadcrumbs={breadcrumbs} isAnimatedTitle={path.startsWith('/chat')} />
         </div>
         {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 border-l pl-4" style={{ WebkitAppRegion: 'no-drag' }}>
           <span className="text-xs text-muted-foreground hidden lg:inline">This is v{appVersion},</span>
           <span className="text-xs text-muted-foreground hidden sm:inline lg:hidden">v{appVersion}</span>
           <Button

@@ -286,19 +286,8 @@ const forgeConfig: ForgeConfig = {
           owner: github.owner,
           name: github.repoName,
         },
-
-        /**
-         * The desktop app release-please generated GitHub releases have a tag prefix of `desktop_app-v<version>`,
-         * so we need to match that here.
-         *
-         * Otherwise, the electron-forge publisher will try to create a release with a tag of `v<version>` and the
-         * build assets will not get attached to the proper GitHub Release.
-         *
-         * The alternative is to set "include-component-in-tag" to "false" in the release-please config
-         * (specifically for the "desktop_app" 'component') but there is a bug that we ran into with release-please
-         * that was causing issues (https://github.com/googleapis/release-please/issues/2214)
-         */
-        tagPrefix: 'desktop_app-v',
+        // default tag prefix is "v" which aligns with release-please's default tag prefix
+        // tagPrefix: 'desktop_app-v',
         prerelease: true,
         draft: false,
       } as PublisherGitHubConfig,

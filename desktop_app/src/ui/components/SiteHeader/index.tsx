@@ -112,13 +112,20 @@ What actually happened?
     }
   };
 
+  /**
+   * For more context on WebKitAppRegion see https://github.com/electron/electron/issues/1354
+   *
+   * Basically we set the whole SiteHeader to be draggable, and then the particular sub-sections that we
+   * want to be non-draggable we set the WebkitAppRegion to 'no-drag' (for things like buttons so that
+   * the click events are not blocked by the draggable region)
+   */
   return (
-    <header className="bg-background sticky top-0 z-50 flex w-full items-center border-b">
-      <div
-        className="flex h-[var(--header-height)] w-64 items-center gap-2 px-4 pl-20 border-r shrink-0"
-        // @ts-expect-error - WebkitAppRegion is not a valid property
-        style={{ WebkitAppRegion: 'drag' }}
-      >
+    <header
+      className="bg-background sticky top-0 z-50 flex w-full items-center border-b"
+      // @ts-expect-error - WebkitAppRegion is not a valid property
+      style={{ WebkitAppRegion: 'drag' }}
+    >
+      <div className="flex h-[var(--header-height)] w-64 items-center gap-2 px-4 pl-20 border-r shrink-0">
         <Button
           className="h-8 w-8 cursor-pointer"
           variant="ghost"
@@ -150,17 +157,12 @@ What actually happened?
           </TooltipContent>
         </Tooltip>
       </div>
-      <div
-        className="flex h-[var(--header-height)] flex-1 items-center justify-between px-2 sm:px-4 min-w-0 overflow-hidden"
-        // @ts-expect-error - WebkitAppRegion is not a valid property
-        style={{ WebkitAppRegion: 'drag' }}
-      >
-        {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
-        <div className="min-w-0 flex-1 truncate" style={{ WebkitAppRegion: 'no-drag' }}>
+      <div className="flex h-[var(--header-height)] flex-1 items-center justify-between px-2 sm:px-4 min-w-0 overflow-hidden">
+        <div className="min-w-0 flex-1 truncate flex items-center h-full">
           <Breadcrumbs breadcrumbs={breadcrumbs} isAnimatedTitle={path.startsWith('/chat')} />
         </div>
         {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 border-l pl-4" style={{ WebkitAppRegion: 'no-drag' }}>
           <span className="text-xs text-muted-foreground hidden lg:inline">This is v{appVersion},</span>
           <span className="text-xs text-muted-foreground hidden sm:inline lg:hidden">v{appVersion}</span>
           <Button

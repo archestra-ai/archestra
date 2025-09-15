@@ -14,13 +14,7 @@ import {
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import {
-  AuthorizationServerMetadata,
-  OAuthClientInformation,
-  OAuthClientMetadata,
-  OAuthProtectedResourceMetadata,
-  OAuthTokens,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformation, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import { config } from 'dotenv';
@@ -372,7 +366,7 @@ class GenericMcpOAuthProvider implements OAuthClientProvider {
             reject(parseError);
           }
         } else {
-          // Handle unexpected requests
+          // Handle unexpected request
           res.writeHead(404, { 'Content-Type': 'text/html' });
           res.end('<html><body><h1>OAuth Callback Server</h1><p>Waiting for authorization...</p></body></html>');
         }

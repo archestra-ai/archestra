@@ -1,10 +1,6 @@
 <div align="center">
 
-# Archestra
-
-**The easiest way to use MCP (Model Context Protocol) without hassle with APIs and configs. Runs 100% offline on your computer**
-
-**[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
+# Archestra Desktop — simplest MCP client
 
   <br />
 
@@ -18,18 +14,16 @@
 
 ## 🚀 Overview
 
-Archestra is an enterprise-grade platform that enables non-technical users to safely leverage AI agents and MCP (Model Context Protocol) servers. Built as a privacy-focused desktop application, Archestra provides a secure runtime environment for AI interactions with sandboxing, resource controls, and prompt injection prevention.
+Archestra is a 100% local runtime for MCP (Model Context Protocol) servers and a ChatGPT-like UI allowing non-technical users to build safe and private agents with powerful data access.
 
 ![Archestra Screenshot](./docs/assets/screenshot.png)
 
 ### Key Features
 
-- 🔒 **Secure Runtime** - Isolated execution environment for AI agents with sandboxing and resource controls
-- 🛡️ **Prompt Injection Prevention** - Advanced security to prevent context leakage and behavior manipulation
+- 🔒 **Sandboxed MCP Runtime** - Isolated execution environment protecting the host.
+- 🔥 **Unique Auth** — No need to toss API keys and config files to run MCP!
 - 🔌 **MCP Protocol Support** - Compatible with thousands of existing MCP servers and custom implementations
 - 💻 **Local-First Architecture** - Privacy-focused design with local LLM
-- 🎯 **Enterprise Ready** - Built for non-technical users with enterprise-level security and compliance
-- 🔧 **Extensible Tool System** - Support most of MCP servers: GitHub, Gmail, Slack, PostgreSQL, filesystem, and more
 
 ## 🤝 Contributing
 

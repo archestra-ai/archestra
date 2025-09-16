@@ -8,6 +8,7 @@ import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
+import toolAggregator from '@backend/llms/toolAggregator';
 import ollamaClient from '@backend/ollama/client';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
@@ -91,7 +92,6 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list
       // Get all available tools and ensure the new ones are included
-      const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
       const allAvailableTools = toolAggregator.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
@@ -121,7 +121,6 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list first
       // then remove the specified tools
-      const { default: toolAggregator } = await import('@backend/llms/toolAggregator');
       const allAvailableTools = toolAggregator.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 

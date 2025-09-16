@@ -8,6 +8,7 @@
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 
+import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
@@ -101,24 +102,6 @@ async function waitForAuthorizationCode(state: string): Promise<string> {
 }
 
 /**
- * Store OAuth tokens in database
- */
-async function storeTokens(serverId: string, tokens: GenericOAuthTokens): Promise<void> {
-  const { default: McpServerModel } = await import('@backend/models/mcpServer');
-
-  const mcpTokens = {
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_in: tokens.expires_in,
-    token_type: tokens.token_type || 'Bearer',
-  };
-
-  await McpServerModel.update(serverId, {
-    oauthTokens: mcpTokens,
-  });
-}
-
-/**
  * Store OAuth tokens in database and optionally inject access token into environment variable and files
  */
 async function storeTokensWithEnvVar(
@@ -126,8 +109,6 @@ async function storeTokensWithEnvVar(
   tokens: GenericOAuthTokens,
   config: OAuthServerConfig
 ): Promise<void> {
-  const { default: McpServerModel } = await import('@backend/models/mcpServer');
-
   const mcpTokens = {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
@@ -181,7 +162,6 @@ async function storeTokensWithEnvVar(
  */
 async function retrieveTokens(serverId: string): Promise<GenericOAuthTokens | null> {
   try {
-    const { default: McpServerModel } = await import('@backend/models/mcpServer');
     const servers = await McpServerModel.getById(serverId);
 
     if (servers?.[0]?.oauthTokens) {
@@ -318,7 +298,6 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   await storeTokensWithEnvVar(serverId, tokens, config);
 
   // Update server status to installed and start the server
-  const { default: McpServerModel } = await import('@backend/models/mcpServer');
   const [updatedServer] = await McpServerModel.update(serverId, {
     status: 'installed',
     oauthClientInfo: null, // Clear the temporary config storage
@@ -374,7 +353,6 @@ export async function completeGenericOAuthFlow(
   await storeTokensWithEnvVar(serverId, tokens, config);
 
   // Update server status to installed and start the server
-  const { default: McpServerModel } = await import('@backend/models/mcpServer');
   const [updatedServer] = await McpServerModel.update(serverId, {
     status: 'installed',
     oauthClientInfo: null, // Clear the temporary config storage

@@ -1,19 +1,13 @@
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { type experimental_MCPClient, experimental_createMCPClient } from 'ai';
 import type { RawReplyDefaultExpression } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 
 import config from '@backend/config';
 import { type McpServer } from '@backend/models/mcpServer';
 import { ToolModel } from '@backend/models/tools';
 import PodmanContainer from '@backend/sandbox/podman/container';
-import {
-  type AvailableTool,
-  AvailableToolSchema,
-  McpServerContainerLogsSchema,
-  type SandboxedMcpServerStatusSummary,
-  SandboxedMcpServerStatusSummarySchema,
-} from '@backend/sandbox/schemas';
+import { type AvailableTool, type SandboxedMcpServerStatusSummary } from '@backend/sandbox/schemas';
+import { areTokensExpired } from '@backend/server/plugins/mcp-oauth';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
 
@@ -63,6 +57,7 @@ export default class SandboxedMcpServer {
     {
       is_read: boolean | null;
       is_write: boolean | null;
+      analyzed_at: string | null;
     }
   > = new Map();
 
@@ -189,6 +184,7 @@ export default class SandboxedMcpServer {
           this.cachedToolAnalysis.set(cachedTool.name, {
             is_read: cachedTool.is_read,
             is_write: cachedTool.is_write,
+            analyzed_at: cachedTool.analyzed_at,
           });
 
           // Log caching for Google tools
@@ -237,11 +233,17 @@ export default class SandboxedMcpServer {
         const cachedAnalysis = this.cachedToolAnalysis.get(tool.name);
 
         // Check if this tool's analysis has changed
-        if (!cachedAnalysis || cachedAnalysis.is_read !== tool.is_read || cachedAnalysis.is_write !== tool.is_write) {
+        if (
+          !cachedAnalysis ||
+          cachedAnalysis.is_read !== tool.is_read ||
+          cachedAnalysis.is_write !== tool.is_write ||
+          cachedAnalysis.analyzed_at !== tool.analyzed_at
+        ) {
           // Update cache with whatever data we have (nulls are fine)
           this.cachedToolAnalysis.set(tool.name, {
             is_read: tool.is_read,
             is_write: tool.is_write,
+            analyzed_at: tool.analyzed_at,
           });
           hasUpdates = true;
           log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
@@ -349,13 +351,8 @@ export default class SandboxedMcpServer {
 
         if (this.mcpServer.oauthTokens?.access_token) {
           try {
-            // Try to refresh tokens if needed
-            const { ensureValidTokens, McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
-
             // We need the OAuth config to refresh tokens, but it's not stored with the server
             // For now, check if tokens are expired manually and warn if they might be
-            const { areTokensExpired } = await import('@backend/server/plugins/mcp-oauth');
-
             // Ensure token has required fields for MCP SDK compatibility
             const tokensWithDefaults = {
               ...this.mcpServer.oauthTokens,
@@ -577,8 +574,9 @@ export default class SandboxedMcpServer {
       // Get analysis results from cache if available
       const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
 
-      // Check if the tool has actually been analyzed (at least one non-null value)
-      const hasAnalysis = cachedAnalysis && (cachedAnalysis.is_read !== null || cachedAnalysis.is_write !== null);
+      // Check if the tool has actually been analyzed (has analyzed_at timestamp)
+      const hasAnalysis =
+        cachedAnalysis && cachedAnalysis.analyzed_at !== null && cachedAnalysis.analyzed_at !== undefined;
 
       return {
         id,

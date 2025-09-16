@@ -8,11 +8,13 @@ import {
   McpServerUserConfigValuesSchema,
 } from '@backend/database/schema/mcpServer';
 import toolAggregator from '@backend/llms/toolAggregator';
+import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpRequestLog from '@backend/models/mcpRequestLog';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/sandboxedMcp';
 import { ErrorResponseSchema } from '@backend/schemas';
+import { McpOAuthProvider, connectMcpServer } from '@backend/server/plugins/mcp-oauth';
 import log from '@backend/utils/logger';
 
 /**
@@ -409,14 +411,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Perform OAuth and get tokens
-          const { connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
-          const { client, accessToken } = await connectMcpServer(config, serverId, remoteUrl);
+          const { client } = await connectMcpServer(config, serverId, remoteUrl);
 
           // Close the test connection
           await client.close();
 
           // Get tokens from the provider for installation
-          const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
           const oauthProvider = new McpOAuthProvider(config, serverId);
           await oauthProvider.init();
 
@@ -441,11 +441,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           try {
             if (isRemoteServer) {
               log.info(`Remote server ${server.name} installed successfully - starting remote server`);
-              // Import McpServerSandboxManager to start the remote server
-              const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
+
               await McpServerSandboxManager.startServer(server);
               // Also sync external clients
-              const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
               await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
             } else {
               // Start the MCP server container for local servers
@@ -463,7 +461,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Clean up the server from sandbox manager if it was registered
             try {
-              const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
               await McpServerSandboxManager.removeMcpServer(serverId);
             } catch (cleanupError) {
               log.warn('Failed to clean up server from sandbox manager:', cleanupError);

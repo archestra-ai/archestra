@@ -9,6 +9,7 @@ import {
   installMcpServerWithOauth,
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
+import { useStatusBarStore } from '@ui/stores/status-bar-store';
 import { ConnectedMcpServer } from '@ui/types';
 
 /**
@@ -140,6 +141,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
   installMcpServer: async (requiresOAuth: boolean, installData: InstallMcpServerData['body']) => {
     const { id, displayName } = installData || {};
     const installId = id || uuidv4();
+    const { updateTask, removeTask } = useStatusBarStore.getState();
 
     try {
       set({
@@ -152,9 +154,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       });
 
       // Add installation task to StatusBar
-      const { useStatusBarStore } = await import('@ui/stores/status-bar-store');
-      const statusBarStore = useStatusBarStore.getState();
-      statusBarStore.updateTask(`install-${installId}`, {
+      updateTask(`install-${installId}`, {
         id: `install-${installId}`,
         type: 'server',
         title: 'Installing MCP Server',
@@ -267,46 +267,41 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       }
 
       // Mark installation as completed in StatusBar
-      const { useStatusBarStore: StatusBarStore2 } = await import('@ui/stores/status-bar-store');
-      const statusBar2 = StatusBarStore2.getState();
-      statusBar2.updateTask(`install-${installId}`, {
+      updateTask(`install-${installId}`, {
         status: 'completed',
         description: 'Installation complete',
       });
-      setTimeout(() => statusBar2.removeTask(`install-${installId}`), 2000);
+      setTimeout(() => removeTask(`install-${installId}`), 2000);
     } catch (error) {
       set({ errorInstallingMcpServer: error as string });
 
       // Mark installation as failed in StatusBar
-      const { useStatusBarStore: StatusBarStore3 } = await import('@ui/stores/status-bar-store');
-      const statusBar3 = StatusBarStore3.getState();
-      statusBar3.updateTask(`install-${installId}`, {
+      updateTask(`install-${installId}`, {
         status: 'error',
         description: 'Installation failed',
         error: error instanceof Error ? error.message : String(error),
       });
-      setTimeout(() => statusBar3.removeTask(`install-${installId}`), 10000);
+      setTimeout(() => removeTask(`install-${installId}`), 10000);
     } finally {
       set({ installingMcpServerId: null });
     }
   },
 
   uninstallMcpServer: async (mcpServerId: string) => {
+    const { updateTask, removeTask } = useStatusBarStore.getState();
+
     try {
       set({
         uninstallingMcpServerId: mcpServerId,
         errorUninstallingMcpServer: null,
       });
 
-      // Add uninstallation task to StatusBar
-      const { useStatusBarStore: StatusBarStore4 } = await import('@ui/stores/status-bar-store');
-      const statusBarStore4 = StatusBarStore4.getState();
-
       // Get server name if available
       const server = get().installedMcpServers.find((s) => s.id === mcpServerId);
       const serverName = server?.name || server?.id || mcpServerId;
 
-      statusBarStore4.updateTask(`uninstall-${mcpServerId}`, {
+      // Add uninstallation task to StatusBar
+      updateTask(`uninstall-${mcpServerId}`, {
         id: `uninstall-${mcpServerId}`,
         type: 'server',
         title: 'Uninstalling MCP Server',
@@ -323,23 +318,21 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       useMcpServersStore.getState().removeMcpServerFromInstalledMcpServers(mcpServerId);
 
       // Mark uninstallation as completed
-      statusBarStore4.updateTask(`uninstall-${mcpServerId}`, {
+      updateTask(`uninstall-${mcpServerId}`, {
         status: 'completed',
         description: 'Uninstalled successfully',
       });
-      setTimeout(() => statusBarStore4.removeTask(`uninstall-${mcpServerId}`), 2000);
+      setTimeout(() => removeTask(`uninstall-${mcpServerId}`), 2000);
     } catch (error) {
       set({ errorUninstallingMcpServer: error as string });
 
       // Mark uninstallation as failed
-      const { useStatusBarStore: StatusBarStore5 } = await import('@ui/stores/status-bar-store');
-      const statusBarStore5 = StatusBarStore5.getState();
-      statusBarStore5.updateTask(`uninstall-${mcpServerId}`, {
+      updateTask(`uninstall-${mcpServerId}`, {
         status: 'error',
         description: 'Uninstallation failed',
         error: error instanceof Error ? error.message : String(error),
       });
-      setTimeout(() => statusBarStore5.removeTask(`uninstall-${mcpServerId}`), 10000);
+      setTimeout(() => removeTask(`uninstall-${mcpServerId}`), 10000);
     } finally {
       set({ uninstallingMcpServerId: null });
     }

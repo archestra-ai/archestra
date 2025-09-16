@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
 import MemoryModel, { CreateMemorySchema } from '@backend/models/memory';
+import websocketService from '@backend/websocket';
 
 // Schema for API responses
 const MemoryEntrySchema = z.object({
@@ -128,7 +129,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const memory = await MemoryModel.setMemory(params.name.trim(), body.value.trim());
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: await MemoryModel.getAllMemories() },
@@ -158,7 +158,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const deleted = await MemoryModel.deleteMemory(params.name);
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: await MemoryModel.getAllMemories() },
@@ -185,7 +184,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const count = await MemoryModel.deleteAllMemories();
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: [] },
@@ -243,7 +241,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await MemoryModel.writeMemories(body.content.trim());
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       const memories = await MemoryModel.getAllMemories();
       websocketService.broadcast({
         type: 'memory-updated',

@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Use the same catalog URL from environment variable, default to production
-const CATALOG_URL = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
+const CATALOG_URL = process.env.ARCHESTRA_CATALOG_URL || 'http://localhost:3000/mcp-catalog/api';
 const CATALOG_DOCS_URL = `${CATALOG_URL}/docs`;
 
 export default defineConfig({

@@ -53,7 +53,7 @@ function ConnectorCatalogPage() {
        *
        * https://github.com/anthropics/dxt/blob/main/MANIFEST.md#server-configuration
        */
-      serverConfig: mcpServer,
+      serverConfig: mcpServer.server,
       userConfigValues: userConfigValues || {},
       // If using browser auth, append -browser to the provider name
       oauthProvider:
@@ -64,8 +64,6 @@ function ConnectorCatalogPage() {
       ...(mcpServer.oauth_config && {
         oauthConfig: mcpServer.oauth_config,
       }),
-      // Include remote_url for remote MCP servers
-      ...(mcpServer.remote_url && { remote_url: mcpServer.remote_url }),
       // Include archestra_config for browser auth provider lookup
       ...(mcpServer.archestra_config && { archestra_config: mcpServer.archestra_config }),
     };
@@ -90,10 +88,7 @@ function ConnectorCatalogPage() {
   };
 
   const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
-    // Check if it's a Remote MCP server
-    const isRemoteMcp = !!mcpServer.remote_url;
-
-    if (isRemoteMcp) {
+    if (mcpServer.server.type === 'remote') {
       // For Remote MCP, skip the dialog and install directly
       await installMcpServer(mcpServer);
     } else {

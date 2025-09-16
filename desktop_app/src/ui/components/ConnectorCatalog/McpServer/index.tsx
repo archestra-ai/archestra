@@ -44,7 +44,7 @@ export default function McpServer({
   // Safely extract OAuth and browser-based config with null checks
   const requiresOAuthSetup = !!server.oauth_config;
   const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
-  const isRemoteMcp = !!server.remote_url;
+  const isRemoteMcp = server.server.type === 'remote';
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);

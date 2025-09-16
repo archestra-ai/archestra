@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.4](https://github.com/archestra-ai/archestra/compare/v0.0.3...v0.0.4) (2025-09-16)
+
+
+### Features
+
+* basic packaged-app e2e test ([#341](https://github.com/archestra-ai/archestra/issues/341)) ([640ca39](https://github.com/archestra-ai/archestra/commit/640ca390fc9a31ab626f906f4aab766f3ff7e444))
+
+
+### Bug Fixes
+
+* address outstanding pnpm typecheck errors ([#395](https://github.com/archestra-ai/archestra/issues/395)) ([726803c](https://github.com/archestra-ai/archestra/commit/726803c8a3810204df8ef132b3af51b6cac23011))
+* several chat related bugs ([#394](https://github.com/archestra-ai/archestra/issues/394)) ([90503d1](https://github.com/archestra-ai/archestra/commit/90503d1c32d8b79c6da89839d44ebbf8c06f6976))
+
+
+### Dependencies
+
+* **frontend:** bump the frontend-dependencies group across 1 directory with 35 updates ([#398](https://github.com/archestra-ai/archestra/issues/398)) ([cbbe509](https://github.com/archestra-ai/archestra/commit/cbbe50941d2a965c80b58751875b101ccb988df4))
+
 ## [0.0.3](https://github.com/archestra-ai/archestra/compare/v0.0.2...v0.0.3) (2025-09-16)
 
 

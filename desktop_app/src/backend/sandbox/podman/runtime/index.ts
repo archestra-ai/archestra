@@ -273,7 +273,7 @@ export default class PodmanRuntime {
     let stderrOutput = '';
 
     this.runCommand({
-      command: ['machine', 'start', this.ARCHESTRA_MACHINE_NAME],
+      command: ['--log-level=debug', 'machine', 'start', this.ARCHESTRA_MACHINE_NAME],
       pipes: {
         onStdout: {
           callback: (data) => {

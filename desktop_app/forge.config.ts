@@ -117,24 +117,25 @@ const forgeConfig: ForgeConfig = {
   rebuildConfig: {},
   hooks: {
     // Sign bundled binaries before packaging
-    async prePackage(_forgeConfig) {
-      if (IS_MAC && process.env.APPLE_TEAM_ID) {
-        console.log('Signing bundled binaries...');
+    // async prePackage(_forgeConfig) {
+    //   if (IS_MAC && process.env.APPLE_TEAM_ID) {
+    //     console.log('Signing bundled binaries...');
 
-        const signingIdentityName = `Developer ID Application: Archestra Limited (${process.env.APPLE_TEAM_ID})`;
-
-        for (const binaryFilePath of binaryFilePaths) {
-          try {
-            console.log(`Signing ${binaryFilePath}...`);
-            execSync(`codesign --force --verbose --sign "${signingIdentityName}" "${binaryFilePath}"`, {
-              stdio: 'inherit',
-            });
-          } catch (error) {
-            console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
-          }
-        }
-      }
-    },
+    //     for (const binaryFilePath of binaryFilePaths) {
+    //       try {
+    //         console.log(`Signing ${binaryFilePath}...`);
+    //         execSync(
+    //           `codesign --force --verbose --sign "${APPLE_CODE_SIGNING_CERTIFICATE_IDENTITY}" "${binaryFilePath}"`,
+    //           {
+    //             stdio: 'inherit',
+    //           }
+    //         );
+    //       } catch (error) {
+    //         console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
+    //       }
+    //     }
+    //   }
+    // },
     // The call to this hook is mandatory for better-sqlite3 to work once the app built
     async packageAfterCopy(_forgeConfig, buildPath) {
       const requiredNativePackages = ['better-sqlite3', 'bindings', 'file-uri-to-path'];

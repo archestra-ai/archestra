@@ -2,7 +2,7 @@ import type { RawReplyDefaultExpression } from 'fastify';
 import fs from 'fs';
 import path from 'node:path';
 import os from 'os';
-import { createStream } from 'rotating-file-stream';
+import { type FileSize, createStream } from 'rotating-file-stream';
 import type { Duplex } from 'stream';
 import { Agent, request, upgrade } from 'undici';
 import { v4 as uuidv4 } from 'uuid';
@@ -290,7 +290,7 @@ export default class PodmanContainer {
           /**
            * Rotate files when they reach this size, e.g. '5M'
            */
-          size: mcpServerLogMaxSize,
+          size: mcpServerLogMaxSize as FileSize,
           /**
            * Keep only N rotated files
            */

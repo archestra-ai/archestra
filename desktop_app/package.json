@@ -49,7 +49,7 @@
     "@electron-forge/shared-types": "^7.9.0",
     "@electron/fuses": "^2.0.0",
     "@electron/rebuild": "^4.0.1",
-    "@hey-api/openapi-ts": "^0.83.1",
+    "@hey-api/openapi-ts": "^0.80.14",
     "@tailwindcss/vite": "^4.1.13",
     "@tanstack/router-plugin": "^1.131.44",
     "@testing-library/jest-dom": "^6.8.0",

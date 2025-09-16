@@ -247,8 +247,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       '@hey-api/openapi-ts':
-        specifier: ^0.83.1
-        version: 0.83.1(typescript@5.9.2)
+        specifier: ^0.80.14
+        version: 0.80.18(typescript@5.9.2)
       '@tailwindcss/vite':
         specifier: ^4.1.13
         version: 4.1.13(vite@7.1.5(@types/node@24.5.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.5)(yaml@2.8.1))
@@ -1295,22 +1295,16 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@hey-api/codegen-core@0.1.0':
-    resolution: {integrity: sha512-7B6B9Zuw4uQWoG5YwAwNC+UTz6ErAujqaQrJuMu/OgPkUHq+hl6zdKKi2MX/399vPYilo0IGBxQHmY1UfmTHsw==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=22.10.0}
-    peerDependencies:
-      typescript: '>=5.5.3'
-
-  '@hey-api/json-schema-ref-parser@1.1.0':
-    resolution: {integrity: sha512-+5eg9pgAAM9oSqJQuUtfTKbLz8yieFKN91myyXiLnprqFj8ROfxUKJLr9DKq/hGKyybKT1WxFSetDqCFm80pCA==}
+  '@hey-api/json-schema-ref-parser@1.0.6':
+    resolution: {integrity: sha512-yktiFZoWPtEW8QKS65eqKwA5MTKp88CyiL8q72WynrBs/73SAaxlSWlA2zW/DZlywZ5hX1OYzrCC0wFdvO9c2w==}
     engines: {node: '>= 16'}
 
-  '@hey-api/openapi-ts@0.83.1':
-    resolution: {integrity: sha512-AJIXDsXBLXS4uzhU+yVeNmD43uN6FYPcWpcid7Q0bA4JRXpI+6livOzUUMiuszt3NlgHy1gcf6x15W2xHNSoag==}
+  '@hey-api/openapi-ts@0.80.18':
+    resolution: {integrity: sha512-YCcRdw+OmD/WgBk5ZNaSblEb94PfqBKp4gDvfEYtEdRVS76etdgVOD0CPz72Tus+6zeSzGDVlWE8GOfcib0C6g==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=22.10.0}
     hasBin: true
     peerDependencies:
-      typescript: '>=5.5.3'
+      typescript: ^5.5.3
 
   '@hookform/resolvers@5.2.2':
     resolution: {integrity: sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA==}
@@ -8967,26 +8961,22 @@ snapshots:
 
   '@gar/promisify@1.1.3': {}
 
-  '@hey-api/codegen-core@0.1.0(typescript@5.9.2)':
-    dependencies:
-      typescript: 5.9.2
-
-  '@hey-api/json-schema-ref-parser@1.1.0':
+  '@hey-api/json-schema-ref-parser@1.0.6':
     dependencies:
       '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
       js-yaml: 4.1.0
       lodash: 4.17.21
 
-  '@hey-api/openapi-ts@0.83.1(typescript@5.9.2)':
+  '@hey-api/openapi-ts@0.80.18(typescript@5.9.2)':
     dependencies:
-      '@hey-api/codegen-core': 0.1.0(typescript@5.9.2)
-      '@hey-api/json-schema-ref-parser': 1.1.0
+      '@hey-api/json-schema-ref-parser': 1.0.6
       ansi-colors: 4.1.3
       c12: 2.0.1
       color-support: 1.1.3
       commander: 13.0.0
       handlebars: 4.7.8
+      js-yaml: 4.1.0
       open: 10.1.2
       semver: 7.7.2
       typescript: 5.9.2

@@ -58,46 +58,6 @@ export const createArchestraMcpServer = () => {
     }
   });
 
-  archestraMcpServer.tool(
-    'get_memory',
-    'Get a specific memory value by its name',
-    z.object({
-      name: z.string().describe('The name of the memory to retrieve'),
-    }) as any,
-    async ({ name }: any) => {
-      try {
-        const memory = await MemoryModel.getMemory(name);
-        if (!memory) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Memory "${name}" not found.`,
-              },
-            ],
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: memory.value,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error retrieving memory "${name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
-            },
-          ],
-        };
-      }
-    }
-  );
 
   archestraMcpServer.tool(
     'set_memory',

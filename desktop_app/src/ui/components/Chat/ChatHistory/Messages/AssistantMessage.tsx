@@ -185,7 +185,7 @@ export default function AssistantMessage({
 
   return (
     <div className="relative group" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-      <div className="gap-y-2 grid grid-cols-1 pr-24 whitespace-pre-wrap">
+      <div className="gap-y-2 grid grid-cols-1 pr-24">
         {isRegenerating ? <RegenerationSkeleton /> : orderedElements}
       </div>
       {isHovered && (

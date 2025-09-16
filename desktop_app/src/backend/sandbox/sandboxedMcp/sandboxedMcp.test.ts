@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import SandboxedMcpServer from './index';
-import { ToolModel } from '@backend/models/tools';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { McpServer } from '@backend/models/mcpServer';
+
+import SandboxedMcpServer from './index';
 
 // Mock dependencies
 vi.mock('@backend/models/tools');
@@ -18,17 +19,51 @@ vi.mock('@backend/websocket', () => ({
   },
 }));
 
+// Mock PodmanContainer to avoid initialization issues
+vi.mock('@backend/sandbox/podman/container', async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    default: vi.fn().mockImplementation(() => ({
+      startOrCreateContainer: vi.fn(),
+      stopContainer: vi.fn(),
+      removeContainer: vi.fn(),
+      getRecentLogs: vi.fn(),
+      streamToContainer: vi.fn(),
+      statusSummary: { state: 'running' },
+      assignedHttpPort: undefined,
+    })),
+  };
+});
+
 describe('SandboxedMcpServer', () => {
   describe('availableToolsList', () => {
     let sandboxedMcpServer: SandboxedMcpServer;
     let mockMcpServer: McpServer;
 
     beforeEach(() => {
+      // Clear all mocks between tests
+      vi.clearAllMocks();
+
       mockMcpServer = {
         id: 'modelcontextprotocol__servers__src__filesystem',
         name: 'Filesystem',
         serverType: 'local',
         state: 'running',
+        serverConfig: {
+          command: 'node',
+          args: ['server.js'],
+        },
+        userConfigValues: {},
+        oauthTokens: null,
+        oauthClientInfo: null,
+        oauthServerMetadata: null,
+        oauthResourceMetadata: null,
+        oauthConfig: null,
+        status: 'installed',
+        remoteUrl: null,
+        updatedAt: '2025-09-16T21:00:00.000Z',
+        createdAt: '2025-09-16T21:00:00.000Z',
       } as McpServer;
 
       // Create instance with mock podman socket path
@@ -38,13 +73,13 @@ describe('SandboxedMcpServer', () => {
     it('should handle tools with standard naming (no prefix)', () => {
       // Mock tools with standard names
       sandboxedMcpServer.tools = {
-        'test_server__read_file': { 
+        test_server__read_file: {
           description: 'Read a file',
-          inputSchema: {}
+          inputSchema: {},
         },
-        'test_server__write_file': { 
+        test_server__write_file: {
           description: 'Write a file',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -86,17 +121,17 @@ describe('SandboxedMcpServer', () => {
     it('should handle filesystem server tools with prefix (servers__src__filesystem__)', () => {
       // Mock tools as they come from the filesystem MCP server
       sandboxedMcpServer.tools = {
-        'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__read_file': {
+        modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__read_file: {
           description: 'Read file contents',
-          inputSchema: {}
+          inputSchema: {},
         },
-        'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__list_directory': {
+        modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__list_directory: {
           description: 'List directory contents',
-          inputSchema: {}
+          inputSchema: {},
         },
-        'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__write_file': {
+        modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__write_file: {
           description: 'Write file contents',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -120,9 +155,9 @@ describe('SandboxedMcpServer', () => {
       const tools = sandboxedMcpServer.availableToolsList;
 
       expect(tools).toHaveLength(3);
-      
+
       // Check that read_file is correctly matched with cache
-      const readFileTool = tools.find(t => t.name.includes('read_file'));
+      const readFileTool = tools.find((t) => t.name.includes('read_file'));
       expect(readFileTool).toBeDefined();
       expect(readFileTool?.analysis).toMatchObject({
         status: 'completed',
@@ -131,7 +166,7 @@ describe('SandboxedMcpServer', () => {
       });
 
       // Check that list_directory is correctly matched with cache
-      const listDirTool = tools.find(t => t.name.includes('list_directory'));
+      const listDirTool = tools.find((t) => t.name.includes('list_directory'));
       expect(listDirTool).toBeDefined();
       expect(listDirTool?.analysis).toMatchObject({
         status: 'completed',
@@ -140,7 +175,7 @@ describe('SandboxedMcpServer', () => {
       });
 
       // Check that write_file is correctly matched with cache
-      const writeFileTool = tools.find(t => t.name.includes('write_file'));
+      const writeFileTool = tools.find((t) => t.name.includes('write_file'));
       expect(writeFileTool).toBeDefined();
       expect(writeFileTool?.analysis).toMatchObject({
         status: 'completed',
@@ -151,9 +186,9 @@ describe('SandboxedMcpServer', () => {
 
     it('should show awaiting_ollama_model status when tool is not analyzed', () => {
       sandboxedMcpServer.tools = {
-        'test_server__unanalyzed_tool': {
+        test_server__unanalyzed_tool: {
           description: 'Tool pending analysis',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -175,9 +210,9 @@ describe('SandboxedMcpServer', () => {
 
     it('should handle tools with analysis but null values (neither read nor write)', () => {
       sandboxedMcpServer.tools = {
-        'test_server__neutral_tool': {
+        test_server__neutral_tool: {
           description: 'Tool that is neither read nor write',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -204,9 +239,9 @@ describe('SandboxedMcpServer', () => {
 
     it('should handle tools without analyzed_at (legacy cache entries)', () => {
       sandboxedMcpServer.tools = {
-        'test_server__legacy_tool': {
+        test_server__legacy_tool: {
           description: 'Tool with legacy cache entry',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -233,9 +268,9 @@ describe('SandboxedMcpServer', () => {
 
     it('should handle edge case with multiple double underscores in tool name', () => {
       sandboxedMcpServer.tools = {
-        'server__prefix__another__actual_tool__name': {
+        server__prefix__another__actual_tool__name: {
           description: 'Tool with complex naming',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 
@@ -266,12 +301,12 @@ describe('SandboxedMcpServer', () => {
         {
           toolId: 'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__read_file',
           expectedCacheKey: 'read_file',
-          expectedName: 'servers__src__filesystem__read_file',
+          expectedName: 'servers__src__filesystem__servers__src__filesystem__read_file', // Full name after stripping server ID
         },
         {
           toolId: 'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__list_allowed_directories',
           expectedCacheKey: 'list_allowed_directories',
-          expectedName: 'servers__src__filesystem__list_allowed_directories',
+          expectedName: 'servers__src__filesystem__servers__src__filesystem__list_allowed_directories', // Full name after stripping server ID
         },
       ];
 
@@ -298,9 +333,9 @@ describe('SandboxedMcpServer', () => {
 
     it('should handle tools with no double underscores in name', () => {
       sandboxedMcpServer.tools = {
-        'simple_server__simpletool': {
+        simple_server__simpletool: {
           description: 'Simple tool with no complex prefix',
-          inputSchema: {}
+          inputSchema: {},
         },
       } as any;
 

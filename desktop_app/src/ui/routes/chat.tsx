@@ -288,10 +288,10 @@ function ChatPage() {
           } else {
             setMessages((prevMessages) => [systemMessage, ...prevMessages]);
           }
-          
+
           // Wait for next tick to ensure state is updated
-          await new Promise(resolve => setTimeout(resolve, 0));
-          
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
           setHasLoadedMemories(true);
           return true;
         } else {

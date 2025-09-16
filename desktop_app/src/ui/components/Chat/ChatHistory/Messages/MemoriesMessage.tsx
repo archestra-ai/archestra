@@ -20,7 +20,7 @@ export default function MemoriesMessage({ message }: MemoriesMessageProps) {
 
   // Parse memories from the text content
   const lines = textContent.split('\n');
-  const headerText = lines[0] || 'Previous memories loaded';
+  const headerText = lines[0] || 'Memories loaded';
   const memories = lines.slice(1).filter((line) => line.trim());
 
   return (

@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from '@tanstack/react-router';
 import { Bug, Plus, SidebarIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import BugReportDialog from '@ui/components/BackendLogsDialog';
 import { ThemeToggler } from '@ui/components/ThemeToggler';
 import { Button } from '@ui/components/ui/button';
 import { useSidebar } from '@ui/components/ui/sidebar';
@@ -15,6 +16,7 @@ export function SiteHeader() {
   const { getCurrentChatTitle, createNewChat } = useChatStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showLogsDialog, setShowLogsDialog] = useState(false);
   const [appInfo, setAppInfo] = useState<{
     version: string;
     isPackaged: boolean;
@@ -76,6 +78,12 @@ What did you expect to happen?
 **Actual Behavior:**
 What actually happened?
 
+**Relevant logs**
+
+\`\`\`
+Put relevant logs here (if any)
+\`\`\`
+
 **System Information:**
 - **App Version:** ${appVersion}
 - **App Packaged:** ${appPackaged ? 'Yes' : 'No'}
@@ -94,7 +102,7 @@ What actually happened?
     `.trim()
     );
 
-    const issueTitle = encodeURIComponent('[Put the Bug title here] ');
+    const issueTitle = encodeURIComponent('[Put the bug title here] ');
     const url = `https://github.com/archestra-ai/archestra/issues/new?title=${issueTitle}&body=${issueBody}`;
     if (window.electronAPI?.openExternal) {
       window.electronAPI.openExternal(url);
@@ -168,10 +176,10 @@ What actually happened?
           <Button
             className="h-6 text-xs px-2 sm:px-3 bg-gray-500 hover:bg-gray-600 text-white"
             size="sm"
-            onClick={handleReportBug}
+            onClick={() => setShowLogsDialog(true)}
             title="Report a bug"
           >
-            <span className="hidden sm:inline">report a</span>
+            <span className="hidden sm:inline">Report a</span>
             <Bug className="h-3.5 w-3.5 sm:ml-1" />
           </Button>
           <span className="text-xs text-muted-foreground hidden sm:inline">or</span>
@@ -187,6 +195,13 @@ What actually happened?
           <ThemeToggler />
         </div>
       </div>
+      <BugReportDialog 
+        open={showLogsDialog} 
+        onOpenChange={setShowLogsDialog}
+        onReportBug={handleReportBug}
+        appVersion={appVersion}
+        systemInfo={systemInfo}
+      />
     </header>
   );
 }

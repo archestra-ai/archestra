@@ -90,15 +90,10 @@ function ConnectorCatalogPage() {
   };
 
   const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
-    if (mcpServer.server.type === 'remote') {
-      // For Remote MCP, skip the dialog and install directly
-      await installMcpServer(mcpServer);
-    } else {
-      // Show OAuth confirmation dialog for regular OAuth
-      setPendingOAuthServer(mcpServer);
-      setPendingBrowserAuth(false);
-      setOauthConfirmDialogOpen(true);
-    }
+    // Show OAuth confirmation dialog for all OAuth-based servers (including Remote MCP)
+    setPendingOAuthServer(mcpServer);
+    setPendingBrowserAuth(false);
+    setOauthConfirmDialogOpen(true);
   };
 
   const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {

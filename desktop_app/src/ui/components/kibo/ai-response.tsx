@@ -37,7 +37,7 @@ const components: Options['components'] = {
     </ol>
   ),
   li: ({ node, children, className, ...props }) => (
-    <li className={cn('py-1', className)} {...props}>
+    <li className={cn('', className)} {...props}>
       {children}
     </li>
   ),

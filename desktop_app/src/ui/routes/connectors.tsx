@@ -278,20 +278,15 @@ function ConnectorCatalogPage() {
           )}
         </div>
       )}
-
-      {/* Install Dialog */}
       <McpServerInstallDialog
         mcpServer={selectedServerForInstall}
         open={installDialogOpen}
         onOpenChange={setInstallDialogOpen}
         onInstall={handleInstallWithConfig}
       />
-
-      {/* Auth Confirmation Dialog */}
       <AuthConfirmationDialog
         open={oauthConfirmDialogOpen}
         onOpenChange={setOauthConfirmDialogOpen}
-        serverName={pendingOAuthServer?.display_name || pendingOAuthServer?.name || ''}
         isBrowserAuth={pendingBrowserAuth}
         onConfirm={handleOAuthConfirm}
         onCancel={handleOAuthCancel}

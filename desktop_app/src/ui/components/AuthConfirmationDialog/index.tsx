@@ -14,7 +14,6 @@ import {
 interface AuthConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  serverName: string;
   isBrowserAuth?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -23,7 +22,6 @@ interface AuthConfirmationDialogProps {
 export default function AuthConfirmationDialog({
   open,
   onOpenChange,
-  serverName,
   isBrowserAuth = false,
   onConfirm,
   onCancel,
@@ -121,14 +119,14 @@ export default function AuthConfirmationDialog({
           95% {
             opacity: 1;
           }
-          100% { 
+          100% {
             transform: translateX(calc(100vw + 100px));
             opacity: 0;
           }
         }
-        
+
         @keyframes oauthDriftSlow {
-          0% { 
+          0% {
             transform: translateX(-100px) translateY(0);
             opacity: 0;
           }
@@ -141,12 +139,12 @@ export default function AuthConfirmationDialog({
           95% {
             opacity: 0.8;
           }
-          100% { 
+          100% {
             transform: translateX(calc(100vw + 100px)) translateY(0);
             opacity: 0;
           }
         }
-        
+
         .oauth-particle {
           position: fixed;
           width: 6px;
@@ -157,21 +155,21 @@ export default function AuthConfirmationDialog({
           pointer-events: none;
           z-index: 51;
         }
-        
+
         .oauth-particle:nth-child(even) {
           width: 4px;
           height: 4px;
           animation: oauthDriftSlow 12s linear infinite;
           background: rgba(118, 75, 162, 0.5);
         }
-        
+
         .oauth-particle:nth-child(3n) {
           width: 8px;
           height: 8px;
           animation-duration: 6s;
           background: rgba(102, 126, 234, 0.8);
         }
-        
+
         .oauth-shape {
           position: fixed;
           border: 2px solid rgba(102, 126, 234, 0.3);
@@ -181,7 +179,7 @@ export default function AuthConfirmationDialog({
           pointer-events: none;
           z-index: 51;
         }
-        
+
         .oauth-shape.square {
           border-radius: 20%;
           animation-duration: 18s;

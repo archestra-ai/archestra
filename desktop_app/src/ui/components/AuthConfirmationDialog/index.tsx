@@ -42,14 +42,14 @@ export default function AuthConfirmationDialog({
       for (let i = 0; i < numParticles; i++) {
         const particle = document.createElement('div');
         particle.className = 'oauth-particle';
-        
+
         // First batch: appear randomly on screen immediately
         if (i < numParticles / 2) {
           const startX = Math.random() * 100; // Random position across viewport
           particle.style.left = startX + 'vw';
           particle.style.top = Math.random() * 100 + '%';
           particle.style.animationDelay = '0s'; // Start immediately
-          particle.style.animationDuration = (12 - startX/10) + 's'; // Adjust duration based on position
+          particle.style.animationDuration = 12 - startX / 10 + 's'; // Adjust duration based on position
           particle.style.opacity = '1'; // Start visible
           // Use a different animation for initial particles
           particle.style.animationName = 'oauthDriftFromPosition';
@@ -85,14 +85,14 @@ export default function AuthConfirmationDialog({
         const size = 30 + Math.random() * 40;
         shape.style.width = size + 'px';
         shape.style.height = size + 'px';
-        
+
         // First few shapes appear on screen immediately
         if (i < 2) {
           const startX = Math.random() * 80; // Random position across viewport
           shape.style.left = startX + 'vw';
           shape.style.top = Math.random() * 100 + '%';
           shape.style.animationDelay = '0s'; // Start immediately
-          shape.style.animationDuration = (15 - startX/8) + 's';
+          shape.style.animationDuration = 15 - startX / 8 + 's';
           shape.style.opacity = '0.8'; // Start visible
           shape.style.animationName = 'oauthDriftFromPosition';
         } else {

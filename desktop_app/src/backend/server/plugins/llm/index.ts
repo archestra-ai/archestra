@@ -13,6 +13,7 @@ import { getModelContextWindow } from '@backend/llms/modelContextWindows';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
+import ollamaClient from '@backend/ollama/client';
 
 interface StreamRequestBody {
   model: string;
@@ -128,7 +129,15 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             fastify.log.info(`[TOKEN DEBUG] streamText onFinish - usage: ${JSON.stringify(usage)}`);
 
             if (usage) {
-              const contextWindow = getModelContextWindow(model);
+              let contextWindow: number;
+
+              // Get context window dynamically for Ollama, use hardcoded for others
+              if (provider === 'ollama') {
+                contextWindow = await ollamaClient.getModelContextWindow(model);
+              } else {
+                contextWindow = getModelContextWindow(model);
+              }
+
               capturedTokenUsage = {
                 promptTokens: usage.inputTokens,
                 completionTokens: usage.outputTokens,

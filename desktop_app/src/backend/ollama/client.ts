@@ -79,6 +79,7 @@ class OllamaClient {
   private baseUrl: string;
   private modelAvailability: Record<string, boolean> = {};
   private modelAvailabilityPromises: Record<string, Promise<void>> = {};
+  private contextWindowCache: Map<string, number> = new Map();
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || config.ollama.server.host;
@@ -279,6 +280,58 @@ class OllamaClient {
       return OllamaListResponseSchema.parse(data);
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Get the context window size for a specific model
+   * Uses the /api/show endpoint to get model details
+   * Results are cached to avoid repeated API calls
+   */
+  async getModelContextWindow(modelName: string): Promise<number> {
+    // Check cache first
+    if (this.contextWindowCache.has(modelName)) {
+      return this.contextWindowCache.get(modelName)!;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/show`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get model info: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Default context window size
+      let contextLength = 128000;
+
+      // Look for context_length in model_info
+      // It's typically stored as {architecture}.context_length
+      if (data.model_info) {
+        for (const [key, value] of Object.entries(data.model_info)) {
+          if (key.endsWith('.context_length') && typeof value === 'number') {
+            contextLength = value;
+            break;
+          }
+        }
+      }
+
+      // Cache the result
+      this.contextWindowCache.set(modelName, contextLength);
+      log.info(`Context window for ${modelName}: ${contextLength}`);
+
+      return contextLength;
+    } catch (error) {
+      log.warn(`Failed to get context window for ${modelName}, using default:`, error);
+      // Cache the default to avoid repeated failed attempts
+      const defaultSize = 128000;
+      this.contextWindowCache.set(modelName, defaultSize);
+      return defaultSize;
     }
   }
 

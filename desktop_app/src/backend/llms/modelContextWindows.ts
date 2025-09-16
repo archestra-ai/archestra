@@ -1,6 +1,9 @@
 /**
  * Model context window sizes (in tokens)
  * This maps model identifiers to their maximum context window size
+ *
+ * Note: Ollama models get their context window dynamically from the Ollama API.
+ * This file only contains cloud provider models that don't provide dynamic context info.
  */
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   // OpenAI Models
@@ -46,42 +49,8 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'deepseek-chat': 128000,
   'deepseek-coder': 128000,
 
-  // Ollama/Local Models (Common ones)
-  'llama3.2': 131072,
-  'llama3.2:1b': 131072,
-  'llama3.2:3b': 131072,
-  'llama3.1': 131072,
-  'llama3.1:8b': 131072,
-  'llama3.1:70b': 131072,
-  'llama3.1:405b': 131072,
-  'llama3': 8192,
-  'llama3:8b': 8192,
-  'llama3:70b': 8192,
-  'llama2': 4096,
-  'llama2:7b': 4096,
-  'llama2:13b': 4096,
-  'llama2:70b': 4096,
-  'mistral': 32768,
-  'mistral:7b': 32768,
-  'mixtral': 32768,
-  'mixtral:8x7b': 32768,
-  'mixtral:8x22b': 65536,
-  'codellama': 16384,
-  'codellama:7b': 16384,
-  'codellama:13b': 16384,
-  'codellama:34b': 16384,
-  'phi3': 131072,
-  'phi3:3.8b': 131072,
-  'phi3:14b': 131072,
-  'qwen2.5': 131072,
-  'qwen2.5:7b': 131072,
-  'qwen2.5:14b': 131072,
-  'qwen2.5:32b': 131072,
-  'qwen2.5:72b': 131072,
-  'llama-guard3:1b': 8192,
-
   // Default fallback for unknown models
-  'default': 8192,
+  'default': 128000,
 };
 
 /**

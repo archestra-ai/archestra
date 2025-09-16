@@ -376,16 +376,16 @@ export default class ChatModel {
           totalTokens: updatedChat.totalTokens,
           lastModel: updatedChat.lastModel,
           lastContextWindow: updatedChat.lastContextWindow,
-          contextUsagePercent: updatedChat.lastContextWindow && updatedChat.totalTokens
-            ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
-            : 0,
+          contextUsagePercent:
+            updatedChat.lastContextWindow && updatedChat.totalTokens
+              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
+              : 0,
         },
       });
     }
   }
 
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
-
     // First, find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
 
@@ -411,7 +411,6 @@ export default class ChatModel {
         createdAt: timestamp, // Explicit timestamp with order preservation
       });
     }
-
 
     // Generate a title if the chat has 4+ messages and no title yet
     if (messages.length >= 4 && !chat.title) {

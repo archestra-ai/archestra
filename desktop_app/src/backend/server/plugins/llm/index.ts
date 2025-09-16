@@ -2,7 +2,14 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI, openai } from '@ai-sdk/openai';
-import { convertToModelMessages, stepCountIs, streamText } from 'ai';
+import {
+  type FinishReason,
+  type LanguageModelUsage,
+  type StepResult,
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+} from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
@@ -121,7 +128,15 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // }),
           // onError({ error }) {
           // },
-          onFinish: async ({ usage, text, finishReason }) => {
+          onFinish: async ({
+            usage,
+            text,
+            finishReason,
+          }: {
+            usage: LanguageModelUsage;
+            text: string;
+            finishReason: FinishReason;
+          }) => {
             // Save token usage directly to the chat
             if (usage && sessionId) {
               let contextWindow: number;

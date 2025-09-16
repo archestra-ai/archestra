@@ -50,7 +50,7 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'deepseek-coder': 128000,
 
   // Default fallback for unknown models
-  'default': 128000,
+  default: 128000,
 };
 
 /**

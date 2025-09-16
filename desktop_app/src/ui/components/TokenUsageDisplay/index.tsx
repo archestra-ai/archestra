@@ -128,12 +128,7 @@ export default function TokenUsageDisplay({
             <span className={cn('transition-colors', contextUsageColor)}>{getIcon()}</span>
             <span className="font-medium">
               {formatNumber(totalTokens)}
-              {contextWindow && (
-                <span className="text-muted-foreground">
-                  {' '}
-                  / {formatNumber(contextWindow)}
-                </span>
-              )}
+              {contextWindow && <span className="text-muted-foreground"> / {formatNumber(contextWindow)}</span>}
             </span>
             {contextWindow && (
               <span className={cn('font-medium', contextUsageColor)}>({contextUsagePercent.toFixed(0)}%)</span>

@@ -9,6 +9,7 @@ import { createOllama } from 'ollama-ai-provider-v2';
 import { type McpTools } from '@backend/archestraMcp';
 import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
+import { getModelContextWindow } from '@backend/llms/modelContextWindows';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
@@ -107,6 +108,9 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           (!provider && !providerConfig && model.startsWith('gpt-')) ||
           (!provider && !providerConfig && model.startsWith('o1-'));
 
+        // Variable to store token usage from streamText onFinish
+        let capturedTokenUsage: any = undefined;
+
         // Create the stream with the appropriate model
         const streamConfig: any = {
           model: modelInstance,
@@ -119,6 +123,23 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // }),
           // onError({ error }) {
           // },
+          onFinish: async ({ usage, text, finishReason }) => {
+            // Handle token usage tracking here
+            fastify.log.info(`[TOKEN DEBUG] streamText onFinish - usage: ${JSON.stringify(usage)}`);
+
+            if (usage) {
+              const contextWindow = getModelContextWindow(model);
+              capturedTokenUsage = {
+                promptTokens: usage.inputTokens,
+                completionTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+                model: model,
+                contextWindow: contextWindow,
+              };
+
+              fastify.log.info(`[TOKEN DEBUG] Token usage captured: ${JSON.stringify(capturedTokenUsage)}`);
+            }
+          },
         };
 
         // Add OpenAI prompt caching configuration if using OpenAI provider
@@ -148,21 +169,15 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
-            onFinish: (result) => {
-              if (sessionId) {
-                Chat.saveMessages(sessionId, result.messages);
-              }
+            onFinish: async (result) => {
+              fastify.log.info(`[TOKEN DEBUG] toUIMessageStreamResponse onFinish - capturedTokenUsage: ${JSON.stringify(capturedTokenUsage)}`);
 
-              // Log OpenAI cache metrics if available
-              if (shouldLogCache && 'usage' in result && result.usage) {
-                const usage = result.usage as any;
-                const cachedTokens = usage?.cachedPromptTokens;
-                const promptTokens = usage?.promptTokens;
-                if (cachedTokens !== undefined && promptTokens) {
-                  fastify.log.info(
-                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`
-                  );
-                }
+              // Save messages with token usage data
+              if (sessionId) {
+                fastify.log.info(`[TOKEN DEBUG] Calling saveMessages with tokenUsage: ${JSON.stringify(capturedTokenUsage)}`);
+                await Chat.saveMessages(sessionId, result.messages, capturedTokenUsage);
+              } else {
+                fastify.log.warn(`[TOKEN DEBUG] No sessionId, not saving messages`);
               }
             },
           })

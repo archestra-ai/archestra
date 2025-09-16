@@ -134,6 +134,20 @@
       "when": 1757703129486,
       "tag": "0018_smiling_thor_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1758057390961,
+      "tag": "0019_dark_puma",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1758060374575,
+      "tag": "0020_parallel_retro_girl",
+      "breakpoints": true
     }
   ]
 }

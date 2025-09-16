@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { AlertCircle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import ChatTokenUsage from '@ui/components/ChatTokenUsage';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
   AIInput,
@@ -624,6 +625,7 @@ export default function ChatInput({
                 <span>Toggle system prompt</span>
               </TooltipContent>
             </Tooltip>
+            <ChatTokenUsage />
           </AIInputTools>
 
           <div className="flex items-center gap-2">

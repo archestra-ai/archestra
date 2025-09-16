@@ -57,6 +57,7 @@ const Message = ({
   onDeleteMessage,
   onRegenerateMessage,
   regeneratingIndex,
+  tokenUsage,
 }: MessageProps) => {
   const isEditing = editingMessageId === message.id;
 
@@ -90,6 +91,7 @@ const Message = ({
           {...commonProps}
           onRegenerate={() => onRegenerateMessage(messageIndex)}
           isRegenerating={regeneratingIndex === messageIndex}
+          tokenUsage={tokenUsage}
         />
       );
     case 'system':
@@ -132,6 +134,7 @@ export default function ChatHistory({
   regeneratingIndex,
   isSubmitting,
   submissionStartTime,
+  tokenUsageMap,
 }: ChatHistoryProps) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollAreaRef = useRef<HTMLElement | null>(null);
@@ -229,6 +232,7 @@ export default function ChatHistory({
                 onRegenerateMessage={onRegenerateMessage}
                 isRegenerating={isRegenerating}
                 regeneratingIndex={regeneratingIndex}
+                tokenUsage={tokenUsageMap?.get(message.id)}
               />
             </div>
           </div>

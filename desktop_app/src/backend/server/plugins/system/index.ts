@@ -22,7 +22,7 @@ const systemRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Read the file
       const fileContent = fs.readFileSync(logPath, 'utf-8');
       const logLines = fileContent.split('\n');
-      
+
       // Get the last N lines
       const lastLines = logLines.slice(-lines);
       const logs = lastLines.join('\n');

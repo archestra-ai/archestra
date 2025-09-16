@@ -1,4 +1,4 @@
-import { Bug, CheckCircle, Copy, ExternalLink, RefreshCw, Terminal, FileText } from 'lucide-react';
+import { Bug, CheckCircle, Copy, ExternalLink, FileText, RefreshCw, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
@@ -15,12 +15,12 @@ interface BugReportDialogProps {
   systemInfo?: any;
 }
 
-export default function BugReportDialog({ 
-  open, 
-  onOpenChange, 
+export default function BugReportDialog({
+  open,
+  onOpenChange,
   onReportBug,
   appVersion,
-  systemInfo 
+  systemInfo,
 }: BugReportDialogProps) {
   const [backendLogs, setBackendLogs] = useState<string>('');
   const [frontendLogs, setFrontendLogs] = useState<string>('');
@@ -105,11 +105,13 @@ export default function BugReportDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="text-sm text-muted-foreground mb-2">
-          These logs may help maintainers debug the issue
-        </div>
+        <div className="text-sm text-muted-foreground mb-2">These logs may help maintainers debug the issue</div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'backend' | 'frontend')} className="flex-1 flex flex-col min-h-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as 'backend' | 'frontend')}
+          className="flex-1 flex flex-col min-h-0"
+        >
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <TabsList className="grid w-[280px] grid-cols-2">
               <TabsTrigger value="backend">Backend Logs</TabsTrigger>
@@ -147,20 +149,15 @@ export default function BugReportDialog({
             </div>
           </TabsContent>
         </Tabs>
-        
+
         <DialogFooter className="flex-row justify-between items-center sm:justify-between">
           <div className="text-xs text-muted-foreground">
-            App Version: {appVersion || 'Unknown'} | 
-            Platform: {systemInfo?.platform || 'Unknown'} | 
-            OS: {systemInfo?.osVersion || 'Unknown'}
+            App Version: {appVersion || 'Unknown'} | Platform: {systemInfo?.platform || 'Unknown'} | OS:{' '}
+            {systemInfo?.osVersion || 'Unknown'}
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCopyAllLogs}
-              className="flex items-center gap-2"
-            >
-              {(copiedBackend && copiedFrontend) ? (
+            <Button variant="outline" onClick={handleCopyAllLogs} className="flex items-center gap-2">
+              {copiedBackend && copiedFrontend ? (
                 <>
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   Copied!

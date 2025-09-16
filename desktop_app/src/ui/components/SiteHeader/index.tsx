@@ -195,8 +195,8 @@ Put relevant logs here (if any)
           <ThemeToggler />
         </div>
       </div>
-      <BugReportDialog 
-        open={showLogsDialog} 
+      <BugReportDialog
+        open={showLogsDialog}
         onOpenChange={setShowLogsDialog}
         onReportBug={handleReportBug}
         appVersion={appVersion}

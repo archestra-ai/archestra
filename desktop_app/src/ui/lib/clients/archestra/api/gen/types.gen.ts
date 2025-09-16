@@ -1994,6 +1994,20 @@ export type ResetSandboxResponses = {
 
 export type ResetSandboxResponse = ResetSandboxResponses[keyof ResetSandboxResponses];
 
+export type GetApiSystemBackendLogsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/system/backend-logs';
+};
+
+export type GetApiSystemBackendLogsResponses = {
+  /**
+   * Default Response
+   */
+  200: unknown;
+};
+
 export type GetUserData = {
   body?: never;
   path?: never;

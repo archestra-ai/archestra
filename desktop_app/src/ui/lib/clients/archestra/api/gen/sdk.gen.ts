@@ -32,6 +32,8 @@ import type {
   DisconnectExternalMcpClientResponses,
   GetAllMemoriesData,
   GetAllMemoriesResponses,
+  GetApiSystemBackendLogsData,
+  GetApiSystemBackendLogsResponses,
   GetAvailableCloudProvidersData,
   GetAvailableCloudProvidersResponses,
   GetAvailableToolsData,
@@ -702,6 +704,15 @@ export const resetSandbox = <ThrowOnError extends boolean = false>(
 ) => {
   return (options?.client ?? _heyApiClient).post<ResetSandboxResponses, ResetSandboxErrors, ThrowOnError>({
     url: '/api/sandbox/reset',
+    ...options,
+  });
+};
+
+export const getApiSystemBackendLogs = <ThrowOnError extends boolean = false>(
+  options?: Options<GetApiSystemBackendLogsData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).get<GetApiSystemBackendLogsResponses, unknown, ThrowOnError>({
+    url: '/api/system/backend-logs',
     ...options,
   });
 };

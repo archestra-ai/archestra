@@ -136,28 +136,8 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Only add tools and toolChoice if tools are available
         if (tools && Object.keys(tools).length > 0) {
-          // Truncate tool IDs to 64 characters for LLM compatibility if needed
-          const truncatedTools: McpTools = {};
-          for (const [toolId, tool] of Object.entries(tools)) {
-            // Skip undefined, null tools, or tools without a name property
-            if (!tool || !tool.name || typeof tool.name !== 'string') {
-              continue;
-            }
-
-            // Truncate the tool name if it's too long (keep the tool ID as is)
-            const truncatedToolName = tool.name.length > 64 ? tool.name.substring(0, 64) : tool.name;
-
-            truncatedTools[toolId] = {
-              ...tool,
-              name: truncatedToolName,
-            };
-          }
-
-          // Only set tools if we have valid tools after filtering
-          if (Object.keys(truncatedTools).length > 0) {
-            streamConfig.tools = truncatedTools;
-            streamConfig.toolChoice = toolChoice || 'auto';
-          }
+          streamConfig.tools = tools;
+          streamConfig.toolChoice = toolChoice || 'auto';
         }
 
         const result = streamText(streamConfig);

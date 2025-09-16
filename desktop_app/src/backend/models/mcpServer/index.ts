@@ -56,14 +56,6 @@ export const McpServerInstallSchema = z.object({
   archestra_config: z.any().optional(),
 });
 
-// Interface for catalog search parameters
-interface CatalogSearchParams {
-  q?: string;
-  category?: string;
-  limit?: number;
-  offset?: number;
-}
-
 export default class McpServerModel {
   static async create(data: typeof mcpServersTable.$inferInsert) {
     return db.insert(mcpServersTable).values(data).returning();

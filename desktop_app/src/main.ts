@@ -3,7 +3,7 @@ import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } 
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
-import { UpdateSourceType, updateElectronApp } from 'update-electron-app';
+import { updateElectronApp } from 'update-electron-app';
 
 import ArchestraMcpClient from '@backend/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
@@ -58,10 +58,7 @@ if (process.defaultApp) {
  * https://github.com/electron/update-electron-app?tab=readme-ov-file#usage
  */
 updateElectronApp({
-  updateSource: {
-    type: UpdateSourceType.ElectronPublicUpdateService,
-    repo: `${config.build.github.owner}/${config.build.github.repoName}`,
-  },
+  repo: `${config.build.github.owner}/${config.build.github.repoName}`,
   updateInterval: config.build.updateInterval,
   logger: log,
 });

@@ -504,7 +504,7 @@ Output ONLY the JSON object, starting with { and ending with }`;
 
 ${messages.join('\n\n')}
 
-The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation.`;
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
 
     try {
       const response = await this.generate({

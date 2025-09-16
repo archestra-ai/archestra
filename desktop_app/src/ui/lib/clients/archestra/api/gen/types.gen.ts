@@ -178,6 +178,18 @@ export type WebSocketMessageInput =
         message: string;
         error?: string;
       };
+    }
+  | {
+      type: 'chat-token-usage-updated';
+      payload: {
+        chatId: number;
+        totalPromptTokens: number | null;
+        totalCompletionTokens: number | null;
+        totalTokens: number | null;
+        lastModel: string | null;
+        lastContextWindow: number | null;
+        contextUsagePercent: number;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -193,6 +205,11 @@ export type ChatWithMessagesInput = {
         | Array<unknown>
       )
     | null;
+  totalPromptTokens: number | null;
+  totalCompletionTokens: number | null;
+  totalTokens: number | null;
+  lastModel: string | null;
+  lastContextWindow: number | null;
   createdAt: string;
   updatedAt: string;
   messages: Array<{
@@ -632,6 +649,18 @@ export type WebSocketMessage =
         message: string;
         error?: string;
       };
+    }
+  | {
+      type: 'chat-token-usage-updated';
+      payload: {
+        chatId: number;
+        totalPromptTokens: number | null;
+        totalCompletionTokens: number | null;
+        totalTokens: number | null;
+        lastModel: string | null;
+        lastContextWindow: number | null;
+        contextUsagePercent: number;
+      };
     };
 
 export type ChatWithMessages = {
@@ -647,6 +676,11 @@ export type ChatWithMessages = {
         | Array<unknown>
       )
     | null;
+  totalPromptTokens: number | null;
+  totalCompletionTokens: number | null;
+  totalTokens: number | null;
+  lastModel: string | null;
+  lastContextWindow: number | null;
   createdAt: string;
   updatedAt: string;
   messages: Array<{

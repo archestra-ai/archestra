@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.5](https://github.com/archestra-ai/archestra/compare/v0.0.4...v0.0.5) (2025-09-16)
+
+
+### Bug Fixes
+
+* Logs and sys prompt ([#397](https://github.com/archestra-ai/archestra/issues/397)) ([c56cf5a](https://github.com/archestra-ai/archestra/commit/c56cf5a502307eeff3b3f0ba31abfa20d8a4c4f7))
+
 ## [0.0.4](https://github.com/archestra-ai/archestra/compare/v0.0.3...v0.0.4) (2025-09-16)
 
 

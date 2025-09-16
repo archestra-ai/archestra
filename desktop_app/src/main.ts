@@ -60,6 +60,7 @@ if (process.defaultApp) {
 updateElectronApp({
   repo: `${config.build.github.owner}/${config.build.github.repoName}`,
   updateInterval: config.build.updateInterval,
+  logger: log,
 });
 
 let mainWindow: BrowserWindow | null = null;
@@ -179,7 +180,12 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      devTools: !app.isPackaged,
+      /**
+       * NOTE: for now we'll just keep devtools enabled while we're in alpha stage
+       *
+       * later on we should probably disable this for packaged buidls (ie. `devTools: !app.isPackaged`)
+       */
+      devTools: true,
     },
   });
 

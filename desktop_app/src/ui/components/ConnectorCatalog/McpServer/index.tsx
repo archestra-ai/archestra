@@ -3,7 +3,6 @@ import {
   Code,
   Database,
   FileText,
-  GitFork,
   Globe,
   Info,
   Loader2,
@@ -13,23 +12,20 @@ import {
   Settings,
   Star,
   Users,
-  Wrench,
 } from 'lucide-react';
 
-import { type LocalMcpServerManifest } from '@ui/catalog_local';
 import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
-import { Separator } from '@ui/components/ui/separator';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useMcpServersStore, useSandboxStore } from '@ui/stores';
 
 interface McpServerProps {
-  server: ArchestraMcpServerManifest | LocalMcpServerManifest;
-  onInstallClick: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
-  onOAuthInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
-  onBrowserInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
+  server: ArchestraMcpServerManifest;
+  onInstallClick: (server: ArchestraMcpServerManifest) => void;
+  onOAuthInstallClick?: (server: ArchestraMcpServerManifest) => void;
+  onBrowserInstallClick?: (server: ArchestraMcpServerManifest) => void;
   onUninstallClick: (serverId: string) => void;
 }
 
@@ -43,24 +39,12 @@ export default function McpServer({
   const { installedMcpServers, installingMcpServerId, uninstallingMcpServerId } = useMcpServersStore();
   const { isRunning: sandboxIsRunning } = useSandboxStore();
 
-  const {
-    name,
-    display_name,
-    description,
-    github_info: gitHubInfo,
-    category,
-    archestra_config,
-    programming_language: programmingLanguage,
-    quality_score: qualityScore,
-    tools,
-    prompts,
-    license,
-  } = server;
+  const { name, display_name, description, github_info: gitHubInfo, category, archestra_config, tools } = server;
 
   // Safely extract OAuth and browser-based config with null checks
-  const requiresOAuthSetup = !!(server as LocalMcpServerManifest).oauth_config;
+  const requiresOAuthSetup = !!server.oauth_config;
   const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
-  const isRemoteMcp = !!(server as LocalMcpServerManifest).remote_url;
+  const isRemoteMcp = server.server.type === 'remote';
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);

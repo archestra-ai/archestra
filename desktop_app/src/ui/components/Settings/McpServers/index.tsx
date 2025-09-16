@@ -212,7 +212,7 @@ export default function McpServers(_props: McpServersProps) {
                                 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                 : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                         }`}
-                        title={`${server.displayName}: ${server.state}`}
+                        title={`${server.name}: ${server.state}`}
                       >
                         <div
                           className={`h-1.5 w-1.5 rounded-full ${
@@ -225,7 +225,7 @@ export default function McpServers(_props: McpServersProps) {
                                   : 'bg-gray-400'
                           }`}
                         />
-                        <span className="truncate max-w-[120px]">{server.displayName}</span>
+                        <span className="truncate max-w-[120px]">{server.name}</span>
                       </div>
                     );
                   })}

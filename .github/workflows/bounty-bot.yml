@@ -25,7 +25,6 @@ jobs:
 
             // List of authorized users who can assign bounties
             const authorizedUsers = [
-              'Matvey-Kuk',
               'joeyorlando',
               'iskhakov'
             ];

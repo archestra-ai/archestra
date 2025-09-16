@@ -173,6 +173,8 @@ export type WebSocketMessageInput =
         status: 'started' | 'analyzing' | 'completed' | 'error';
         progress?: number;
         totalTools?: number;
+        analyzedTools?: number;
+        currentTool?: string;
         message: string;
         error?: string;
       };
@@ -625,6 +627,8 @@ export type WebSocketMessage =
         status: 'started' | 'analyzing' | 'completed' | 'error';
         progress?: number;
         totalTools?: number;
+        analyzedTools?: number;
+        currentTool?: string;
         message: string;
         error?: string;
       };

@@ -46,6 +46,8 @@ const ToolAnalysisProgressPayloadSchema = z.object({
   status: z.enum(['started', 'analyzing', 'completed', 'error']),
   progress: z.number().min(0).max(100).optional(),
   totalTools: z.number().optional(),
+  analyzedTools: z.number().optional(),
+  currentTool: z.string().optional(),
   message: z.string(),
   error: z.string().optional(),
 });

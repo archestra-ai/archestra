@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   test: {
-    silent: true, // suppress all console logs from the tests
+    silent: true, // suppress all console logs from tests
     globals: true,
     projects: [
       {

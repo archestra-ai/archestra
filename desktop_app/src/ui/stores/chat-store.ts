@@ -14,6 +14,7 @@ import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
 
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import { useToolsStore } from './tools-store';
 
 interface ChatState {
@@ -127,8 +128,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       toolsStore.selectedToolIds.clear();
 
       // Add the default tools that were set in the backend
-      const defaultTools = ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'];
-      defaultTools.forEach((id) => toolsStore.selectedToolIds.add(id));
+      DEFAULT_ARCHESTRA_TOOLS.forEach((id) => toolsStore.selectedToolIds.add(id));
 
       // Trigger a re-render by creating a new Set
       useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
@@ -242,8 +242,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // Set the tools store to match the new chat's default tools
         const toolsStore = useToolsStore.getState();
         toolsStore.selectedToolIds.clear();
-        const defaultTools = ['archestra__set_memory', 'archestra__list_available_tools', 'archestra__enable_tools'];
-        defaultTools.forEach((id) => toolsStore.selectedToolIds.add(id));
+        DEFAULT_ARCHESTRA_TOOLS.forEach((id) => toolsStore.selectedToolIds.add(id));
         useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
       } else {
         set({ chats: newChats, currentChatSessionId: newChats[0].sessionId, draftMessages: newDrafts });

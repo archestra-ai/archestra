@@ -109,9 +109,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           (!provider && !providerConfig && model.startsWith('gpt-')) ||
           (!provider && !providerConfig && model.startsWith('o1-'));
 
-        // Variable to store token usage from streamText onFinish
-        let capturedTokenUsage: any = undefined;
-
         // Create the stream with the appropriate model
         const streamConfig: any = {
           model: modelInstance,
@@ -125,10 +122,8 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           // onError({ error }) {
           // },
           onFinish: async ({ usage, text, finishReason }) => {
-            // Handle token usage tracking here
-            fastify.log.info(`[TOKEN DEBUG] streamText onFinish - usage: ${JSON.stringify(usage)}`);
-
-            if (usage) {
+            // Save token usage directly to the chat
+            if (usage && sessionId) {
               let contextWindow: number;
 
               // Get context window dynamically for Ollama, use hardcoded for others
@@ -138,7 +133,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
                 contextWindow = getModelContextWindow(model);
               }
 
-              capturedTokenUsage = {
+              const tokenUsage = {
                 promptTokens: usage.inputTokens,
                 completionTokens: usage.outputTokens,
                 totalTokens: usage.totalTokens,
@@ -146,7 +141,10 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
                 contextWindow: contextWindow,
               };
 
-              fastify.log.info(`[TOKEN DEBUG] Token usage captured: ${JSON.stringify(capturedTokenUsage)}`);
+              // Save token usage directly to the chat
+              await Chat.updateTokenUsage(sessionId, tokenUsage);
+
+              fastify.log.info(`Token usage saved for chat: ${JSON.stringify(tokenUsage)}`);
             }
           },
         };
@@ -179,14 +177,12 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           result.toUIMessageStreamResponse({
             originalMessages: messages,
             onFinish: async (result) => {
-              fastify.log.info(`[TOKEN DEBUG] toUIMessageStreamResponse onFinish - capturedTokenUsage: ${JSON.stringify(capturedTokenUsage)}`);
-
-              // Save messages with token usage data
+              // Save messages only - token usage is saved separately in streamText.onFinish
               if (sessionId) {
-                fastify.log.info(`[TOKEN DEBUG] Calling saveMessages with tokenUsage: ${JSON.stringify(capturedTokenUsage)}`);
-                await Chat.saveMessages(sessionId, result.messages, capturedTokenUsage);
+                await Chat.saveMessages(sessionId, result.messages);
+                fastify.log.info(`Messages saved for session ${sessionId}`);
               } else {
-                fastify.log.warn(`[TOKEN DEBUG] No sessionId, not saving messages`);
+                fastify.log.warn(`No sessionId, not saving messages`);
               }
             },
           })

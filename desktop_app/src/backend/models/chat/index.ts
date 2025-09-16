@@ -326,10 +326,9 @@ export default class ChatModel {
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
   }
 
-  static async saveMessages(
+  static async updateTokenUsage(
     sessionId: string,
-    messages: UIMessage[],
-    tokenUsage?: {
+    tokenUsage: {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
@@ -337,7 +336,55 @@ export default class ChatModel {
       contextWindow?: number;
     }
   ): Promise<void> {
-    log.info(`[TOKEN DEBUG] saveMessages called with tokenUsage: ${JSON.stringify(tokenUsage)}`);
+    if (!tokenUsage || !tokenUsage.totalTokens) {
+      return;
+    }
+
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Updating token usage for chat ${chat.id}: ${JSON.stringify(tokenUsage)}`);
+
+    // Update the chat with cumulative token usage
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
+        totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
+        totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
+        lastModel: tokenUsage.model,
+        lastContextWindow: tokenUsage.contextWindow,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage update
+    const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
+
+    if (updatedChat) {
+      WebSocketService.broadcast({
+        type: 'chat-token-usage-updated',
+        payload: {
+          chatId: chat.id,
+          totalPromptTokens: updatedChat.totalPromptTokens,
+          totalCompletionTokens: updatedChat.totalCompletionTokens,
+          totalTokens: updatedChat.totalTokens,
+          lastModel: updatedChat.lastModel,
+          lastContextWindow: updatedChat.lastContextWindow,
+          contextUsagePercent: updatedChat.lastContextWindow && updatedChat.totalTokens
+            ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
+            : 0,
+        },
+      });
+    }
+  }
+
+  static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
 
     // First, find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
@@ -365,50 +412,10 @@ export default class ChatModel {
       });
     }
 
-    // Update token usage at the chat level if provided
-    if (tokenUsage && tokenUsage.totalTokens) {
-      log.info(`[TOKEN DEBUG] Updating chat token usage: ${JSON.stringify(tokenUsage)}`);
-
-      // Update the chat with cumulative token usage
-      await db
-        .update(chatsTable)
-        .set({
-          totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
-          totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
-          totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
-          lastModel: tokenUsage.model,
-          lastContextWindow: tokenUsage.contextWindow,
-          updatedAt: new Date().toISOString(),
-        })
-        .where(eq(chatsTable.id, chat.id));
-    }
 
     // Generate a title if the chat has 4+ messages and no title yet
     if (messages.length >= 4 && !chat.title) {
       await this.generateAndUpdateChatTitle(chat.id, messages);
-    }
-
-    // Broadcast token usage update for the chat if available
-    if (tokenUsage && tokenUsage.totalTokens) {
-      // Get the updated chat to get the new totals
-      const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
-
-      if (updatedChat) {
-        WebSocketService.broadcast({
-          type: 'chat-token-usage-updated',
-          payload: {
-            chatId: chat.id,
-            totalPromptTokens: updatedChat.totalPromptTokens,
-            totalCompletionTokens: updatedChat.totalCompletionTokens,
-            totalTokens: updatedChat.totalTokens,
-            lastModel: updatedChat.lastModel,
-            lastContextWindow: updatedChat.lastContextWindow,
-            contextUsagePercent: updatedChat.lastContextWindow && updatedChat.totalTokens
-              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
-              : 0,
-          },
-        });
-      }
     }
   }
 }

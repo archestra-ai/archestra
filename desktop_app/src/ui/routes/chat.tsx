@@ -8,7 +8,6 @@ import ChatInput from '@ui/components/Chat/ChatInput';
 import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
-import { useMessageActions } from '@ui/hooks/useMessageActions';
 import { getAllMemories } from '@ui/lib/clients/archestra/api/gen';
 import { useChatStore, useCloudProvidersStore, useOllamaStore, useToolsStore } from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
@@ -20,7 +19,21 @@ export const Route = createFileRoute('/chat')({
 });
 
 function ChatPage() {
-  const { getCurrentChat, getCurrentChatTitle, saveDraftMessage, getDraftMessage, clearDraftMessage } = useChatStore();
+  const {
+    getCurrentChat,
+    getCurrentChatTitle,
+    saveDraftMessage,
+    getDraftMessage,
+    clearDraftMessage,
+    editingMessageId,
+    editingMessageContent,
+    startEditMessage,
+    cancelEditMessage,
+    saveEditMessage,
+    deleteMessage,
+    setEditingMessageContent,
+    updateMessages,
+  } = useChatStore();
   const { selectedToolIds, setOnlyTools } = useToolsStore();
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
@@ -123,14 +136,18 @@ function ChatPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
 
-  // Use the message actions hook
-  const { editingMessageId, editingContent, setEditingContent, startEdit, cancelEdit, saveEdit, deleteMessage } =
-    useMessageActions({
-      messages,
-      setMessages,
-      sendMessage,
-      sessionId: currentChatSessionId,
-    });
+  // Wrapper functions for message editing actions
+  const handleSaveEdit = (messageId: string) => {
+    saveEditMessage(messageId, messages);
+    // Also update local messages state
+    setMessages(messages);
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    deleteMessage(messageId, messages);
+    // Also update local messages state
+    setMessages(messages.filter((msg) => msg.id !== messageId));
+  };
 
   // Handle regeneration for specific message index
   const handleRegenerateMessage = async (messageIndex: number) => {
@@ -445,12 +462,12 @@ function ChatPage() {
             sessionId={currentChatSessionId}
             messages={regeneratingIndex !== null && fullMessagesBackup.length > 0 ? fullMessagesBackup : messages}
             editingMessageId={editingMessageId}
-            editingContent={editingContent}
-            onEditStart={startEdit}
-            onEditCancel={cancelEdit}
-            onEditSave={saveEdit}
-            onEditChange={setEditingContent}
-            onDeleteMessage={deleteMessage}
+            editingContent={editingMessageContent}
+            onEditStart={startEditMessage}
+            onEditCancel={cancelEditMessage}
+            onEditSave={handleSaveEdit}
+            onEditChange={setEditingMessageContent}
+            onDeleteMessage={handleDeleteMessage}
             onRegenerateMessage={handleRegenerateMessage}
             isRegenerating={regeneratingIndex !== null || isLoading}
             regeneratingIndex={regeneratingIndex}

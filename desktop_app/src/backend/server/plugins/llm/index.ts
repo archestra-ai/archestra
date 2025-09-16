@@ -176,13 +176,21 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
-            onFinish: async (result) => {
-              // Save messages only - token usage is saved separately in streamText.onFinish
+            onFinish: (result) => {
               if (sessionId) {
-                await Chat.saveMessages(sessionId, result.messages);
-                fastify.log.info(`Messages saved for session ${sessionId}`);
-              } else {
-                fastify.log.warn(`No sessionId, not saving messages`);
+                Chat.saveMessages(sessionId, result.messages);
+              }
+
+              // Log OpenAI cache metrics if available
+              if (shouldLogCache && 'usage' in result && result.usage) {
+                const usage = result.usage as any;
+                const cachedTokens = usage?.cachedPromptTokens;
+                const promptTokens = usage?.promptTokens;
+                if (cachedTokens !== undefined && promptTokens) {
+                  fastify.log.info(
+                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`
+                  );
+                }
               }
             },
           })

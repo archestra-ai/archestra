@@ -95,9 +95,6 @@ export default class SandboxedMcpServer {
       }
     }
 
-    // Try to fetch cached tools on initialization
-    this.fetchCachedTools();
-
     // Set up periodic updates for cached analysis
     this.startPeriodicAnalysisUpdates();
   }
@@ -447,6 +444,9 @@ export default class SandboxedMcpServer {
   }
 
   async start() {
+    // Ensure cache is populated before proceeding
+    await this.fetchCachedTools();
+
     if (this.isRemoteServer) {
       // For remote servers, skip container operations
       log.info(`Starting remote MCP server: ${this.mcpServer.name}`);
@@ -474,6 +474,12 @@ export default class SandboxedMcpServer {
         await this.pingMcpServerContainerUntilHealthy();
         await this.createMcpClient();
         await this.fetchTools();
+
+        /**
+         * Fetch cached tools again after tools are discovered
+         * This ensures the cache is up-to-date with any newly discovered tools
+         */
+        await this.fetchCachedTools();
 
         log.info(`Successfully started MCP server: ${this.mcpServer.name} (OAuth: ${!!this.mcpServer.oauthTokens})`);
       } catch (error) {
@@ -566,10 +572,20 @@ export default class SandboxedMcpServer {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
 
-      // Strip any prefix ending with '__' for cache lookup
-      // Tools may have prefixes at runtime but are stored without them in the database
-      const prefixSeparatorIndex = toolName.indexOf('__');
-      const cacheKey = prefixSeparatorIndex !== -1 ? toolName.substring(prefixSeparatorIndex + 2) : toolName;
+      /**
+       * For some mcp servers, their id looks like:
+       *  servers__src__filesystem__list_allowed_directorie
+       *
+       * so we need to get just the actual tool name for cache lookup
+       */
+      let cacheKey = toolName;
+
+      // Find the last occurrence of '__' which should be before the actual tool name
+      const lastDoubleUnderscore = toolName.lastIndexOf('__');
+      if (lastDoubleUnderscore !== -1) {
+        // Get everything after the last '__'
+        cacheKey = toolName.substring(lastDoubleUnderscore + 2);
+      }
 
       // Get analysis results from cache if available
       const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);

@@ -131,7 +131,9 @@ export default class PodmanRuntime {
    * binary naming convention. As of this writing, the versions we are using are:
    * - `gvproxy` is [`v0.8.6`](https://github.com/containers/gvisor-tap-vsock/releases/tag/v0.8.6) -- podman v5.5.2 comes with this version (see https://github.com/containers/podman/blob/v5.5.2/go.mod#L18)
    * - `vfkit` is [`v0.6.0`](https://github.com/crc-org/vfkit/releases/tag/v0.6.0) -- podman v5.5.2 comes with this version (see https://github.com/containers/podman/blob/v5.5.2/go.mod#L26)
-   *   - NOTE: in the releases of `vfkit` they have `vfkit` + `vfkit-unsigned` (we are using `vfkit`.. honestly not sure of the difference?)
+   *   - NOTE: in the releases of `vfkit` they have `vfkit` + `vfkit-unsigned` -- we are using `vfkit-unsigned`. I
+   *   believe (or suspect) that if we used the `vfkit` binary, we would run into issues with the Mac app code
+   *   signing process (because vfkit would be signed by a different certificate than ours)
    *
    * See also `CONTAINERS_HELPER_BINARY_DIR` env var which is being passed into our podman commands below.
    */

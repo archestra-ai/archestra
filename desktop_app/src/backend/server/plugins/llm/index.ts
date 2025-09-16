@@ -136,7 +136,29 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Only add tools and toolChoice if tools are available
         if (tools && Object.keys(tools).length > 0) {
-          streamConfig.tools = tools;
+          // For OpenAI, we need to ensure tool names don't exceed 64 characters
+          let processedTools = tools;
+          if (isOpenAIProvider) {
+            processedTools = {};
+            for (const [toolId, tool] of Object.entries(tools)) {
+              // OpenAI has a 64 character limit for tool names
+              let processedToolId = toolId;
+              if (toolId.length > 64) {
+                /**
+                 * Truncate the tool name while keeping it unique
+                 * Keep the last 64 characters to preserve the tool name part
+                 * This is better than truncating from the end because the MCP server ID
+                 * is at the beginning and the actual tool name is at the end
+                 */
+                processedToolId = '...' + toolId.slice(-61); // 3 chars for '...' + 61 chars = 64
+                fastify.log.warn(
+                  `Truncated tool name for OpenAI from "${toolId}" (${toolId.length} chars) to "${processedToolId}" (${processedToolId.length} chars)`
+                );
+              }
+              processedTools[processedToolId] = tool;
+            }
+          }
+          streamConfig.tools = processedTools;
           streamConfig.toolChoice = toolChoice || 'auto';
         }
 

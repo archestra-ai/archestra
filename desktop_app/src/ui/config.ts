@@ -29,6 +29,6 @@ export default {
     catalogUrl: CATALOG_URL,
   },
   chat: {
-    defaultTitle: 'New Chat',
+    defaultTitle: 'New Agent',
   },
 };

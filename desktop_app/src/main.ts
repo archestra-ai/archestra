@@ -237,6 +237,16 @@ async function startBackendServer(): Promise<void> {
       // Continue anyway - the app can work without Archestra tools
     }
 
+    // Start Ollama server first
+    await OllamaServer.startServer();
+
+    /**
+     * Ensure that ollama models that're required for various app functionality are available,
+     * downloading them if necessary. This must be done BEFORE starting MCP servers
+     * so that tool analysis can proceed without waiting forever.
+     */
+    await OllamaClient.ensureModelsAvailable();
+
     // Now start the sandbox manager which will connect MCP clients
     McpServerSandboxManager.onSandboxStartupSuccess = () => {
       log.info('Sandbox startup successful');
@@ -245,14 +255,6 @@ async function startBackendServer(): Promise<void> {
       log.error('Sandbox startup error:', error);
     };
     McpServerSandboxManager.start();
-
-    await OllamaServer.startServer();
-
-    /**
-     * Ensure that ollama models that're required for various app functionality are available,
-     * downloading them if necessary
-     */
-    await OllamaClient.ensureModelsAvailable();
 
     log.info('Backend server started successfully in main process');
   } catch (error) {
@@ -467,8 +469,14 @@ if (!gotTheLock) {
  * Some APIs can only be used after this event occurs.
  */
 app.on('ready', async () => {
-  await startBackendServer();
+  /**
+   * IMPORTANT: create the main app window before starting the backend server.
+   * Don't await for startBackendServer() to complete before creating the window as this
+   * will lead to the main app window feeling like it's taking forever to boot up
+   */
   createWindow();
+
+  await startBackendServer();
 
   // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
   if (process.platform === 'darwin') {

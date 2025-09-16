@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ThemeToggler } from '@ui/components/ThemeToggler';
 import { Button } from '@ui/components/ui/button';
 import { useSidebar } from '@ui/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { useChatStore } from '@ui/stores';
 
 import { Breadcrumbs } from './Breadcrumbs';
@@ -32,33 +33,27 @@ export function SiteHeader() {
   } | null>(null);
 
   useEffect(() => {
-    window.electronAPI.getAppInfo().then(setAppInfo);
-    window.electronAPI.getSystemInfo().then(setSystemInfo);
+    if (window.electronAPI?.getAppInfo) {
+      window.electronAPI.getAppInfo().then(setAppInfo);
+    }
+    if (window.electronAPI?.getSystemInfo) {
+      window.electronAPI.getSystemInfo().then(setSystemInfo);
+    }
   }, []);
 
   let breadcrumbs: string[] = [];
   const path = location.pathname;
 
   if (path.startsWith('/chat')) {
-    breadcrumbs = ['Chat', getCurrentChatTitle()];
-  } else if (path.startsWith('/llm-providers')) {
-    breadcrumbs = ['LLM Providers'];
-    if (path.includes('/ollama')) {
-      breadcrumbs.push('Ollama');
-    } else if (path.includes('/cloud')) {
-      breadcrumbs.push('Cloud');
-    }
+    breadcrumbs = ['Agents', getCurrentChatTitle()];
+  } else if (path === '/llm-providers/ollama') {
+    breadcrumbs = ['Local models'];
+  } else if (path === '/llm-providers/cloud') {
+    breadcrumbs = ['Cloud models'];
   } else if (path.startsWith('/connectors')) {
-    breadcrumbs = ['Connectors'];
-  } else if (path.startsWith('/settings')) {
-    breadcrumbs = ['Settings'];
-    if (path.includes('/mcp-servers')) {
-      breadcrumbs.push('Servers');
-    } else if (path.includes('/mcp-clients')) {
-      breadcrumbs.push('Clients');
-    } else if (path.includes('/ollama')) {
-      breadcrumbs.push('Ollama');
-    }
+    breadcrumbs = ['MCP Connectors'];
+  } else if (path === '/settings/mcp-clients') {
+    breadcrumbs = ['Use as MCP Proxy'];
   }
 
   const appVersion = appInfo?.version;
@@ -101,21 +96,36 @@ What actually happened?
 
     const issueTitle = encodeURIComponent('[Put the Bug title here] ');
     const url = `https://github.com/archestra-ai/archestra/issues/new?title=${issueTitle}&body=${issueBody}`;
-    window.electronAPI.openExternal(url);
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const handleGHStar = () => {
     const url = `https://github.com/archestra-ai/archestra`;
-    window.electronAPI.openExternal(url);
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
+  /**
+   * For more context on WebKitAppRegion see https://github.com/electron/electron/issues/1354
+   *
+   * Basically we set the whole SiteHeader to be draggable, and then the particular sub-sections that we
+   * want to be non-draggable we set the WebkitAppRegion to 'no-drag' (for things like buttons so that
+   * the click events are not blocked by the draggable region)
+   */
   return (
-    <header className="bg-background sticky top-0 z-50 flex w-full items-center border-b">
-      <div
-        className="flex h-[var(--header-height)] w-64 items-center gap-2 px-4 pl-20 border-r shrink-0"
-        // @ts-expect-error - WebkitAppRegion is not a valid property
-        style={{ WebkitAppRegion: 'drag' }}
-      >
+    <header
+      className="bg-background sticky top-0 z-50 flex w-full items-center border-b"
+      // @ts-expect-error - WebkitAppRegion is not a valid property
+      style={{ WebkitAppRegion: 'drag' }}
+    >
+      <div className="flex h-[var(--header-height)] w-64 items-center gap-2 px-4 pl-20 border-r shrink-0">
         <Button
           className="h-8 w-8 cursor-pointer"
           variant="ghost"
@@ -126,32 +136,33 @@ What actually happened?
         >
           <SidebarIcon />
         </Button>
-        <Button
-          className="h-8 cursor-pointer hidden sm:flex"
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            await createNewChat();
-            navigate({ to: '/chat' });
-          }}
-          // @ts-expect-error - WebkitAppRegion is not a valid property
-          style={{ WebkitAppRegion: 'no-drag' }}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          <span className="hidden lg:inline">New Chat</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Button
+                className="h-8 cursor-not-allowed opacity-50 hidden sm:flex"
+                variant="ghost"
+                size="sm"
+                disabled
+                // @ts-expect-error - WebkitAppRegion is not a valid property
+                style={{ WebkitAppRegion: 'no-drag' }}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                <span className="hidden lg:inline">New Agent</span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Sorry, it's an early alpha version, parallel agents are under development. Check back soon!</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
-      <div
-        className="flex h-[var(--header-height)] flex-1 items-center justify-between px-2 sm:px-4 min-w-0 overflow-hidden"
-        // @ts-expect-error - WebkitAppRegion is not a valid property
-        style={{ WebkitAppRegion: 'drag' }}
-      >
-        {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
-        <div className="min-w-0 flex-1 truncate" style={{ WebkitAppRegion: 'no-drag' }}>
+      <div className="flex h-[var(--header-height)] flex-1 items-center justify-between px-2 sm:px-4 min-w-0 overflow-hidden">
+        <div className="min-w-0 flex-1 truncate flex items-center h-full">
           <Breadcrumbs breadcrumbs={breadcrumbs} isAnimatedTitle={path.startsWith('/chat')} />
         </div>
         {/* @ts-expect-error - WebkitAppRegion is not a valid property */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 border-l pl-4" style={{ WebkitAppRegion: 'no-drag' }}>
           <span className="text-xs text-muted-foreground hidden lg:inline">This is v{appVersion},</span>
           <span className="text-xs text-muted-foreground hidden sm:inline lg:hidden">v{appVersion}</span>
           <Button

@@ -1,4 +1,4 @@
-import { GitGraph } from 'lucide-react';
+import { Bug } from 'lucide-react';
 
 import { Button } from '@ui/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@ui/components/ui/hover-card';
@@ -56,11 +56,11 @@ export default function ReportIssueWithCatalogEntry({ catalogId }: ReportIssueWi
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 cursor-pointer"
+          className="h-5 w-5 p-0 cursor-pointer"
           onClick={handleReportIssue}
           title="Report issue"
         >
-          <GitGraph className="h-3 w-3" />
+          <Bug className="h-3 w-3" />
         </Button>
       </HoverCardTrigger>
       <HoverCardContent side="left" className="w-64">

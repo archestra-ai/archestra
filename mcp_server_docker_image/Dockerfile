@@ -69,7 +69,6 @@ RUN update-ca-certificates && \
     git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
 
 # Install uv using the official installation method
-# Copy from the official uv Docker image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 
@@ -106,7 +105,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Use tini for proper signal handling
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Default command (override when running specific MCP servers)
+# Default command (override when running specific MCP server)
 CMD ["sh", "-c", "echo 'MCP base container ready. Override CMD to run your MCP server.'"]
 
 # Labels for container metadata

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "da5c3622-273c-482b-9a9c-7d33691f606d",
-  "prevId": "a358d4b7-7c93-4ee6-abfd-e9c4ed53cc3a",
+  "id": "7a62c6df-cba4-4dbf-aee6-2e3281670191",
+  "prevId": "9f34837e-d552-48d0-a2fd-fae36a41d496",
   "tables": {
     "chats": {
       "name": "chats",
@@ -24,6 +24,13 @@
         },
         "title": {
           "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "selected_tools": {
+          "name": "selected_tools",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -611,20 +618,6 @@
         },
         "is_write": {
           "name": "is_write",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "idempotent": {
-          "name": "idempotent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reversible": {
-          "name": "reversible",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

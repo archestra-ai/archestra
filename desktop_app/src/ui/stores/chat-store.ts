@@ -1,15 +1,28 @@
 import { create } from 'zustand';
 
 import config from '@ui/config';
-import { createChat, deleteChat, getChatById, getChats, updateChat } from '@ui/lib/clients/archestra/api/gen';
+import {
+  createChat,
+  deleteChat,
+  getChatById,
+  getChatSelectedTools,
+  getChats,
+  selectChatTools,
+  updateChat,
+} from '@ui/lib/clients/archestra/api/gen';
 import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
+
+import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
+import { useToolsStore } from './tools-store';
 
 interface ChatState {
   chats: ChatWithMessages[];
   currentChatSessionId: string | null;
   isLoadingChats: boolean;
+  pendingPrompts: Map<string, string>;
+  draftMessages: Map<number, string>; // chatId -> draft content
 }
 
 interface ChatActions {
@@ -21,6 +34,11 @@ interface ChatActions {
   deleteCurrentChat: () => Promise<void>;
   updateChatTitle: (chatId: number, title: string) => Promise<void>;
   initializeStore: () => Promise<void>;
+  setPendingPrompts: (sessionId: string, prompt: string) => void;
+  removePendingPrompt: (sessionId: string) => void;
+  saveDraftMessage: (chatId: number, content: string) => void;
+  getDraftMessage: (chatId: number) => string;
+  clearDraftMessage: (chatId: number) => void;
 }
 
 type ChatStore = ChatState & ChatActions;
@@ -42,8 +60,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chats: [],
   currentChatSessionId: null,
   isLoadingChats: false,
+  pendingPrompts: new Map<string, string>(),
 
-  // Actions
+  setPendingPrompts: (sessionId: string, prompt: string) => {
+    set((state) => {
+      const nextPendingPrompts = new Map(state.pendingPrompts);
+      nextPendingPrompts.set(sessionId, prompt);
+      return { pendingPrompts: nextPendingPrompts };
+    });
+  },
+
+  removePendingPrompt: (sessionId: string) => {
+    set((state) => {
+      const nextPendingPrompts = new Map(state.pendingPrompts);
+      nextPendingPrompts.delete(sessionId);
+      return { pendingPrompts: nextPendingPrompts };
+    });
+  },
+  draftMessages: new Map(),
+
   loadChats: async () => {
     set({ isLoadingChats: true });
     try {
@@ -87,6 +122,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         currentChatSessionId: initializedChat.sessionId,
       }));
 
+      // Set the tools store to match the new chat's default tools
+      const toolsStore = useToolsStore.getState();
+      // Clear current selection first
+      toolsStore.selectedToolIds.clear();
+
+      // Add the default tools that were set in the backend
+      DEFAULT_ARCHESTRA_TOOLS.forEach((id) => toolsStore.selectedToolIds.add(id));
+
+      // Trigger a re-render by creating a new Set
+      useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
+
       return initializedChat;
     } catch (error) {
       console.error('Failed to create new chat:', error);
@@ -107,6 +153,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           chats: state.chats.map((chat) => (chat.id === chatId ? initializedChat : chat)),
           currentChatSessionId: initializedChat.sessionId,
         }));
+
+        // Load and apply the chat's selected tools
+        try {
+          const { data: toolsData } = await getChatSelectedTools({ path: { id: chatId.toString() } });
+          if (toolsData) {
+            const toolsStore = useToolsStore.getState();
+
+            // Clear current selection first
+            toolsStore.selectedToolIds.clear();
+
+            if (toolsData.selectedTools === null) {
+              // null means all tools are selected
+              const allToolIds = toolsData.availableTools.map((tool) => tool.id);
+              allToolIds.forEach((id) => toolsStore.selectedToolIds.add(id));
+            } else if (toolsData.selectedTools.length > 0) {
+              // Add only the selected tools
+              toolsData.selectedTools.forEach((id) => toolsStore.selectedToolIds.add(id));
+            }
+            // If selectedTools is empty array, keep the selection empty
+
+            // Trigger a re-render by creating a new Set
+            useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
+          }
+        } catch (toolsError) {
+          console.error('Failed to load chat tools:', toolsError);
+          // Continue even if tools loading fails
+        }
       }
     } catch (error) {
       console.error('Failed to load chat messages:', error);
@@ -135,20 +208,44 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       await deleteChat({ path: { id: currentChat.id.toString() } });
 
-      const { chats } = get();
+      const { chats, draftMessages } = get();
       const newChats = chats.filter((chat) => chat.id !== currentChat.id);
+
+      // Clean up draft message for deleted chat
+      const newDrafts = new Map(draftMessages);
+      newDrafts.delete(currentChat.id);
 
       if (newChats.length === 0) {
         /**
-         * Remove the deleted chat from the state and then create a new one
-         *
-         * there should never be a case where no chat exists..
+         * Create a new chat first before clearing the old state
+         * to avoid a state where there's no current chat
          */
-        set({ chats: [], currentChatSessionId: null });
+        const { data } = await createChat({
+          body: {
+            llm_provider: 'ollama',
+          },
+        });
 
-        await get().createNewChat();
+        if (!data) {
+          throw new Error('No data returned from create chat API');
+        }
+
+        const initializedChat = initializeChat(data);
+
+        // Update state atomically with the new chat already created
+        set({
+          chats: [initializedChat],
+          currentChatSessionId: initializedChat.sessionId,
+          draftMessages: newDrafts,
+        });
+
+        // Set the tools store to match the new chat's default tools
+        const toolsStore = useToolsStore.getState();
+        toolsStore.selectedToolIds.clear();
+        DEFAULT_ARCHESTRA_TOOLS.forEach((id) => toolsStore.selectedToolIds.add(id));
+        useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
       } else {
-        set({ chats: newChats, currentChatSessionId: newChats[0].sessionId });
+        set({ chats: newChats, currentChatSessionId: newChats[0].sessionId, draftMessages: newDrafts });
       }
     } catch (error) {
       console.error('Failed to delete chat:', error);
@@ -178,6 +275,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to establish WebSocket connection:', error);
     }
+  },
+
+  // Draft message actions
+  saveDraftMessage: (chatId: number, content: string) => {
+    set((state) => {
+      const newDrafts = new Map(state.draftMessages);
+      if (content.trim()) {
+        newDrafts.set(chatId, content);
+      } else {
+        newDrafts.delete(chatId);
+      }
+      return { draftMessages: newDrafts };
+    });
+  },
+
+  getDraftMessage: (chatId: number) => {
+    return get().draftMessages.get(chatId) || '';
+  },
+
+  clearDraftMessage: (chatId: number) => {
+    set((state) => {
+      const newDrafts = new Map(state.draftMessages);
+      newDrafts.delete(chatId);
+      return { draftMessages: newDrafts };
+    });
   },
 }));
 

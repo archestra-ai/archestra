@@ -294,35 +294,44 @@ class OllamaClient {
       annotations?: any;
     }>
   ): Promise<Record<string, z.infer<typeof ToolAnalysisResultSchema>>> {
-    const prompt = `You are an expert at analyzing API tools and their capabilities. Analyze the following tools and determine their characteristics.
+    // Create example to help the model understand the exact format
+    const exampleOutput = {
+      getTodo: {
+        is_read: true,
+        is_write: false,
+      },
+      createTodo: {
+        is_read: false,
+        is_write: true,
+      },
+    };
 
-For each tool, evaluate:
-1. is_read: Does this tool primarily read or retrieve data without modifying state?
-2. is_write: Does this tool create, update, or delete data?
-3. idempotent: Can this tool be safely called multiple times with the same parameters without changing the result beyond the initial call?
-4. reversible: Can the effects of this tool be undone or rolled back? (e.g., sending an email is NOT reversible)
+    const prompt = `You are an expert at analyzing API tools. Your task is to analyze tools and output ONLY valid JSON.
 
-Consider the tool's name, description, input schema, and any annotations provided.
+EXAMPLE OUTPUT FORMAT:
+${JSON.stringify(exampleOutput, null, 2)}
+
+For each tool, determine:
+- is_read: true if the tool reads/retrieves/fetches/gets/lists/searches data WITHOUT modifying anything
+- is_write: true if the tool creates/updates/deletes/modifies/changes data
+
+Common patterns:
+- Tools with names containing "get", "list", "read", "search", "fetch", "find" are usually is_read: true
+- Tools with names containing "create", "update", "delete", "add", "remove", "set", "write", "modify" are usually is_write: true
+- Some tools can be both read AND write (e.g., "executeQuery" might read or write depending on the query)
 
 Tools to analyze:
 ${JSON.stringify(tools, null, 2)}
 
-Return a JSON object with tool names as keys and analysis results as values. The format MUST be exactly:
+CRITICAL: Your response MUST be valid JSON that matches this EXACT structure:
 {
-  "toolName": {
-    "is_read": boolean,
-    "is_write": boolean,
-    "idempotent": boolean,
-    "reversible": boolean
-  }
+  "toolName1": {"is_read": boolean, "is_write": boolean},
+  "toolName2": {"is_read": boolean, "is_write": boolean}
 }
 
-CRITICAL REQUIREMENTS:
-- Return ONLY the JSON object, nothing else
-- Do NOT include any markdown formatting (no \`\`\`json blocks)
-- Do NOT include any explanations or text before or after the JSON
-- Use actual boolean values (true/false), not strings
-- Start your response with { and end with }`;
+Replace toolName1, toolName2 with actual tool names from the input.
+Every tool MUST have both is_read and is_write as boolean values (true or false).
+Output ONLY the JSON object, starting with { and ending with }`;
 
     try {
       const response = await this.generate({
@@ -332,31 +341,158 @@ CRITICAL REQUIREMENTS:
         format: 'json',
       });
 
-      const rawResult = JSON.parse(response.response);
+      let rawResult: any;
+      try {
+        rawResult = JSON.parse(response.response);
+      } catch (parseError) {
+        log.error('Failed to parse Ollama response as JSON:', response.response);
+        throw new Error('Invalid JSON response from Ollama');
+      }
+
+      // Debug log to see what the model actually returned
+      log.debug('Raw analysis response from Ollama:', JSON.stringify(rawResult, null, 2));
 
       const result: Record<string, z.infer<typeof ToolAnalysisResultSchema>> = {};
 
-      // Validate each tool's analysis results
-      for (const [toolName, analysis] of Object.entries(rawResult)) {
+      // Ensure we have analysis for all requested tools
+      for (const tool of tools) {
+        const toolName = tool.name;
+        const analysis = rawResult[toolName];
+
         try {
-          result[toolName] = ToolAnalysisResultSchema.parse(analysis);
-        } catch (error) {
-          log.warn(`Invalid analysis result for tool ${toolName}:`, error);
-          // Provide default values if parsing fails
-          result[toolName] = {
-            is_read: false,
-            is_write: false,
-            idempotent: false,
-            reversible: false,
+          // Check if we have analysis for this tool
+          if (!analysis) {
+            log.warn(`No analysis returned for tool ${toolName}, using name-based inference`);
+            result[toolName] = this.inferToolProperties(toolName, tool.description);
+            continue;
+          }
+
+          // Check if the analysis is in the correct format
+          if (typeof analysis !== 'object' || analysis === null) {
+            log.warn(`Tool ${toolName} has invalid format (not an object):`, analysis);
+            result[toolName] = this.inferToolProperties(toolName, tool.description);
+            continue;
+          }
+
+          // Ensure both required fields are present
+          const validatedAnalysis = {
+            is_read:
+              typeof analysis.is_read === 'boolean' ? analysis.is_read : this.inferIsRead(toolName, tool.description),
+            is_write:
+              typeof analysis.is_write === 'boolean'
+                ? analysis.is_write
+                : this.inferIsWrite(toolName, tool.description),
           };
+
+          // Validate with schema
+          result[toolName] = ToolAnalysisResultSchema.parse(validatedAnalysis);
+        } catch (error) {
+          log.warn(`Failed to validate analysis for tool ${toolName}:`, error);
+          log.debug(`Raw analysis data for ${toolName}:`, analysis);
+          // Use inference as fallback
+          result[toolName] = this.inferToolProperties(toolName, tool.description);
         }
       }
 
       return result;
     } catch (error) {
       log.error('Failed to analyze tools:', error);
-      throw error;
+      // Return inferred results for all tools as ultimate fallback
+      const fallbackResult: Record<string, z.infer<typeof ToolAnalysisResultSchema>> = {};
+      for (const tool of tools) {
+        fallbackResult[tool.name] = this.inferToolProperties(tool.name, tool.description);
+      }
+      return fallbackResult;
     }
+  }
+
+  /**
+   * Infer tool properties based on name and description
+   */
+  private inferToolProperties(name: string, description?: string): z.infer<typeof ToolAnalysisResultSchema> {
+    const lowerName = name.toLowerCase();
+    const lowerDesc = (description || '').toLowerCase();
+    const combined = `${lowerName} ${lowerDesc}`;
+
+    return {
+      is_read: this.inferIsRead(name, description),
+      is_write: this.inferIsWrite(name, description),
+    };
+  }
+
+  /**
+   * Infer if a tool is a read operation
+   */
+  private inferIsRead(name: string, description?: string): boolean {
+    const lowerName = name.toLowerCase();
+    const lowerDesc = (description || '').toLowerCase();
+    const combined = `${lowerName} ${lowerDesc}`;
+
+    const readPatterns = [
+      'get',
+      'list',
+      'read',
+      'search',
+      'fetch',
+      'find',
+      'query',
+      'retrieve',
+      'show',
+      'view',
+      'describe',
+      'check',
+      'verify',
+      'examine',
+      'inspect',
+      'status',
+      'info',
+      'detail',
+      'lookup',
+    ];
+
+    return readPatterns.some((pattern) => combined.includes(pattern));
+  }
+
+  /**
+   * Infer if a tool is a write operation
+   */
+  private inferIsWrite(name: string, description?: string): boolean {
+    const lowerName = name.toLowerCase();
+    const lowerDesc = (description || '').toLowerCase();
+    const combined = `${lowerName} ${lowerDesc}`;
+
+    const writePatterns = [
+      'create',
+      'update',
+      'delete',
+      'add',
+      'remove',
+      'set',
+      'write',
+      'modify',
+      'edit',
+      'change',
+      'insert',
+      'append',
+      'replace',
+      'clear',
+      'reset',
+      'submit',
+      'post',
+      'put',
+      'patch',
+      'destroy',
+      'drop',
+      'truncate',
+      'execute',
+      'run',
+      'apply',
+      'commit',
+      'save',
+      'store',
+    ];
+
+    return writePatterns.some((pattern) => combined.includes(pattern));
   }
 
   /**
@@ -426,13 +562,6 @@ The title should capture the main topic or theme of the conversation. Respond wi
         ({ model: modelName }) => !installedModelNames.includes(modelName)
       );
 
-      if (modelsToDownload.length === 0) {
-        log.info('All required models are already available');
-        // Warm up the already installed models
-        await this.warmUpModels(config.ollama.requiredModels.map((m) => m.model));
-        return;
-      }
-
       log.info(`Downloading ${modelsToDownload.length} required models...`);
 
       const downloadPromises = modelsToDownload.map(async ({ model: modelName }) => {
@@ -451,49 +580,10 @@ The title should capture the main topic or theme of the conversation. Respond wi
       await Promise.all(downloadPromises);
 
       log.info('Finished downloading required models');
-
-      // Warm up all successfully downloaded models
-      const availableModels = config.ollama.requiredModels
-        .filter(({ model }) => this.modelAvailability[model])
-        .map((m) => m.model);
-
-      if (availableModels.length > 0) {
-        await this.warmUpModels(availableModels);
-      }
     } catch (error) {
       log.error('Failed to ensure models are available:', error);
       // Don't throw here - server should still work even if models aren't downloaded
     }
-  }
-
-  /**
-   * Warm up models by loading them into memory
-   * This prevents the first generation from being slow
-   */
-  private async warmUpModels(modelNames: string[]): Promise<void> {
-    log.info(`Warming up ${modelNames.length} models...`);
-
-    const warmUpPromises = modelNames.map(async (modelName) => {
-      try {
-        log.info(`Loading model '${modelName}' into memory...`);
-        // Send a minimal generation request to load the model
-        await this.generate({
-          model: modelName,
-          prompt: 'Hi',
-          stream: false,
-          options: {
-            num_predict: 1,
-          },
-        });
-        log.info(`Model '${modelName}' is ready`);
-      } catch (error) {
-        log.warn(`Failed to warm up model '${modelName}':`, error);
-        // Don't throw - other models should still warm up
-      }
-    });
-
-    await Promise.all(warmUpPromises);
-    log.info('Finished warming up models');
   }
 }
 

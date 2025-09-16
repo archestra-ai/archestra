@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "da5c3622-273c-482b-9a9c-7d33691f606d",
-  "prevId": "a358d4b7-7c93-4ee6-abfd-e9c4ed53cc3a",
+  "id": "db7575d0-938a-4a68-a22a-1b48f3ed9660",
+  "prevId": "bcc6c8ef-0600-4a63-baa9-a17311b2005c",
   "tables": {
     "chats": {
       "name": "chats",
@@ -618,13 +618,6 @@
         },
         "idempotent": {
           "name": "idempotent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reversible": {
-          "name": "reversible",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

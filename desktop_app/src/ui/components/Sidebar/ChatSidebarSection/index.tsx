@@ -1,3 +1,4 @@
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
@@ -19,6 +20,8 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
   const { chats, getCurrentChat, isLoadingChats, selectChat, deleteCurrentChat, updateChatTitle } = useChatStore();
   const currentChatId = getCurrentChat()?.id;
   const [showAllChats, setShowAllChats] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const VISIBLE_CHAT_COUNT = 5;
   const visibleChats = showAllChats ? chats : chats.slice(0, VISIBLE_CHAT_COUNT);
@@ -41,15 +44,18 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
         <>
           {visibleChats.map((chat) => {
             const { id, title } = chat;
-            const isCurrentChat = currentChatId === id;
+            const isCurrentChat = currentChatId === id && location.pathname.startsWith('/chat');
 
             return (
               <SidebarMenuSubItem key={id} className="group/chat-item">
                 <div className="flex items-center w-full">
                   <SidebarMenuSubButton
-                    onClick={() => selectChat(id)}
+                    onClick={async () => {
+                      await selectChat(id);
+                      navigate({ to: '/chat' });
+                    }}
                     isActive={isCurrentChat}
-                    className="cursor-pointer hover:bg-accent/50 flex-1 pr-1"
+                    className="cursor-pointer flex-1 pr-1"
                   >
                     <EditableTitle
                       className="truncate"
@@ -67,7 +73,7 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
             <SidebarMenuSubItem>
               <SidebarMenuSubButton
                 onClick={() => setShowAllChats(!showAllChats)}
-                className="cursor-pointer hover:bg-accent/50 text-xs text-muted-foreground"
+                className="cursor-pointer text-xs text-muted-foreground"
               >
                 {showAllChats ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                 <span>{showAllChats ? 'Show less' : `Show ${hiddenChatsCount} more`}</span>

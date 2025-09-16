@@ -3,7 +3,9 @@ import { FastifyPluginAsync } from 'fastify';
 import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
 
-import McpServerModel from '@backend/models/mcpServer';
+import ArchestraMcpContext from '@backend/archestraMcp/context';
+import toolAggregator from '@backend/llms/toolAggregator';
+import ChatModel from '@backend/models/chat';
 import MemoryModel from '@backend/models/memory';
 import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
@@ -18,101 +20,6 @@ export const createArchestraMcpServer = () => {
     name: 'archestra-server',
     version: '1.0.0',
   }) as any;
-
-  archestraMcpServer.tool('list_installed_mcp_servers', 'List all installed MCP servers', async () => {
-    try {
-      const servers = await McpServerModel.getInstalledMcpServers();
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(servers, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify([], null, 2),
-          },
-        ],
-      };
-    }
-  });
-
-  archestraMcpServer.tool(
-    'install_mcp_server',
-    'Install an MCP server',
-    z.object({
-      id: z.string().describe('The ID of the MCP server to install'),
-    }) as any,
-    async ({ id }: any) => {
-      try {
-        const server = await McpServerModel.getById(id);
-        if (!server) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `MCP server with id ${id} not found`,
-              },
-            ],
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(server, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify([], null, 2),
-            },
-          ],
-        };
-      }
-    }
-  );
-
-  archestraMcpServer.tool(
-    'uninstall_mcp_server',
-    'Uninstall an MCP server',
-    z.object({
-      id: z.string().describe('The ID of the MCP server to uninstall'),
-    }) as any,
-    async ({ id }: any) => {
-      try {
-        await McpServerModel.uninstallMcpServer(id);
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `MCP server with id ${id} uninstalled`,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify([], null, 2),
-            },
-          ],
-        };
-      }
-    }
-  );
 
   // Memory CRUD tools
   archestraMcpServer.tool('list_memories', 'List all stored memory entries with their names and values', async () => {
@@ -308,80 +215,85 @@ export const createArchestraMcpServer = () => {
     }
   );
 
+  // Tool management tools
   archestraMcpServer.tool(
-    'search_mcp_servers',
-    'Search for MCP servers in the catalog',
-    z.object({
-      query: z.string().optional().describe('Search query to find specific MCP servers'),
-      category: z.string().optional().describe('Filter by category (e.g., "ai", "data", "productivity")'),
-      limit: z.number().int().positive().default(10).optional().describe('Number of results to return'),
-    }) as any,
-    async ({ query, category, limit }: any) => {
+    'list_available_tools',
+    'List all available MCP tools showing which are enabled for the current chat',
+    async () => {
       try {
-        // Search the catalog
-        const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
-
-        const queryParams = new URLSearchParams();
-        if (query) queryParams.append('q', query);
-        if (category) queryParams.append('category', category);
-        if (limit) queryParams.append('limit', limit.toString());
-
-        const url = `${catalogUrl}/search?${queryParams.toString()}`;
-
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'Archestra-Desktop/1.0',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Catalog API returned ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const servers = data.servers || [];
-
-        if (servers.length === 0) {
+        const chatId = ArchestraMcpContext.getCurrentChatId();
+        if (!chatId) {
           return {
             content: [
               {
                 type: 'text',
-                text: 'No MCP servers found matching your search criteria.',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
               },
             ],
           };
         }
 
-        // Format the results
-        const formattedResults = servers
-          .map((server: any) => {
-            const parts = [
-              `**${server.display_name}** (${server.name})`,
-              server.description,
-              `Category: ${server.category}`,
-            ];
+        // Get all available tools
+        const allTools = toolAggregator.getAllAvailableTools();
 
-            if (server.tags && server.tags.length > 0) {
-              parts.push(`Tags: ${server.tags.join(', ')}`);
-            }
+        // Get selected tools for the chat
+        const selectedTools = await ChatModel.getSelectedTools(chatId);
 
-            if (server.author) {
-              parts.push(`Author: ${server.author}`);
-            }
+        // Create a set of selected tool IDs for quick lookup
+        const selectedSet =
+          selectedTools === null
+            ? new Set(allTools.map((t) => t.id)) // null means all selected
+            : new Set(selectedTools);
 
-            return parts.join('\n');
+        // Group tools by MCP server
+        const toolsByServer: Record<string, any[]> = {};
+
+        for (const tool of allTools) {
+          const serverName = tool.mcpServerName || 'Unknown Server';
+          if (!toolsByServer[serverName]) {
+            toolsByServer[serverName] = [];
+          }
+
+          toolsByServer[serverName].push({
+            id: tool.id,
+            name: tool.name,
+            description: tool.description,
+            selected: selectedSet.has(tool.id),
+            analysis: tool.analysis,
+          });
+        }
+
+        // Format the output
+        const formattedOutput = Object.entries(toolsByServer)
+          .map(([serverName, tools]) => {
+            const enabledCount = tools.filter((t) => t.selected).length;
+            const header = `**${serverName}** (${enabledCount}/${tools.length} enabled)`;
+
+            const toolList = tools
+              .map((t) => {
+                const status = t.selected ? '✓' : '✗';
+                const analysisInfo =
+                  t.analysis?.is_read !== null
+                    ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
+                    : '';
+                return `  ${status} ${t.id}${analysisInfo}: ${t.description || 'No description'}`;
+              })
+              .join('\n');
+
+            return `${header}\n${toolList}`;
           })
-          .join('\n\n---\n\n');
+          .join('\n\n');
 
-        const resultText = `Found ${servers.length} MCP server${servers.length === 1 ? '' : 's'}${data.totalCount > servers.length ? ` (showing first ${servers.length} of ${data.totalCount} total)` : ''}:\n\n${formattedResults}`;
+        const summary =
+          selectedTools === null
+            ? 'All tools are currently enabled (default)'
+            : `${selectedSet.size} out of ${allTools.length} tools enabled`;
 
         return {
           content: [
             {
               type: 'text',
-              text: resultText,
+              text: `${summary}\n\n${formattedOutput}`,
             },
           ],
         };
@@ -390,7 +302,223 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Error searching MCP servers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              text: `Error listing tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  archestraMcpServer.tool(
+    'enable_tools',
+    'Enable specific tools for use in the current chat. First call list_available_tools to see tool IDs, then pass them here. Example: {"toolIds": ["filesystem__read_file", "filesystem__write_file", "remote-mcp__search_repositories"]}',
+    z.object({
+      toolIds: z
+        .array(z.string())
+        .describe(
+          'Array of tool IDs from list_available_tools output. Example: ["archestra__list_memories", "filesystem__read_file", "remote-mcp__create_issue"]'
+        ),
+    }) as any,
+    async (context: any) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { toolIds } = global._mcpToolArguments || {};
+      const chatId = ArchestraMcpContext.getCurrentChatId();
+
+      try {
+        if (!chatId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
+              },
+            ],
+          };
+        }
+
+        if (!toolIds || !Array.isArray(toolIds)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: toolIds must be an array of tool IDs',
+              },
+            ],
+          };
+        }
+
+        // Get all available tools to validate the tool IDs exist
+        const allTools = toolAggregator.getAllAvailableTools();
+        const availableToolIds = new Set(allTools.map((t) => t.id));
+
+        // Get currently selected tools for the chat
+        const currentSelectedTools = await ChatModel.getSelectedTools(chatId);
+        const currentEnabledSet =
+          currentSelectedTools === null
+            ? new Set(availableToolIds) // null means all tools are enabled
+            : new Set(currentSelectedTools);
+
+        // Validate each tool ID
+        const errors: string[] = [];
+        const validToolsToEnable: string[] = [];
+
+        for (const toolId of toolIds) {
+          if (!availableToolIds.has(toolId)) {
+            errors.push(`Tool '${toolId}' does not exist`);
+          } else if (currentEnabledSet.has(toolId)) {
+            errors.push(`Tool '${toolId}' is already enabled`);
+          } else {
+            validToolsToEnable.push(toolId);
+          }
+        }
+
+        // If there are any errors, return them
+        if (errors.length > 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error enabling tools:\n${errors.join('\n')}`,
+              },
+            ],
+          };
+        }
+
+        // If no valid tools to enable, return message
+        if (validToolsToEnable.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No tools to enable. All specified tools are either non-existent or already enabled.',
+              },
+            ],
+          };
+        }
+
+        const updatedTools = await ChatModel.addSelectedTools(chatId, validToolsToEnable);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Total enabled: ${updatedTools.length}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error enabling tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  archestraMcpServer.tool(
+    'disable_tools',
+    'Disable specific tools from the current chat',
+    z.object({
+      toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
+    }) as any,
+    async (context: any) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { toolIds } = global._mcpToolArguments || {};
+      const chatId = ArchestraMcpContext.getCurrentChatId();
+
+      try {
+        if (!chatId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: No active chat context found. Please send a message in a chat first.',
+              },
+            ],
+          };
+        }
+
+        if (!toolIds || !Array.isArray(toolIds)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: toolIds must be an array of tool IDs',
+              },
+            ],
+          };
+        }
+
+        // Get all available tools to validate the tool IDs exist
+        const allTools = toolAggregator.getAllAvailableTools();
+        const availableToolIds = new Set(allTools.map((t) => t.id));
+
+        // Get currently selected tools for the chat
+        const currentSelectedTools = await ChatModel.getSelectedTools(chatId);
+        const currentEnabledSet =
+          currentSelectedTools === null
+            ? new Set(availableToolIds) // null means all tools are enabled
+            : new Set(currentSelectedTools);
+
+        // Validate each tool ID
+        const errors: string[] = [];
+        const validToolsToDisable: string[] = [];
+
+        for (const toolId of toolIds) {
+          if (!availableToolIds.has(toolId)) {
+            errors.push(`Tool '${toolId}' does not exist`);
+          } else if (!currentEnabledSet.has(toolId)) {
+            errors.push(`Tool '${toolId}' is already disabled`);
+          } else {
+            validToolsToDisable.push(toolId);
+          }
+        }
+
+        // If there are any errors, return them
+        if (errors.length > 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error disabling tools:\n${errors.join('\n')}`,
+              },
+            ],
+          };
+        }
+
+        // If no valid tools to disable, return message
+        if (validToolsToDisable.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No tools to disable. All specified tools are either non-existent or already disabled.',
+              },
+            ],
+          };
+        }
+
+        const updatedTools = await ChatModel.removeSelectedTools(chatId, validToolsToDisable);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Successfully disabled ${validToolsToDisable.length} tool(s). Remaining enabled: ${updatedTools.length}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error disabling tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
             },
           ],
         };

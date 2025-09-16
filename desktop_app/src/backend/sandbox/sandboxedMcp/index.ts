@@ -15,6 +15,7 @@ import {
   SandboxedMcpServerStatusSummarySchema,
 } from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
+import WebSocketService from '@backend/websocket';
 
 const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.http;
 
@@ -62,8 +63,6 @@ export default class SandboxedMcpServer {
     {
       is_read: boolean | null;
       is_write: boolean | null;
-      idempotent: boolean | null;
-      reversible: boolean | null;
     }
   > = new Map();
 
@@ -160,20 +159,65 @@ export default class SandboxedMcpServer {
    */
   private async fetchCachedTools() {
     try {
+      log.info(`[fetchCachedTools] Fetching cached tools for ${this.mcpServerId}`);
       const cachedTools = await ToolModel.getByMcpServerId(this.mcpServerId);
-      if (cachedTools.length > 0) {
-        log.info(`Found ${cachedTools.length} cached tool analysis results for ${this.mcpServerId}`);
+      log.info(`[fetchCachedTools] Found ${cachedTools.length} tools in database for ${this.mcpServerId}`);
 
-        // Only cache the analysis results, not the tools themselves
+      if (cachedTools.length > 0) {
+        // Count how many tools actually have analysis results
+        let analyzedCount = 0;
+
+        // Log Google tools for debugging
+        const googleTools = cachedTools.filter(
+          (t) => t.name.includes('gmail') || t.name.includes('drive') || t.name.includes('google')
+        );
+        if (googleTools.length > 0) {
+          log.info(
+            `[fetchCachedTools] Found ${googleTools.length} Google tools in database:`,
+            googleTools.map((t) => ({
+              name: t.name,
+              analyzed_at: t.analyzed_at,
+              is_read: t.is_read,
+              is_write: t.is_write,
+            }))
+          );
+        }
+
+        // Cache all tools from the database, regardless of analysis status
         for (const cachedTool of cachedTools) {
-          // Cache the analysis results
+          // Cache the tool with whatever analysis data it has (nulls are fine)
           this.cachedToolAnalysis.set(cachedTool.name, {
             is_read: cachedTool.is_read,
             is_write: cachedTool.is_write,
-            idempotent: cachedTool.idempotent,
-            reversible: cachedTool.reversible,
           });
+
+          // Log caching for Google tools
+          if (cachedTool.name.includes('gmail') || cachedTool.name.includes('drive')) {
+            log.info(`[fetchCachedTools] Caching Google tool: ${cachedTool.name}`, {
+              is_read: cachedTool.is_read,
+              is_write: cachedTool.is_write,
+              analyzed_at: cachedTool.analyzed_at,
+            });
+          }
+
+          // Count tools that have been analyzed
+          if (cachedTool.analyzed_at) {
+            analyzedCount++;
+          }
         }
+
+        log.info(
+          `[fetchCachedTools] Cached ${cachedTools.length} tools for ${this.mcpServerId} (${analyzedCount} analyzed)`
+        );
+
+        // Always broadcast when we cache tools, regardless of analysis status
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Loaded ${cachedTools.length} tools (${analyzedCount} analyzed)`,
+          },
+        });
       }
     } catch (error) {
       log.error(`Failed to fetch cached tool analysis results for ${this.mcpServerId}:`, error);
@@ -192,21 +236,12 @@ export default class SandboxedMcpServer {
       for (const tool of tools) {
         const cachedAnalysis = this.cachedToolAnalysis.get(tool.name);
 
-        // Check if this tool has new analysis results
-        if (
-          tool.analyzed_at &&
-          (!cachedAnalysis ||
-            cachedAnalysis.is_read !== tool.is_read ||
-            cachedAnalysis.is_write !== tool.is_write ||
-            cachedAnalysis.idempotent !== tool.idempotent ||
-            cachedAnalysis.reversible !== tool.reversible)
-        ) {
-          // Update cache
+        // Check if this tool's analysis has changed
+        if (!cachedAnalysis || cachedAnalysis.is_read !== tool.is_read || cachedAnalysis.is_write !== tool.is_write) {
+          // Update cache with whatever data we have (nulls are fine)
           this.cachedToolAnalysis.set(tool.name, {
             is_read: tool.is_read,
             is_write: tool.is_write,
-            idempotent: tool.idempotent,
-            reversible: tool.reversible,
           });
           hasUpdates = true;
           log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
@@ -229,6 +264,15 @@ export default class SandboxedMcpServer {
       const hasUpdates = await this.updateCachedAnalysis();
       if (hasUpdates) {
         log.info(`Analysis cache updated for MCP server ${this.mcpServerId}`);
+
+        // Broadcast that tools have been updated
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Tool analysis updated for ${this.mcpServer.name}`,
+          },
+        });
       }
     }, 5000);
   }
@@ -269,6 +313,20 @@ export default class SandboxedMcpServer {
       try {
         log.info(`Starting async analysis of tools for ${this.mcpServerId}...`);
         await ToolModel.analyze(tools, this.mcpServerId);
+
+        // After tools are saved to database, try to fetch any existing cached analysis
+        // This is important because on first startup, fetchCachedTools() in constructor
+        // runs before tools exist in the database
+        await this.fetchCachedTools();
+
+        // Broadcast that tools are now available (even if not yet analyzed)
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Discovered ${newToolCount} tools for ${this.mcpServer.name}`,
+          },
+        });
       } catch (error) {
         log.error(`Failed to save tools for ${this.mcpServerId}:`, error);
         // Continue even if saving fails
@@ -511,8 +569,16 @@ export default class SandboxedMcpServer {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
 
+      // Strip any prefix ending with '__' for cache lookup
+      // Tools may have prefixes at runtime but are stored without them in the database
+      const prefixSeparatorIndex = toolName.indexOf('__');
+      const cacheKey = prefixSeparatorIndex !== -1 ? toolName.substring(prefixSeparatorIndex + 2) : toolName;
+
       // Get analysis results from cache if available
-      const cachedAnalysis = this.cachedToolAnalysis.get(toolName);
+      const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
+
+      // Check if the tool has actually been analyzed (at least one non-null value)
+      const hasAnalysis = cachedAnalysis && (cachedAnalysis.is_read !== null || cachedAnalysis.is_write !== null);
 
       return {
         id,
@@ -521,23 +587,19 @@ export default class SandboxedMcpServer {
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: this.mcpServerId,
         mcpServerName: this.mcpServer.name,
-        // Include analysis results - default to awaiting_ollama_model if not analyzed
-        analysis: cachedAnalysis
+        // Include analysis results - show correct status based on whether analysis exists
+        analysis: hasAnalysis
           ? {
               status: 'completed',
               error: null,
               is_read: cachedAnalysis.is_read,
               is_write: cachedAnalysis.is_write,
-              idempotent: cachedAnalysis.idempotent,
-              reversible: cachedAnalysis.reversible,
             }
           : {
               status: 'awaiting_ollama_model',
               error: null,
               is_read: null,
               is_write: null,
-              idempotent: null,
-              reversible: null,
             },
       };
     });

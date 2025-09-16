@@ -14,6 +14,8 @@ export default defineConfig({
   // https://orm.drizzle.team/docs/sql-schema-declaration#camel-and-snake-casing
   casing: 'snake_case',
   dbCredentials: {
-    url: `${process.env.HOME}/Library/Application Support/archestra/${DATABASE_FILE_NAME}`,
+    url: process.env.CI
+      ? ':memory:'
+      : `${process.env.HOME}/Library/Application Support/archestra/${DATABASE_FILE_NAME}`,
   },
 });

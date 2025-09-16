@@ -1,0 +1,1 @@
+ALTER TABLE `chats` ADD `selected_tools` text;

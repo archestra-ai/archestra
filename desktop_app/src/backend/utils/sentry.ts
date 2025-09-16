@@ -50,7 +50,7 @@ class SentryClient {
 
     if (user.collectTelemetryData && user.uniqueId) {
       Sentry.setUser({
-        id: `user_${user.uniqueId}`,
+        id: user.uniqueId,
       });
       log.info('Sentry user context set');
     } else {

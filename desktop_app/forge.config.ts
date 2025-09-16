@@ -7,7 +7,6 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
 
@@ -44,6 +43,7 @@ const forgeConfig: ForgeConfig = {
     icon: './assets/icons/icon',
     name: productName,
     appBundleId,
+    appCopyright: `Copyright © ${new Date().getFullYear()} Archestra Limited`,
 
     /**
      * Only enable signing/notarization in CI or when explicitly requested
@@ -115,25 +115,6 @@ const forgeConfig: ForgeConfig = {
    */
   rebuildConfig: {},
   hooks: {
-    // Sign bundled binaries before packaging
-    async prePackage(_forgeConfig) {
-      if (IS_MAC && process.env.APPLE_TEAM_ID) {
-        console.log('Signing bundled binaries...');
-
-        const signingIdentityName = `Developer ID Application: Archestra Limited (${process.env.APPLE_TEAM_ID})`;
-
-        for (const binaryFilePath of binaryFilePaths) {
-          try {
-            console.log(`Signing ${binaryFilePath}...`);
-            execSync(`codesign --force --verbose --sign "${signingIdentityName}" "${binaryFilePath}"`, {
-              stdio: 'inherit',
-            });
-          } catch (error) {
-            console.warn(`Warning: Could not sign ${binaryFilePath}:`, error);
-          }
-        }
-      }
-    },
     // The call to this hook is mandatory for better-sqlite3 to work once the app built
     async packageAfterCopy(_forgeConfig, buildPath) {
       const requiredNativePackages = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
@@ -182,13 +163,11 @@ const forgeConfig: ForgeConfig = {
     //   description,
     //   setupIcon: './icons/icon.ico',
     // }),
-
     /**
-     * The Mac .zip is required for update-electron-app to work
-     * (see https://github.com/electron/update-electron-app?tab=readme-ov-file#what-kinds-of-assets-do-i-need-to-build)
+     * NOTE: zip assets are required for update-electron-app (ie. auto updater) to work properly
+     * see https://github.com/electron/update-electron-app
      */
-    new MakerZIP({}, ['win32', 'darwin']),
-
+    new MakerZIP({}, ['darwin', 'win32']),
     new MakerRpm({
       options: {
         name: productName,
@@ -288,19 +267,8 @@ const forgeConfig: ForgeConfig = {
           owner: github.owner,
           name: github.repoName,
         },
-
-        /**
-         * The desktop app release-please generated GitHub releases have a tag prefix of `desktop_app-v<version>`,
-         * so we need to match that here.
-         *
-         * Otherwise, the electron-forge publisher will try to create a release with a tag of `v<version>` and the
-         * build assets will not get attached to the proper GitHub Release.
-         *
-         * The alternative is to set "include-component-in-tag" to "false" in the release-please config
-         * (specifically for the "desktop_app" 'component') but there is a bug that we ran into with release-please
-         * that was causing issues (https://github.com/googleapis/release-please/issues/2214)
-         */
-        tagPrefix: 'desktop_app-v',
+        // default tag prefix is "v" which aligns with release-please's default tag prefix
+        // tagPrefix: 'desktop_app-v',
         prerelease: true,
         draft: false,
       } as PublisherGitHubConfig,

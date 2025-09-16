@@ -22,6 +22,12 @@ import type {
   DeleteCloudProviderResponses,
   DeleteMemoryData,
   DeleteMemoryResponses,
+  DeselectAllChatToolsData,
+  DeselectAllChatToolsErrors,
+  DeselectAllChatToolsResponses,
+  DeselectChatToolsData,
+  DeselectChatToolsErrors,
+  DeselectChatToolsResponses,
   DisconnectExternalMcpClientData,
   DisconnectExternalMcpClientResponses,
   GetAllMemoriesData,
@@ -30,9 +36,14 @@ import type {
   GetAvailableCloudProvidersResponses,
   GetAvailableToolsData,
   GetAvailableToolsResponses,
+  GetChatAvailableToolsData,
+  GetChatAvailableToolsResponses,
   GetChatByIdData,
   GetChatByIdErrors,
   GetChatByIdResponses,
+  GetChatSelectedToolsData,
+  GetChatSelectedToolsErrors,
+  GetChatSelectedToolsResponses,
   GetChatsData,
   GetChatsResponses,
   GetCloudProviderModelsData,
@@ -76,7 +87,14 @@ import type {
   RestartSandboxData,
   RestartSandboxErrors,
   RestartSandboxResponses,
+  SelectAllChatToolsData,
+  SelectAllChatToolsErrors,
+  SelectAllChatToolsResponses,
+  SelectChatToolsData,
+  SelectChatToolsErrors,
+  SelectChatToolsResponses,
   SetMemoryData,
+  SetMemoryErrors,
   SetMemoryResponses,
   StartGenericOAuthData,
   StartGenericOAuthErrors,
@@ -90,6 +108,7 @@ import type {
   UpdateChatErrors,
   UpdateChatResponses,
   UpdateMemoryData,
+  UpdateMemoryErrors,
   UpdateMemoryResponses,
   UpdateUserData,
   UpdateUserResponses,
@@ -183,6 +202,92 @@ export const updateChat = <ThrowOnError extends boolean = false>(options: Option
       'Content-Type': 'application/json',
       ...options.headers,
     },
+  });
+};
+
+/**
+ * Get selected tools for a specific chat
+ */
+export const getChatSelectedTools = <ThrowOnError extends boolean = false>(
+  options: Options<GetChatSelectedToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).get<GetChatSelectedToolsResponses, GetChatSelectedToolsErrors, ThrowOnError>(
+    {
+      url: '/api/chat/{id}/tools',
+      ...options,
+    }
+  );
+};
+
+/**
+ * Add tools to chat selection
+ */
+export const selectChatTools = <ThrowOnError extends boolean = false>(
+  options: Options<SelectChatToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<SelectChatToolsResponses, SelectChatToolsErrors, ThrowOnError>({
+    url: '/api/chat/{id}/tools/select',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Remove tools from chat selection
+ */
+export const deselectChatTools = <ThrowOnError extends boolean = false>(
+  options: Options<DeselectChatToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<DeselectChatToolsResponses, DeselectChatToolsErrors, ThrowOnError>({
+    url: '/api/chat/{id}/tools/deselect',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Select all available tools for this chat
+ */
+export const selectAllChatTools = <ThrowOnError extends boolean = false>(
+  options: Options<SelectAllChatToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<SelectAllChatToolsResponses, SelectAllChatToolsErrors, ThrowOnError>({
+    url: '/api/chat/{id}/tools/select-all',
+    ...options,
+  });
+};
+
+/**
+ * Clear all tool selections for this chat
+ */
+export const deselectAllChatTools = <ThrowOnError extends boolean = false>(
+  options: Options<DeselectAllChatToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<
+    DeselectAllChatToolsResponses,
+    DeselectAllChatToolsErrors,
+    ThrowOnError
+  >({
+    url: '/api/chat/{id}/tools/deselect-all',
+    ...options,
+  });
+};
+
+/**
+ * List all tools available for selection
+ */
+export const getChatAvailableTools = <ThrowOnError extends boolean = false>(
+  options: Options<GetChatAvailableToolsData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).get<GetChatAvailableToolsResponses, unknown, ThrowOnError>({
+    url: '/api/chat/{id}/tools/available',
+    ...options,
   });
 };
 
@@ -516,7 +621,7 @@ export const getMemoryByName = <ThrowOnError extends boolean = false>(
  * Create or update a memory entry
  */
 export const setMemory = <ThrowOnError extends boolean = false>(options: Options<SetMemoryData, ThrowOnError>) => {
-  return (options.client ?? _heyApiClient).put<SetMemoryResponses, unknown, ThrowOnError>({
+  return (options.client ?? _heyApiClient).put<SetMemoryResponses, SetMemoryErrors, ThrowOnError>({
     url: '/api/memories/{name}',
     ...options,
     headers: {
@@ -542,7 +647,7 @@ export const getMemory = <ThrowOnError extends boolean = false>(options?: Option
 export const updateMemory = <ThrowOnError extends boolean = false>(
   options?: Options<UpdateMemoryData, ThrowOnError>
 ) => {
-  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, unknown, ThrowOnError>({
+  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, UpdateMemoryErrors, ThrowOnError>({
     url: '/api/memory',
     ...options,
     headers: {

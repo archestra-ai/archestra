@@ -178,15 +178,9 @@
           },
           "is_write": {
             "type": "boolean"
-          },
-          "idempotent": {
-            "type": "boolean"
-          },
-          "reversible": {
-            "type": "boolean"
           }
         },
-        "required": ["is_read", "is_write", "idempotent", "reversible"]
+        "required": ["is_read", "is_write"]
       },
       "ToolInput": {
         "type": "object",
@@ -270,28 +264,6 @@
               }
             ]
           },
-          "idempotent": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
-          "reversible": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "analyzed_at": {
             "anyOf": [
               {
@@ -318,8 +290,6 @@
           "input_schema",
           "is_read",
           "is_write",
-          "idempotent",
-          "reversible",
           "analyzed_at",
           "created_at",
           "updated_at"
@@ -543,6 +513,39 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["chat-tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "selectedTools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  }
+                },
+                "required": ["chatId", "selectedTools"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["sandbox-status-update"]
               },
               "payload": {
@@ -603,6 +606,71 @@
               }
             },
             "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["mcpServerId", "message"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-analysis-progress"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["started", "analyzing", "completed", "error"]
+                  },
+                  "progress": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "totalTools": {
+                    "type": "number"
+                  },
+                  "analyzedTools": {
+                    "type": "number"
+                  },
+                  "currentTool": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "message"]
+              }
+            },
+            "required": ["type", "payload"]
           }
         ]
       },
@@ -621,6 +689,43 @@
             "anyOf": [
               {
                 "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "selectedTools": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
               },
               {
                 "nullable": true,
@@ -660,7 +765,7 @@
             }
           }
         },
-        "required": ["id", "sessionId", "title", "createdAt", "updatedAt", "messages"]
+        "required": ["id", "sessionId", "title", "selectedTools", "createdAt", "updatedAt", "messages"]
       },
       "CloudProviderWithConfigInput": {
         "type": "object",
@@ -1271,33 +1376,9 @@
                     "enum": [null]
                   }
                 ]
-              },
-              "idempotent": {
-                "description": "Whether the tool is idempotent",
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "nullable": true,
-                    "enum": [null]
-                  }
-                ]
-              },
-              "reversible": {
-                "description": "Whether the tool actions are reversible",
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "nullable": true,
-                    "enum": [null]
-                  }
-                ]
               }
             },
-            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"]
+            "required": ["status", "error", "is_read", "is_write"]
           }
         },
         "required": ["id", "name", "mcpServerId", "mcpServerName", "analysis"]
@@ -1646,15 +1727,9 @@
           },
           "is_write": {
             "type": "boolean"
-          },
-          "idempotent": {
-            "type": "boolean"
-          },
-          "reversible": {
-            "type": "boolean"
           }
         },
-        "required": ["is_read", "is_write", "idempotent", "reversible"],
+        "required": ["is_read", "is_write"],
         "additionalProperties": false
       },
       "Tool": {
@@ -1739,28 +1814,6 @@
               }
             ]
           },
-          "idempotent": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
-          "reversible": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "analyzed_at": {
             "anyOf": [
               {
@@ -1787,8 +1840,6 @@
           "input_schema",
           "is_read",
           "is_write",
-          "idempotent",
-          "reversible",
           "analyzed_at",
           "created_at",
           "updated_at"
@@ -2020,6 +2071,41 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["chat-tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "selectedTools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  }
+                },
+                "required": ["chatId", "selectedTools"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["sandbox-status-update"]
               },
               "payload": {
@@ -2085,6 +2171,75 @@
             },
             "required": ["type", "payload"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tools-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["mcpServerId", "message"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-analysis-progress"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "mcpServerId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["started", "analyzing", "completed", "error"]
+                  },
+                  "progress": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "totalTools": {
+                    "type": "number"
+                  },
+                  "analyzedTools": {
+                    "type": "number"
+                  },
+                  "currentTool": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": ["status", "message"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
           }
         ]
       },
@@ -2103,6 +2258,43 @@
             "anyOf": [
               {
                 "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "selectedTools": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "array",
+                    "items": {}
+                  }
+                ]
               },
               {
                 "nullable": true,
@@ -2143,7 +2335,7 @@
             }
           }
         },
-        "required": ["id", "sessionId", "title", "createdAt", "updatedAt", "messages"],
+        "required": ["id", "sessionId", "title", "selectedTools", "createdAt", "updatedAt", "messages"],
         "additionalProperties": false
       },
       "CloudProviderWithConfig": {
@@ -2764,33 +2956,9 @@
                     "enum": [null]
                   }
                 ]
-              },
-              "idempotent": {
-                "description": "Whether the tool is idempotent",
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "nullable": true,
-                    "enum": [null]
-                  }
-                ]
-              },
-              "reversible": {
-                "description": "Whether the tool actions are reversible",
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "nullable": true,
-                    "enum": [null]
-                  }
-                ]
               }
             },
-            "required": ["status", "error", "is_read", "is_write", "idempotent", "reversible"],
+            "required": ["status", "error", "is_read", "is_write"],
             "additionalProperties": false
           }
         },
@@ -3256,6 +3424,381 @@
                   },
                   "required": ["error"],
                   "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools": {
+      "get": {
+        "operationId": "getChatSelectedTools",
+        "tags": ["Chat"],
+        "description": "Get selected tools for a specific chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "nullable": true,
+                          "enum": [null]
+                        }
+                      ]
+                    },
+                    "availableTools": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AvailableTool"
+                      }
+                    }
+                  },
+                  "required": ["selectedTools", "availableTools"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/select": {
+      "post": {
+        "operationId": "selectChatTools",
+        "tags": ["Chat"],
+        "description": "Add tools to chat selection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["toolIds"]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["selectedTools"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/deselect": {
+      "post": {
+        "operationId": "deselectChatTools",
+        "tags": ["Chat"],
+        "description": "Remove tools from chat selection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["toolIds"]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["selectedTools"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/select-all": {
+      "post": {
+        "operationId": "selectAllChatTools",
+        "tags": ["Chat"],
+        "description": "Select all available tools for this chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/deselect-all": {
+      "post": {
+        "operationId": "deselectAllChatTools",
+        "tags": ["Chat"],
+        "description": "Clear all tool selections for this chat",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{id}/tools/available": {
+      "get": {
+        "operationId": "getChatAvailableTools",
+        "tags": ["Chat"],
+        "description": "List all tools available for selection",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvailableTool"
+                  }
                 }
               }
             }
@@ -4332,6 +4875,26 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       },
@@ -4407,6 +4970,26 @@
                     }
                   },
                   "required": ["success"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
                   "additionalProperties": false
                 }
               }

@@ -44,6 +44,7 @@ const forgeConfig: ForgeConfig = {
     icon: './assets/icons/icon',
     name: productName,
     appBundleId,
+    appCopyright: `Copyright © ${new Date().getFullYear()} Archestra Limited`,
 
     /**
      * Only enable signing/notarization in CI or when explicitly requested

@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import { AlertCircle, MessageSquare, Package, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 
-import { type LocalMcpServerManifest } from '@ui/catalog_local';
 import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
@@ -18,14 +17,10 @@ export const Route = createFileRoute('/connectors')({
 });
 
 function ConnectorCatalogPage() {
-  const [selectedServerForInstall, setSelectedServerForInstall] = useState<
-    ArchestraMcpServerManifest | LocalMcpServerManifest | null
-  >(null);
+  const [selectedServerForInstall, setSelectedServerForInstall] = useState<ArchestraMcpServerManifest | null>(null);
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const [oauthConfirmDialogOpen, setOauthConfirmDialogOpen] = useState(false);
-  const [pendingOAuthServer, setPendingOAuthServer] = useState<
-    ArchestraMcpServerManifest | LocalMcpServerManifest | null
-  >(null);
+  const [pendingOAuthServer, setPendingOAuthServer] = useState<ArchestraMcpServerManifest | null>(null);
   const [pendingBrowserAuth, setPendingBrowserAuth] = useState(false);
 
   const {
@@ -41,7 +36,7 @@ function ConnectorCatalogPage() {
   const { installedMcpServers, installMcpServer: _installMcpServer, uninstallMcpServer } = useMcpServersStore();
 
   const installMcpServer = async (
-    mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest,
+    mcpServer: ArchestraMcpServerManifest,
     userConfigValues?: McpServerUserConfigValues,
     useBrowserAuth: boolean = false
   ) => {
@@ -58,7 +53,7 @@ function ConnectorCatalogPage() {
        *
        * https://github.com/anthropics/dxt/blob/main/MANIFEST.md#server-configuration
        */
-      serverConfig: mcpServer.server,
+      serverConfig: mcpServer,
       userConfigValues: userConfigValues || {},
       // If using browser auth, append -browser to the provider name
       oauthProvider:
@@ -66,8 +61,8 @@ function ConnectorCatalogPage() {
           ? `${mcpServer.archestra_config.oauth.provider}-browser`
           : mcpServer.archestra_config?.oauth?.provider,
       // Include OAuth config from catalog if available (new approach)
-      ...((mcpServer as LocalMcpServerManifest).oauth_config && {
-        oauthConfig: (mcpServer as LocalMcpServerManifest).oauth_config,
+      ...(mcpServer.oauth_config && {
+        oauthConfig: mcpServer.oauth_config,
       }),
       // Include remote_url for remote MCP servers
       ...(mcpServer.remote_url && { remote_url: mcpServer.remote_url }),
@@ -83,7 +78,7 @@ function ConnectorCatalogPage() {
     _installMcpServer(mcpServer.archestra_config?.oauth?.required || false, installData);
   };
 
-  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
+  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest) => {
     // If server has user_config, show the dialog
     if (mcpServer.user_config && Object.keys(mcpServer.user_config).length > 0) {
       setSelectedServerForInstall(mcpServer);
@@ -94,9 +89,9 @@ function ConnectorCatalogPage() {
     }
   };
 
-  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
+  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
     // Check if it's a Remote MCP server
-    const isRemoteMcp = !!(mcpServer as LocalMcpServerManifest).remote_url;
+    const isRemoteMcp = !!mcpServer.remote_url;
 
     if (isRemoteMcp) {
       // For Remote MCP, skip the dialog and install directly
@@ -109,7 +104,7 @@ function ConnectorCatalogPage() {
     }
   };
 
-  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
+  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
     // Show OAuth confirmation dialog for browser auth
     setPendingOAuthServer(mcpServer);
     setPendingBrowserAuth(true);

@@ -44,15 +44,11 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      # TODO: add this later
-      # - name: Build
-      #   run: pnpm make
-
   verify-codegend-code-is-up-to-date:
     name: Verify generated code is up to date
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     defaults:
       run:
         working-directory: ./desktop_app
@@ -60,7 +56,7 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          persist-credentials: true
+          persist-credentials: false
           # Only use PR head ref if it's not from a fork (forks can't push back to the original repo)
           ref: ${{ github.event.pull_request.head.repo.fork == false && github.event.pull_request.head.ref || '' }}
 
@@ -68,33 +64,17 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Check for codegen'd changes
-        id: codegen-changes
         run: |
           pnpm codegen:all
 
           # Check both unstaged and staged changes
           if ! git diff --exit-code || ! git diff --cached --exit-code; then
-            echo "Generated code is not up to date - committing changes"
-            echo "codegen-changes=true" >> $GITHUB_OUTPUT
+            echo "::error::Generated code is not up to date. Please run 'pnpm codegen:all' locally and commit the changes."
+            exit 1
           else
             echo "Generated code is up to date"
             echo "codegen-changes=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Add and commit generated code
-        # Only commit if changes exist and it's not a PR from a fork
-        if: steps.codegen-changes.outputs.codegen-changes == 'true' && github.event.pull_request.head.repo.fork == false
-        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9.1.4
-        with:
-          message: "chore: update generated code"
-          committer_name: GitHub Actions
-          committer_email: 41898282+github-actions[bot]@users.noreply.github.com
-
-      - name: Fail if PR from a fork has uncommitted codegen changes
-        if: steps.codegen-changes.outputs.codegen-changes == 'true' && github.event.pull_request.head.repo.fork == true
-        run: |
-          echo "::error::Generated code is not up to date. Please run 'pnpm codegen:all' locally and commit the changes."
-          exit 1
 
   verify-no-pending-database-migrations:
     name: Verify no pending database migrations

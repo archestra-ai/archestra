@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 
-import { type LocalMcpServerManifest, localCatalogServers } from '@ui/catalog_local';
+import { localCatalogServers } from '@ui/catalog_local';
+import config from '@ui/config';
 import {
+  type ArchestraMcpServerManifest,
   type SearchMcpServerCatalogData,
   getMcpServerCategories,
   searchMcpServerCatalog,
@@ -13,7 +15,7 @@ import {
 const CATALOG_PAGE_SIZE = 24;
 
 interface ConnectorCatalogState {
-  connectorCatalog: LocalMcpServerManifest[];
+  connectorCatalog: ArchestraMcpServerManifest[];
   loadingConnectorCatalog: boolean;
   errorFetchingConnectorCatalog: string | null;
 
@@ -83,10 +85,10 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
       const { data } = await searchMcpServerCatalog({ query: params });
 
       if (data) {
-        let filteredLocalServers: LocalMcpServerManifest[] = [];
+        let filteredLocalServers: ArchestraMcpServerManifest[] = [];
 
         // Only include local catalog servers in development mode
-        if (import.meta.env.DEV) {
+        if (config.isDev) {
           filteredLocalServers = localCatalogServers;
 
           if (catalogSearchQuery) {

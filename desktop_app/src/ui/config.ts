@@ -1,9 +1,11 @@
+const IS_DEV = import.meta.env.DEV;
+
 const HOST = import.meta.env.VITE_HOST || 'localhost';
 
 // In development, use Vite's dev server port (5173) which proxies to the backend
 // In production, connect directly to the backend server port
-const HTTP_PORT = import.meta.env.DEV ? import.meta.env.VITE_PORT || '5173' : '54587';
-const WEBSOCKET_PORT = import.meta.env.DEV ? import.meta.env.VITE_WEBSOCKET_PORT || '5173' : '54588';
+const HTTP_PORT = IS_DEV ? import.meta.env.VITE_PORT || '5173' : '54587';
+const WEBSOCKET_PORT = IS_DEV ? import.meta.env.VITE_WEBSOCKET_PORT || '5173' : '54588';
 
 const BASE_URL = `${HOST}:${HTTP_PORT}`;
 const BASE_URL_WITH_PROTOCOL = `http://${BASE_URL}`;
@@ -12,6 +14,7 @@ const BASE_URL_WITH_PROTOCOL = `http://${BASE_URL}`;
 const CATALOG_URL = import.meta.env.VITE_ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
 
 export default {
+  isDev: IS_DEV,
   archestra: {
     apiUrl: BASE_URL_WITH_PROTOCOL,
     /**

@@ -35,7 +35,7 @@ jobs:
       # https://www.electronforge.io/config/publishers/github#authentication
       contents: write
     with:
-      dry_run: false
+      dry_run: true
     secrets:
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

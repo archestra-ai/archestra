@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_PROMPT } from '@/constants';
+import { DEFAULT_SYSTEM_PROMPT } from '../../../constants';
 
 class BaseLocalStorage {
   static keyPrefix: string = '';

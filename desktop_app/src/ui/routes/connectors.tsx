@@ -64,6 +64,8 @@ function ConnectorCatalogPage() {
       ...(mcpServer.oauth_config && {
         oauthConfig: mcpServer.oauth_config,
       }),
+      // Include remote_url for remote MCP servers
+      ...(mcpServer.server.type === 'remote' && { remote_url: mcpServer.server.url }),
       // Include archestra_config for browser auth provider lookup
       ...(mcpServer.archestra_config && { archestra_config: mcpServer.archestra_config }),
     };

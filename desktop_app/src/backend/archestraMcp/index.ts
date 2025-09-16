@@ -158,12 +158,6 @@ class ArchestraMcpClient {
 
       // Static evaluation for all Archestra MCP tools
       const toolEvaluations: Record<string, { is_read: boolean; is_write: boolean }> = {
-        // MCP Server management tools
-        list_installed_mcp_servers: { is_read: true, is_write: false },
-        install_mcp_server: { is_read: false, is_write: true },
-        uninstall_mcp_server: { is_read: false, is_write: true },
-        search_mcp_servers: { is_read: true, is_write: false },
-
         // Memory management tools
         list_memories: { is_read: true, is_write: false },
         get_memory: { is_read: true, is_write: false },

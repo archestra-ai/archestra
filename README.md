@@ -2,7 +2,7 @@
 
 # Archestra
 
-**Enterprise MCP Platform for AI Agents**
+**The easiest way to use MCP (Model Context Protocol) without hassle with APIs and configs. Runs 100% offline on your computer**
 
 **[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
 
@@ -15,12 +15,6 @@
 </div>
 
 ---
-
-## ⚠️ Early Development Notice
-
-**Archestra is in very early development**, and it's not yet ready for general download.
-
-**Want to get notified when we launch?** Drop your email at [Archestra.AI](https://www.archestra.ai/) to be the first to know when Archestra is ready.
 
 ## 🚀 Overview
 

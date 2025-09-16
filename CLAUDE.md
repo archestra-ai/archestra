@@ -41,6 +41,7 @@ cd desktop_app
 pnpm test             # Run all tests
 pnpm test:ui          # Run UI tests only
 pnpm test:backend     # Run backend tests only
+pnpm test:e2e:packaged # Run E2E tests on packaged app
 pnpm typecheck        # Check TypeScript types
 pnpm prettier         # Format code
 ```
@@ -409,10 +410,13 @@ Key tables (snake_case naming):
 
 ### Testing Patterns
 
-- **Vitest** for all tests
+- **Vitest** for unit and integration tests
 - UI tests use jsdom environment
 - Backend tests use node environment
 - Test files colocated with source files (`.test.ts` extension)
+- **WebDriverIO** for E2E tests on packaged applications
+- E2E tests located in `test/e2e/` directory
+- E2E tests run against built applications in CI
 
 ### CI/CD Workflows
 
@@ -424,7 +428,7 @@ Key tables (snake_case naming):
   - **Workflow Structure**:
     - `claude-code.yml` and `claude-pull-requests.yml`: Reusable workflow templates
     - `user-scoped-claude-code.yml` and `user-scoped-claude-pull-requests.yml`: User-specific orchestrators
-  - **Authorized Users**: Currently configured for `joeyorlando`, `Matvey-Kuk`, and `iskhakov`
+  - **Authorized Users**: Currently configured for `joeyorlando` and `iskhakov`
   - **Compliance**: Ensures adherence to Anthropic's single-account OAuth token policy
   - **Adding New Users**: Add repository secret `USERNAME_CLAUDE_CODE_OAUTH_TOKEN` and update user-scoped workflows
 

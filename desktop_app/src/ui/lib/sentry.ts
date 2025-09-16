@@ -1,3 +1,4 @@
+import type { Integration } from '@sentry/core';
 import * as Sentry from '@sentry/electron/renderer';
 
 import { type User } from '@ui/lib/clients/archestra/api/gen';
@@ -12,16 +13,28 @@ class SentryClient {
   /**
    * Initialize Sentry early for error tracking
    */
-  initialize() {
+  async initialize() {
     if (this.initialized) {
       console.log('Sentry already initialized');
       return;
     }
 
+    const appInfo = await window.electronAPI.getAppInfo();
+    let integrations: Integration[] = [];
+
+    if (appInfo.isPackaged) {
+      /**
+       * Don't capture traces and replays in development as it eats up a lot of usage
+       */
+      integrations.push(Sentry.browserTracingIntegration(), Sentry.replayIntegration());
+    }
+
+    console.log(`Sentry renderer process using ${integrations.length} integrations (packaged: ${appInfo.isPackaged})`);
+
     Sentry.init({
       dsn: config.sentry.dsn,
       sendDefaultPii: true,
-      integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+      integrations,
       tracesSampleRate,
       replaysSessionSampleRate,
       replaysOnErrorSampleRate,

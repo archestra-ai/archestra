@@ -8,6 +8,11 @@ on:
         type: boolean
         required: false
         default: false
+      run_tests:
+        description: Whether to run E2E tests against the packaged application
+        type: boolean
+        required: false
+        default: false
     secrets:
       ARCHESTRA_RELEASER_GITHUB_APP_ID:
         required: true
@@ -131,3 +136,7 @@ jobs:
         if: ${{ always() && matrix.os == 'macos' && github.event.pull_request.head.repo.fork == false }}
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db
+
+      - name: Run E2E tests on packaged app
+        if: inputs.run_tests
+        run: pnpm test:e2e:packaged

@@ -27,6 +27,7 @@
     "prepare": "husky install",
     "typecheck": "tsc --noEmit",
     "test": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/vitest/dist/cli.js --config vite.main.config.ts",
+    "test:e2e:packaged": "wdio run ./wdio.conf.ts",
     "prettier": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/prettier/bin/prettier.cjs --write .",
     "db": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/drizzle-kit/bin.cjs",
     "codegen:all": "pnpm codegen:libpod && pnpm codegen:archestra:api && pnpm codegen:archestra:catalog && pnpm prettier",
@@ -54,6 +55,7 @@
     "@testing-library/jest-dom": "^6.7.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@testing-library/webdriverio": "^3.2.1",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
@@ -63,6 +65,10 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@types/ws": "^8.18.1",
+    "@wdio/cli": "^9.19.2",
+    "@wdio/local-runner": "^9.19.2",
+    "@wdio/mocha-framework": "^9.19.2",
+    "@wdio/spec-reporter": "^9.19.2",
     "chokidar": "^4.0.3",
     "drizzle-kit": "^0.31.4",
     "electron": "37.3.1",
@@ -75,7 +81,9 @@
     "tsx": "^4.20.4",
     "typescript": "~5.9.2",
     "vite": "^7.1.5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wdio-electron-service": "^9.1.2",
+    "wdio-wait-for": "^3.1.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.5",

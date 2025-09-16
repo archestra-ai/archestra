@@ -1,4 +1,4 @@
-import { ChevronRight, Settings } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
@@ -316,12 +316,12 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
             opacity: 1;
           }
         }
-        
+
         .fade-in {
           animation: fadeIn 500ms ease-in-out forwards;
         }
       `}</style>
-      <div className="fixed inset-0 z-50 bg-black">
+      <div className="fixed inset-0 z-50 bg-black" data-testid="onboarding-wizard-dialog">
         {/* Previous step (stays visible during transition) */}
         {previousStep !== null && isTransitioning && (
           <div className="absolute inset-0">{renderStepContent(previousStep)}</div>

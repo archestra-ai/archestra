@@ -27,8 +27,8 @@ jobs:
       id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/linting-and-tests.yml
 
-  build-desktop-application:
-    name: Build desktop application
+  package-and-test-desktop-application:
+    name: Package and test desktop application
     uses: ./.github/workflows/build-desktop-application.yml
     permissions:
       # publisher requires write permissions to the repo's contents to create new releases
@@ -36,6 +36,7 @@ jobs:
       contents: write
     with:
       dry_run: true
+      run_tests: true
     secrets:
       ARCHESTRA_RELEASER_GITHUB_APP_ID: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
       ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}

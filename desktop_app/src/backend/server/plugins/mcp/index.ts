@@ -58,7 +58,6 @@ export const createArchestraMcpServer = () => {
     }
   });
 
-
   archestraMcpServer.tool(
     'set_memory',
     'Set or update a memory entry with a specific name and value',

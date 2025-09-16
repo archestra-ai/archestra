@@ -64,9 +64,9 @@ const components: Options['components'] = {
     };
 
     return (
-      <a 
-        className={cn('font-medium text-primary underline', className)} 
-        rel="noreferrer" 
+      <a
+        className={cn('font-medium text-primary underline', className)}
+        rel="noreferrer"
         href={href}
         onClick={handleClick}
         {...props}

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { localCatalogServers } from '@ui/catalog_local';
+import config from '@ui/config';
 import {
   type ArchestraMcpServerManifest,
   type SearchMcpServerCatalogData,
@@ -87,7 +88,7 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
         let filteredLocalServers: ArchestraMcpServerManifest[] = [];
 
         // Only include local catalog servers in development mode
-        if (import.meta.env.DEV) {
+        if (config.isDev) {
           filteredLocalServers = localCatalogServers;
 
           if (catalogSearchQuery) {

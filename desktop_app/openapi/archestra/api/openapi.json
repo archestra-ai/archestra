@@ -4130,11 +4130,11 @@
         }
       }
     },
-    "/api/chat/{chatId}/message/{messageId}": {
+    "/api/message/{messageId}": {
       "put": {
         "operationId": "updateChatMessage",
         "tags": ["Chat"],
-        "description": "Update a specific message in a chat",
+        "description": "Update a specific message",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4150,14 +4150,6 @@
           "required": true
         },
         "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "chatId",
-            "required": true
-          },
           {
             "schema": {
               "type": "string"

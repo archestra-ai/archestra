@@ -1293,11 +1293,10 @@ export type UpdateChatMessageData = {
     content: unknown;
   };
   path: {
-    chatId: string;
     messageId: string;
   };
   query?: never;
-  url: '/api/chat/{chatId}/message/{messageId}';
+  url: '/api/message/{messageId}';
 };
 
 export type UpdateChatMessageErrors = {

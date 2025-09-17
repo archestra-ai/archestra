@@ -297,13 +297,13 @@ export const getChatAvailableTools = <ThrowOnError extends boolean = false>(
 };
 
 /**
- * Update a specific message in a chat
+ * Update a specific message
  */
 export const updateChatMessage = <ThrowOnError extends boolean = false>(
   options: Options<UpdateChatMessageData, ThrowOnError>
 ) => {
   return (options.client ?? _heyApiClient).put<UpdateChatMessageResponses, UpdateChatMessageErrors, ThrowOnError>({
-    url: '/api/chat/{chatId}/message/{messageId}',
+    url: '/api/message/{messageId}',
     ...options,
     headers: {
       'Content-Type': 'application/json',

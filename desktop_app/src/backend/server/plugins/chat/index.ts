@@ -4,11 +4,9 @@ import { z } from 'zod';
 
 import toolAggregator from '@backend/llms/toolAggregator';
 import ChatModel, { ChatWithMessagesSchema } from '@backend/models/chat';
+import MessageModel from '@backend/models/message';
 import { AvailableToolSchema } from '@backend/sandbox/schemas';
 import { ErrorResponseSchema, StringNumberIdSchema } from '@backend/schemas';
-
-// UIMessage schema based on the 'ai' SDK types
-const UIMessageSchema = z.custom<UIMessage>();
 
 /**
  * Register our zod schemas into the global registry, such that they get output as components in the openapi spec
@@ -326,20 +324,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
   );
 
-  // Message update endpoint
   fastify.put(
-    '/api/chat/:chatId/message/:messageId',
+    '/api/message/:messageId',
     {
       schema: {
         operationId: 'updateChatMessage',
-        description: 'Update a specific message in a chat',
+        description: 'Update a specific message',
         tags: ['Chat'],
         params: z.object({
-          chatId: StringNumberIdSchema,
           messageId: StringNumberIdSchema,
         }),
         body: z.object({
-          content: UIMessageSchema,
+          content: z.custom<UIMessage>(),
         }),
         response: {
           200: z.object({
@@ -349,9 +345,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { chatId, messageId }, body }, reply) => {
+    async ({ params: { messageId }, body }, reply) => {
       try {
-        await ChatModel.updateMessage(chatId, messageId, body.content);
+        await MessageModel.updateContent(messageId, body.content);
         return reply.code(200).send({ success: true });
       } catch (error) {
         return reply.code(404).send({ error: 'Message not found' });

@@ -27,6 +27,7 @@ interface StreamRequestBody {
   chatId?: number; // Chat ID to get chat-specific tools
 }
 
+const USE_ARCHESTRA_LLM = true;
 const { vercelSdk: vercelSdkConfig } = sharedConfig;
 
 const createModelInstance = async (model: string, provider?: string) => {
@@ -164,6 +165,16 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         if (tools && Object.keys(tools).length > 0) {
           streamConfig.tools = tools;
           streamConfig.toolChoice = toolChoice || 'auto';
+        }
+
+        if (USE_ARCHESTRA_LLM) {
+          const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
+
+          const google = createGoogleGenerativeAI({
+            baseURL: 'http://localhost:8888/',
+            apiKey: 'will_be_added_on_proxy',
+          });
+          streamConfig.model = google('gemini-1.5-flash');
         }
 
         const result = streamText(streamConfig);

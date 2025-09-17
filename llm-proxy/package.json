@@ -1,0 +1,14 @@
+{
+  "name": "llm-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.2.2",
+    "@fastify/http-proxy": "^11.0.0",
+    "dotenv": "^16.4.7"
+  }
+}

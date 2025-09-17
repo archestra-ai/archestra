@@ -14,6 +14,7 @@ Note: The README.md includes a Developer Quickstart section that shows basic set
 2. **ALWAYS use pnpm** (not npm or yarn) for package management
 3. **Run database commands from `desktop_app/`** directory
 4. **Use Podman** (not Docker) for container operations
+5. **Prettier** for ANY code that you push, make sure you run `pnpm prettier --write .` to ensure it is properly formatted
 
 ## Common Development Commands
 
@@ -29,7 +30,7 @@ pnpm start:server       # Start backend server only
 
 ```bash
 cd desktop_app
-pnpm package           # Package app for current platform
+pnpm package          # Package app for current platform
 pnpm make             # Create platform installer
 pnpm build:universal  # Build universal macOS binary
 ```
@@ -38,12 +39,12 @@ pnpm build:universal  # Build universal macOS binary
 
 ```bash
 cd desktop_app
-pnpm test             # Run all tests
-pnpm test:ui          # Run UI tests only
-pnpm test:backend     # Run backend tests only
-pnpm test:e2e:packaged # Run E2E tests on packaged app
-pnpm typecheck        # Check TypeScript types
-pnpm prettier         # Format code
+pnpm test                       # Run all tests
+pnpm test:ui                    # Run UI tests only
+pnpm test:backend               # Run backend tests only
+pnpm test:e2e:packaged          # Run E2E tests on packaged app
+pnpm typecheck                  # Check TypeScript types
+pnpm prettier --write .         # Format code
 ```
 
 ### Database Management

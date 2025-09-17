@@ -119,6 +119,24 @@ function ChatPage() {
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+      // Add error message to the chat display
+      const errorText = typeof error === 'string' ? error : error.message || 'An error occurred while processing your request.';
+      const errorMessage: UIMessage = {
+        id: `error-${Date.now()}`,
+        role: 'error' as any, // Custom error role
+        parts: [
+          {
+            type: 'text',
+            text: errorText,
+          },
+        ],
+      };
+      // Add the error message to the current messages
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
+      // Also save to the store so it persists
+      if (currentChat) {
+        updateMessages(currentChat.id, [...messages, errorMessage]);
+      }
     },
   });
 

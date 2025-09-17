@@ -126,8 +126,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           //   delayInMs: 20, // optional: defaults to 10ms
           //   chunking: 'line', // optional: defaults to 'word'
           // }),
-          // onError({ error }) {
-          // },
           onFinish: async ({
             usage,
             text,
@@ -191,6 +189,28 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
+            onError: (error) => {
+              if (error == null) {
+                return 'unknown error';
+              }
+              if (typeof error === 'string') {
+                return error;
+              }
+              if (error instanceof Error) {
+                if ('responseBody' in error && error.responseBody) {
+                  if (typeof error.responseBody === 'string') {
+                    try {
+                      const parsed = JSON.parse(error.responseBody);
+                      return parsed.error || error.message;
+                    } catch {
+                      return error.message;
+                    }
+                  }
+                }
+                return error.message;
+              }
+              return 'An unexpected error occurred';
+            },
             onFinish: (result) => {
               if (sessionId) {
                 Chat.saveMessages(sessionId, result.messages);

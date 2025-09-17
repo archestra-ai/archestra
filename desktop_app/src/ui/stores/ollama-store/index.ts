@@ -10,6 +10,7 @@ import {
 import { ArchestraOllamaClient } from '@ui/lib/clients/ollama';
 import { OllamaLocalStorage } from '@ui/lib/localStorage';
 import websocketService from '@ui/lib/websocket';
+import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 import { AVAILABLE_MODELS } from './available_models';
 
@@ -148,7 +149,6 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
     const previousModel = get().selectedModel;
 
     // Track model switching in StatusBar
-    const { useStatusBarStore } = await import('@ui/stores/status-bar-store');
     const statusBarStore = useStatusBarStore.getState();
 
     if (previousModel && previousModel !== model) {

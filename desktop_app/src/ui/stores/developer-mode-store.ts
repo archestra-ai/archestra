@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { DEFAULT_SYSTEM_PROMPT } from '../../constants';
+
 interface DeveloperModeState {
   isDeveloperMode: boolean;
   systemPrompt: string;
@@ -19,7 +21,7 @@ export const useDeveloperModeStore = create<DeveloperModeStore>()(
   persist(
     (set) => ({
       isDeveloperMode: false,
-      systemPrompt: 'You are a helpful AI assistant.',
+      systemPrompt: DEFAULT_SYSTEM_PROMPT,
 
       toggleDeveloperMode: () => set((state) => ({ isDeveloperMode: !state.isDeveloperMode })),
 

@@ -9,17 +9,12 @@ import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/client/auth.js';
-import {
-  AuthorizationServerMetadata,
-  OAuthClientInformation,
-  OAuthClientMetadata,
-  OAuthProtectedResourceMetadata,
-  OAuthTokens,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformation, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as http from 'http';
 
+import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
 
@@ -182,7 +177,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // Priority 2: Try to load cached dynamic registration from database
     try {
       log.info(`🔍 Looking for cached client info for server ID: ${this.serverId}`);
-      const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const server = await McpServerModel.getById(this.serverId);
 
       log.info(`📊 Database query result:`, {
@@ -215,7 +209,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
       log.info('💾 Client info to save:', { client_id: clientInfo.client_id, has_secret: !!clientInfo.client_secret });
 
       // Save to database instead of local file
-      const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const result = await McpServerModel.update(this.serverId, {
         oauthClientInfo: clientInfo,
       });
@@ -233,7 +226,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     try {
       // Load tokens from database
-      const { default: McpServerModel } = await import('@backend/models/mcpServer');
       const server = await McpServerModel.getById(this.serverId);
 
       if (server?.[0]?.oauthTokens) {
@@ -256,7 +248,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
   async saveTokens(tokens: OAuthTokens): Promise<void> {
     try {
       // Save tokens to database
-      const { default: McpServerModel } = await import('@backend/models/mcpServer');
       await McpServerModel.update(this.serverId, {
         oauthTokens: tokens,
       });
@@ -408,17 +399,17 @@ export class McpOAuthProvider implements OAuthClientProvider {
                 <script>
                   // Safely encode the deeplink URL
                   const deeplinkUrl = ${JSON.stringify(deeplinkUrl)};
-                  
+
                   // Set the href attribute safely
                   document.getElementById('deeplink').href = deeplinkUrl;
-                  
+
                   // Try to open the deeplink
                   try {
                     window.location.href = deeplinkUrl;
                   } catch (e) {
                     console.log('Deeplink failed, user can click manually');
                   }
-                  
+
                   // Preserve existing auto-close functionality
                   setTimeout(() => window.close(), 2000);
                 </script>
@@ -527,7 +518,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     // Clear OAuth data from database
     try {
-      const { default: McpServerModel } = await import('@backend/models/mcpServer');
       await McpServerModel.update(this.serverId, {
         oauthTokens: null,
         oauthClientInfo: null,

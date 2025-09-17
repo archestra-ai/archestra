@@ -42,11 +42,25 @@ export default function AuthConfirmationDialog({
       for (let i = 0; i < numParticles; i++) {
         const particle = document.createElement('div');
         particle.className = 'oauth-particle';
-        particle.style.left = '-100px';
-        particle.style.top = Math.random() * 100 + '%';
-        particle.style.animationDelay = Math.random() * 8 + 's';
-        particle.style.animationDuration = 8 + Math.random() * 6 + 's';
-        particle.style.opacity = '0';
+
+        // First batch: appear randomly on screen immediately
+        if (i < numParticles / 2) {
+          const startX = Math.random() * 100; // Random position across viewport
+          particle.style.left = startX + 'vw';
+          particle.style.top = Math.random() * 100 + '%';
+          particle.style.animationDelay = '0s'; // Start immediately
+          particle.style.animationDuration = 12 - startX / 10 + 's'; // Adjust duration based on position
+          particle.style.opacity = '1'; // Start visible
+          // Use a different animation for initial particles
+          particle.style.animationName = 'oauthDriftFromPosition';
+        } else {
+          // Second batch: flow in from left with delay
+          particle.style.left = '-100px';
+          particle.style.top = Math.random() * 100 + '%';
+          particle.style.animationDelay = Math.random() * 4 + 's'; // Staggered entry
+          particle.style.animationDuration = 6 + Math.random() * 4 + 's';
+          particle.style.opacity = '0';
+        }
 
         // Check if dark mode is active
         const isDark = document.documentElement.classList.contains('dark');
@@ -71,11 +85,24 @@ export default function AuthConfirmationDialog({
         const size = 30 + Math.random() * 40;
         shape.style.width = size + 'px';
         shape.style.height = size + 'px';
-        shape.style.left = '-150px';
-        shape.style.top = Math.random() * 100 + '%';
-        shape.style.animationDelay = Math.random() * 15 + 's';
-        shape.style.animationDuration = 15 + Math.random() * 10 + 's';
-        shape.style.opacity = '0';
+
+        // First few shapes appear on screen immediately
+        if (i < 2) {
+          const startX = Math.random() * 80; // Random position across viewport
+          shape.style.left = startX + 'vw';
+          shape.style.top = Math.random() * 100 + '%';
+          shape.style.animationDelay = '0s'; // Start immediately
+          shape.style.animationDuration = 15 - startX / 8 + 's';
+          shape.style.opacity = '0.8'; // Start visible
+          shape.style.animationName = 'oauthDriftFromPosition';
+        } else {
+          // Rest flow in from left
+          shape.style.left = '-150px';
+          shape.style.top = Math.random() * 100 + '%';
+          shape.style.animationDelay = Math.random() * 5 + 's';
+          shape.style.animationDuration = 10 + Math.random() * 5 + 's';
+          shape.style.opacity = '0';
+        }
 
         // Check if dark mode is active
         const isDark = document.documentElement.classList.contains('dark');
@@ -125,6 +152,20 @@ export default function AuthConfirmationDialog({
           }
         }
 
+        @keyframes oauthDriftFromPosition {
+          0% { 
+            transform: translateX(0);
+            opacity: 1;
+          }
+          95% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateX(calc(100vw + 100px));
+            opacity: 0;
+          }
+        }
+
         @keyframes oauthDriftSlow {
           0% {
             transform: translateX(-100px) translateY(0);
@@ -151,7 +192,7 @@ export default function AuthConfirmationDialog({
           height: 6px;
           background: rgba(102, 126, 234, 0.6);
           border-radius: 50%;
-          animation: oauthDrift 8s linear infinite;
+          animation: oauthDrift 5s linear infinite; /* Reduced from 8s to 5s */
           pointer-events: none;
           z-index: 51;
         }
@@ -159,14 +200,14 @@ export default function AuthConfirmationDialog({
         .oauth-particle:nth-child(even) {
           width: 4px;
           height: 4px;
-          animation: oauthDriftSlow 12s linear infinite;
+          animation: oauthDriftSlow 8s linear infinite; /* Reduced from 12s to 8s */
           background: rgba(118, 75, 162, 0.5);
         }
 
         .oauth-particle:nth-child(3n) {
           width: 8px;
           height: 8px;
-          animation-duration: 6s;
+          animation-duration: 4s; /* Reduced from 6s to 4s */
           background: rgba(102, 126, 234, 0.8);
         }
 

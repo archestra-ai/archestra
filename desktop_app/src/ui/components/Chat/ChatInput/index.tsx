@@ -303,7 +303,7 @@ export default function ChatInput({
                           type="button"
                           title={`Remove all ${serverName} tools`}
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-3 w-3 cursor-pointer" />
                         </button>
                       </div>
                     </TooltipTrigger>

@@ -1,3 +1,5 @@
+import { DEFAULT_SYSTEM_PROMPT } from '../../../constants';
+
 class BaseLocalStorage {
   static keyPrefix: string = '';
 
@@ -30,7 +32,7 @@ export class SettingsLocalStorage extends BaseLocalStorage {
   static keyPrefix = 'settings';
 
   static getSystemPrompt() {
-    return super.get('systemPrompt') || 'You are a helpful AI assistant.';
+    return super.get('systemPrompt') || DEFAULT_SYSTEM_PROMPT;
   }
 
   static setSystemPrompt(prompt: string) {

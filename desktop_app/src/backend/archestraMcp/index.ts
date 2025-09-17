@@ -160,7 +160,6 @@ class ArchestraMcpClient {
       const toolEvaluations: Record<string, { is_read: boolean; is_write: boolean }> = {
         // Memory management tools
         list_memories: { is_read: true, is_write: false },
-        get_memory: { is_read: true, is_write: false },
         set_memory: { is_read: false, is_write: true },
         delete_memory: { is_read: false, is_write: true },
 

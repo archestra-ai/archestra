@@ -5,6 +5,7 @@ import config from '@ui/config';
 import {
   createChat,
   deleteChat,
+  deleteChatMessage,
   getChatById,
   getChatSelectedTools,
   getChats,
@@ -47,7 +48,7 @@ interface ChatActions {
   startEditMessage: (messageId: string, currentMessageContent: string) => void;
   cancelEditMessage: () => void;
   saveEditMessage: (messageId: string, messages: UIMessage[]) => Promise<UIMessage[]>;
-  deleteMessage: (messageId: string, messages: UIMessage[]) => void;
+  deleteMessage: (messageId: string, messages: UIMessage[]) => Promise<void>;
   setEditingMessageContent: (content: string) => void;
   updateMessages: (chatId: number, messages: UIMessage[]) => void;
 }
@@ -359,49 +360,41 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return messages;
     }
 
+    let updatedMessage: UIMessage | null = null;
+
     const updatedMessages = messages.map((msg) => {
       if (msg.id === messageId) {
         // Update the message content
         if (msg.role === 'user' || msg.role === 'assistant') {
-          return {
+          updatedMessage = {
             ...msg,
             parts: [{ type: 'text', text: editingMessageContent }],
           } as UIMessage;
+          return updatedMessage;
         }
       }
       return msg;
     });
 
+    try {
+      // Persist the updated message to the backend
+      await updateChatMessage({
+        path: {
+          id: messageId,
+        },
+        body: {
+          content: updatedMessage,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to persist message update:', error);
+      // Continue with local update even if backend fails
+    }
+
     // Update the messages in the current chat
     const currentChat = get().getCurrentChat();
     if (currentChat) {
       get().updateMessages(currentChat.id, updatedMessages);
-
-      // Extract the numeric message ID from the composite ID
-      // Message IDs are in format: "{sessionId}-{messageId}"
-      const messageParts = messageId.split('-');
-      const numericMessageId = parseInt(messageParts[messageParts.length - 1], 10);
-
-      // Find the updated message to persist
-      const updatedMessage = updatedMessages.find((msg) => msg.id === messageId);
-
-      if (updatedMessage && !isNaN(numericMessageId)) {
-        try {
-          // Persist the updated message to the backend
-          await updateChatMessage({
-            path: {
-              chatId: currentChat.id,
-              messageId: numericMessageId,
-            },
-            body: {
-              content: updatedMessage,
-            },
-          });
-        } catch (error) {
-          console.error('Failed to persist message update:', error);
-          // Continue with local update even if backend fails
-        }
-      }
     }
 
     // Clear editing state
@@ -410,13 +403,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     return updatedMessages;
   },
 
-  deleteMessage: (messageId: string, messages: UIMessage[]) => {
-    const updatedMessages = messages.filter((msg) => msg.id !== messageId);
+  deleteMessage: async (messageId: string, messages: UIMessage[]) => {
+    try {
+      // Delete from backend
+      await deleteChatMessage({ path: { id: messageId } });
 
-    // Update the messages in the current chat
-    const currentChat = get().getCurrentChat();
-    if (currentChat) {
-      get().updateMessages(currentChat.id, updatedMessages);
+      // Update local state
+      const updatedMessages = messages.filter((msg) => msg.id !== messageId);
+
+      // Update the messages in the current chat
+      const currentChat = get().getCurrentChat();
+      if (currentChat) {
+        get().updateMessages(currentChat.id, updatedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      throw error;
     }
   },
 

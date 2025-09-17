@@ -8,6 +8,10 @@ import MessageModel from '@backend/models/message';
 import { AvailableToolSchema } from '@backend/sandbox/schemas';
 import { ErrorResponseSchema, StringNumberIdSchema } from '@backend/schemas';
 
+const MessageIdSchema = z
+  .string()
+  .describe('The content ID (from the ai SDK) of the message to update (not the database pk ID)');
+
 /**
  * Register our zod schemas into the global registry, such that they get output as components in the openapi spec
  * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-create-refs-to-the-schemas
@@ -325,15 +329,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    '/api/message/:messageId',
+    '/api/message/:id',
     {
       schema: {
         operationId: 'updateChatMessage',
         description: 'Update a specific message',
         tags: ['Chat'],
-        params: z.object({
-          messageId: StringNumberIdSchema,
-        }),
+        params: z.object({ id: MessageIdSchema }),
         body: z.object({
           content: z.custom<UIMessage>(),
         }),
@@ -345,10 +347,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { messageId }, body }, reply) => {
+    async ({ params: { id }, body }, reply) => {
       try {
-        await MessageModel.updateContent(messageId, body.content);
+        await MessageModel.updateContent(id, body.content);
         return reply.code(200).send({ success: true });
+      } catch (error) {
+        return reply.code(404).send({ error: 'Message not found' });
+      }
+    }
+  );
+
+  fastify.delete(
+    '/api/message/:id',
+    {
+      schema: {
+        operationId: 'deleteChatMessage',
+        description: 'Delete a specific message',
+        tags: ['Chat'],
+        params: z.object({ id: MessageIdSchema }),
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      try {
+        await MessageModel.delete(id);
+        return reply.code(204).send();
       } catch (error) {
         return reply.code(404).send({ error: 'Message not found' });
       }

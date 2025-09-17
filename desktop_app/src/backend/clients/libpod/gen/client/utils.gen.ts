@@ -162,6 +162,21 @@ export const getParseAs = (contentType: string | null): Exclude<Config['parseAs'
   return;
 };
 
+const checkForExistence = (
+  options: Pick<RequestOptions, 'auth' | 'query'> & {
+    headers: Headers;
+  },
+  name?: string
+): boolean => {
+  if (!name) {
+    return false;
+  }
+  if (options.headers.has(name) || options.query?.[name] || options.headers.get('Cookie')?.includes(`${name}=`)) {
+    return true;
+  }
+  return false;
+};
+
 export const setAuthParams = async ({
   security,
   ...options
@@ -170,6 +185,10 @@ export const setAuthParams = async ({
     headers: Headers;
   }) => {
   for (const auth of security) {
+    if (checkForExistence(options, auth.name)) {
+      continue;
+    }
+
     const token = await getAuthToken(auth, options.auth);
 
     if (!token) {
@@ -193,8 +212,6 @@ export const setAuthParams = async ({
         options.headers.set(name, token);
         break;
     }
-
-    return;
   }
 };
 

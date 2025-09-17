@@ -132,7 +132,7 @@ function ConnectorCatalogPage() {
           <h1 className="text-3xl font-bold">MCP Сonnectors</h1>
           <p className="text-muted-foreground mt-1">
             MCP Connectors allow AI to access your data. Archestra is able to run hundreds of local MCP servers and
-            connect to the remote ones.
+            connect to remote ones.
           </p>
         </div>
 

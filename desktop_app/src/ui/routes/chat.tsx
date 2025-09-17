@@ -38,13 +38,12 @@ function ChatPage() {
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
-  const { systemPrompt } = useDeveloperModeStore();
+  const { getSystemPrompt } = useDeveloperModeStore();
   const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
   const [isLoadingMemories, setIsLoadingMemories] = useState(false);
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
-  const currentChatMessages = currentChat?.messages || [];
   const currentChatTitle = getCurrentChatTitle();
 
   // Get current input from draft messages
@@ -68,6 +67,7 @@ function ChatPage() {
   const selectedToolIdsRef = useRef(selectedToolIds);
   selectedToolIdsRef.current = selectedToolIds;
 
+  const systemPrompt = getSystemPrompt();
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
 
@@ -79,7 +79,6 @@ function ChatPage() {
       prepareSendMessagesRequest: ({ id, messages }) => {
         const currentModel = selectedModelRef.current;
         const currentCloudProviderModels = availableCloudProviderModelsRef.current;
-        const currentSelectedToolIds = selectedToolIdsRef.current;
         const currentSystemPrompt = systemPromptRef.current;
         const currentChat = getCurrentChat();
 

@@ -5,6 +5,9 @@ export default {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
   },
+  vercelSdk: {
+    maxToolCalls: 10,
+  },
   build: {
     updateInterval: '1 hour',
     github: {

@@ -8,7 +8,8 @@ import { DEFAULT_SYSTEM_PROMPT } from '../../../../constants';
 interface SystemPromptProps {}
 
 export default function SystemPrompt(_props: SystemPromptProps) {
-  const { isDeveloperMode, systemPrompt, setSystemPrompt } = useDeveloperModeStore();
+  const { isDeveloperMode, getSystemPrompt, setCustomSystemPrompt } = useDeveloperModeStore();
+  const systemPrompt = getSystemPrompt();
 
   if (!isDeveloperMode) {
     return null;
@@ -24,7 +25,7 @@ export default function SystemPrompt(_props: SystemPromptProps) {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => setSystemPrompt(DEFAULT_SYSTEM_PROMPT)}
+            onClick={() => setCustomSystemPrompt(DEFAULT_SYSTEM_PROMPT)}
             className="h-6 px-2 text-xs"
           >
             Reset
@@ -33,7 +34,7 @@ export default function SystemPrompt(_props: SystemPromptProps) {
         <Textarea
           id="system-prompt"
           value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
+          onChange={(e) => setCustomSystemPrompt(e.target.value)}
           placeholder="Enter system prompt for the AI assistant..."
           className="min-h-20 resize-none"
         />

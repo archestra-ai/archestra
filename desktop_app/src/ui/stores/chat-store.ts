@@ -5,10 +5,12 @@ import config from '@ui/config';
 import {
   createChat,
   deleteChat,
+  deleteChatMessage,
   getChatById,
   getChatSelectedTools,
   getChats,
   updateChat,
+  updateChatMessage,
 } from '@ui/lib/clients/archestra/api/gen';
 import posthogClient from '@ui/lib/posthog';
 import { initializeChat } from '@ui/lib/utils/chat';
@@ -46,8 +48,8 @@ interface ChatActions {
   // Message editing actions
   startEditMessage: (messageId: string, currentMessageContent: string) => void;
   cancelEditMessage: () => void;
-  saveEditMessage: (messageId: string, messages: UIMessage[]) => void;
-  deleteMessage: (messageId: string, messages: UIMessage[]) => void;
+  saveEditMessage: (messageId: string, messages: UIMessage[]) => Promise<UIMessage[]>;
+  deleteMessage: (messageId: string, messages: UIMessage[]) => Promise<void>;
   setEditingMessageContent: (content: string) => void;
   updateMessages: (chatId: number, messages: UIMessage[]) => void;
 }
@@ -359,22 +361,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ editingMessageContent });
   },
 
-  saveEditMessage: (messageId: string, messages: UIMessage[]) => {
+  saveEditMessage: async (messageId: string, messages: UIMessage[]): Promise<UIMessage[]> => {
     const { editingMessageContent, cancelEditMessage } = get();
-    if (!editingMessageContent.trim()) return;
+    if (!editingMessageContent.trim()) {
+      return messages;
+    }
+
+    let updatedMessage: UIMessage | null = null;
 
     const updatedMessages = messages.map((msg) => {
       if (msg.id === messageId) {
         // Update the message content
         if (msg.role === 'user' || msg.role === 'assistant') {
-          return {
+          updatedMessage = {
             ...msg,
             parts: [{ type: 'text', text: editingMessageContent }],
           } as UIMessage;
+          return updatedMessage;
         }
       }
       return msg;
     });
+
+    try {
+      // Persist the updated message to the backend
+      await updateChatMessage({
+        path: {
+          id: messageId,
+        },
+        body: {
+          content: updatedMessage,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to persist message update:', error);
+      // Continue with local update even if backend fails
+    }
 
     // Update the messages in the current chat
     const currentChat = get().getCurrentChat();
@@ -384,15 +406,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // Clear editing state
     cancelEditMessage();
+
+    return updatedMessages;
   },
 
-  deleteMessage: (messageId: string, messages: UIMessage[]) => {
-    const updatedMessages = messages.filter((msg) => msg.id !== messageId);
+  deleteMessage: async (messageId: string, messages: UIMessage[]) => {
+    try {
+      // Delete from backend
+      await deleteChatMessage({ path: { id: messageId } });
 
-    // Update the messages in the current chat
-    const currentChat = get().getCurrentChat();
-    if (currentChat) {
-      get().updateMessages(currentChat.id, updatedMessages);
+      // Update local state
+      const updatedMessages = messages.filter((msg) => msg.id !== messageId);
+
+      // Update the messages in the current chat
+      const currentChat = get().getCurrentChat();
+      if (currentChat) {
+        get().updateMessages(currentChat.id, updatedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      throw error;
     }
   },
 

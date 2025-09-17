@@ -14,7 +14,6 @@ import RegenerationSkeleton from './RegenerationSkeleton';
 
 interface AssistantMessageProps {
   message: UIMessage;
-  messageIndex: number;
   isEditing: boolean;
   editingContent: string;
   onEditStart: () => void;
@@ -38,7 +37,6 @@ const THINK_END_TAG_LENGTH = '</think>'.length;
 
 export default function AssistantMessage({
   message,
-  messageIndex,
   isEditing,
   editingContent,
   onEditStart,

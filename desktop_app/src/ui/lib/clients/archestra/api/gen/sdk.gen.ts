@@ -17,6 +17,9 @@ import type {
   DeleteAllMemoriesResponses,
   DeleteChatData,
   DeleteChatErrors,
+  DeleteChatMessageData,
+  DeleteChatMessageErrors,
+  DeleteChatMessageResponses,
   DeleteChatResponses,
   DeleteCloudProviderData,
   DeleteCloudProviderResponses,
@@ -108,6 +111,9 @@ import type {
   UninstallMcpServerResponses,
   UpdateChatData,
   UpdateChatErrors,
+  UpdateChatMessageData,
+  UpdateChatMessageErrors,
+  UpdateChatMessageResponses,
   UpdateChatResponses,
   UpdateMemoryData,
   UpdateMemoryErrors,
@@ -290,6 +296,34 @@ export const getChatAvailableTools = <ThrowOnError extends boolean = false>(
   return (options.client ?? _heyApiClient).get<GetChatAvailableToolsResponses, unknown, ThrowOnError>({
     url: '/api/chat/{id}/tools/available',
     ...options,
+  });
+};
+
+/**
+ * Delete a specific message
+ */
+export const deleteChatMessage = <ThrowOnError extends boolean = false>(
+  options: Options<DeleteChatMessageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<DeleteChatMessageResponses, DeleteChatMessageErrors, ThrowOnError>({
+    url: '/api/message/{id}',
+    ...options,
+  });
+};
+
+/**
+ * Update a specific message
+ */
+export const updateChatMessage = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateChatMessageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).put<UpdateChatMessageResponses, UpdateChatMessageErrors, ThrowOnError>({
+    url: '/api/message/{id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 

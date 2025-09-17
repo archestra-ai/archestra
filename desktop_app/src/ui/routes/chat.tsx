@@ -9,6 +9,7 @@ import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { getAllMemories } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
 import { useChatStore, useCloudProvidersStore, useDeveloperModeStore, useOllamaStore, useToolsStore } from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
@@ -418,6 +419,13 @@ function ChatPage() {
       sendMessage({ text: messageText });
       setPendingPrompts(currentChatSessionId, messageText);
       clearDraftMessage(currentChat.id);
+
+      // Track message sent in PostHog
+      posthogClient.capture('message_sent', {
+        chatId: currentChat.id,
+        messageLength: messageText.length,
+        toolsCount: selectedToolIds.size,
+      });
     }
   };
 
@@ -438,6 +446,13 @@ function ChatPage() {
     setSubmissionStartTime(Date.now());
     // Directly send the prompt when a tile is clicked
     sendMessage({ text: prompt });
+
+    // Track prompt selection in PostHog
+    posthogClient.capture('prompt_selected', {
+      chatId: currentChat?.id,
+      promptLength: prompt.length,
+      toolsCount: selectedToolIds.size,
+    });
   };
 
   const handleRerunAgent = async () => {

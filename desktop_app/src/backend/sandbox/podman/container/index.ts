@@ -36,7 +36,7 @@ export const PodmanContainerStateSchema = z.enum([
   'exited',
 ]);
 
-export const PROJECTS_BASE = '/home/mcp/projects';
+export const FOLDER_MOUNT_BASE = '/home/mcp';
 
 export const PodmanContainerStatusSummarySchema = z.object({
   /**
@@ -542,7 +542,7 @@ export default class PodmanContainer {
     const hostToContainerPath = (hostPath: string): string => {
       const baseName = path.basename(hostPath);
       const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-      return path.posix.join(PROJECTS_BASE, sanitizedBaseName);
+      return path.posix.join(FOLDER_MOUNT_BASE, sanitizedBaseName);
     };
     const replaceTemplateVariables = (str: string): string => {
       if (!userConfigValues) return str;
@@ -1292,8 +1292,10 @@ export default class PodmanContainer {
         if (typeof hostPathRaw !== 'string' || hostPathRaw.trim() === '') continue;
         const hostPath = hostPathRaw.trim();
 
-        // Mount to <PROJECTS_BASE> with a simple sanitized name to avoid conflicts
-        // Check that the directory exists
+        /**
+         * Mount to <FOLDER_MOUNT_BASE> with a simple sanitized name to avoid conflicts
+         * Check that the directory exists
+         */
         try {
           const stats = await fs.promises.stat(hostPath);
           if (!stats.isDirectory()) {
@@ -1307,7 +1309,7 @@ export default class PodmanContainer {
 
         const baseName = path.basename(hostPath);
         const sanitizedBaseName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const target = path.posix.join(PROJECTS_BASE, sanitizedBaseName);
+        const target = path.posix.join(FOLDER_MOUNT_BASE, sanitizedBaseName);
 
         log.info(`Mount (bind): host="${hostPath}" -> container="${target}" (readOnly=${readOnly})`);
         // Use SpecGenerator Mount shape (capitalized keys)

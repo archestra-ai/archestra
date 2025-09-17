@@ -2,7 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI, openai } from '@ai-sdk/openai';
-import { type FinishReason, type LanguageModelUsage, convertToModelMessages, stepCountIs, streamText } from 'ai';
+import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
@@ -73,6 +73,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: FastifyRequest<{ Body: StreamRequestBody }>, reply: FastifyReply) => {
       const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice, chatId } = request.body;
+      const isOllama = provider === 'ollama';
 
       try {
         // Set the chat context for Archestra MCP tools
@@ -103,9 +104,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           tools = toolAggregator.getAllTools();
         }
 
-        const isOpenAI = provider === 'openai';
-        const isOllama = provider === 'ollama';
-
         // Create the stream with the appropriate model
         const streamConfig: Parameters<typeof streamText>[0] = {
           model: await createModelInstance(model, provider),
@@ -130,15 +128,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             },
             ollama: {},
           },
-          onFinish: async ({
-            usage,
-            text,
-            finishReason,
-          }: {
-            usage: LanguageModelUsage;
-            text: string;
-            finishReason: FinishReason;
-          }) => {
+          onFinish: async ({ usage, text: _text, finishReason: _finishReason }) => {
             // Save token usage directly to the chat
             if (usage && sessionId) {
               let contextWindow: number;
@@ -202,18 +192,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             onFinish: (result) => {
               if (sessionId) {
                 Chat.saveMessages(sessionId, result.messages);
-              }
-
-              // Log OpenAI cache metrics if available
-              if (isOpenAI && 'usage' in result && result.usage) {
-                const usage = result.usage as any;
-                const cachedTokens = usage?.cachedPromptTokens;
-                const promptTokens = usage?.promptTokens;
-                if (cachedTokens !== undefined && promptTokens) {
-                  fastify.log.info(
-                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`
-                  );
-                }
               }
             },
           })

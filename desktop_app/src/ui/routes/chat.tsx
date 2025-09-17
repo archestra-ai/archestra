@@ -14,6 +14,11 @@ import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 
+const {
+  archestra: { chatStreamBaseUrl },
+  chat: { systemMemoriesMessageId },
+} = config;
+
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
@@ -72,7 +77,7 @@ function ChatPage() {
   systemPromptRef.current = systemPrompt;
 
   const transport = useMemo(() => {
-    const apiEndpoint = `${config.archestra.chatStreamBaseUrl}/stream`;
+    const apiEndpoint = `${chatStreamBaseUrl}/stream`;
 
     return new DefaultChatTransport({
       api: apiEndpoint,
@@ -358,7 +363,7 @@ function ChatPage() {
 
           // Add a system message with the memories (but don't display it)
           const systemMessage: UIMessage = {
-            id: 'system-memories',
+            id: systemMemoriesMessageId,
             role: 'system',
             parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
           };

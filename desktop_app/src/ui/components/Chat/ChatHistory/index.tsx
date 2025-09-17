@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import RunningInBackgroundMessage from '@ui/components/Chat/ChatHistory/Messages/RunningInBackgroundMessage';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
+import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
 
 import { AssistantMessage, ErrorMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
@@ -10,6 +11,8 @@ import SubmissionLoadingMessage from './Messages/SubmissionLoadingMessage';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
 const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-area-viewport]`;
+
+const { systemMemoriesMessageId } = config.chat;
 
 interface ChatHistoryProps {
   messages: UIMessage[];
@@ -96,7 +99,7 @@ const Message = ({
       return <ErrorMessage message={message} />;
     case 'system':
       // Check if this is a memories message
-      if (message.id === 'system-memories') {
+      if (message.id === systemMemoriesMessageId) {
         return <MemoriesMessage message={message} />;
       }
       return <OtherMessage message={message} />;
@@ -143,10 +146,10 @@ export default function ChatHistory({
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Filter out system messages except for special ones like system-memories
-  const visibleMessages = messages.filter(message => {
+  const visibleMessages = messages.filter((message) => {
     if (message.role === 'system') {
       // Only show special system messages like memories
-      return message.id === 'system-memories';
+      return message.id === systemMemoriesMessageId;
     }
     return true;
   });
@@ -221,11 +224,11 @@ export default function ChatHistory({
             className={cn(
               'rounded-lg overflow-hidden min-w-0',
               // Special handling for memories message
-              message.id === 'system-memories' ? '' : 'p-3',
-              message.id === 'system-memories' ? '' : getMessageClassName(message.role)
+              message.id === systemMemoriesMessageId ? '' : 'p-3',
+              message.id === systemMemoriesMessageId ? '' : getMessageClassName(message.role)
             )}
           >
-            {message.id !== 'system-memories' && (
+            {message.id !== systemMemoriesMessageId && (
               <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
             )}
             <div className="overflow-hidden min-w-0">

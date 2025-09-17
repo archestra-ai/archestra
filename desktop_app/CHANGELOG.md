@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.5](https://github.com/archestra-ai/archestra/compare/v0.0.4...v0.0.5) (2025-09-17)
+
+
+### Features
+
+* add context size, fix bugs ([#432](https://github.com/archestra-ai/archestra/issues/432)) ([aa4eb52](https://github.com/archestra-ai/archestra/commit/aa4eb5207ab6efc63bf4e30b079ce7f5c62ed67d))
+
+
+### Bug Fixes
+
+* infinite tool analysis loading in UI sidebar ([#419](https://github.com/archestra-ai/archestra/issues/419)) ([59a73df](https://github.com/archestra-ai/archestra/commit/59a73df2139c26ed8d2dcdef7251e23f082a8b12)), closes [#404](https://github.com/archestra-ai/archestra/issues/404)
+* Logs and sys prompt ([#397](https://github.com/archestra-ai/archestra/issues/397)) ([c56cf5a](https://github.com/archestra-ai/archestra/commit/c56cf5a502307eeff3b3f0ba31abfa20d8a4c4f7))
+* open links in external browser instead of internal browser ([#423](https://github.com/archestra-ai/archestra/issues/423)) ([30efde3](https://github.com/archestra-ai/archestra/commit/30efde3797c58d2d45305fc70eae121f697d318b))
+* show auth confirmation dialog for Remote MCP servers ([#422](https://github.com/archestra-ai/archestra/issues/422)) ([d56b0ac](https://github.com/archestra-ai/archestra/commit/d56b0acf829e837855e9bc7b2364e9338611b579))
+* system prompt and markup ([#416](https://github.com/archestra-ai/archestra/issues/416)) ([a215c3a](https://github.com/archestra-ai/archestra/commit/a215c3acbd43e97fb61b8f16d9cfe94d74a1a7d5))
+
 ## [0.0.4](https://github.com/archestra-ai/archestra/compare/v0.0.3...v0.0.4) (2025-09-16)
 
 

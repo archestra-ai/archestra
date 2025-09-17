@@ -108,7 +108,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         const streamConfig: Parameters<typeof streamText>[0] = {
           model: await createModelInstance(model, provider),
           messages: convertToModelMessages(messages),
-          stopWhen: stepCountIs(5),
+          stopWhen: stepCountIs(vercelSdkConfig.maxToolCalls),
           providerOptions: {
             /**
              * The following options are available for the OpenAI provider
@@ -124,7 +124,11 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
                     promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
                   }
                 : {}),
-              maxToolCalls: vercelSdkConfig.maxToolCalls, // Allow multiple tool calls
+              /**
+               * maxToolCalls for the most part is handled by stopWhen, but openAI provider also has its
+               * own unique config for this
+               */
+              maxToolCalls: vercelSdkConfig.maxToolCalls,
             },
             ollama: {},
           },

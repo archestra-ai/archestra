@@ -2,9 +2,9 @@
 
 
 - 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!
-- 🔒 **Sandboxed MCP Runtime** - Isolated sandbox protecting the host from supply chain attacks.
-- 🔌 **Full OSS MCPs Support** - Compatible with thousands of existing MCP servers.
-- 💻 **Local-First Architecture** - Privacy-focused design with local LLM.
+- 🔒 **Sandboxed MCP Runtime** — Isolated sandbox protecting the host from supply chain attacks.
+- 🔌 **Full OSS MCPs Support** — Compatible with thousands of existing MCP servers.
+- 💻 **Local-First Architecture** — Privacy-focused design with local LLM.
 
 ![Archestra Screenshot](./docs/assets/screenshot.png)
 

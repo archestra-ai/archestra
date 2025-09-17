@@ -159,12 +159,27 @@ export default class ChatModel {
     await this.updateSelectedTools(chatId, []);
   }
 
-  static async generateAndUpdateChatTitle(chatId: number, messages: UIMessage[]): Promise<void> {
+  static async conditionallyGenerateAndUpdateChatTitle(
+    chatId: number,
+    currentTitle: string | null,
+    messages: UIMessage[]
+  ): Promise<void> {
+    const messagesToConsiderForTitle = messages.filter((msg) => msg.role === 'user' || msg.role === 'assistant');
+
+    /**
+     * Only generate a title if the chat has no title yet and has 4 messages
+     *
+     * NOTE: we only consider messages between the user and the LLM (ignore system messages)
+     */
+    if (currentTitle || messagesToConsiderForTitle.length < 4) {
+      return;
+    }
+
     try {
       // Extract text content from the first few messages for title generation
       const messageTexts: string[] = [];
 
-      for (const msg of messages.slice(0, 4)) {
+      for (const msg of messagesToConsiderForTitle.slice(0, 4)) {
         // UIMessage has a parts array, extract text from text parts
         let textContent = '';
 
@@ -411,9 +426,6 @@ export default class ChatModel {
       });
     }
 
-    // Generate a title if the chat has 4+ messages and no title yet
-    if (messages.length >= 4 && !chat.title) {
-      await this.generateAndUpdateChatTitle(chat.id, messages);
-    }
+    await this.conditionallyGenerateAndUpdateChatTitle(chat.id, chat.title, messages);
   }
 }

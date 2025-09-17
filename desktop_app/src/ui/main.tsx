@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import posthogClient from '@ui/lib/posthog';
 import sentryClient from '@ui/lib/sentry';
 import websocketService from '@ui/lib/websocket';
 import { useUserStore } from '@ui/stores/user-store';
@@ -17,7 +18,7 @@ logCapture;
 // Initialize Sentry early for error tracking
 sentryClient.initialize();
 
-// Fetch user data and set Sentry user context
+// Fetch user data and set Sentry user context, initialize PostHog if analytics enabled
 useUserStore
   .getState()
   .fetchUser()
@@ -25,6 +26,13 @@ useUserStore
     const user = useUserStore.getState().user;
     if (user) {
       sentryClient.setUserContext(user);
+
+      // Initialize PostHog if user has opted in to analytics
+      if (user.collectAnalyticsData) {
+        posthogClient.initialize().then(() => {
+          posthogClient.setUserContext(user);
+        });
+      }
     }
   });
 

@@ -12,6 +12,7 @@ import {
   updateChat,
   updateChatMessage,
 } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
 import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages } from '@ui/types';
@@ -171,6 +172,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       // Trigger a re-render by creating a new Set
       useToolsStore.setState({ selectedToolIds: new Set(toolsStore.selectedToolIds) });
+
+      // Track chat creation in PostHog
+      posthogClient.capture('chat_created', {
+        chatId: initializedChat.id,
+        llmProvider: 'ollama',
+      });
 
       return initializedChat;
     } catch (error) {

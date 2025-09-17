@@ -184,7 +184,7 @@ export const createArchestraMcpServer = () => {
     async (context: any) => {
       // Workaround for fastify-mcp bug: get arguments from global
       const { mcp_server } = global._mcpToolArguments || {};
-      
+
       try {
         const chatId = ArchestraMcpContext.getCurrentChatId();
         if (!chatId) {
@@ -238,7 +238,7 @@ export const createArchestraMcpServer = () => {
             .join('\n');
 
           const exampleServer = Object.keys(toolsByServer)[0] || 'filesystem';
-          
+
           return {
             content: [
               {
@@ -251,7 +251,7 @@ export const createArchestraMcpServer = () => {
 
         // If mcp_server specified, show tools for that server
         const serverTools = toolsByServer[mcp_server];
-        
+
         if (!serverTools) {
           const availableServers = Object.keys(toolsByServer).join(', ');
           return {

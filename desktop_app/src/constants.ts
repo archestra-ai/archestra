@@ -2,6 +2,8 @@
  * Shared constants used by both backend and frontend
  */
 
+export const FILE_SYSTEM_BASE_MOUNT_PATH = '/home/mcp';
+
 // System models that are used internally and should not be shown in the user model selector
 export const SYSTEM_MODELS = {
   GUARD: 'llama-guard3:1b',
@@ -12,12 +14,17 @@ export const SYSTEM_MODELS = {
 export const SYSTEM_MODEL_NAMES = [SYSTEM_MODELS.GUARD, SYSTEM_MODELS.GENERAL];
 
 export const DEFAULT_SYSTEM_PROMPT = `Executing the task
-Before working on a task, provide a step-by-step plan of what you would do. 
+Before working on a task, provide a step-by-step plan of what you would do.
 Later, proceed following the plan. At each step, repeat what step you're working on.
-At first step, always check if you have all tools needed for it. If not, list available tools and enable missing. 
+Check if you have all needed tools. If not, list available tools and enable missing. 
+Don't stop until the task will be fully finished.
+At first step, always check if you have all tools needed for it. If not, list available tools and enable missing.
+
+Filesystem access
+If you are considering using any Filesystem access tools, any paths that you are considering using should be relative to ${FILE_SYSTEM_BASE_MOUNT_PATH}. Example, if you want to use Desktop/file.txt, it would be ${FILE_SYSTEM_BASE_MOUNT_PATH}/Desktop/file.txt.
 
 Using tools
-Before pushing any data to 3'rd party systems, ask user for the explicit permission.
+Before pushing any data to 3rd party systems, ask user for the explicit permission.
 Be extra careful with writing data, make sure you don't overwrite important information.
 
 Memory

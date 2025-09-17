@@ -1,10 +1,16 @@
+import { type UIMessage } from 'ai';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
 import toolAggregator from '@backend/llms/toolAggregator';
 import ChatModel, { ChatWithMessagesSchema } from '@backend/models/chat';
+import MessageModel from '@backend/models/message';
 import { AvailableToolSchema } from '@backend/sandbox/schemas';
 import { ErrorResponseSchema, StringNumberIdSchema } from '@backend/schemas';
+
+const MessageIdSchema = z
+  .string()
+  .describe('The content ID (from the ai SDK) of the message to update (not the database pk ID)');
 
 /**
  * Register our zod schemas into the global registry, such that they get output as components in the openapi spec
@@ -319,6 +325,59 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_request, reply) => {
       const availableTools = toolAggregator.getAllAvailableTools();
       return reply.code(200).send(availableTools);
+    }
+  );
+
+  fastify.put(
+    '/api/message/:id',
+    {
+      schema: {
+        operationId: 'updateChatMessage',
+        description: 'Update a specific message',
+        tags: ['Chat'],
+        params: z.object({ id: MessageIdSchema }),
+        body: z.object({
+          content: z.custom<UIMessage>(),
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+          }),
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ params: { id }, body }, reply) => {
+      try {
+        await MessageModel.updateContent(id, body.content);
+        return reply.code(200).send({ success: true });
+      } catch (error) {
+        return reply.code(404).send({ error: 'Message not found' });
+      }
+    }
+  );
+
+  fastify.delete(
+    '/api/message/:id',
+    {
+      schema: {
+        operationId: 'deleteChatMessage',
+        description: 'Delete a specific message',
+        tags: ['Chat'],
+        params: z.object({ id: MessageIdSchema }),
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ params: { id } }, reply) => {
+      try {
+        await MessageModel.delete(id);
+        return reply.code(204).send();
+      } catch (error) {
+        return reply.code(404).send({ error: 'Message not found' });
+      }
     }
   );
 };

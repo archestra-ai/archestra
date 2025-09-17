@@ -12,13 +12,11 @@ export const Route = createFileRoute('/settings/mcp-clients')({
   component: ExternalClients,
 });
 
-export default function ExternalClients() {
+function ExternalClients() {
   const {
     supportedExternalMcpClientNames,
     connectedExternalMcpClients,
-    isConnectingExternalMcpClient,
     isDisconnectingExternalMcpClient,
-    connectExternalMcpClient,
     disconnectExternalMcpClient,
   } = useExternalMcpClientsStore();
 

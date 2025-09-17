@@ -14,6 +14,11 @@ import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 
+const {
+  archestra: { chatStreamBaseUrl },
+  chat: { systemMemoriesMessageId },
+} = config;
+
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
@@ -38,14 +43,13 @@ function ChatPage() {
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
-  const { systemPrompt } = useDeveloperModeStore();
+  const { getSystemPrompt } = useDeveloperModeStore();
   const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
   const [isLoadingMemories, setIsLoadingMemories] = useState(false);
   const systemMemoryMessageRef = useRef<UIMessage | null>(null);
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
-  const currentChatMessages = currentChat?.messages || [];
   const currentChatTitle = getCurrentChatTitle();
 
   // Get current input from draft messages
@@ -70,18 +74,18 @@ function ChatPage() {
   const selectedToolIdsRef = useRef(selectedToolIds);
   selectedToolIdsRef.current = selectedToolIds;
 
+  const systemPrompt = getSystemPrompt();
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
 
   const transport = useMemo(() => {
-    const apiEndpoint = `${config.archestra.chatStreamBaseUrl}/stream`;
+    const apiEndpoint = `${chatStreamBaseUrl}/stream`;
 
     return new DefaultChatTransport({
       api: apiEndpoint,
       prepareSendMessagesRequest: ({ id, messages }) => {
         const currentModel = selectedModelRef.current;
         const currentCloudProviderModels = availableCloudProviderModelsRef.current;
-        const currentSelectedToolIds = selectedToolIdsRef.current;
         const currentSystemPrompt = systemPromptRef.current;
         const currentChat = getCurrentChat();
 
@@ -127,6 +131,25 @@ function ChatPage() {
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+      // Add error message to the chat display
+      const errorText =
+        typeof error === 'string' ? error : error.message || 'An error occurred while processing your request.';
+      const errorMessage: UIMessage = {
+        id: `error-${Date.now()}`,
+        role: 'error' as any, // Custom error role
+        parts: [
+          {
+            type: 'text',
+            text: errorText,
+          },
+        ],
+      };
+      // Add the error message to the current messages
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
+      // Also save to the store so it persists
+      if (currentChat) {
+        updateMessages(currentChat.id, [...messages, errorMessage]);
+      }
     },
   });
 
@@ -162,14 +185,15 @@ function ChatPage() {
   const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
 
   // Wrapper functions for message editing actions
-  const handleSaveEdit = (messageId: string) => {
-    saveEditMessage(messageId, messages);
+  const handleSaveEdit = async (messageId: string) => {
+    // Save the updated messages in the zustand store
+    const updatedMessages = await saveEditMessage(messageId, messages);
     // Also update local messages state
-    setMessages(messages);
+    setMessages(updatedMessages);
   };
 
-  const handleDeleteMessage = (messageId: string) => {
-    deleteMessage(messageId, messages);
+  const handleDeleteMessage = async (messageId: string) => {
+    await deleteMessage(messageId, messages);
     // Also update local messages state
     setMessages(messages.filter((msg) => msg.id !== messageId));
   };
@@ -253,20 +277,51 @@ function ChatPage() {
     }
   }, [status, regeneratingIndex, fullMessagesBackup, messages]);
 
+  // Add a ref to track the last loaded chat
+  const lastLoadedChatIdRef = useRef<string | null>(null);
+
   // Load messages from database when chat changes
   useEffect(() => {
-    // Only update messages if we have a valid chat
-    if (currentChat && currentChatSessionId) {
-      if (currentChatMessages && currentChatMessages.length > 0) {
+    // Only sync messages when switching to a different chat
+    // Don't sync when the same chat object updates (title, tokens, etc.)
+    if (currentChatSessionId && currentChatSessionId !== lastLoadedChatIdRef.current) {
+      const chat = getCurrentChat();
+      if (chat && chat.messages && chat.messages.length > 0) {
         // Messages are already UIMessage type
-        setMessages(currentChatMessages);
+        setMessages(chat.messages);
       } else {
         // Clear messages when chat exists but has no messages
         setMessages([]);
       }
+      lastLoadedChatIdRef.current = currentChatSessionId;
     }
-    // Don't call setMessages when there's no chat to avoid triggering updates during deletion
-  }, [currentChatSessionId, currentChatMessages, currentChat]); // Now also depend on currentChat
+  }, [currentChatSessionId, getCurrentChat]); // Only depend on session ID and the getter function
+
+  // Add debounced message sync from useChat to store
+  const messageSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Sync messages back to store with debouncing
+    // Only sync when we have a valid chat and messages
+    if (currentChat && messages.length > 0 && !isLoading) {
+      // Clear existing timeout
+      if (messageSyncTimeoutRef.current) {
+        clearTimeout(messageSyncTimeoutRef.current);
+      }
+
+      // Debounce to avoid excessive updates during streaming
+      messageSyncTimeoutRef.current = setTimeout(() => {
+        updateMessages(currentChat.id, messages);
+      }, 1000); // 1 second debounce
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (messageSyncTimeoutRef.current) {
+        clearTimeout(messageSyncTimeoutRef.current);
+      }
+    };
+  }, [messages, currentChat?.id, isLoading, updateMessages]);
 
   // Simple debounce implementation
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -317,7 +372,7 @@ function ChatPage() {
 
           // Add a system message with the memories (but don't display it)
           const systemMessage: UIMessage = {
-            id: 'system-memories',
+            id: systemMemoriesMessageId,
             role: 'system',
             parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
           };

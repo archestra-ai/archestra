@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import RunningInBackgroundMessage from '@ui/components/Chat/ChatHistory/Messages/RunningInBackgroundMessage';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
+import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
 
 import { AssistantMessage, ErrorMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
@@ -10,6 +11,8 @@ import SubmissionLoadingMessage from './Messages/SubmissionLoadingMessage';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
 const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-area-viewport]`;
+
+const { systemMemoriesMessageId } = config.chat;
 
 interface ChatHistoryProps {
   messages: UIMessage[];
@@ -96,7 +99,7 @@ const Message = ({
       return <ErrorMessage message={message} />;
     case 'system':
       // Check if this is a memories message
-      if (message.id === 'system-memories') {
+      if (message.id === systemMemoriesMessageId) {
         return <MemoriesMessage message={message} />;
       }
       return <OtherMessage message={message} />;
@@ -141,6 +144,15 @@ export default function ChatHistory({
   const scrollAreaRef = useRef<HTMLElement | null>(null);
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Filter out system messages except for special ones like system-memories
+  const visibleMessages = messages.filter((message) => {
+    if (message.role === 'system') {
+      // Only show special system messages like memories
+      return message.id === systemMemoriesMessageId;
+    }
+    return true;
+  });
 
   // Scroll to bottom when new messages are added or content changes
   const scrollToBottom = useCallback(() => {
@@ -206,17 +218,17 @@ export default function ChatHistory({
   return (
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
       <div className="p-4 space-y-4 max-w-full overflow-hidden">
-        {messages.map((message, index) => (
+        {visibleMessages.map((message, index) => (
           <div
             key={message.id || `message-${index}`}
             className={cn(
               'rounded-lg overflow-hidden min-w-0',
               // Special handling for memories message
-              message.id === 'system-memories' ? '' : 'p-3',
-              message.id === 'system-memories' ? '' : getMessageClassName(message.role)
+              message.id === systemMemoriesMessageId ? '' : 'p-3',
+              message.id === systemMemoriesMessageId ? '' : getMessageClassName(message.role)
             )}
           >
-            {message.id !== 'system-memories' && (
+            {message.id !== systemMemoriesMessageId && (
               <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
             )}
             <div className="overflow-hidden min-w-0">

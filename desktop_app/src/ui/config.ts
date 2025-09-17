@@ -33,5 +33,6 @@ export default {
   },
   chat: {
     defaultTitle: 'New Agent',
+    systemMemoriesMessageId: 'system-memories',
   },
 };

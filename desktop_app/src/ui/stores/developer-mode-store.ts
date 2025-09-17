@@ -5,12 +5,13 @@ import { DEFAULT_SYSTEM_PROMPT } from '../../constants';
 
 interface DeveloperModeState {
   isDeveloperMode: boolean;
-  systemPrompt: string;
+  customSystemPrompt: string | null;
 }
 
 interface DeveloperModeActions {
   toggleDeveloperMode: () => void;
-  setSystemPrompt: (prompt: string) => void;
+  setCustomSystemPrompt: (prompt: string) => void;
+  getSystemPrompt: () => string;
 }
 
 type DeveloperModeStore = DeveloperModeState & DeveloperModeActions;
@@ -19,13 +20,15 @@ const STORAGE_KEY = 'archestra-developer-mode';
 
 export const useDeveloperModeStore = create<DeveloperModeStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       isDeveloperMode: false,
-      systemPrompt: DEFAULT_SYSTEM_PROMPT,
+      customSystemPrompt: null,
 
       toggleDeveloperMode: () => set((state) => ({ isDeveloperMode: !state.isDeveloperMode })),
 
-      setSystemPrompt: (prompt: string) => set({ systemPrompt: prompt }),
+      setCustomSystemPrompt: (customSystemPrompt: string) => set({ customSystemPrompt }),
+
+      getSystemPrompt: () => get().customSystemPrompt || DEFAULT_SYSTEM_PROMPT,
     }),
     {
       name: STORAGE_KEY,

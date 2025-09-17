@@ -14,7 +14,8 @@ export const SYSTEM_MODEL_NAMES = [SYSTEM_MODELS.GUARD, SYSTEM_MODELS.GENERAL];
 export const DEFAULT_SYSTEM_PROMPT = `Executing the task
 Before working on a task, provide a step-by-step plan of what you would do. 
 Later, proceed following the plan. At each step, repeat what step you're working on.
-At first step, always check if you have all tools needed for it. If not, list available tools and enable missing. 
+Check if you have all needed tools. If not, list available tools and enable missing. 
+Don't stop until the task will be fully finished.
 
 Using tools
 Before pushing any data to 3'rd party systems, ask user for the explicit permission.

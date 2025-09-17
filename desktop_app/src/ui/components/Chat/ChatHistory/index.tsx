@@ -81,7 +81,7 @@ const Message = ({
     onDelete: () => onDeleteMessage(message.id),
   };
 
-  switch (message.role) {
+  switch (message.role as string) {
     case 'user':
       return <UserMessage {...commonProps} />;
     case 'assistant':

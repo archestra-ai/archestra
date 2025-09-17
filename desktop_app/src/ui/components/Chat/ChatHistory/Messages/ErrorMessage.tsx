@@ -9,8 +9,8 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
   // Extract error text from message parts
   let errorText = 'An error occurred';
   if (message.parts && message.parts.length > 0) {
-    const textPart = message.parts.find((part: any) => part.type === 'text');
-    if (textPart && textPart.text) {
+    const textPart = message.parts.find((part) => part.type === 'text');
+    if (textPart && 'text' in textPart) {
       errorText = textPart.text;
     }
   }

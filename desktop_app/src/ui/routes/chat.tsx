@@ -41,6 +41,7 @@ function ChatPage() {
   const { systemPrompt } = useDeveloperModeStore();
   const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
   const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const systemMemoryMessageRef = useRef<UIMessage | null>(null);
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
@@ -54,6 +55,7 @@ function ChatPage() {
   useEffect(() => {
     setHasLoadedMemories(false);
     setIsLoadingMemories(false);
+    systemMemoryMessageRef.current = null;
   }, [currentChatSessionId]);
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
@@ -86,6 +88,12 @@ function ChatPage() {
         const cloudModel = currentCloudProviderModels.find((m) => m.id === currentModel);
         const provider = cloudModel ? cloudModel.provider : 'ollama';
 
+        // Ensure system-memories message is included if it exists
+        let messagesToSend = messages;
+        if (systemMemoryMessageRef.current && !messages.some((msg) => msg.id === 'system-memories')) {
+          messagesToSend = [systemMemoryMessageRef.current, ...messages];
+        }
+
         // Prepend system prompt as a system message if it exists
         const messagesWithSystemPrompt = currentSystemPrompt
           ? [
@@ -94,9 +102,9 @@ function ChatPage() {
                 role: 'system',
                 parts: [{ type: 'text', text: currentSystemPrompt }],
               },
-              ...messages,
+              ...messagesToSend,
             ]
-          : messages;
+          : messagesToSend;
 
         return {
           body: {
@@ -112,7 +120,7 @@ function ChatPage() {
         };
       },
     });
-  }, [currentChatSessionId, getCurrentChat]);
+  }, [currentChatSessionId, getCurrentChat, systemMemoryMessageRef]);
 
   const { sendMessage, messages, setMessages, stop, status, regenerate } = useChat({
     id: currentChatSessionId || 'temp-id', // use the provided chat ID or a temp ID
@@ -314,6 +322,9 @@ function ChatPage() {
             parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
           };
 
+          // Save the system message to ref for later use
+          systemMemoryMessageRef.current = systemMessage;
+
           // Prepend the system message to the messages
           // If forceLoad is true (restart scenario), replace all messages
           // Otherwise, prepend to existing messages
@@ -330,12 +341,14 @@ function ChatPage() {
           return true;
         } else {
           console.log('No memories found to load');
+          systemMemoryMessageRef.current = null;
           setHasLoadedMemories(true);
           return false;
         }
       } catch (error) {
         console.error('Failed to load memories:', error);
         // Continue even if memory loading fails
+        systemMemoryMessageRef.current = null;
         setHasLoadedMemories(true);
         return false;
       } finally {
@@ -417,10 +430,10 @@ function ChatPage() {
     setIsLoadingMemories(false);
 
     // Small delay to ensure state updates are processed
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Force load memories even though messages might not be empty yet
-    await loadMemoriesIfNeeded(true);
+    const memoriesLoaded = await loadMemoriesIfNeeded(true);
 
     // Check if more than 20 tools are selected and reset to default if so
     if (selectedToolIds.size > 20) {
@@ -433,6 +446,22 @@ function ChatPage() {
     sendMessage({ text: messageText });
     if (currentChat) {
       setPendingPrompts(currentChatSessionId, messageText);
+    }
+
+    // If memories were loaded, ensure the system message persists
+    // We use the ref to access the system message since it was saved during loadMemoriesIfNeeded
+    if (memoriesLoaded && systemMemoryMessageRef.current) {
+      // Use setTimeout to ensure this runs after sendMessage updates
+      setTimeout(() => {
+        setMessages((currentMessages) => {
+          const hasSystemMessage = currentMessages.some((msg) => msg.id === 'system-memories');
+          if (!hasSystemMessage && systemMemoryMessageRef.current) {
+            // Re-add the system message at the beginning
+            return [systemMemoryMessageRef.current, ...currentMessages];
+          }
+          return currentMessages;
+        });
+      }, 100);
     }
   };
 

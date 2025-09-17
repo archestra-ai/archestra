@@ -142,6 +142,15 @@ export default function ChatHistory({
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Filter out system messages except for special ones like system-memories
+  const visibleMessages = messages.filter(message => {
+    if (message.role === 'system') {
+      // Only show special system messages like memories
+      return message.id === 'system-memories';
+    }
+    return true;
+  });
+
   // Scroll to bottom when new messages are added or content changes
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current && shouldAutoScroll && !isScrollingRef.current) {
@@ -206,7 +215,7 @@ export default function ChatHistory({
   return (
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
       <div className="p-4 space-y-4 max-w-full overflow-hidden">
-        {messages.map((message, index) => (
+        {visibleMessages.map((message, index) => (
           <div
             key={message.id || `message-${index}`}
             className={cn(

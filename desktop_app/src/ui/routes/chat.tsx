@@ -8,6 +8,7 @@ import ChatInput from '@ui/components/Chat/ChatInput';
 import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
+import posthogClient from '@ui/lib/posthog';
 import {
   useChatStore,
   useCloudProvidersStore,
@@ -411,6 +412,13 @@ function ChatPage() {
         sendMessage({ text: currentInput });
         setPendingPrompts(currentChatSessionId, currentInput);
         clearDraftMessage(currentChat.id);
+
+        // Track message sent in PostHog
+        posthogClient.capture('message_sent', {
+          chatId: currentChat.id,
+          messageLength: currentInput.length,
+          toolsCount: selectedToolIds.size,
+        });
       }
     },
     [
@@ -419,6 +427,7 @@ function ChatPage() {
       currentChat,
       messages,
       memoriesUIMessage,
+      selectedToolIds,
       setMessages,
       conditionallyResetTools,
       sendMessage,
@@ -436,8 +445,15 @@ function ChatPage() {
 
       // Directly send the prompt when a tile is clicked
       sendMessage({ text: prompt });
+
+      // Track prompt selection in PostHog
+      posthogClient.capture('prompt_selected', {
+        chatId: currentChat?.id,
+        promptLength: prompt.length,
+        toolsCount: selectedToolIds.size,
+      });
     },
-    [conditionallyResetTools, sendMessage]
+    [conditionallyResetTools, sendMessage, currentChat, selectedToolIds]
   );
 
   const handleRerunAgent = useCallback(async () => {

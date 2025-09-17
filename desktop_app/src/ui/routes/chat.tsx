@@ -514,6 +514,8 @@ function ChatPage() {
           handleSubmit={() => {}}
           stop={() => {}}
           hasMessages={false}
+          status="ready"
+          isSubmitting={false}
         />
       </div>
     );
@@ -560,6 +562,8 @@ function ChatPage() {
           stop={stop}
           hasMessages={messages.length > 0}
           onRerunAgent={handleRerunAgent}
+          status={status}
+          isSubmitting={isSubmitting}
         />
       </div>
     </div>

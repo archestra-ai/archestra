@@ -75,14 +75,6 @@ const PROVIDER_REGISTRY: Record<SupportedCloudProvider, CloudProvider> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro'],
   },
-  ollama: {
-    type: 'ollama',
-    name: 'Ollama',
-    apiKeyUrl: config.ollama.server.host,
-    apiKeyPlaceholder: 'Not required (leave empty for local)',
-    baseUrl: config.ollama.server.host + '/api',
-    models: ['llama3.2', 'llama3.1', 'mistral', 'mixtral', 'codellama', 'phi3'],
-  },
 };
 
 // Helper function to get provider for a model

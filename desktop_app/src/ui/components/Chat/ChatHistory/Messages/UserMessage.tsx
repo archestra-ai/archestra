@@ -15,9 +15,6 @@ interface UserMessageProps {
   onDelete?: () => void;
 }
 
-/**
- * TODO: fix the typing issues in this file (also remove the "as" casts)
- */
 export default function UserMessage({
   message,
   isEditing,

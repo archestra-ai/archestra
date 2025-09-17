@@ -4,9 +4,6 @@ interface OtherMessageProps {
   message: UIMessage;
 }
 
-/**
- * TODO: fix the typing issues in this file (also remove the "as" casts)
- */
 export default function OtherMessage({ message }: OtherMessageProps) {
   // Extract text content from parts array (UIMessage in ai SDK v5 uses parts)
   let textContent = '';

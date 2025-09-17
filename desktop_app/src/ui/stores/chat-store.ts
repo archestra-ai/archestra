@@ -45,7 +45,7 @@ interface ChatActions {
   // Message editing actions
   startEditMessage: (messageId: string, currentMessageContent: string) => void;
   cancelEditMessage: () => void;
-  saveEditMessage: (messageId: string, messages: UIMessage[]) => void;
+  saveEditMessage: (messageId: string, messages: UIMessage[]) => UIMessage[];
   deleteMessage: (messageId: string, messages: UIMessage[]) => void;
   setEditingMessageContent: (content: string) => void;
   updateMessages: (chatId: number, messages: UIMessage[]) => void;
@@ -352,9 +352,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ editingMessageContent });
   },
 
-  saveEditMessage: (messageId: string, messages: UIMessage[]) => {
+  saveEditMessage: (messageId: string, messages: UIMessage[]): UIMessage[] => {
     const { editingMessageContent, cancelEditMessage } = get();
-    if (!editingMessageContent.trim()) return;
+    if (!editingMessageContent.trim()) {
+      return messages;
+    }
 
     const updatedMessages = messages.map((msg) => {
       if (msg.id === messageId) {
@@ -377,6 +379,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // Clear editing state
     cancelEditMessage();
+
+    return updatedMessages;
   },
 
   deleteMessage: (messageId: string, messages: UIMessage[]) => {

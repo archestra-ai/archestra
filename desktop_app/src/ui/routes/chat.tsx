@@ -178,22 +178,8 @@ function ChatPage() {
 
   // Wrapper functions for message editing actions
   const handleSaveEdit = (messageId: string) => {
-    // First update the messages with the edited content
-    const updatedMessages = messages.map((msg) => {
-      if (msg.id === messageId) {
-        // Update the message content with the edited text
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          return {
-            ...msg,
-            parts: [{ type: 'text', text: editingMessageContent }],
-          } as UIMessage;
-        }
-      }
-      return msg;
-    });
-
-    // Then save the updated messages
-    saveEditMessage(messageId, updatedMessages);
+    // Save the updated messages in the zustand store
+    const updatedMessages = saveEditMessage(messageId, messages);
     // Also update local messages state
     setMessages(updatedMessages);
   };

@@ -273,10 +273,10 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                   >
                     <SidebarMenuItem>
                       <div className="flex items-center gap-1">
-                        <CollapsibleTrigger className="flex-1 min-w-0">
-                          <div
-                            className={`px-2 py-1.5 bg-muted/50 rounded-md transition-colors w-full ${serverData.tools.length === 0 && !isError ? 'opacity-60' : 'cursor-pointer hover:bg-muted/70'}`}
-                          >
+                        <div
+                          className={`flex-1 min-w-0 px-2 py-1.5 bg-muted/50 rounded-md transition-colors ${serverData.tools.length === 0 && !isError ? 'opacity-60' : 'cursor-pointer hover:bg-muted/70'}`}
+                        >
+                          <CollapsibleTrigger className="w-full">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 {(() => {
@@ -301,28 +301,6 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 <span className="text-sm font-medium capitalize truncate">{serverName}</span>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (serverData.tools.length > 0) {
-                                      // Add all tools from this server
-                                      serverData.tools.forEach((tool) => addSelectedTool(tool.id));
-                                    }
-                                  }}
-                                  className={`p-0.5 rounded transition-colors ${serverData.tools.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted-foreground/20'}`}
-                                  title={
-                                    isError
-                                      ? `${serverName} has an error`
-                                      : serverData.tools.length === 0
-                                        ? `${serverName} is loading tools`
-                                        : `Add all ${serverName} tools`
-                                  }
-                                  disabled={serverData.tools.length === 0}
-                                >
-                                  <PlusCircle
-                                    className={`h-4 w-4 ${serverData.tools.length === 0 ? 'text-muted-foreground/50' : 'text-muted-foreground hover:text-foreground'}`}
-                                  />
-                                </button>
                                 {isExpanded ? (
                                   <ChevronDown className="h-3 w-3 text-muted-foreground" />
                                 ) : (
@@ -362,8 +340,30 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 return parts.length > 0 ? parts.join(' + ') : 'No tools';
                               })()}
                             </div>
-                          </div>
-                        </CollapsibleTrigger>
+                          </CollapsibleTrigger>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (serverData.tools.length > 0) {
+                              // Add all tools from this server
+                              serverData.tools.forEach((tool) => addSelectedTool(tool.id));
+                            }
+                          }}
+                          className={`p-0.5 rounded transition-colors ${serverData.tools.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted-foreground/20'}`}
+                          title={
+                            isError
+                              ? `${serverName} has an error`
+                              : serverData.tools.length === 0
+                                ? `${serverName} is loading tools`
+                                : `Add all ${serverName} tools`
+                          }
+                          disabled={serverData.tools.length === 0}
+                        >
+                          <PlusCircle
+                            className={`h-4 w-4 ${serverData.tools.length === 0 ? 'text-muted-foreground/50' : 'text-muted-foreground hover:text-foreground'}`}
+                          />
+                        </button>
                       </div>
                     </SidebarMenuItem>
 

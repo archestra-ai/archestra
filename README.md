@@ -1,4 +1,4 @@
-# Archestra Desktop — simple and safe MCP client
+# Archestra Desktop, the Most Simple and Safe MCP Client
 
 
 - 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!

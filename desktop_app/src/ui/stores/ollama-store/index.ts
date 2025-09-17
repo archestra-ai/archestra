@@ -246,6 +246,15 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
           }
         : state.downloadProgress,
     }));
+
+    // When download is completed, refresh the installed models list
+    if (progress.status === 'completed') {
+      // Add a small delay to ensure Ollama has registered the model
+      setTimeout(() => {
+        get().fetchInstalledModels();
+        get().fetchRequiredModelsStatus();
+      }, 500);
+    }
   },
 }));
 

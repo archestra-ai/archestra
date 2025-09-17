@@ -42,6 +42,7 @@ interface ChatInputProps {
   handleSubmit: (e?: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
   disabled: boolean;
+  rerunAgentDisabled: boolean;
   stop: () => void;
   hasMessages?: boolean;
   onRerunAgent?: () => void;
@@ -68,6 +69,7 @@ export default function ChatInput({
   handleSubmit,
   isLoading,
   disabled,
+  rerunAgentDisabled,
   stop,
   hasMessages = false,
   onRerunAgent,
@@ -637,7 +639,7 @@ export default function ChatInput({
             {hasMessages && onRerunAgent && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <AIInputButton onClick={onRerunAgent} disabled={false} type="button" className="px-3">
+                  <AIInputButton onClick={onRerunAgent} disabled={rerunAgentDisabled} type="button" className="px-3">
                     <RefreshCw size={16} />
                     <span className="ml-1.5 text-sm">Restart Agent</span>
                   </AIInputButton>

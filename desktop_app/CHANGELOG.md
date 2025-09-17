@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.6](https://github.com/archestra-ai/archestra/compare/v0.0.5...v0.0.6) (2025-09-17)
+
+
+### Bug Fixes
+
+* auto-refresh Ollama models list after download completes ([#455](https://github.com/archestra-ai/archestra/issues/455)) ([02a964c](https://github.com/archestra-ai/archestra/commit/02a964c7f3d225d73309a1fe14b2e215232c19fc))
+* hide system messages from chat UI ([#445](https://github.com/archestra-ai/archestra/issues/445)) ([b92205e](https://github.com/archestra-ai/archestra/commit/b92205e4869f851617b3b1bc3c504ef8ec3970c2))
+* polishing for archestra mcp ([#447](https://github.com/archestra-ai/archestra/issues/447)) ([7ae602d](https://github.com/archestra-ai/archestra/commit/7ae602d4cdac97b31a3249cbd83601b2a0d33804))
+* posthog is back ([#459](https://github.com/archestra-ai/archestra/issues/459)) ([10826bb](https://github.com/archestra-ai/archestra/commit/10826bbe76b7d386fc78965abcf188e15e7ae4f8))
+* properly update messages with edited content before saving ([#453](https://github.com/archestra-ai/archestra/issues/453)) ([f2920b6](https://github.com/archestra-ai/archestra/commit/f2920b6b24dbe01a6fd04e7e0ebf4ec8e066ecbb))
+* race condition with memory loading on chat reset ([#457](https://github.com/archestra-ai/archestra/issues/457)) ([fc68d6b](https://github.com/archestra-ai/archestra/commit/fc68d6b0f6a0ef804bd909eba987c3556fb65665))
+* resolve HTML validation error for nested button elements in sidebar ([#458](https://github.com/archestra-ai/archestra/issues/458)) ([37b2d57](https://github.com/archestra-ai/archestra/commit/37b2d57ef8835362d3a77747fd9dbb6f38667777))
+* tweak vercel sdk `providerOptions` ([#434](https://github.com/archestra-ai/archestra/issues/434)) ([64d0100](https://github.com/archestra-ai/archestra/commit/64d01009d708b9c143d86a4354542dca9d0b5620))
+
 ## [0.0.5](https://github.com/archestra-ai/archestra/compare/v0.0.4...v0.0.5) (2025-09-17)
 
 

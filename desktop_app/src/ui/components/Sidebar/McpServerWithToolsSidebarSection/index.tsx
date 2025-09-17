@@ -4,7 +4,6 @@ import { AlertCircle, ChevronDown, ChevronRight, Loader2, Plus, PlusCircle } fro
 import { useEffect, useState } from 'react';
 
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
-import { Checkbox } from '@ui/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
   SidebarGroup,
@@ -265,110 +264,104 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                 const isInitializing = isServerInitializing(serverData.serverId);
                 const serverState = installedMcpServers.find((s) => s.id === serverData.serverId)?.state;
                 const isError = serverState === 'error';
+                const hasTools = serverData.tools.length > 0;
+
                 return (
                   <Collapsible
                     key={serverName}
                     open={isExpanded}
                     onOpenChange={() => toggleServerExpansion(serverName)}
                   >
-                    <SidebarMenuItem>
-                      <div className="flex items-center gap-1">
-                        <CollapsibleTrigger className="flex-1 min-w-0">
-                          <div
-                            className={`px-2 py-1.5 bg-muted/50 rounded-md transition-colors w-full ${serverData.tools.length === 0 && !isError ? 'opacity-60' : 'cursor-pointer hover:bg-muted/70'}`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {(() => {
-                                  // Check the actual server state to determine what icon to show
-                                  const server = installedMcpServers.find((s) => s.id === serverData.serverId);
-                                  const isActuallyInitializing =
-                                    server &&
-                                    (server.state === 'not_created' ||
-                                      server.state === 'created' ||
-                                      server.state === 'initializing');
+                    <SidebarMenuItem
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded transition-colors bg-muted/50 ${hasTools ? 'hover:bg-muted/70' : 'opacity-60'}`}
+                    >
+                      <CollapsibleTrigger
+                        className={`w-full flex-1 ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {(() => {
+                              // Check the actual server state to determine what icon to show
+                              const server = installedMcpServers.find((s) => s.id === serverData.serverId);
+                              const isActuallyInitializing =
+                                server &&
+                                (server.state === 'not_created' ||
+                                  server.state === 'created' ||
+                                  server.state === 'initializing');
 
-                                  if (isError) {
-                                    return <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />;
-                                  }
-                                  if (serverData.tools.length === 0 && isActuallyInitializing) {
-                                    return (
-                                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                                <span className="text-sm font-medium capitalize truncate">{serverName}</span>
-                              </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (serverData.tools.length > 0) {
-                                      // Add all tools from this server
-                                      serverData.tools.forEach((tool) => addSelectedTool(tool.id));
-                                    }
-                                  }}
-                                  className={`p-0.5 rounded transition-colors ${serverData.tools.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted-foreground/20'}`}
-                                  title={
-                                    isError
-                                      ? `${serverName} has an error`
-                                      : serverData.tools.length === 0
-                                        ? `${serverName} is loading tools`
-                                        : `Add all ${serverName} tools`
-                                  }
-                                  disabled={serverData.tools.length === 0}
-                                >
-                                  <PlusCircle
-                                    className={`h-4 w-4 ${serverData.tools.length === 0 ? 'text-muted-foreground/50' : 'text-muted-foreground hover:text-foreground'}`}
-                                  />
-                                </button>
-                                {isExpanded ? (
-                                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5 text-left">
-                              {(() => {
-                                if (isError) {
-                                  return 'Error';
-                                }
-
-                                // Check the actual server state to determine what to show
-                                const server = installedMcpServers.find((s) => s.id === serverData.serverId);
-                                const isActuallyInitializing =
-                                  server &&
-                                  (server.state === 'not_created' ||
-                                    server.state === 'created' ||
-                                    server.state === 'initializing');
-
-                                // Show "Loading..." only for servers that are actually initializing
-                                if (serverData.tools.length === 0) {
-                                  if (isActuallyInitializing) {
-                                    return 'Loading...';
-                                  }
-                                  // Server is running or in another state but has no tools
-                                  return 'No tools available';
-                                }
-
-                                const parts = [];
-                                if (serverData.readOnlyCount > 0) parts.push(`${serverData.readOnlyCount} read`);
-                                if (serverData.writeOnlyCount > 0) parts.push(`${serverData.writeOnlyCount} write`);
-                                if (serverData.readWriteCount > 0)
-                                  parts.push(`${serverData.readWriteCount} read/write`);
-                                if (serverData.otherCount > 0) parts.push(`${serverData.otherCount} other`);
-                                return parts.length > 0 ? parts.join(' + ') : 'No tools';
-                              })()}
-                            </div>
+                              if (isError) {
+                                return <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />;
+                              }
+                              if (hasTools && isActuallyInitializing) {
+                                return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />;
+                              }
+                              return null;
+                            })()}
+                            <span className="text-sm font-medium capitalize truncate">{serverName}</span>
                           </div>
-                        </CollapsibleTrigger>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 text-left">
+                          {(() => {
+                            if (isError) {
+                              return 'Error';
+                            }
+
+                            // Check the actual server state to determine what to show
+                            const server = installedMcpServers.find((s) => s.id === serverData.serverId);
+                            const isActuallyInitializing =
+                              server &&
+                              (server.state === 'not_created' ||
+                                server.state === 'created' ||
+                                server.state === 'initializing');
+
+                            // Show "Loading..." only for servers that are actually initializing
+                            if (!hasTools) {
+                              if (isActuallyInitializing) {
+                                return 'Loading...';
+                              }
+                              // Server is running or in another state but has no tools
+                              return 'No tools available';
+                            }
+
+                            const parts = [];
+                            if (serverData.readOnlyCount > 0) parts.push(`${serverData.readOnlyCount} read`);
+                            if (serverData.writeOnlyCount > 0) parts.push(`${serverData.writeOnlyCount} write`);
+                            if (serverData.readWriteCount > 0) parts.push(`${serverData.readWriteCount} read/write`);
+                            if (serverData.otherCount > 0) parts.push(`${serverData.otherCount} other`);
+                            return parts.length > 0 ? parts.join(' + ') : 'No tools';
+                          })()}
+                        </div>
+                      </CollapsibleTrigger>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (hasTools) {
+                            // Add all tools from this server
+                            serverData.tools.forEach((tool) => addSelectedTool(tool.id));
+                          }
+                        }}
+                        title={
+                          isError
+                            ? `${serverName} has an error`
+                            : !hasTools
+                              ? `${serverName} is loading tools`
+                              : `Add all ${serverName} tools`
+                        }
+                        disabled={!hasTools}
+                      >
+                        <PlusCircle className="h-4 w-4 cursor-pointer" />
+                      </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isExpanded ? (
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                        )}
                       </div>
                     </SidebarMenuItem>
 
                     <CollapsibleContent>
-                      {serverData.tools.length === 0 ? (
+                      {!hasTools ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
                             {isError ? 'Server error - check Settings' : 'Loading tools...'}
@@ -443,7 +436,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
               <SidebarMenuItem>
                 <SidebarMenuButton
                   size="sm"
-                  className="justify-start text-muted-foreground"
+                  className="justify-start text-muted-foreground cursor-pointer"
                   onClick={() => navigate({ to: '/connectors' })}
                 >
                   <Plus className="h-4 w-4" />

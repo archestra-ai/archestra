@@ -23,9 +23,9 @@ interface ChatHistoryProps {
   editingContent: string;
   onEditStart: (messageId: string, content: string) => void;
   onEditCancel: () => void;
-  onEditSave: (messageId: string) => void;
+  onEditSave: (messageId: string) => Promise<void>;
   onEditChange: (content: string) => void;
-  onDeleteMessage: (messageId: string) => void;
+  onDeleteMessage: (messageId: string) => Promise<void>;
   onRegenerateMessage: (messageIndex: number) => void;
   isRegenerating?: boolean;
   regeneratingIndex?: number | null;
@@ -40,9 +40,9 @@ interface MessageProps {
   editingContent: string;
   onEditStart: (messageId: string, content: string) => void;
   onEditCancel: () => void;
-  onEditSave: (messageId: string) => void;
+  onEditSave: (messageId: string) => Promise<void>;
   onEditChange: (content: string) => void;
-  onDeleteMessage: (messageId: string) => void;
+  onDeleteMessage: (messageId: string) => Promise<void>;
   onRegenerateMessage: (messageIndex: number) => void;
   isRegenerating?: boolean;
   regeneratingIndex?: number | null;

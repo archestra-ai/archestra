@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { type User, getUser, updateUser } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
 import sentryClient from '@ui/lib/sentry';
 
 interface UserStore {
@@ -30,6 +31,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
   markOnboardingCompleted: async () => {
     const { data } = await updateUser({ body: { hasCompletedOnboarding: true } });
     set({ user: data });
+
+    // Track onboarding completion in PostHog
+    posthogClient.capture('onboarding_completed');
   },
 
   toggleTelemetryCollectionStatus: async (collectTelemetryData: boolean) => {
@@ -49,5 +53,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
     const { data } = await updateUser({ body: { collectAnalyticsData } });
     set({ user: data });
+
+    // Update PostHog analytics status
+    posthogClient.updateAnalyticsStatus(collectAnalyticsData, data);
   },
 }));

@@ -8,8 +8,15 @@ import ChatInput from '@ui/components/Chat/ChatInput';
 import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
-import { getAllMemories } from '@ui/lib/clients/archestra/api/gen';
-import { useChatStore, useCloudProvidersStore, useDeveloperModeStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import posthogClient from '@ui/lib/posthog';
+import {
+  useChatStore,
+  useCloudProvidersStore,
+  useDeveloperModeStore,
+  useMemoryStore,
+  useOllamaStore,
+  useToolsStore,
+} from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
@@ -38,27 +45,32 @@ function ChatPage() {
     deleteMessage,
     setEditingMessageContent,
     updateMessages,
+    pendingPrompts,
+    setPendingPrompts,
+    removePendingPrompt,
   } = useChatStore();
   const { selectedToolIds, setOnlyTools } = useToolsStore();
   const { selectedModel } = useOllamaStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();
   const { getSystemPrompt } = useDeveloperModeStore();
-  const [hasLoadedMemories, setHasLoadedMemories] = useState(false);
-  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const { memories, isLoading: isLoadingMemories } = useMemoryStore();
+
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
+  const [fullMessagesBackup, setFullMessagesBackup] = useState<UIMessage[]>([]);
+
+  // Track pre-generation loading state (between submission and streaming start)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
 
   const currentChat = getCurrentChat();
   const currentChatSessionId = currentChat?.sessionId || '';
   const currentChatTitle = getCurrentChatTitle();
 
+  const pendingPrompt = pendingPrompts.get(currentChatSessionId);
+
   // Get current input from draft messages
   const currentInput = currentChat ? getDraftMessage(currentChat.id) : '';
-
-  // Reset memory loading flag when chat changes
-  useEffect(() => {
-    setHasLoadedMemories(false);
-    setIsLoadingMemories(false);
-  }, [currentChatSessionId]);
 
   // We use useRef because prepareSendMessagesRequest captures values when created.
   // Without ref, switching models/providers wouldn't work - it would always use the old values.
@@ -76,11 +88,22 @@ function ChatPage() {
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
 
-  const transport = useMemo(() => {
-    const apiEndpoint = `${chatStreamBaseUrl}/stream`;
+  const memoriesText = memories.map((m) => `${m.name}: ${m.value}`).join('\n');
+  const memoriesUIMessage = useMemo(
+    () =>
+      (memoriesText
+        ? {
+            id: systemMemoriesMessageId,
+            role: 'system',
+            parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
+          }
+        : null) as UIMessage | null,
+    [memoriesText]
+  );
 
+  const transport = useMemo(() => {
     return new DefaultChatTransport({
-      api: apiEndpoint,
+      api: `${chatStreamBaseUrl}/stream`,
       prepareSendMessagesRequest: ({ id, messages }) => {
         const currentModel = selectedModelRef.current;
         const currentCloudProviderModels = availableCloudProviderModelsRef.current;
@@ -90,6 +113,9 @@ function ChatPage() {
         const cloudModel = currentCloudProviderModels.find((m) => m.id === currentModel);
         const provider = cloudModel ? cloudModel.provider : 'ollama';
 
+        // Ensure system-memories message is included if it exists
+        let messagesToSend = messages;
+
         // Prepend system prompt as a system message if it exists
         const messagesWithSystemPrompt = currentSystemPrompt
           ? [
@@ -98,14 +124,14 @@ function ChatPage() {
                 role: 'system',
                 parts: [{ type: 'text', text: currentSystemPrompt }],
               },
-              ...messages,
+              ...messagesToSend,
             ]
-          : messages;
+          : messagesToSend;
 
         return {
           body: {
             messages: messagesWithSystemPrompt,
-            model: currentModel || 'llama3.1:8b',
+            model: currentModel,
             sessionId: id || currentChatSessionId,
             provider: provider,
             // Include chatId so backend can load chat-specific tools
@@ -145,17 +171,20 @@ function ChatPage() {
     },
   });
 
-  // ================ Running on background logic ================ //
-  const pendingPrompts = useChatStore((s) => s.pendingPrompts);
-  const setPendingPrompts = useChatStore((s) => s.setPendingPrompts);
-  const removePendingPrompt = useChatStore((s) => s.removePendingPrompt);
+  const chatIsSubmitted = status === 'submitted';
+  const chatIsLoading = status === 'streaming';
+  const chatHasError = status === 'error';
+  const chatIsReady = status === 'ready';
 
-  const pendingPrompt = pendingPrompts.get(currentChatSessionId);
+  const isSubmittingDisabled = !currentInput.trim() || chatIsLoading || isSubmitting || !!pendingPrompt;
+  const isChatEmpty = messages.length === 0;
 
-  // When streaming finishes and there is an assistant reply and the second to
-  // last message is the same as the pending prompt, remove the pending prompt
+  /**
+   * When streaming finishes and there is an assistant reply and the second to
+   * last message is the same as the pending prompt, remove the pending prompt
+   */
   useEffect(() => {
-    if (status === 'ready' && currentChatSessionId) {
+    if (chatIsReady && currentChatSessionId) {
       const secondToLastMessage = messages.at(-2);
       const lastMessage = messages.at(-1);
 
@@ -165,86 +194,95 @@ function ChatPage() {
 
       if (isLastMessageAssistant && isSecondToLastMessageSameAsPendingPrompt) removePendingPrompt(currentChatSessionId);
     }
-  }, [status, currentChatSessionId, messages]);
-  // ================================== //
-
-  const isLoading = status === 'streaming';
-  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
-  const [fullMessagesBackup, setFullMessagesBackup] = useState<UIMessage[]>([]);
-
-  // Track pre-generation loading state (between submission and streaming start)
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
+  }, [chatIsReady, currentChatSessionId, messages]);
 
   // Wrapper functions for message editing actions
-  const handleSaveEdit = (messageId: string) => {
-    saveEditMessage(messageId, messages);
-    // Also update local messages state
-    setMessages(messages);
-  };
+  const handleSaveEdit = useCallback(
+    async (messageId: string) => {
+      // Save the updated messages in the zustand store
+      const updatedMessages = await saveEditMessage(messageId, messages);
+      // Also update local messages state
+      setMessages(updatedMessages);
+    },
+    [messages, saveEditMessage]
+  );
 
-  const handleDeleteMessage = (messageId: string) => {
-    deleteMessage(messageId, messages);
-    // Also update local messages state
-    setMessages(messages.filter((msg) => msg.id !== messageId));
-  };
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      await deleteMessage(messageId, messages);
+      // Also update local messages state
+      setMessages(messages.filter((msg) => msg.id !== messageId));
+    },
+    [messages, deleteMessage]
+  );
 
   // Handle regeneration for specific message index
-  const handleRegenerateMessage = async (messageIndex: number) => {
-    const messageToRegenerate = messages[messageIndex];
+  const handleRegenerateMessage = useCallback(
+    async (messageIndex: number) => {
+      const messageToRegenerate = messages[messageIndex];
 
-    if (!messageToRegenerate || messageToRegenerate.role !== 'assistant') {
-      console.error('Can only regenerate assistant messages');
-      return;
-    }
+      if (!messageToRegenerate || messageToRegenerate.role !== 'assistant') {
+        console.error('Can only regenerate assistant messages');
+        return;
+      }
 
-    setRegeneratingIndex(messageIndex);
+      setRegeneratingIndex(messageIndex);
 
-    // Store the full messages array for display purposes
-    setFullMessagesBackup(messages);
+      // Store the full messages array for display purposes
+      setFullMessagesBackup(messages);
 
-    // Create a truncated conversation for the API call only
-    const conversationUpToAssistant = messages.slice(0, messageIndex + 1);
+      // Create a truncated conversation for the API call only
+      const conversationUpToAssistant = messages.slice(0, messageIndex + 1);
 
-    // Temporarily set messages to truncated version for API call
-    setMessages(conversationUpToAssistant);
+      // Temporarily set messages to truncated version for API call
+      setMessages(conversationUpToAssistant);
 
-    // Use the built-in regenerate function which will regenerate the last assistant message
-    regenerate();
-  };
+      // Use the built-in regenerate function which will regenerate the last assistant message
+      regenerate();
+    },
+    [messages, regenerate]
+  );
 
   // Track inference in StatusBar
   useEffect(() => {
-    if (status === 'streaming' || isSubmitting) {
+    if (chatIsLoading || isSubmitting) {
       setChatInference(currentChatSessionId, currentChatTitle, true);
-    } else if (status === 'ready' || status === 'error') {
+    } else if (chatIsReady || chatHasError) {
       // Only stop inference when this specific chat is done
       setChatInference(currentChatSessionId, currentChatTitle, false);
     }
-  }, [status, isSubmitting, currentChatSessionId, currentChatTitle, setChatInference]);
+  }, [
+    chatIsLoading,
+    isSubmitting,
+    chatIsReady,
+    chatHasError,
+    currentChatSessionId,
+    currentChatTitle,
+    setChatInference,
+  ]);
 
   useEffect(() => {
-    if (isLoading) {
+    if (chatIsLoading) {
       setIsSubmitting(false);
     }
-  }, [isLoading]);
+  }, [chatIsLoading]);
 
   useEffect(() => {
-    if (status === 'ready' || status === 'error') {
+    if (chatIsReady || chatHasError) {
       setIsSubmitting(false);
     }
 
     // Handle error case during regeneration - restore backup messages
-    if (status === 'error' && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
+    if (chatHasError && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
       setMessages(fullMessagesBackup);
       setFullMessagesBackup([]);
       setRegeneratingIndex(null);
     }
-  }, [status, regeneratingIndex, fullMessagesBackup]);
+  }, [chatIsReady, chatHasError, regeneratingIndex, fullMessagesBackup]);
 
   // Clear regenerating state and merge new message when streaming finishes
   useEffect(() => {
-    if (status === 'ready' && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
+    if (chatIsReady && regeneratingIndex !== null && fullMessagesBackup.length > 0) {
       // Get the new regenerated message (last message in the current truncated array)
       const newRegeneratedMessage = messages[messages.length - 1];
 
@@ -262,11 +300,11 @@ function ChatPage() {
 
       setFullMessagesBackup([]);
       setRegeneratingIndex(null);
-    } else if (status === 'ready' && regeneratingIndex !== null) {
+    } else if (chatIsReady && regeneratingIndex !== null) {
       // No backup to restore, just clear the regenerating state
       setRegeneratingIndex(null);
     }
-  }, [status, regeneratingIndex, fullMessagesBackup, messages]);
+  }, [chatIsReady, regeneratingIndex, fullMessagesBackup, messages]);
 
   // Add a ref to track the last loaded chat
   const lastLoadedChatIdRef = useRef<string | null>(null);
@@ -294,7 +332,7 @@ function ChatPage() {
   useEffect(() => {
     // Sync messages back to store with debouncing
     // Only sync when we have a valid chat and messages
-    if (currentChat && messages.length > 0 && !isLoading) {
+    if (currentChat && messages.length > 0 && !chatIsLoading) {
       // Clear existing timeout
       if (messageSyncTimeoutRef.current) {
         clearTimeout(messageSyncTimeoutRef.current);
@@ -312,7 +350,7 @@ function ChatPage() {
         clearTimeout(messageSyncTimeoutRef.current);
       }
     };
-  }, [messages, currentChat?.id, isLoading, updateMessages]);
+  }, [messages, currentChat?.id, chatIsLoading, updateMessages]);
 
   // Simple debounce implementation
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -336,111 +374,91 @@ function ChatPage() {
     };
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    if (currentChat) {
-      // Immediately update UI by saving to store without debounce
-      saveDraftMessage(currentChat.id, newValue);
-      // Also save with debounce for potential future persistence
-      debouncedSaveDraft(currentChat.id, newValue);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newValue = e.target.value;
+      if (currentChat) {
+        // Immediately update UI by saving to store without debounce
+        saveDraftMessage(currentChat.id, newValue);
+        // Also save with debounce for potential future persistence
+        debouncedSaveDraft(currentChat.id, newValue);
+      }
+    },
+    [currentChat, saveDraftMessage, debouncedSaveDraft]
+  );
+
+  /**
+   * Check if more than 20 tools are selected and reset to default if so
+   */
+  const conditionallyResetTools = useCallback(() => {
+    if (selectedToolIds.size > 20) {
+      setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
     }
-  };
+  }, [selectedToolIds, setOnlyTools]);
 
-  const loadMemoriesIfNeeded = async (forceLoad = false): Promise<boolean> => {
-    // Only load memories for the first message in a chat
-    if ((forceLoad || messages.length === 0) && !hasLoadedMemories && !isLoadingMemories) {
-      setIsLoadingMemories(true);
-      try {
-        const { data } = await getAllMemories();
-        if (data && data.memories && data.memories.length > 0) {
-          // Format memories for logging
-          const memoriesText = data.memories.map((m) => `${m.name}: ${m.value}`).join('\n');
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent<HTMLFormElement>) => {
+      e?.preventDefault();
 
-          // Log memories to console instead of showing in UI
-          console.log('Previous memories loaded:');
-          console.log(memoriesText);
-          console.log(`Total memories loaded: ${data.memories.length}`);
-
-          // Add a system message with the memories (but don't display it)
-          const systemMessage: UIMessage = {
-            id: systemMemoriesMessageId,
-            role: 'system',
-            parts: [{ type: 'text', text: `Previous memories loaded:\n${memoriesText}` }],
-          };
-
-          // Prepend the system message to the messages
-          // If forceLoad is true (restart scenario), replace all messages
-          // Otherwise, prepend to existing messages
-          if (forceLoad) {
-            setMessages([systemMessage]);
-          } else {
-            setMessages((prevMessages) => [systemMessage, ...prevMessages]);
-          }
-
-          // Wait for next tick to ensure state is updated
-          await new Promise((resolve) => setTimeout(resolve, 0));
-
-          setHasLoadedMemories(true);
-          return true;
-        } else {
-          console.log('No memories found to load');
-          setHasLoadedMemories(true);
-          return false;
+      if (isSubmittingDisabled) {
+        return;
+      } else if (currentInput.trim() && currentChat) {
+        if (messages.length === 0 && memoriesUIMessage) {
+          setMessages([memoriesUIMessage]);
         }
-      } catch (error) {
-        console.error('Failed to load memories:', error);
-        // Continue even if memory loading fails
-        setHasLoadedMemories(true);
-        return false;
-      } finally {
-        setIsLoadingMemories(false);
+
+        conditionallyResetTools();
+
+        setIsSubmitting(true);
+        setSubmissionStartTime(Date.now());
+        sendMessage({ text: currentInput });
+        setPendingPrompts(currentChatSessionId, currentInput);
+        clearDraftMessage(currentChat.id);
+
+        // Track message sent in PostHog
+        posthogClient.capture('message_sent', {
+          chatId: currentChat.id,
+          messageLength: currentInput.length,
+          toolsCount: selectedToolIds.size,
+        });
       }
-    }
-    return false;
-  };
+    },
+    [
+      isSubmittingDisabled,
+      currentInput,
+      currentChat,
+      messages,
+      memoriesUIMessage,
+      selectedToolIds,
+      setMessages,
+      conditionallyResetTools,
+      sendMessage,
+      setPendingPrompts,
+      clearDraftMessage,
+    ]
+  );
 
-  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    if (isSubmittingDisabled) return;
-    if (currentInput.trim() && currentChat) {
-      // Load memories before sending the first message
-      await loadMemoriesIfNeeded();
-
-      // Check if more than 20 tools are selected and reset to default if so
-      if (selectedToolIds.size > 20) {
-        await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
-      }
-
-      const messageText = currentInput;
+  const handlePromptSelect = useCallback(
+    async (prompt: string) => {
+      conditionallyResetTools();
 
       setIsSubmitting(true);
       setSubmissionStartTime(Date.now());
-      sendMessage({ text: messageText });
-      setPendingPrompts(currentChatSessionId, messageText);
-      clearDraftMessage(currentChat.id);
-    }
-  };
 
-  const handlePromptSelect = async (prompt: string) => {
-    // If this is the first message in the chat, load memories first
-    if (messages.length === 0 && !hasLoadedMemories) {
-      // Load memories before sending the first message
-      // The function now properly waits for state updates
-      await loadMemoriesIfNeeded();
-    }
+      // Directly send the prompt when a tile is clicked
+      sendMessage({ text: prompt });
 
-    // Check if more than 20 tools are selected and reset to default if so
-    if (selectedToolIds.size > 20) {
-      await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
-    }
+      // Track prompt selection in PostHog
+      posthogClient.capture('prompt_selected', {
+        chatId: currentChat?.id,
+        promptLength: prompt.length,
+        toolsCount: selectedToolIds.size,
+      });
+    },
+    [conditionallyResetTools, sendMessage, currentChat, selectedToolIds]
+  );
 
-    setIsSubmitting(true);
-    setSubmissionStartTime(Date.now());
-    // Directly send the prompt when a tile is clicked
-    sendMessage({ text: prompt });
-  };
-
-  const handleRerunAgent = async () => {
+  const handleRerunAgent = useCallback(async () => {
     // Get the first user message (the original prompt)
     const firstUserMessage = messages.find((msg) => msg.role === 'user');
 
@@ -463,37 +481,29 @@ function ChatPage() {
       return;
     }
 
-    // Clear all messages to start fresh
-    setMessages([]);
-
-    // Reset memory loading flags to load memories again
-    setHasLoadedMemories(false);
-    setIsLoadingMemories(false);
-
-    // Small delay to ensure state updates are processed
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Force load memories even though messages might not be empty yet
-    await loadMemoriesIfNeeded(true);
-
-    // Check if more than 20 tools are selected and reset to default if so
-    if (selectedToolIds.size > 20) {
-      await setOnlyTools(DEFAULT_ARCHESTRA_TOOLS);
-    }
+    setMessages(memoriesUIMessage ? [memoriesUIMessage] : []);
+    conditionallyResetTools();
 
     // Re-run with the first user message
     setIsSubmitting(true);
     setSubmissionStartTime(Date.now());
     sendMessage({ text: messageText });
+
     if (currentChat) {
       setPendingPrompts(currentChatSessionId, messageText);
     }
-  };
-
-  const isSubmittingDisabled = !currentInput.trim() || isLoading || isSubmitting || !!pendingPrompt;
+  }, [
+    messages,
+    memoriesUIMessage,
+    currentChatSessionId,
+    currentChat,
+    conditionallyResetTools,
+    setMessages,
+    sendMessage,
+    setPendingPrompts,
+  ]);
 
   if (!currentChat) {
-    // TODO: this is a temporary solution, maybe let's make some cool loading animations with a mascot?
     return null;
   }
 
@@ -542,22 +552,21 @@ function ChatPage() {
             onEditChange={setEditingMessageContent}
             onDeleteMessage={handleDeleteMessage}
             onRegenerateMessage={handleRegenerateMessage}
-            isRegenerating={regeneratingIndex !== null || isLoading}
+            isRegenerating={regeneratingIndex !== null || chatIsLoading}
             regeneratingIndex={regeneratingIndex}
             isSubmitting={isSubmitting}
             submissionStartTime={submissionStartTime}
           />
         </div>
       )}
-
       <SystemPrompt />
-
       <div className="flex-shrink-0">
         <ChatInput
           input={currentInput}
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
-          isLoading={isLoading}
+          isLoading={chatIsLoading}
+          rerunAgentDisabled={chatIsSubmitted || chatIsLoading}
           disabled={isSubmittingDisabled}
           stop={stop}
           hasMessages={messages.length > 0}

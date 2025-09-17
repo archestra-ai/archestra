@@ -170,6 +170,8 @@ function ChatPage() {
       }
     },
   });
+
+  const chatIsSubmitted = status === 'submitted';
   const chatIsLoading = status === 'streaming';
   const chatHasError = status === 'error';
   const chatIsReady = status === 'ready';
@@ -505,26 +507,6 @@ function ChatPage() {
     return null;
   }
 
-  // Early return if no current chat exists (e.g., during deletion)
-  if (!currentChat) {
-    return (
-      <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-auto">
-          <EmptyChatState onPromptSelect={handlePromptSelect} />
-        </div>
-        <ChatInput
-          input=""
-          disabled={true}
-          isLoading={false}
-          handleInputChange={() => {}}
-          handleSubmit={() => {}}
-          stop={() => {}}
-          hasMessages={false}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
       {isChatEmpty && !pendingPrompt ? (
@@ -560,6 +542,7 @@ function ChatPage() {
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isLoading={chatIsLoading}
+          rerunAgentDisabled={chatIsSubmitted || chatIsLoading}
           disabled={isSubmittingDisabled}
           stop={stop}
           hasMessages={messages.length > 0}

@@ -65,6 +65,31 @@ const listenForChatTitleUpdates = () => {
   });
 };
 
+/**
+ * Listen for token usage updates from the backend via WebSocket
+ */
+const listenForTokenUsageUpdates = () => {
+  return websocketService.subscribe('chat-token-usage-updated', (message) => {
+    const { chatId, totalPromptTokens, totalCompletionTokens, totalTokens, lastModel, lastContextWindow } =
+      message.payload;
+
+    useChatStore.setState((state) => ({
+      chats: state.chats.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              totalPromptTokens,
+              totalCompletionTokens,
+              totalTokens,
+              lastModel,
+              lastContextWindow,
+            }
+          : chat
+      ),
+    }));
+  });
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   // State
   chats: [],
@@ -284,6 +309,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       listenForChatTitleUpdates();
+      listenForTokenUsageUpdates();
     } catch (error) {
       console.error('Failed to establish WebSocket connection:', error);
     }

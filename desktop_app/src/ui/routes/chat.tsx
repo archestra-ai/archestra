@@ -119,6 +119,25 @@ function ChatPage() {
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+      // Add error message to the chat display
+      const errorText =
+        typeof error === 'string' ? error : error.message || 'An error occurred while processing your request.';
+      const errorMessage: UIMessage = {
+        id: `error-${Date.now()}`,
+        role: 'error' as any, // Custom error role
+        parts: [
+          {
+            type: 'text',
+            text: errorText,
+          },
+        ],
+      };
+      // Add the error message to the current messages
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
+      // Also save to the store so it persists
+      if (currentChat) {
+        updateMessages(currentChat.id, [...messages, errorMessage]);
+      }
     },
   });
 
@@ -245,20 +264,51 @@ function ChatPage() {
     }
   }, [status, regeneratingIndex, fullMessagesBackup, messages]);
 
+  // Add a ref to track the last loaded chat
+  const lastLoadedChatIdRef = useRef<string | null>(null);
+
   // Load messages from database when chat changes
   useEffect(() => {
-    // Only update messages if we have a valid chat
-    if (currentChat && currentChatSessionId) {
-      if (currentChatMessages && currentChatMessages.length > 0) {
+    // Only sync messages when switching to a different chat
+    // Don't sync when the same chat object updates (title, tokens, etc.)
+    if (currentChatSessionId && currentChatSessionId !== lastLoadedChatIdRef.current) {
+      const chat = getCurrentChat();
+      if (chat && chat.messages && chat.messages.length > 0) {
         // Messages are already UIMessage type
-        setMessages(currentChatMessages);
+        setMessages(chat.messages);
       } else {
         // Clear messages when chat exists but has no messages
         setMessages([]);
       }
+      lastLoadedChatIdRef.current = currentChatSessionId;
     }
-    // Don't call setMessages when there's no chat to avoid triggering updates during deletion
-  }, [currentChatSessionId, currentChatMessages, currentChat]); // Now also depend on currentChat
+  }, [currentChatSessionId, getCurrentChat]); // Only depend on session ID and the getter function
+
+  // Add debounced message sync from useChat to store
+  const messageSyncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Sync messages back to store with debouncing
+    // Only sync when we have a valid chat and messages
+    if (currentChat && messages.length > 0 && !isLoading) {
+      // Clear existing timeout
+      if (messageSyncTimeoutRef.current) {
+        clearTimeout(messageSyncTimeoutRef.current);
+      }
+
+      // Debounce to avoid excessive updates during streaming
+      messageSyncTimeoutRef.current = setTimeout(() => {
+        updateMessages(currentChat.id, messages);
+      }, 1000); // 1 second debounce
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (messageSyncTimeoutRef.current) {
+        clearTimeout(messageSyncTimeoutRef.current);
+      }
+    };
+  }, [messages, currentChat?.id, isLoading, updateMessages]);
 
   // Simple debounce implementation
   const debounceRef = useRef<NodeJS.Timeout | null>(null);

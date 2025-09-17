@@ -671,6 +671,91 @@
               }
             },
             "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["chat-token-usage-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "totalPromptTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "totalCompletionTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "totalTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "lastModel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "lastContextWindow": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "contextUsagePercent": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "chatId",
+                  "totalPromptTokens",
+                  "totalCompletionTokens",
+                  "totalTokens",
+                  "lastModel",
+                  "lastContextWindow",
+                  "contextUsagePercent"
+                ]
+              }
+            },
+            "required": ["type", "payload"]
           }
         ]
       },
@@ -733,6 +818,69 @@
               }
             ]
           },
+          "totalPromptTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "totalCompletionTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "totalTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "lastModel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "lastContextWindow": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           },
@@ -765,7 +913,20 @@
             }
           }
         },
-        "required": ["id", "sessionId", "title", "selectedTools", "createdAt", "updatedAt", "messages"]
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "selectedTools",
+          "totalPromptTokens",
+          "totalCompletionTokens",
+          "totalTokens",
+          "lastModel",
+          "lastContextWindow",
+          "createdAt",
+          "updatedAt",
+          "messages"
+        ]
       },
       "CloudProviderWithConfigInput": {
         "type": "object",
@@ -2240,6 +2401,93 @@
             },
             "required": ["type", "payload"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["chat-token-usage-updated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "totalPromptTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "totalCompletionTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "totalTokens": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "lastModel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "lastContextWindow": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "nullable": true,
+                        "enum": [null]
+                      }
+                    ]
+                  },
+                  "contextUsagePercent": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "chatId",
+                  "totalPromptTokens",
+                  "totalCompletionTokens",
+                  "totalTokens",
+                  "lastModel",
+                  "lastContextWindow",
+                  "contextUsagePercent"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
           }
         ]
       },
@@ -2302,6 +2550,69 @@
               }
             ]
           },
+          "totalPromptTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "totalCompletionTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "totalTokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "lastModel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
+          "lastContextWindow": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2335,7 +2646,20 @@
             }
           }
         },
-        "required": ["id", "sessionId", "title", "selectedTools", "createdAt", "updatedAt", "messages"],
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "selectedTools",
+          "totalPromptTokens",
+          "totalCompletionTokens",
+          "totalTokens",
+          "lastModel",
+          "lastContextWindow",
+          "createdAt",
+          "updatedAt",
+          "messages"
+        ],
         "additionalProperties": false
       },
       "CloudProviderWithConfig": {

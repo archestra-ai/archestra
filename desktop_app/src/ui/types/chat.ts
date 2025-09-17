@@ -27,6 +27,14 @@ export interface ChatWithMessages {
    * messages is UIMessage array from the 'ai' SDK
    */
   messages: UIMessage[];
+  /**
+   * Token usage for the entire chat session
+   */
+  totalPromptTokens?: number | null;
+  totalCompletionTokens?: number | null;
+  totalTokens?: number | null;
+  lastModel?: string | null;
+  lastContextWindow?: number | null;
 }
 
 export { type ServerChatMessageRepresentation, type ServerChatWithMessagesRepresentation };

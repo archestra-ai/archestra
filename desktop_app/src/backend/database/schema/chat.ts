@@ -19,6 +19,14 @@ export const chatsTable = sqliteTable(
      * Format: JSON array of tool IDs like ["mcp_server_id__tool_name", ...]
      */
     selectedTools: text({ mode: 'json' }).$type<string[] | null>(),
+    /**
+     * Token usage tracking for the entire chat session
+     */
+    totalPromptTokens: int('total_prompt_tokens').default(0),
+    totalCompletionTokens: int('total_completion_tokens').default(0),
+    totalTokens: int('total_tokens').default(0),
+    lastModel: text('last_model'),
+    lastContextWindow: int('last_context_window'),
     createdAt: text()
       .notNull()
       .default(sql`(current_timestamp)`),

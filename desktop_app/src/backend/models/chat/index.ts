@@ -1,5 +1,5 @@
 import { type UIMessage } from 'ai';
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import db from '@backend/database';
@@ -323,6 +323,65 @@ export default class ChatModel {
     // Note: Related chat_interactions will be cascade deleted
     // when that table is added (foreign key constraint)
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
+  }
+
+  static async updateTokenUsage(
+    sessionId: string,
+    tokenUsage: {
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      model?: string;
+      contextWindow?: number;
+    }
+  ): Promise<void> {
+    if (!tokenUsage || !tokenUsage.totalTokens) {
+      return;
+    }
+
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Updating token usage for chat ${chat.id}: ${JSON.stringify(tokenUsage)}`);
+
+    // Update the chat with cumulative token usage
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
+        totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
+        totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
+        lastModel: tokenUsage.model,
+        lastContextWindow: tokenUsage.contextWindow,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage update
+    const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
+
+    if (updatedChat) {
+      WebSocketService.broadcast({
+        type: 'chat-token-usage-updated',
+        payload: {
+          chatId: chat.id,
+          totalPromptTokens: updatedChat.totalPromptTokens,
+          totalCompletionTokens: updatedChat.totalCompletionTokens,
+          totalTokens: updatedChat.totalTokens,
+          lastModel: updatedChat.lastModel,
+          lastContextWindow: updatedChat.lastContextWindow,
+          contextUsagePercent:
+            updatedChat.lastContextWindow && updatedChat.totalTokens
+              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
+              : 0,
+        },
+      });
+    }
   }
 
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {

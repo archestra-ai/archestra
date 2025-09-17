@@ -5,7 +5,7 @@ import RunningInBackgroundMessage from '@ui/components/Chat/ChatHistory/Messages
 import { ScrollArea } from '@ui/components/ui/scroll-area';
 import { cn } from '@ui/lib/utils/tailwind';
 
-import { AssistantMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
+import { AssistantMessage, ErrorMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
 import SubmissionLoadingMessage from './Messages/SubmissionLoadingMessage';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
@@ -81,7 +81,7 @@ const Message = ({
     onDelete: () => onDeleteMessage(message.id),
   };
 
-  switch (message.role) {
+  switch (message.role as string) {
     case 'user':
       return <UserMessage {...commonProps} />;
     case 'assistant':
@@ -92,6 +92,8 @@ const Message = ({
           isRegenerating={regeneratingIndex === messageIndex}
         />
       );
+    case 'error':
+      return <ErrorMessage message={message} />;
     case 'system':
       // Check if this is a memories message
       if (message.id === 'system-memories') {
@@ -103,12 +105,14 @@ const Message = ({
   }
 };
 
-const getMessageClassName = (role: 'user' | 'assistant' | 'system') => {
+const getMessageClassName = (role: string) => {
   switch (role) {
     case 'user':
       return 'bg-primary border border-primary/20 ml-8 text-primary-foreground';
     case 'assistant':
       return 'bg-muted mr-8';
+    case 'error':
+      return 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 mr-8';
     case 'system':
       return 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-600';
     default:

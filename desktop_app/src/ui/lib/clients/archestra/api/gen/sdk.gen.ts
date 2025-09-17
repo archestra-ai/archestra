@@ -108,6 +108,9 @@ import type {
   UninstallMcpServerResponses,
   UpdateChatData,
   UpdateChatErrors,
+  UpdateChatMessageData,
+  UpdateChatMessageErrors,
+  UpdateChatMessageResponses,
   UpdateChatResponses,
   UpdateMemoryData,
   UpdateMemoryErrors,
@@ -290,6 +293,22 @@ export const getChatAvailableTools = <ThrowOnError extends boolean = false>(
   return (options.client ?? _heyApiClient).get<GetChatAvailableToolsResponses, unknown, ThrowOnError>({
     url: '/api/chat/{id}/tools/available',
     ...options,
+  });
+};
+
+/**
+ * Update a specific message in a chat
+ */
+export const updateChatMessage = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateChatMessageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).put<UpdateChatMessageResponses, UpdateChatMessageErrors, ThrowOnError>({
+    url: '/api/chat/{chatId}/message/{messageId}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 

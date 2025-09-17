@@ -1288,6 +1288,40 @@ export type GetChatAvailableToolsResponses = {
 
 export type GetChatAvailableToolsResponse = GetChatAvailableToolsResponses[keyof GetChatAvailableToolsResponses];
 
+export type UpdateChatMessageData = {
+  body: {
+    content: unknown;
+  };
+  path: {
+    chatId: string;
+    messageId: string;
+  };
+  query?: never;
+  url: '/api/chat/{chatId}/message/{messageId}';
+};
+
+export type UpdateChatMessageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
+
+export type UpdateChatMessageResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+  };
+};
+
+export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
+
 export type GetAvailableCloudProvidersData = {
   body?: never;
   path?: never;

@@ -177,9 +177,9 @@ function ChatPage() {
   const [submissionStartTime, setSubmissionStartTime] = useState<number>(Date.now());
 
   // Wrapper functions for message editing actions
-  const handleSaveEdit = (messageId: string) => {
+  const handleSaveEdit = async (messageId: string) => {
     // Save the updated messages in the zustand store
-    const updatedMessages = saveEditMessage(messageId, messages);
+    const updatedMessages = await saveEditMessage(messageId, messages);
     // Also update local messages state
     setMessages(updatedMessages);
   };

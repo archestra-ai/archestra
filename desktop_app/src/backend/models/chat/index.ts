@@ -384,6 +384,26 @@ export default class ChatModel {
     }
   }
 
+  static async updateMessage(chatId: number, messageId: number, content: UIMessage): Promise<void> {
+    // Update the message content
+    await db
+      .update(messagesTable)
+      .set({
+        content,
+      })
+      .where(eq(messagesTable.id, messageId));
+
+    // Broadcast the update via WebSocket
+    WebSocketService.broadcast({
+      type: 'message-updated',
+      payload: {
+        chatId,
+        messageId,
+        content,
+      },
+    });
+  }
+
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
     // First, find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);

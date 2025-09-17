@@ -9,6 +9,7 @@ import {
   getChatSelectedTools,
   getChats,
   updateChat,
+  updateChatMessage,
 } from '@ui/lib/clients/archestra/api/gen';
 import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
@@ -45,7 +46,7 @@ interface ChatActions {
   // Message editing actions
   startEditMessage: (messageId: string, currentMessageContent: string) => void;
   cancelEditMessage: () => void;
-  saveEditMessage: (messageId: string, messages: UIMessage[]) => UIMessage[];
+  saveEditMessage: (messageId: string, messages: UIMessage[]) => Promise<UIMessage[]>;
   deleteMessage: (messageId: string, messages: UIMessage[]) => void;
   setEditingMessageContent: (content: string) => void;
   updateMessages: (chatId: number, messages: UIMessage[]) => void;
@@ -352,7 +353,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ editingMessageContent });
   },
 
-  saveEditMessage: (messageId: string, messages: UIMessage[]): UIMessage[] => {
+  saveEditMessage: async (messageId: string, messages: UIMessage[]): Promise<UIMessage[]> => {
     const { editingMessageContent, cancelEditMessage } = get();
     if (!editingMessageContent.trim()) {
       return messages;
@@ -375,6 +376,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const currentChat = get().getCurrentChat();
     if (currentChat) {
       get().updateMessages(currentChat.id, updatedMessages);
+
+      // Extract the numeric message ID from the composite ID
+      // Message IDs are in format: "{sessionId}-{messageId}"
+      const messageParts = messageId.split('-');
+      const numericMessageId = parseInt(messageParts[messageParts.length - 1], 10);
+
+      // Find the updated message to persist
+      const updatedMessage = updatedMessages.find((msg) => msg.id === messageId);
+
+      if (updatedMessage && !isNaN(numericMessageId)) {
+        try {
+          // Persist the updated message to the backend
+          await updateChatMessage({
+            path: {
+              chatId: currentChat.id,
+              messageId: numericMessageId,
+            },
+            body: {
+              content: updatedMessage,
+            },
+          });
+        } catch (error) {
+          console.error('Failed to persist message update:', error);
+          // Continue with local update even if backend fails
+        }
+      }
     }
 
     // Clear editing state

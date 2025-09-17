@@ -13,6 +13,8 @@ import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
 
+import sharedConfig from '../../../../config';
+
 interface StreamRequestBody {
   model: string;
   messages: Array<any>;
@@ -22,6 +24,8 @@ interface StreamRequestBody {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   chatId?: number; // Chat ID to get chat-specific tools
 }
+
+const { vercelSdk: vercelSdkConfig } = sharedConfig;
 
 const createModelInstance = async (model: string, provider?: string) => {
   if (provider === 'ollama') {
@@ -97,8 +101,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           tools = toolAggregator.getAllTools();
         }
 
-        const modelInstance = await createModelInstance(model, provider);
-
         // Detect if we're using OpenAI provider
         const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
         const isOpenAIProvider =
@@ -108,31 +110,30 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           (!provider && !providerConfig && model.startsWith('o1-'));
 
         // Create the stream with the appropriate model
-        const streamConfig: any = {
-          model: modelInstance,
+        const streamConfig: Parameters<typeof streamText>[0] = {
+          model: await createModelInstance(model, provider),
           messages: convertToModelMessages(messages),
-          maxSteps: 5, // Allow multiple tool calls
           stopWhen: stepCountIs(5),
-          // experimental_transform: smoothStream({
-          //   delayInMs: 20, // optional: defaults to 10ms
-          //   chunking: 'line', // optional: defaults to 'word'
-          // }),
-          // onError({ error }) {
-          // },
-        };
-
-        // Add OpenAI prompt caching configuration if using OpenAI provider
-        if (isOpenAIProvider) {
-          streamConfig.experimental = {
-            providerOptions: {
-              openai: {
-                // Use chatId or sessionId as cache key for better hit rates
-                // This ensures similar conversations share cached prefixes
-                promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
-              },
+          providerOptions: {
+            /**
+             * The following options are available for the OpenAI provider
+             * https://ai-sdk.dev/providers/ai-sdk-providers/openai#responses-models
+             */
+            openai: {
+              /**
+               * A cache key for manual prompt caching control.
+               * Used by OpenAI to cache responses for similar requests to optimize your cache hit rates.
+               */
+              ...(chatId || sessionId
+                ? {
+                    promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
+                  }
+                : {}),
+              maxToolCalls: vercelSdkConfig.maxToolCalls, // Allow multiple tool calls
             },
-          };
-        }
+            ollama: {},
+          },
+        };
 
         // Only add tools and toolChoice if tools are available
         if (tools && Object.keys(tools).length > 0) {
@@ -141,9 +142,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         const result = streamText(streamConfig);
-
-        // Store isOpenAIProvider for use in callback
-        const shouldLogCache = isOpenAIProvider;
 
         return reply.send(
           result.toUIMessageStreamResponse({
@@ -154,7 +152,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
               }
 
               // Log OpenAI cache metrics if available
-              if (shouldLogCache && 'usage' in result && result.usage) {
+              if (isOpenAIProvider && 'usage' in result && result.usage) {
                 const usage = result.usage as any;
                 const cachedTokens = usage?.cachedPromptTokens;
                 const promptTokens = usage?.promptTokens;

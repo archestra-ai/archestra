@@ -169,41 +169,42 @@ export default class PodmanRuntime {
     command,
     pipes: { onStdout, onStderr, onExit, onError },
   }: RunCommandOptions<T>): void {
+    const env = {
+      ...process.env,
+      /**
+       * See here, `CONTAINERS_HELPER_BINARY_DIR` isn't well documented, but here is what I've found:
+       * https://github.com/containers/podman/blob/0c4c9e4fbc0cf9cdcdcb5ea1683a2ffeddb03e77/hack/bats#L131
+       * https://docs.podman.io/en/stable/markdown/podman.1.html#environment-variables
+       */
+      CONTAINERS_HELPER_BINARY_DIR: this.helperBinariesDirectory,
+
+      /**
+       * Basically we don't want the podman machine to use the user's docker config (if one exists)
+       *
+       * From the podman docs (https://docs.podman.io/en/v5.2.2/markdown/podman-create.1.html#authfile-path):
+       *
+       * Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json on Linux, and $HOME/.
+       * config/containers/auth.json on Windows/macOS. The file is created by podman login. If the authorization
+       * state is not found there, $HOME/.docker/config.json is checked, which is set using docker login.
+       *
+       * Note: There is also the option to override the default path of the authentication file by setting the
+       * REGISTRY_AUTH_FILE environment variable. This can be done with export REGISTRY_AUTH_FILE=path.
+       */
+      REGISTRY_AUTH_FILE: this.registryAuthFilePath,
+
+      /**
+       * Custom containers.conf path. From the podman docs (https://docs.podman.io/en/stable/markdown/podman.1.html#environment-variables):
+       * If the CONTAINERS_CONF environment variable is set, then its value is used for the
+       * containers.conf file rather than the default.
+       */
+      CONTAINERS_CONF: this.containersConfPath,
+    };
     const commandForLogs = `${this.binaryPath} ${command.join(' ')}`;
 
-    log.info(`[Podman command]: running ${commandForLogs}`);
+    log.info(`[Podman command]: running ${commandForLogs} with env ${JSON.stringify(env)}`);
 
     const commandProcess = spawn(this.binaryPath, command, {
-      env: {
-        ...process.env,
-        /**
-         * See here, `CONTAINERS_HELPER_BINARY_DIR` isn't well documented, but here is what I've found:
-         * https://github.com/containers/podman/blob/0c4c9e4fbc0cf9cdcdcb5ea1683a2ffeddb03e77/hack/bats#L131
-         * https://docs.podman.io/en/stable/markdown/podman.1.html#environment-variables
-         */
-        CONTAINERS_HELPER_BINARY_DIR: this.helperBinariesDirectory,
-
-        /**
-         * Basically we don't want the podman machine to use the user's docker config (if one exists)
-         *
-         * From the podman docs (https://docs.podman.io/en/v5.2.2/markdown/podman-create.1.html#authfile-path):
-         *
-         * Path of the authentication file. Default is ${XDG_RUNTIME_DIR}/containers/auth.json on Linux, and $HOME/.
-         * config/containers/auth.json on Windows/macOS. The file is created by podman login. If the authorization
-         * state is not found there, $HOME/.docker/config.json is checked, which is set using docker login.
-         *
-         * Note: There is also the option to override the default path of the authentication file by setting the
-         * REGISTRY_AUTH_FILE environment variable. This can be done with export REGISTRY_AUTH_FILE=path.
-         */
-        REGISTRY_AUTH_FILE: this.registryAuthFilePath,
-
-        /**
-         * Custom containers.conf path. From the podman docs (https://docs.podman.io/en/stable/markdown/podman.1.html#environment-variables):
-         * If the CONTAINERS_CONF environment variable is set, then its value is used for the
-         * containers.conf file rather than the default.
-         */
-        CONTAINERS_CONF: this.containersConfPath,
-      },
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

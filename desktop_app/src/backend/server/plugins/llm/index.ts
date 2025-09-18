@@ -9,9 +9,13 @@ import { createOllama } from 'ollama-ai-provider-v2';
 import { type McpTools } from '@backend/archestraMcp';
 import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
+import { getModelContextWindow } from '@backend/llms/modelContextWindows';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
+import ollamaClient from '@backend/ollama/client';
+
+import sharedConfig from '../../../../config';
 
 interface StreamRequestBody {
   model: string;
@@ -22,6 +26,8 @@ interface StreamRequestBody {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   chatId?: number; // Chat ID to get chat-specific tools
 }
+
+const { vercelSdk: vercelSdkConfig } = sharedConfig;
 
 const createModelInstance = async (model: string, provider?: string) => {
   if (provider === 'ollama') {
@@ -67,6 +73,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: FastifyRequest<{ Body: StreamRequestBody }>, reply: FastifyReply) => {
       const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice, chatId } = request.body;
+      const isOllama = provider === 'ollama';
 
       try {
         // Set the chat context for Archestra MCP tools
@@ -97,42 +104,61 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           tools = toolAggregator.getAllTools();
         }
 
-        const modelInstance = await createModelInstance(model, provider);
-
-        // Detect if we're using OpenAI provider
-        const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
-        const isOpenAIProvider =
-          provider === 'openai' ||
-          providerConfig?.provider?.type === 'openai' ||
-          (!provider && !providerConfig && model.startsWith('gpt-')) ||
-          (!provider && !providerConfig && model.startsWith('o1-'));
-
         // Create the stream with the appropriate model
-        const streamConfig: any = {
-          model: modelInstance,
+        const streamConfig: Parameters<typeof streamText>[0] = {
+          model: await createModelInstance(model, provider),
           messages: convertToModelMessages(messages),
-          maxSteps: 5, // Allow multiple tool calls
-          stopWhen: stepCountIs(5),
-          // experimental_transform: smoothStream({
-          //   delayInMs: 20, // optional: defaults to 10ms
-          //   chunking: 'line', // optional: defaults to 'word'
-          // }),
-          // onError({ error }) {
-          // },
-        };
-
-        // Add OpenAI prompt caching configuration if using OpenAI provider
-        if (isOpenAIProvider) {
-          streamConfig.experimental = {
-            providerOptions: {
-              openai: {
-                // Use chatId or sessionId as cache key for better hit rates
-                // This ensures similar conversations share cached prefixes
-                promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
-              },
+          stopWhen: stepCountIs(vercelSdkConfig.maxToolCalls),
+          providerOptions: {
+            /**
+             * The following options are available for the OpenAI provider
+             * https://ai-sdk.dev/providers/ai-sdk-providers/openai#responses-models
+             */
+            openai: {
+              /**
+               * A cache key for manual prompt caching control.
+               * Used by OpenAI to cache responses for similar requests to optimize your cache hit rates.
+               */
+              ...(chatId || sessionId
+                ? {
+                    promptCacheKey: chatId ? `chat-${chatId}` : sessionId ? `session-${sessionId}` : undefined,
+                  }
+                : {}),
+              /**
+               * maxToolCalls for the most part is handled by stopWhen, but openAI provider also has its
+               * own unique config for this
+               */
+              maxToolCalls: vercelSdkConfig.maxToolCalls,
             },
-          };
-        }
+            ollama: {},
+          },
+          onFinish: async ({ usage, text: _text, finishReason: _finishReason }) => {
+            // Save token usage directly to the chat
+            if (usage && sessionId) {
+              let contextWindow: number;
+
+              // Get context window dynamically for Ollama, use hardcoded for others
+              if (isOllama) {
+                contextWindow = await ollamaClient.getModelContextWindow(model);
+              } else {
+                contextWindow = getModelContextWindow(model);
+              }
+
+              const tokenUsage = {
+                promptTokens: usage.inputTokens,
+                completionTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+                model: model,
+                contextWindow: contextWindow,
+              };
+
+              // Save token usage directly to the chat
+              await Chat.updateTokenUsage(sessionId, tokenUsage);
+
+              fastify.log.info(`Token usage saved for chat: ${JSON.stringify(tokenUsage)}`);
+            }
+          },
+        };
 
         // Only add tools and toolChoice if tools are available
         if (tools && Object.keys(tools).length > 0) {
@@ -142,27 +168,34 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
         const result = streamText(streamConfig);
 
-        // Store isOpenAIProvider for use in callback
-        const shouldLogCache = isOpenAIProvider;
-
         return reply.send(
           result.toUIMessageStreamResponse({
             originalMessages: messages,
+            onError: (error) => {
+              if (error == null) {
+                return 'unknown error';
+              }
+              if (typeof error === 'string') {
+                return error;
+              }
+              if (error instanceof Error) {
+                if ('responseBody' in error && error.responseBody) {
+                  if (typeof error.responseBody === 'string') {
+                    try {
+                      const parsed = JSON.parse(error.responseBody);
+                      return parsed.error || error.message;
+                    } catch {
+                      return error.message;
+                    }
+                  }
+                }
+                return error.message;
+              }
+              return 'An unexpected error occurred';
+            },
             onFinish: (result) => {
               if (sessionId) {
                 Chat.saveMessages(sessionId, result.messages);
-              }
-
-              // Log OpenAI cache metrics if available
-              if (shouldLogCache && 'usage' in result && result.usage) {
-                const usage = result.usage as any;
-                const cachedTokens = usage?.cachedPromptTokens;
-                const promptTokens = usage?.promptTokens;
-                if (cachedTokens !== undefined && promptTokens) {
-                  fastify.log.info(
-                    `OpenAI Prompt Cache - Model: ${model}, Cached tokens: ${cachedTokens}, Total prompt tokens: ${promptTokens}, Cache hit rate: ${((cachedTokens / promptTokens) * 100).toFixed(1)}%`
-                  );
-                }
               }
             },
           })

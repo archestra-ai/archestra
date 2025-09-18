@@ -72,5 +72,6 @@ export const initializeChat = (chat: ServerChatWithMessagesRepresentation): Chat
   return {
     ...chat,
     messages: chat.messages.map((message) => message.content as any), // Content is already a UIMessage from the backend
+    // Token usage fields will be included from the chat object
   };
 };

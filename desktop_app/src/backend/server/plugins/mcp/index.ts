@@ -60,7 +60,7 @@ export const createArchestraMcpServer = () => {
 
   archestraMcpServer.tool(
     'set_memory',
-    'Set or update a memory entry with a specific name and value',
+    'Set or update a memory entry with a specific name and value. Example: {"name": "favorite_color", "value": "blue"}',
     z.object({
       name: z.string().describe('The name/key for the memory entry'),
       value: z.string().describe('The value/content to store'),
@@ -177,8 +177,14 @@ export const createArchestraMcpServer = () => {
   // Tool management tools
   archestraMcpServer.tool(
     'list_available_tools',
-    'List all available MCP tools showing which are enabled for the current chat',
-    async () => {
+    'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
+    z.object({
+      mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
+    }) as any,
+    async (context: any) => {
+      // Workaround for fastify-mcp bug: get arguments from global
+      const { mcp_server } = global._mcpToolArguments || {};
+
       try {
         const chatId = ArchestraMcpContext.getCurrentChatId();
         if (!chatId) {
@@ -222,37 +228,59 @@ export const createArchestraMcpServer = () => {
           });
         }
 
-        // Format the output
-        const formattedOutput = Object.entries(toolsByServer)
-          .map(([serverName, tools]) => {
-            const enabledCount = tools.filter((t) => t.selected).length;
-            const header = `**${serverName}** (${enabledCount}/${tools.length} enabled)`;
+        // If no mcp_server specified, list all servers with hint
+        if (!mcp_server) {
+          const serverList = Object.entries(toolsByServer)
+            .map(([serverName, tools]) => {
+              const enabledCount = tools.filter((t) => t.selected).length;
+              return `• **${serverName}** (${enabledCount}/${tools.length} tools enabled)`;
+            })
+            .join('\n');
 
-            const toolList = tools
-              .map((t) => {
-                const status = t.selected ? '✓' : '✗';
-                const analysisInfo =
-                  t.analysis?.is_read !== null
-                    ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
-                    : '';
-                return `  ${status} ${t.id}${analysisInfo}: ${t.description || 'No description'}`;
-              })
-              .join('\n');
+          const exampleServer = Object.keys(toolsByServer)[0] || 'filesystem';
 
-            return `${header}\n${toolList}`;
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Available MCP Servers:\n\n${serverList}\n\nTo see tools for a specific server, use:\n{"mcp_server": "${exampleServer}"}`,
+              },
+            ],
+          };
+        }
+
+        // If mcp_server specified, show tools for that server
+        const serverTools = toolsByServer[mcp_server];
+
+        if (!serverTools) {
+          const availableServers = Object.keys(toolsByServer).join(', ');
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Server "${mcp_server}" not found.\n\nAvailable servers: ${availableServers}`,
+              },
+            ],
+          };
+        }
+
+        const enabledCount = serverTools.filter((t) => t.selected).length;
+        const toolList = serverTools
+          .map((t) => {
+            const status = t.selected ? '✓' : '✗';
+            const analysisInfo =
+              t.analysis?.is_read !== null
+                ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
+                : '';
+            return `  ${status} ${t.id}${analysisInfo}`;
           })
-          .join('\n\n');
-
-        const summary =
-          selectedTools === null
-            ? 'All tools are currently enabled (default)'
-            : `${selectedSet.size} out of ${allTools.length} tools enabled`;
+          .join('\n');
 
         return {
           content: [
             {
               type: 'text',
-              text: `${summary}\n\n${formattedOutput}`,
+              text: `**${mcp_server}** (${enabledCount}/${serverTools.length} tools enabled)\n\n${toolList}`,
             },
           ],
         };
@@ -271,7 +299,7 @@ export const createArchestraMcpServer = () => {
 
   archestraMcpServer.tool(
     'enable_tools',
-    'Enable specific tools for use in the current chat. First call list_available_tools to see tool IDs, then pass them here. Example: {"toolIds": ["filesystem__read_file", "filesystem__write_file", "remote-mcp__search_repositories"]}',
+    'Enable specific tools for use in the current chat. Use list_available_tools to see tool IDs if you don\'t have them. Example: {"toolIds": ["filesystem__read_file", "filesystem__write_file", "remote-mcp__search_repositories"]}',
     z.object({
       toolIds: z
         .array(z.string())

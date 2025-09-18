@@ -1,7 +1,7 @@
 {
   "name": "Archestra",
   "productName": "Archestra",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Enterprise MCP platform for AI Agents",
   "license": "MIT",
   "repository": {
@@ -134,8 +134,8 @@
     "fastify-type-provider-zod": "^5.0.3",
     "lucide-react": "^0.544.0",
     "ollama": "^0.5.18",
-    "ollama-ai-provider": "^1.2.0",
     "ollama-ai-provider-v2": "1.3.1",
+    "posthog-js": "^1.266.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-hook-form": "^7.62.0",

@@ -178,6 +178,18 @@ export type WebSocketMessageInput =
         message: string;
         error?: string;
       };
+    }
+  | {
+      type: 'chat-token-usage-updated';
+      payload: {
+        chatId: number;
+        totalPromptTokens: number | null;
+        totalCompletionTokens: number | null;
+        totalTokens: number | null;
+        lastModel: string | null;
+        lastContextWindow: number | null;
+        contextUsagePercent: number;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -193,6 +205,11 @@ export type ChatWithMessagesInput = {
         | Array<unknown>
       )
     | null;
+  totalPromptTokens: number | null;
+  totalCompletionTokens: number | null;
+  totalTokens: number | null;
+  lastModel: string | null;
+  lastContextWindow: number | null;
   createdAt: string;
   updatedAt: string;
   messages: Array<{
@@ -219,7 +236,7 @@ export type CloudProviderWithConfigInput = {
   validatedAt: string | null;
 };
 
-export type SupportedCloudProvidersInput = 'anthropic' | 'openai' | 'deepseek' | 'gemini' | 'ollama';
+export type SupportedCloudProvidersInput = 'anthropic' | 'openai' | 'deepseek' | 'gemini';
 
 export type SupportedCloudProviderModelInput = {
   id: string;
@@ -632,6 +649,18 @@ export type WebSocketMessage =
         message: string;
         error?: string;
       };
+    }
+  | {
+      type: 'chat-token-usage-updated';
+      payload: {
+        chatId: number;
+        totalPromptTokens: number | null;
+        totalCompletionTokens: number | null;
+        totalTokens: number | null;
+        lastModel: string | null;
+        lastContextWindow: number | null;
+        contextUsagePercent: number;
+      };
     };
 
 export type ChatWithMessages = {
@@ -647,6 +676,11 @@ export type ChatWithMessages = {
         | Array<unknown>
       )
     | null;
+  totalPromptTokens: number | null;
+  totalCompletionTokens: number | null;
+  totalTokens: number | null;
+  lastModel: string | null;
+  lastContextWindow: number | null;
   createdAt: string;
   updatedAt: string;
   messages: Array<{
@@ -673,7 +707,7 @@ export type CloudProviderWithConfig = {
   validatedAt: string | null;
 };
 
-export type SupportedCloudProviders = 'anthropic' | 'openai' | 'deepseek' | 'gemini' | 'ollama';
+export type SupportedCloudProviders = 'anthropic' | 'openai' | 'deepseek' | 'gemini';
 
 export type SupportedCloudProviderModel = {
   id: string;
@@ -1253,6 +1287,74 @@ export type GetChatAvailableToolsResponses = {
 };
 
 export type GetChatAvailableToolsResponse = GetChatAvailableToolsResponses[keyof GetChatAvailableToolsResponses];
+
+export type DeleteChatMessageData = {
+  body?: never;
+  path: {
+    /**
+     * The content ID (from the ai SDK) of the message to update (not the database pk ID)
+     */
+    id: string;
+  };
+  query?: never;
+  url: '/api/message/{id}';
+};
+
+export type DeleteChatMessageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type DeleteChatMessageError = DeleteChatMessageErrors[keyof DeleteChatMessageErrors];
+
+export type DeleteChatMessageResponses = {
+  /**
+   * Default Response
+   */
+  204: void;
+};
+
+export type DeleteChatMessageResponse = DeleteChatMessageResponses[keyof DeleteChatMessageResponses];
+
+export type UpdateChatMessageData = {
+  body: {
+    content: unknown;
+  };
+  path: {
+    /**
+     * The content ID (from the ai SDK) of the message to update (not the database pk ID)
+     */
+    id: string;
+  };
+  query?: never;
+  url: '/api/message/{id}';
+};
+
+export type UpdateChatMessageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
+
+export type UpdateChatMessageResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+  };
+};
+
+export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
 export type GetAvailableCloudProvidersData = {
   body?: never;

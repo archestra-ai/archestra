@@ -9,6 +9,7 @@ import {
   installMcpServerWithOauth,
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 import { ConnectedMcpServer } from '@ui/types';
 
@@ -189,6 +190,14 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
           if (data) {
             get().addMcpServerToInstalledMcpServers(data);
+
+            // Track browser auth installation in PostHog
+            posthogClient.capture('mcp_server_installed', {
+              serverId: data.id,
+              serverName: data.name || displayName,
+              serverType: data.serverType,
+              authMethod: 'browser',
+            });
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -264,6 +273,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         }
 
         get().addMcpServerToInstalledMcpServers(newlyInstalledMcpServer);
+
+        // Track MCP server installation in PostHog
+        posthogClient.capture('mcp_server_installed', {
+          serverId: newlyInstalledMcpServer.id,
+          serverName: newlyInstalledMcpServer.name,
+          serverType: newlyInstalledMcpServer.serverType,
+        });
       }
 
       // Mark installation as completed in StatusBar
@@ -316,6 +332,12 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
       // Remove from MCP servers store
       useMcpServersStore.getState().removeMcpServerFromInstalledMcpServers(mcpServerId);
+
+      // Track MCP server uninstallation in PostHog
+      posthogClient.capture('mcp_server_uninstalled', {
+        serverId: mcpServerId,
+        serverName: serverName,
+      });
 
       // Mark uninstallation as completed
       updateTask(`uninstall-${mcpServerId}`, {

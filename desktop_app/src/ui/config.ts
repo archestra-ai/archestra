@@ -33,5 +33,10 @@ export default {
   },
   chat: {
     defaultTitle: 'New Agent',
+    systemMemoriesMessageId: 'system-memories',
+  },
+  posthog: {
+    apiKey: 'phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7',
+    host: 'https://eu.i.posthog.com',
   },
 };

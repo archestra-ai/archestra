@@ -1,5 +1,5 @@
 import { type UIMessage } from 'ai';
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import db from '@backend/database';
@@ -159,12 +159,27 @@ export default class ChatModel {
     await this.updateSelectedTools(chatId, []);
   }
 
-  static async generateAndUpdateChatTitle(chatId: number, messages: UIMessage[]): Promise<void> {
+  static async conditionallyGenerateAndUpdateChatTitle(
+    chatId: number,
+    currentTitle: string | null,
+    messages: UIMessage[]
+  ): Promise<void> {
+    const messagesToConsiderForTitle = messages.filter((msg) => msg.role === 'user' || msg.role === 'assistant');
+
+    /**
+     * Only generate a title if the chat has no title yet and has 4 messages
+     *
+     * NOTE: we only consider messages between the user and the LLM (ignore system messages)
+     */
+    if (currentTitle || messagesToConsiderForTitle.length < 4) {
+      return;
+    }
+
     try {
       // Extract text content from the first few messages for title generation
       const messageTexts: string[] = [];
 
-      for (const msg of messages.slice(0, 4)) {
+      for (const msg of messagesToConsiderForTitle.slice(0, 4)) {
         // UIMessage has a parts array, extract text from text parts
         let textContent = '';
 
@@ -325,6 +340,65 @@ export default class ChatModel {
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
   }
 
+  static async updateTokenUsage(
+    sessionId: string,
+    tokenUsage: {
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      model?: string;
+      contextWindow?: number;
+    }
+  ): Promise<void> {
+    if (!tokenUsage || !tokenUsage.totalTokens) {
+      return;
+    }
+
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Updating token usage for chat ${chat.id}: ${JSON.stringify(tokenUsage)}`);
+
+    // Update the chat with cumulative token usage
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
+        totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
+        totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
+        lastModel: tokenUsage.model,
+        lastContextWindow: tokenUsage.contextWindow,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage update
+    const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
+
+    if (updatedChat) {
+      WebSocketService.broadcast({
+        type: 'chat-token-usage-updated',
+        payload: {
+          chatId: chat.id,
+          totalPromptTokens: updatedChat.totalPromptTokens,
+          totalCompletionTokens: updatedChat.totalCompletionTokens,
+          totalTokens: updatedChat.totalTokens,
+          lastModel: updatedChat.lastModel,
+          lastContextWindow: updatedChat.lastContextWindow,
+          contextUsagePercent:
+            updatedChat.lastContextWindow && updatedChat.totalTokens
+              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
+              : 0,
+        },
+      });
+    }
+  }
+
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
     // First, find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
@@ -352,9 +426,6 @@ export default class ChatModel {
       });
     }
 
-    // Generate a title if the chat has 4+ messages and no title yet
-    if (messages.length >= 4 && !chat.title) {
-      await this.generateAndUpdateChatTitle(chat.id, messages);
-    }
+    await this.conditionallyGenerateAndUpdateChatTitle(chat.id, chat.title, messages);
   }
 }

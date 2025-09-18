@@ -1,5 +1,3 @@
-import { DEFAULT_SYSTEM_PROMPT } from '../../../constants';
-
 class BaseLocalStorage {
   static keyPrefix: string = '';
 
@@ -25,17 +23,5 @@ export class OllamaLocalStorage extends BaseLocalStorage {
 
   static setSelectedModel(model: string) {
     super.set('selectedModel', model);
-  }
-}
-
-export class SettingsLocalStorage extends BaseLocalStorage {
-  static keyPrefix = 'settings';
-
-  static getSystemPrompt() {
-    return super.get('systemPrompt') || DEFAULT_SYSTEM_PROMPT;
-  }
-
-  static setSystemPrompt(prompt: string) {
-    super.set('systemPrompt', prompt);
   }
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.8](https://github.com/archestra-ai/archestra/compare/v0.0.7...v0.0.8) (2025-09-18)
+
+
+### Features
+
+* improve running chats in background ([#377](https://github.com/archestra-ai/archestra/issues/377)) ([1d8dc65](https://github.com/archestra-ai/archestra/commit/1d8dc65947d2df0d0c2a174352ff463731f9d20f))
+
+
+### Bug Fixes
+
+* hide setup tile when no model ([#472](https://github.com/archestra-ai/archestra/issues/472)) ([20dec1c](https://github.com/archestra-ai/archestra/commit/20dec1c9bc382e43ee449870fcfc6aa7812a2587))
+
 ## [0.0.7](https://github.com/archestra-ai/archestra/compare/v0.0.6...v0.0.7) (2025-09-18)
 
 

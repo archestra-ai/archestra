@@ -511,8 +511,6 @@ function ChatPage() {
     return null;
   }
 
-  const isChatEmpty = messages.length === 0;
-
   // Early return if no current chat exists (e.g., during deletion)
   if (!currentChat) {
     return (

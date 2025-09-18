@@ -521,6 +521,7 @@ function ChatPage() {
         <ChatInput
           input=""
           disabled={true}
+          rerunAgentDisabled={true}
           isLoading={false}
           handleInputChange={() => {}}
           handleSubmit={() => {}}

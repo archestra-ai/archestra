@@ -155,9 +155,6 @@ export default class CloudProviderModel {
     const configs = await CloudProviderModel.getAll();
     const models: SupportedCloudProviderModel[] = [];
 
-    // Always add Archestra LLM as an available model
-    models.push({ id: 'archestra-llm', provider: 'gemini' });
-
     for (const config of configs) {
       if (!config.enabled) continue;
 

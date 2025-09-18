@@ -36,16 +36,6 @@ const createModelInstance = async (model: string, provider?: string) => {
     return ollamaClient(model);
   }
 
-  // Check if this is the Archestra LLM model
-  if (model === 'archestra-llm') {
-    const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
-    const google = createGoogleGenerativeAI({
-      baseURL: 'http://localhost:8888/',
-      apiKey: 'will_be_added_on_proxy',
-    });
-    return google('gemini-1.5-flash');
-  }
-
   const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
 
   if (!providerConfig) {

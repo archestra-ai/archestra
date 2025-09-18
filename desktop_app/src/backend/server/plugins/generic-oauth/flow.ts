@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 
 import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
+import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider
@@ -210,10 +211,7 @@ async function exchangeCodeForTokens(
   // Check if this provider requires oauth-proxy
   if (config.requires_proxy && serverId) {
     log.info(`Using oauth-proxy for token exchange for ${config.name}`);
-    const { OAuthProxyClient } = await import('@backend/services/oauth-proxy-client');
-    const proxyClient = new OAuthProxyClient();
-
-    return proxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
+    return OAuthProxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
       grant_type: 'authorization_code',
       code,
       redirect_uri: config.redirect_uris[0],

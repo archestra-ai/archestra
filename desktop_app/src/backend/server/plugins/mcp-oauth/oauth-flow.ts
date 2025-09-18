@@ -9,7 +9,7 @@ import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/sdk/c
 import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import { oauthProxyClient } from '@backend/services/oauth-proxy-client';
+import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 import { McpOAuthProvider } from './provider';
@@ -69,7 +69,7 @@ export async function performOAuth(provider: McpOAuthProvider, config: OAuthServ
 
         // Exchange authorization code for tokens via OAuth proxy
         // Pass MCP server URL for discovery, not the token endpoint
-        const tokens = await oauthProxyClient.exchangeTokens(
+        const tokens = await OAuthProxyClient.exchangeTokens(
           provider.getServerId(),
           config.server_url, // Pass server URL for OAuth discovery
           {

@@ -6,6 +6,8 @@
  */
 import log from '@backend/utils/logger';
 
+const OAUTH_PROXY_BASE_URL = process.env.OAUTH_PROXY_URL || 'https://oauth.dev.archestra.ai';
+
 export interface OAuthTokens {
   access_token: string;
   token_type: string;
@@ -22,42 +24,32 @@ export interface OAuthProxyRequest {
   [key: string]: any;
 }
 
-export class OAuthProxyClient {
-  private baseUrl: string;
-
-  constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.OAUTH_PROXY_URL || 'https://oauth.dev.archestra.ai/oauth/callback';
-  }
-
+class OAuthProxyClient {
   /**
    * Exchange authorization code for access tokens via generic OAuth route
    */
-  async exchangeGenericOAuthTokens(
+  static async exchangeGenericOAuthTokens(
     mcpServerId: string,
     tokenEndpoint: string,
     params: Record<string, any>
   ): Promise<OAuthTokens> {
     log.info(`Exchanging generic OAuth tokens via oauth-proxy for MCP server: ${mcpServerId}`);
 
-    const requestBody = {
-      grant_type: params.grant_type,
-      mcp_server_id: mcpServerId,
-      token_endpoint: tokenEndpoint,
-      code: params.code,
-      redirect_uri: params.redirect_uri,
-      client_secret: 'REDACTED', // Will be replaced by proxy with real secret
-    };
-
-    const proxyUrl = `${this.baseUrl}/oauth/token`;
-
     try {
-      const response = await fetch(proxyUrl, {
+      const response = await fetch(`${OAUTH_PROXY_BASE_URL}/oauth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          grant_type: params.grant_type,
+          mcp_server_id: mcpServerId,
+          token_endpoint: tokenEndpoint,
+          code: params.code,
+          redirect_uri: params.redirect_uri,
+          client_secret: 'REDACTED', // Will be replaced by proxy with real secret
+        }),
         signal: AbortSignal.timeout(30000),
       });
 
@@ -81,33 +73,29 @@ export class OAuthProxyClient {
   /**
    * Exchange authorization code or refresh token for access tokens via oauth-proxy (MCP SDK route)
    */
-  async exchangeTokens(
+  static async exchangeTokens(
     mcpServerId: string,
     serverUrl: string, // Now expects MCP server URL for discovery, not token endpoint
     params: Record<string, any>
   ): Promise<OAuthTokens> {
     log.info(`Exchanging tokens via oauth-proxy for MCP server: ${mcpServerId}`);
 
-    // Transform params for MCP SDK route
-    const requestBody = {
-      authorization_code: params.code,
-      code_verifier: params.code_verifier,
-      redirect_uri: params.redirect_uri,
-      resource: params.resource,
-      authorization_server_url: serverUrl, // Pass MCP server URL for OAuth discovery
-    };
-
-    // Use the new MCP SDK-based proxy route for perfect compatibility
-    const proxyUrl = `${this.baseUrl}/mcp/sdk-token/${mcpServerId}`;
-
     try {
-      const response = await fetch(proxyUrl, {
+      // Use the new MCP SDK-based proxy route for perfect compatibility
+      const response = await fetch(`${OAUTH_PROXY_BASE_URL}/mcp/sdk-token/${mcpServerId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        // Transform params for MCP SDK route
+        body: JSON.stringify({
+          authorization_code: params.code,
+          code_verifier: params.code_verifier,
+          redirect_uri: params.redirect_uri,
+          resource: params.resource,
+          authorization_server_url: serverUrl, // Pass MCP server URL for OAuth discovery
+        }),
         // Add timeout for safety
         signal: AbortSignal.timeout(30000),
       });
@@ -126,86 +114,6 @@ export class OAuthProxyClient {
       throw new Error(`OAuth proxy token exchange failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-
-  /**
-   * Revoke tokens via oauth-proxy
-   */
-  async revokeTokens(mcpServerId: string, revocationEndpoint: string, token: string): Promise<void> {
-    if (!revocationEndpoint) {
-      log.info(`No revocation endpoint provided for MCP server ${mcpServerId}, skipping revocation`);
-      return;
-    }
-
-    log.info(`Revoking tokens via oauth-proxy for MCP server: ${mcpServerId}`);
-
-    try {
-      const response = await fetch(`${this.baseUrl}/oauth/revoke`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          mcp_server_id: mcpServerId,
-          revocation_endpoint: revocationEndpoint,
-          token,
-        }),
-        // Add timeout for safety
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        log.warn(`Token revocation failed (non-critical):`, errorData);
-        // Don't throw error for revocation failures - they're not critical
-        return;
-      }
-
-      log.info(`Token revocation successful via oauth-proxy for MCP server: ${mcpServerId}`);
-    } catch (error) {
-      log.warn(`Token revocation error (non-critical) for ${mcpServerId}:`, error);
-      // Don't throw error for revocation failures - they're not critical
-    }
-  }
-
-  /**
-   * Check if oauth-proxy server is available
-   */
-  async isAvailable(): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-      return response.ok;
-    } catch (error) {
-      log.warn(`OAuth proxy health check failed:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Get allowed destinations from oauth-proxy
-   */
-  async getAllowedDestinations(): Promise<string[]> {
-    try {
-      const response = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (!response.ok) {
-        return [];
-      }
-
-      const data = await response.json();
-      return data.allowedDestinations || [];
-    } catch (error) {
-      log.warn(`Failed to get allowed destinations from oauth-proxy:`, error);
-      return [];
-    }
-  }
 }
 
-// Export a default instance
-export const oauthProxyClient = new OAuthProxyClient();
+export default OAuthProxyClient;

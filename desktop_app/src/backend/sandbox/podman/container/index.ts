@@ -20,7 +20,6 @@ import {
 } from '@backend/clients/libpod/gen';
 import config from '@backend/config';
 import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@backend/models/mcpServer';
-import { getBrowserAuthProvider, hasBrowserAuthProvider } from '@backend/server/plugins/browser-auth/provider-registry';
 import log from '@backend/utils/logger';
 import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
@@ -113,8 +112,8 @@ export default class PodmanContainer {
     );
 
     // Check if this is a Docker-style configuration
-    if (command === 'docker' || command === 'podman') {
-      // Parse Docker/Podman run command to extract image and real args
+    if (command === 'docker') {
+      // Parse Docker run command to extract image and real args
       const dockerConfig = PodmanContainer.parseDockerCommand(args || []);
       this.customImage = dockerConfig.image;
       this.command = dockerConfig.command;
@@ -127,9 +126,6 @@ export default class PodmanContainer {
       this.envVars = env;
     }
 
-    // Handle OAuth token mapping for browser auth providers
-    this.mapOAuthTokensToEnvironmentVariables(mcpServer);
-
     // Set the socket path for the container (needed for attach operations)
     this.socketPath = socketPath;
 
@@ -138,65 +134,6 @@ export default class PodmanContainer {
     this.startupPercentage = 0;
     this.statusMessage = 'Container not yet created';
     this.statusError = null;
-  }
-
-  /**
-   * Map OAuth tokens to environment variables for browser auth providers
-   */
-  private mapOAuthTokensToEnvironmentVariables(mcpServer: McpServer) {
-    try {
-      // Check if this server has browser-based auth config
-      const archestra_config = mcpServer.oauthConfig ? JSON.parse(mcpServer.oauthConfig as any) : null;
-      const providerName = archestra_config?.browser_based?.provider;
-
-      if (!providerName) {
-        log.info(`No browser-based provider configured for ${mcpServer.name}`);
-        return;
-      }
-
-      // Check if we have OAuth tokens
-      if (!mcpServer.oauthTokens) {
-        log.info(`No OAuth tokens found for ${mcpServer.name}`);
-        return;
-      }
-
-      // Get the browser auth provider
-      if (!hasBrowserAuthProvider(providerName)) {
-        log.warn(`Browser auth provider ${providerName} not found`);
-        return;
-      }
-
-      const provider = getBrowserAuthProvider(providerName);
-      const tokenMapping = provider.browserAuthConfig?.tokenMapping;
-
-      if (!tokenMapping) {
-        log.warn(`No token mapping defined for provider ${providerName}`);
-        return;
-      }
-
-      // Map tokens to environment variables
-      const oauthTokens = mcpServer.oauthTokens as any;
-
-      // Handle primary token
-      if (tokenMapping.primary && oauthTokens.primary_token) {
-        this.envVars[tokenMapping.primary] = oauthTokens.primary_token;
-        log.info(`Mapped primary token to ${tokenMapping.primary} for ${mcpServer.name}`);
-      }
-
-      // Handle secondary token
-      if (tokenMapping.secondary && oauthTokens.secondary_token) {
-        this.envVars[tokenMapping.secondary] = oauthTokens.secondary_token;
-        log.info(`Mapped secondary token to ${tokenMapping.secondary} for ${mcpServer.name}`);
-      }
-
-      // Handle standard OAuth access token as fallback
-      if (!oauthTokens.primary_token && oauthTokens.access_token && tokenMapping.primary) {
-        this.envVars[tokenMapping.primary] = oauthTokens.access_token;
-        log.info(`Mapped OAuth access token to ${tokenMapping.primary} for ${mcpServer.name}`);
-      }
-    } catch (error) {
-      log.error(`Failed to map OAuth tokens to environment variables for ${mcpServer.name}:`, error);
-    }
   }
 
   /**

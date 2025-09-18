@@ -40,15 +40,6 @@ export function setupProviderBrowserAuthHandlers() {
     return handleBrowserAuth(provider);
   });
 
-  // Legacy support for Slack (backward compatibility)
-  ipcMain.handle('slack-auth', async () => {
-    const provider = getBrowserAuthProvider('slack-browser');
-    if (!provider.browserAuthConfig?.enabled) {
-      throw new Error('Browser auth not enabled for Slack');
-    }
-    return handleBrowserAuth(provider);
-  });
-
   log.info('[Browser Auth] Provider browser auth handlers registered');
 }
 

@@ -29,6 +29,26 @@ for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
   binaryFilePaths.push(binaryFilePath);
 }
 
+// Add config files to be included in the packaged app
+const CONFIG_DIRECTORY = './resources/config';
+const configFilePaths: string[] = [];
+if (fs.existsSync(CONFIG_DIRECTORY)) {
+  // Recursively find all config files
+  const walkDir = (dir: string): void => {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        configFilePaths.push(filePath);
+      } else if (stat.isDirectory()) {
+        walkDir(filePath);
+      }
+    }
+  };
+  walkDir(CONFIG_DIRECTORY);
+}
+
 const forgeConfig: ForgeConfig = {
   packagerConfig: {
     /**
@@ -39,7 +59,7 @@ const forgeConfig: ForgeConfig = {
      * https://electron.github.io/packager/main/interfaces/Options.html#asar
      */
     asar: true,
-    extraResource: binaryFilePaths,
+    extraResource: [...binaryFilePaths, ...configFilePaths],
     icon: './assets/icons/icon',
     name: productName,
     appBundleId,

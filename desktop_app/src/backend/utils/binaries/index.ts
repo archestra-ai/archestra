@@ -64,6 +64,19 @@ export const getBinariesDirectory = () => {
     : path.join(app.getAppPath(), 'resources', 'bin', PLATFORM, ARCHITECTURE);
 };
 
+/**
+ * Get the path to the "config" directory
+ *
+ * Similar to getBinariesDirectory, but for configuration files
+ */
+export const getConfigDirectory = () => {
+  if (typeof app === 'undefined' || !app || !app.isPackaged) {
+    return path.join(process.cwd(), 'resources', 'config');
+  }
+
+  return app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources', 'config');
+};
+
 export const getBinaryExecPath = (binaryName: SupportedBinary) => {
   const binaryPath = path.resolve(
     path.join(getBinariesDirectory(), `${binaryName}${PLATFORM === 'win' ? '.exe' : ''}`)

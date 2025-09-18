@@ -4,7 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import PodmanImage from '@backend/sandbox/podman/image';
-import { getBinariesDirectory, getBinaryExecPath } from '@backend/utils/binaries';
+import { getBinariesDirectory, getBinaryExecPath, getConfigDirectory } from '@backend/utils/binaries';
 import log from '@backend/utils/logger';
 import { PODMAN_REGISTRY_AUTH_FILE_PATH } from '@backend/utils/paths';
 
@@ -137,6 +137,11 @@ export default class PodmanRuntime {
    */
   private helperBinariesDirectory = getBinariesDirectory();
 
+  /**
+   * Path to the custom containers.conf file
+   */
+  private containersConfPath = path.join(getConfigDirectory(), 'podman', 'containers.conf');
+
   constructor(onMachineInstallationSuccess: () => void, onMachineInstallationError: (error: Error) => void) {
     this.baseImage = new PodmanImage();
 
@@ -191,6 +196,13 @@ export default class PodmanRuntime {
          * REGISTRY_AUTH_FILE environment variable. This can be done with export REGISTRY_AUTH_FILE=path.
          */
         REGISTRY_AUTH_FILE: this.registryAuthFilePath,
+
+        /**
+         * Custom containers.conf path. From the podman docs (https://docs.podman.io/en/stable/markdown/podman.1.html#environment-variables):
+         * If the CONTAINERS_CONF environment variable is set, then its value is used for the
+         * containers.conf file rather than the default.
+         */
+        CONTAINERS_CONF: this.containersConfPath,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

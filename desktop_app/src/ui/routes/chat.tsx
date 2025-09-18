@@ -149,12 +149,16 @@ function ChatPage() {
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+      // Clear the pending prompt on error
+      if (currentChatSessionId) {
+        removePendingPrompt(currentChatSessionId);
+      }
       // Add error message to the chat display
       const errorText =
         typeof error === 'string' ? error : error.message || 'An error occurred while processing your request.';
       const errorMessage: UIMessage = {
         id: `error-${Date.now()}`,
-        role: 'error' as any, // Custom error role
+        role: 'assistant', // Use standard assistant role for errors
         parts: [
           {
             type: 'text',

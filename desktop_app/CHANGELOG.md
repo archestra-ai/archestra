@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.7](https://github.com/archestra-ai/archestra/compare/v0.0.6...v0.0.7) (2025-09-18)
+
+
+### Features
+
+* Add archestra-llm provider and llm-proxy service ([#460](https://github.com/archestra-ai/archestra/issues/460)) ([243518c](https://github.com/archestra-ai/archestra/commit/243518ce1ee01b31f17e1e60433ec160b699faed))
+* Add stop button and fix bugs in error display ([#461](https://github.com/archestra-ai/archestra/issues/461)) ([4e6a853](https://github.com/archestra-ai/archestra/commit/4e6a85309579916a4ca2a1df6063a8e37c760d8c))
+
+
+### Bug Fixes
+
+* errors when connecting Slack and GitHub connectors ([#433](https://github.com/archestra-ai/archestra/issues/433)) ([da05c1b](https://github.com/archestra-ai/archestra/commit/da05c1ba9010a37eb7e53278bf503fd577eb366f))
+
 ## [0.0.6](https://github.com/archestra-ai/archestra/compare/v0.0.5...v0.0.6) (2025-09-17)
 
 

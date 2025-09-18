@@ -12,6 +12,13 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
     const textPart = message.parts.find((part) => part.type === 'text');
     if (textPart && 'text' in textPart) {
       errorText = textPart.text;
+      // Try to parse and format JSON
+      try {
+        const parsed = JSON.parse(errorText);
+        errorText = JSON.stringify(parsed, null, 2);
+      } catch {
+        // Not JSON, use as-is
+      }
     }
   }
 

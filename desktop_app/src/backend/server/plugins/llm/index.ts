@@ -132,8 +132,9 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             },
             ollama: {},
           },
-          onFinish: async ({ usage, text: _text, finishReason: _finishReason }) => {
-            // Save token usage directly to the chat
+          onFinish: async ({ response, usage, text: _text, finishReason: _finishReason }) => {
+            console.log(JSON.stringify(response.messages));
+            // Save chat token usage
             if (usage && sessionId) {
               let contextWindow: number;
 
@@ -172,30 +173,18 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           result.toUIMessageStreamResponse({
             originalMessages: messages,
             onError: (error) => {
-              if (error == null) {
-                return 'unknown error';
-              }
-              if (typeof error === 'string') {
-                return error;
-              }
-              if (error instanceof Error) {
-                if ('responseBody' in error && error.responseBody) {
-                  if (typeof error.responseBody === 'string') {
-                    try {
-                      const parsed = JSON.parse(error.responseBody);
-                      return parsed.error || error.message;
-                    } catch {
-                      return error.message;
-                    }
-                  }
-                }
-                return error.message;
-              }
-              return 'An unexpected error occurred';
+              return JSON.stringify(error);
             },
-            onFinish: (result) => {
+            onFinish: ({ messages }) => {
               if (sessionId) {
-                Chat.saveMessages(sessionId, result.messages);
+                // Check if last message has empty parts and strip it if so
+                if (messages.length > 0 && messages[messages.length - 1].parts.length === 0) {
+                  messages = messages.slice(0, -1);
+                }
+                // Only save if there are messages remaining
+                if (messages.length > 0) {
+                  Chat.saveMessages(sessionId, messages);
+                }
               }
             },
           })

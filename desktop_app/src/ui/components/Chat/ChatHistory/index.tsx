@@ -88,6 +88,10 @@ const Message = ({
     case 'user':
       return <UserMessage {...commonProps} />;
     case 'assistant':
+      // Check if this is an error message (has error ID pattern)
+      if (message.id.startsWith('error-')) {
+        return <ErrorMessage message={message} />;
+      }
       return (
         <AssistantMessage
           {...commonProps}
@@ -95,8 +99,6 @@ const Message = ({
           isRegenerating={regeneratingIndex === messageIndex}
         />
       );
-    case 'error':
-      return <ErrorMessage message={message} />;
     case 'system':
       // Check if this is a memories message
       if (message.id === systemMemoriesMessageId) {

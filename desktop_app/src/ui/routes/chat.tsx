@@ -149,12 +149,16 @@ function ChatPage() {
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+      // Clear the pending prompt on error
+      if (currentChatSessionId) {
+        removePendingPrompt(currentChatSessionId);
+      }
       // Add error message to the chat display
       const errorText =
         typeof error === 'string' ? error : error.message || 'An error occurred while processing your request.';
       const errorMessage: UIMessage = {
         id: `error-${Date.now()}`,
-        role: 'error' as any, // Custom error role
+        role: 'assistant', // Use standard assistant role for errors
         parts: [
           {
             type: 'text',
@@ -507,6 +511,29 @@ function ChatPage() {
     return null;
   }
 
+  // Early return if no current chat exists (e.g., during deletion)
+  if (!currentChat) {
+    return (
+      <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <EmptyChatState onPromptSelect={handlePromptSelect} />
+        </div>
+        <ChatInput
+          input=""
+          disabled={true}
+          rerunAgentDisabled={true}
+          isLoading={false}
+          handleInputChange={() => {}}
+          handleSubmit={() => {}}
+          stop={() => {}}
+          hasMessages={false}
+          status="ready"
+          isSubmitting={false}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full gap-2 max-w-full overflow-hidden">
       {isChatEmpty && !pendingPrompt ? (
@@ -547,6 +574,8 @@ function ChatPage() {
           stop={stop}
           hasMessages={messages.length > 0}
           onRerunAgent={handleRerunAgent}
+          status={status}
+          isSubmitting={isSubmitting}
         />
       </div>
     </div>

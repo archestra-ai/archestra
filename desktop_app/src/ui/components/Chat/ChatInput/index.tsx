@@ -29,6 +29,7 @@ import {
   useOllamaStore,
   useToolsStore,
 } from '@ui/stores';
+import { ChatMessageStatus } from '@ui/types/chat';
 import type { Tool } from '@ui/types/tools';
 
 import { SYSTEM_MODEL_NAMES } from '../../../../constants';
@@ -45,6 +46,8 @@ interface ChatInputProps {
   stop: () => void;
   hasMessages?: boolean;
   onRerunAgent?: () => void;
+  status?: 'submitted' | 'streaming' | 'ready' | 'error';
+  isSubmitting?: boolean;
 }
 
 const PLACEHOLDER_EXAMPLES = [
@@ -70,6 +73,8 @@ export default function ChatInput({
   stop,
   hasMessages = false,
   onRerunAgent,
+  status = 'ready',
+  isSubmitting = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
@@ -644,7 +649,21 @@ export default function ChatInput({
                 </TooltipContent>
               </Tooltip>
             )}
-            <AIInputSubmit onClick={isLoading ? stop : undefined} disabled={disabled} />
+            <AIInputSubmit
+              onClick={status === 'streaming' || status === 'submitted' || isSubmitting ? stop : undefined}
+              disabled={disabled}
+              status={
+                isSubmitting
+                  ? ChatMessageStatus.Submitted
+                  : status === 'submitted'
+                    ? ChatMessageStatus.Submitted
+                    : status === 'streaming'
+                      ? ChatMessageStatus.Streaming
+                      : status === 'error'
+                        ? ChatMessageStatus.Error
+                        : ChatMessageStatus.Ready
+              }
+            />
           </div>
         </AIInputToolbar>
       </AIInput>

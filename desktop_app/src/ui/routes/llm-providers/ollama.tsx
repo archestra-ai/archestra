@@ -236,18 +236,7 @@ function OllamaProviderPage() {
                                 size="icon"
                                 variant="destructive"
                                 disabled={isUninstalling || isDownloading}
-                                onClick={async () => {
-                                  setModelsBeingUninstalled((prev) => new Set([...prev, fullModelName]));
-                                  try {
-                                    await uninstallModel(fullModelName);
-                                  } finally {
-                                    setModelsBeingUninstalled((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(fullModelName);
-                                      return next;
-                                    });
-                                  }
-                                }}
+                                onClick={() => handleUninstallClick(fullModelName)}
                                 className="h-7 w-7 cursor-pointer"
                                 title="Uninstall model"
                               >

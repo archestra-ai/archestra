@@ -67,6 +67,21 @@ export const useOllamaStore = create<OllamaStore>()(
             const { models } = await ollamaClient.list();
             set({ installedModels: models });
 
+            const userSelectableModels = getUserSelectableModels(models);
+
+            // Reset selected model if:
+            // 1. No models are available at all
+            // 2. No user-selectable models are available
+            // 3. Currently selected model is not in the user-selectable models list
+            if (
+              models == null ||
+              models.length === 0 ||
+              userSelectableModels.length === 0 ||
+              (selectedModel && !userSelectableModels.some((model) => model.model === selectedModel))
+            ) {
+              get().setSelectedModel('');
+            }
+
             // Don't auto-select a model - let user choose
             // const firstInstalledModel = models[0];
             // if (!selectedModel && firstInstalledModel && firstInstalledModel.model) {

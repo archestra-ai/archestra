@@ -11,9 +11,8 @@ import {
   updateChat,
 } from '@ui/lib/clients/archestra/api/gen';
 import posthogClient from '@ui/lib/posthog';
-import { initializeChat } from '@ui/lib/utils/chat';
 import websocketService from '@ui/lib/websocket';
-import { type ChatWithMessages } from '@ui/types';
+import { type ChatWithMessages, type ServerChatWithMessagesRepresentation } from '@ui/types';
 
 import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import { useToolsStore } from './tools-store';
@@ -41,6 +40,14 @@ interface ChatActions {
 }
 
 type ChatStore = ChatState & ChatActions;
+
+export const initializeChat = (chat: ServerChatWithMessagesRepresentation): ChatWithMessages => {
+  return {
+    ...chat,
+    messages: chat.messages.map((message) => message.content as any), // Content is already a UIMessage from the backend
+    // Token usage fields will be included from the chat object
+  };
+};
 
 /**
  * Listen for chat title updates from the backend via WebSocket

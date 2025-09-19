@@ -4,12 +4,11 @@
  * Based on performOAuth from linear-mcp-oauth-minimal.ts
  * Handles OAuth authentication flow using @modelcontextprotocol/sdk/client/auth.js
  */
-import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
-import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/sdk/client/auth.js';
+import { auth, discoverAuthorizationServerMetadata } from '@modelcontextprotocol/sdk/client/auth.js';
 import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
+import OAuthProxyClient from '@backend/clients/oauthProxy';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 import { McpOAuthProvider } from './provider';

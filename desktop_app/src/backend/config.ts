@@ -40,6 +40,9 @@ export default {
       port: parseInt(process.env.ARCHESTRA_WEBSOCKET_SERVER_PORT || '54588', 10),
     },
   },
+  oauthProxy: {
+    url: process.env.OAUTH_PROXY_URL || 'https://oauth.dev.archestra.ai',
+  },
   ollama: {
     server: {
       host: `http://localhost:${OLLAMA_SERVER_PORT}`,

@@ -14,6 +14,7 @@ import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
 import ollamaClient from '@backend/ollama/client';
+import { getModelContextWindow } from '@backend/server/plugins/llm/modelContextWindows';
 
 import sharedConfig from '../../../../config';
 

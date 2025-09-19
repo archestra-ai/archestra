@@ -72,6 +72,7 @@
     "chokidar": "^4.0.3",
     "drizzle-kit": "^0.31.4",
     "electron": "37.3.1",
+    "electron-devtools-installer": "^4.0.0",
     "husky": "^9.1.7",
     "jsdom": "^27.0.0",
     "lint-staged": "^16.1.6",

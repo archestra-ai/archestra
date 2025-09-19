@@ -1,5 +1,6 @@
 import { config as dotenvConfig } from 'dotenv';
 import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { REACT_DEVELOPER_TOOLS, installExtension } from 'electron-devtools-installer';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -161,7 +162,7 @@ function getWindowIcon(): string | NativeImage | undefined {
   return loadIconWithFallback(resolveIconFilename());
 }
 
-const createWindow = () => {
+const createWindow = async () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -198,6 +199,9 @@ const createWindow = () => {
 
   // Open the DevTools only in development mode
   if (!app.isPackaged) {
+    // note that Components and Profiler tabs start to appear after first reload
+    // https://github.com/electron/electron/issues/41613
+    await installExtension(REACT_DEVELOPER_TOOLS);
     mainWindow.webContents.openDevTools();
   }
 };

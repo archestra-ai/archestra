@@ -7,16 +7,15 @@ import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { useChatAgent } from '@ui/contexts/chat-agent-context';
-import { useChatStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import { useChatStore, useToolsStore } from '@ui/stores';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
 
 function ChatPage() {
-  const { saveDraftMessage, getDraftMessage, clearDraftMessage } = useChatStore();
+  const { saveDraftMessage, getDraftMessage, clearDraftMessage, selectedModel } = useChatStore();
   const { setOnlyTools } = useToolsStore();
-  const { selectedModel } = useOllamaStore();
   const {
     messages,
     setMessages,

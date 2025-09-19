@@ -23,10 +23,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/co
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
 import {
+  useChatStore,
   useCloudProvidersStore,
   useDeveloperModeStore,
   useMcpServersStore,
-  useOllamaStore,
   useToolsStore,
   useUserSelectableModels,
 } from '@ui/stores';
@@ -78,7 +78,7 @@ export default function ChatInput({
   isSubmitting = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
-  const { selectedModel, setSelectedModel } = useOllamaStore();
+  const { selectedModel, setSelectedModel } = useChatStore();
   const userSelectableModels = useUserSelectableModels();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();

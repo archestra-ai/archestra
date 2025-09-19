@@ -4,6 +4,7 @@ import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
 
 import ArchestraMcpContext from '@backend/archestraMcp/context';
+import toolAggregator from '@backend/llms/toolAggregator';
 import ChatModel from '@backend/models/chat';
 import MemoryModel from '@backend/models/memory';
 import log from '@backend/utils/logger';

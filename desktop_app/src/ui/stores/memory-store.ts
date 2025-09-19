@@ -1,20 +1,13 @@
 import { create } from 'zustand';
 
 import {
+  type MemoryEntry,
   deleteAllMemories as apiDeleteAllMemories,
   deleteMemory as apiDeleteMemory,
   setMemory as apiSetMemory,
   getAllMemories,
 } from '@ui/lib/clients/archestra/api/gen';
 import websocketService from '@ui/lib/websocket';
-
-export interface MemoryEntry {
-  id: number;
-  name: string;
-  value: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface MemoryState {
   memories: MemoryEntry[];

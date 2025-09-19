@@ -96,11 +96,6 @@ export default function ChatInput({
     return () => clearInterval(interval);
   }, []);
 
-  // Use the selected model from Ollama store
-  // Convert empty string to undefined so the placeholder shows
-  const currentModel = !selectedModel || selectedModel === '' ? undefined : selectedModel;
-  const handleModelChange = setSelectedModel;
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -572,13 +567,13 @@ export default function ChatInput({
         </div>
         <AIInputToolbar>
           <AIInputTools>
-            <AIInputModelSelect value={currentModel} onValueChange={handleModelChange} disabled={false}>
+            <AIInputModelSelect value={selectedModel} onValueChange={setSelectedModel} disabled={false}>
               <AIInputModelSelectTrigger
-                className={!currentModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
+                className={!selectedModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
               >
                 <AIInputModelSelectValue
                   placeholder="No model selected, choose one!"
-                  className={!currentModel ? 'text-green-600 font-medium' : ''}
+                  className={!selectedModel ? 'text-green-600 font-medium' : ''}
                 />
               </AIInputModelSelectTrigger>
               <AIInputModelSelectContent>

@@ -39,20 +39,6 @@ jobs:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEYORLANDO_CLAUDE_CODE_OAUTH_TOKEN }}
 
-  matvey-claude-pull-requests:
-    name: Claude Pull Requests for Matvey
-    if: |
-      github.event.pull_request.user.login == 'Matvey-Kuk'
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-pull-requests.yml
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.MATVEY_CLAUDE_CODE_OAUTH_TOKEN }}
-
   ildar-claude-pull-requests:
     name: Claude Pull Requests for Ildar
     if: |

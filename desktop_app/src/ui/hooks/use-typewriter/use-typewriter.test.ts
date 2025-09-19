@@ -121,7 +121,7 @@ describe('useTypewriter', () => {
 
   it('should handle rapid text changes correctly', () => {
     const { result, rerender } = renderHook(({ text }) => useTypewriter(text, 50), {
-      initialProps: { text: 'New Chat' },
+      initialProps: { text: 'New Agent' },
     });
 
     // Start typing

@@ -30,12 +30,14 @@ export type McpServerType = z.infer<typeof McpServerTypeSchema>;
  *
  * https://github.com/anthropics/dxt/blob/v0.2.6/src/schemas.ts#L3-L7
  */
-export const McpServerConfigSchema = z.strictObject({
-  command: z.string(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
-});
+export const McpServerConfigSchema = z
+  .object({
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    inject_file: z.record(z.string(), z.string()).optional(), // filename -> file content
+  })
+  .passthrough();
 
 export const McpServerUserConfigValuesSchema = z.record(
   z.string(),
@@ -86,6 +88,10 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
    */
   oauthResourceMetadata: text('oauth_resource_metadata', { mode: 'json' }).$type<OAuthProtectedResourceMetadata>(),
   /**
+   * OAuth server configuration from catalog (contains streamable_http_url, etc.)
+   */
+  oauthConfig: text('oauth_config', { mode: 'json' }),
+  /**
    * Current status of the MCP server installation/OAuth flow
    */
   status: text().notNull().default('installing').$type<McpServerStatus>(),
@@ -115,6 +121,7 @@ export const McpServerSchema = z.object({
   oauthClientInfo: OAuthClientInformationSchema.nullable(),
   oauthServerMetadata: AuthorizationServerMetadataSchema.nullable(),
   oauthResourceMetadata: OAuthProtectedResourceMetadataSchema.nullable(),
+  oauthConfig: z.unknown().nullable(), // JSON object containing OAuth config from catalog (parsed by Drizzle)
   status: McpServerStatusSchema,
   serverType: McpServerTypeSchema,
   remoteUrl: z.string().nullable(),

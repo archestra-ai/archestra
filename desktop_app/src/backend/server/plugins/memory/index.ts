@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
 import MemoryModel, { CreateMemorySchema } from '@backend/models/memory';
+import websocketService from '@backend/websocket';
 
 // Schema for API responses
 const MemoryEntrySchema = z.object({
@@ -102,14 +103,32 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: MemoryEntrySchema,
+          400: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
-    async ({ params, body }, _reply) => {
-      const memory = await MemoryModel.setMemory(params.name, body.value);
+    async ({ params, body }, reply) => {
+      // Validate that name and value are not empty
+      if (!params.name || params.name.trim() === '') {
+        return reply.code(400).send({
+          error: 'Invalid memory name',
+          message: 'Memory name cannot be empty',
+        });
+      }
+
+      if (!body.value || body.value.trim() === '') {
+        return reply.code(400).send({
+          error: 'Invalid memory value',
+          message: 'Memory value cannot be empty',
+        });
+      }
+
+      const memory = await MemoryModel.setMemory(params.name.trim(), body.value.trim());
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: await MemoryModel.getAllMemories() },
@@ -139,7 +158,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const deleted = await MemoryModel.deleteMemory(params.name);
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: await MemoryModel.getAllMemories() },
@@ -166,7 +184,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const count = await MemoryModel.deleteAllMemories();
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       websocketService.broadcast({
         type: 'memory-updated',
         payload: { memories: [] },
@@ -205,14 +222,25 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: WriteMemorySchema,
         response: {
           200: z.object({ success: z.boolean() }),
+          400: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
-    async ({ body }, _reply) => {
-      await MemoryModel.writeMemories(body.content);
+    async ({ body }, reply) => {
+      // Validate that content is not empty
+      if (!body.content || body.content.trim() === '') {
+        return reply.code(400).send({
+          error: 'Invalid memory content',
+          message: 'Memory content cannot be empty',
+        });
+      }
+
+      await MemoryModel.writeMemories(body.content.trim());
 
       // Emit WebSocket event for memory update
-      const websocketService = (await import('@backend/websocket')).default;
       const memories = await MemoryModel.getAllMemories();
       websocketService.broadcast({
         type: 'memory-updated',

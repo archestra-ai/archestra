@@ -8,11 +8,13 @@ import {
   McpServerUserConfigValuesSchema,
 } from '@backend/database/schema/mcpServer';
 import toolAggregator from '@backend/llms/toolAggregator';
+import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpRequestLog from '@backend/models/mcpRequestLog';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/sandboxedMcp';
 import { ErrorResponseSchema } from '@backend/schemas';
+import { McpOAuthProvider, connectMcpServer } from '@backend/server/plugins/mcp-oauth';
 import log from '@backend/utils/logger';
 
 /**
@@ -143,8 +145,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let errorMessage: string | null = null;
 
       try {
-        fastify.log.info(`Proxying request to MCP server ${id}: ${JSON.stringify(body)}`);
-
         // Hijack the response to handle streaming manually!
         reply.hijack();
 
@@ -202,7 +202,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return originalEnd(chunk, encoding);
         };
 
-        // Stream the request to the container!
+        // Streamable HTTP servers now connect directly, so proxy only handles stdio servers
+        if (sandboxedMcpServer.isStreamableHttpServer()) {
+          throw new Error('Streamable HTTP servers should connect directly, not through proxy');
+        }
+
+        // Stream the request to the container via stdio for stdio-based MCP servers
         await sandboxedMcpServer.streamToContainer(body, reply.raw);
 
         // Return undefined when hijacking to prevent Fastify from sending response
@@ -348,15 +353,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
 
-        // Use OAuth config from frontend
-        const { resolveOAuthConfig } = await import('@backend/utils/env-resolver');
-        const config = resolveOAuthConfig(installData.oauthConfig);
+        // Use OAuth config directly from catalog
+        const config = installData.oauthConfig;
 
-        log.info('Resolved OAuth config:', {
+        log.info('MCP OAuth config loaded:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
           serverUrl: config.server_url,
+          requiresProxy: !!config.requires_proxy,
         });
 
         // Check if this uses generic OAuth flow - redirect to generic OAuth endpoint
@@ -388,13 +393,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Create placeholder MCP server record with oauth_pending status
         // This allows OAuth provider to save client info during the flow
-        const placeholderServer = await McpServerModel.create({
+        await McpServerModel.create({
           id: serverId,
           name: installData.displayName,
           serverConfig: installData.serverConfig,
           userConfigValues: installData.userConfigValues || null,
           serverType: isRemoteServer ? 'remote' : 'local', // Set server type based on remote_url
           remoteUrl: remoteUrl, // Store remote_url in separate column
+          oauthConfig: installData.oauthConfig ? JSON.stringify(installData.oauthConfig) : null, // Include OAuth config from catalog
           status: 'oauth_pending',
           oauthTokens: null,
           oauthClientInfo: null,
@@ -405,14 +411,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Perform OAuth and get tokens
-          const { connectMcpServer } = await import('@backend/server/plugins/mcp-oauth');
-          const { client, accessToken } = await connectMcpServer(config, serverId);
+          const { client } = await connectMcpServer(config, serverId, remoteUrl);
 
           // Close the test connection
           await client.close();
 
           // Get tokens from the provider for installation
-          const { McpOAuthProvider } = await import('@backend/server/plugins/mcp-oauth');
           const oauthProvider = new McpOAuthProvider(config, serverId);
           await oauthProvider.init();
 
@@ -434,17 +438,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // For remote servers, start the remote server immediately
           // For local servers, start container as usual
-          if (isRemoteServer) {
-            log.info(`Remote server ${server.name} installed successfully - starting remote server`);
-            // Import McpServerSandboxManager to start the remote server
-            const { default: McpServerSandboxManager } = await import('@backend/sandbox/manager');
-            await McpServerSandboxManager.startServer(server);
-            // Also sync external clients
-            const { default: ExternalMcpClientModel } = await import('@backend/models/externalMcpClient');
-            await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
-          } else {
-            // Start the MCP server container for local servers
-            await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+          try {
+            if (isRemoteServer) {
+              log.info(`Remote server ${server.name} installed successfully - starting remote server`);
+
+              await McpServerSandboxManager.startServer(server);
+              // Also sync external clients
+              await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
+            } else {
+              // Start the MCP server container for local servers
+              await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(server);
+            }
+
+            log.info(`OAuth MCP server ${server.name} started successfully`);
+          } catch (startupError) {
+            log.error(`Failed to start OAuth MCP server ${server.name} after successful OAuth:`, startupError);
+
+            // Rollback server status to 'failed' if startup fails
+            await McpServerModel.update(serverId, {
+              status: 'failed',
+            });
+
+            // Clean up the server from sandbox manager if it was registered
+            try {
+              await McpServerSandboxManager.removeMcpServer(serverId);
+            } catch (cleanupError) {
+              log.warn('Failed to clean up server from sandbox manager:', cleanupError);
+            }
+
+            return reply.code(500).send({
+              error: `OAuth completed successfully but server startup failed: ${startupError instanceof Error ? startupError.message : 'Unknown startup error'}`,
+            });
           }
 
           return reply.send({ server });

@@ -25,15 +25,3 @@ export class OllamaLocalStorage extends BaseLocalStorage {
     super.set('selectedModel', model);
   }
 }
-
-export class SettingsLocalStorage extends BaseLocalStorage {
-  static keyPrefix = 'settings';
-
-  static getSystemPrompt() {
-    return super.get('systemPrompt') || 'You are a helpful AI assistant.';
-  }
-
-  static setSystemPrompt(prompt: string) {
-    super.set('systemPrompt', prompt);
-  }
-}

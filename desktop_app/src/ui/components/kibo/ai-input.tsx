@@ -151,8 +151,6 @@ export const AIInputSubmit = ({
     Icon = <Loader2Icon className="animate-spin" />;
   } else if (status === ChatMessageStatus.Streaming) {
     Icon = <SquareIcon />;
-  } else if (status === ChatMessageStatus.Error) {
-    Icon = <XIcon />;
   }
 
   return (

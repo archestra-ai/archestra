@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import PromptCard from '@ui/components/Chat/PromptCard';
 import { promptTemplates } from '@ui/data/prompt-templates';
-import { useChatStore, useMemoryStore } from '@ui/stores';
+import { useMemoryStore } from '@ui/stores';
 
 interface PromptCollectionProps {
   onPromptSelect: (prompt: string) => void;
@@ -10,7 +10,6 @@ interface PromptCollectionProps {
 
 export default function PromptCollection({ onPromptSelect }: PromptCollectionProps) {
   const { memories, isLoading, fetchMemories } = useMemoryStore();
-  const { chats } = useChatStore();
 
   // Ensure memory is fetched on mount
   useEffect(() => {

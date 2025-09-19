@@ -25,22 +25,22 @@ export async function buildApp() {
 
   // Root endpoint  
   app.get('/', async () => {
-    const { getSupportedProviders } = await import('./config/providers.js');
+    const { getAllowedDestinations } = await import('./config/providers.js');
     
     return {
       service: 'OAuth Proxy - Secure Token Exchange Service',
       version: '2.1.0',
-      description: 'Secure OAuth proxy with provider-based endpoint validation',
+      description: 'Secure OAuth proxy with hostname-based endpoint validation',
       security: {
-        ssrfProtection: 'Provider-based endpoint validation prevents SSRF attacks',
-        allowedProviders: getSupportedProviders(),
-        endpointValidation: 'Only trusted OAuth provider endpoints are allowed',
+        ssrfProtection: 'Hostname-based endpoint validation prevents SSRF attacks',
+        allowedDestinations: getAllowedDestinations(),
+        endpointValidation: 'Only trusted OAuth destination hostnames are allowed',
       },
       endpoints: {
-        'POST /oauth/token': 'Secure token exchange (validates endpoints against provider allowlist)',
-        'POST /oauth/revoke': 'Secure token revocation (validates endpoints against provider allowlist)', 
+        'POST /oauth/token': 'Secure token exchange (validates endpoints against hostname allowlist)',
+        'POST /oauth/revoke': 'Secure token revocation (validates endpoints against hostname allowlist)', 
         'GET /callback/:provider': 'OAuth callback handler (redirects to desktop app via deep link)',
-        'GET /health': 'Health check and supported providers list',
+        'GET /health': 'Health check and allowed destinations list',
       }
     };
   });

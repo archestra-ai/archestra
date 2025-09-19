@@ -1,59 +1,49 @@
 /**
- * OAuth Provider Configuration for OAuth Proxy
+ * OAuth Destination Configuration for OAuth Proxy
  * 
- * Defines trusted OAuth endpoints to prevent SSRF attacks while keeping
+ * Defines allowed OAuth endpoints to prevent SSRF attacks while keeping
  * the proxy generic and easy to configure.
  */
 
 /**
- * Provider-based allowlist of trusted OAuth endpoints
- * Maps provider names to arrays of allowed hostnames
+ * Simple allowlist of trusted OAuth destination hostnames
+ * Used for SSRF protection - only these hostnames are allowed
  */
-export const TRUSTED_PROVIDERS = {
-  google: ['oauth2.googleapis.com', 'accounts.google.com'],
-  slack: ['slack.com', 'api.slack.com'],
-  microsoft: ['login.microsoftonline.com'], 
-  github: ['github.com'],
-  atlassian: ['auth.atlassian.com'],
+export const ALLOWED_DESTINATIONS = [
+  'oauth2.googleapis.com',
+  'accounts.google.com',
+  'slack.com', 
+  'api.slack.com',
+  'github.com',
+  'api.githubcopilot.com',
+  'login.microsoftonline.com',
+  'auth.atlassian.com',
   
-  // Development flexibility - allows any URL
-  dev: ['*'],
-  localhost: ['*'],
-};
+  // Development flexibility
+  'localhost',
+  '127.0.0.1',
+];
 
 /**
- * Validate that a token endpoint URL is allowed for the given provider
+ * Validate that a token endpoint URL is allowed
  * 
  * @param {string} url - The token endpoint URL to validate
- * @param {string} provider - The OAuth provider name
- * @returns {boolean} True if the URL is allowed for this provider
+ * @returns {boolean} True if the URL hostname is in the allowlist
  */
-export function isValidOAuthEndpoint(url, provider) {
+export function isValidOAuthEndpoint(url) {
   try {
     const hostname = new URL(url).hostname;
-    const allowedHosts = TRUSTED_PROVIDERS[provider.toLowerCase()];
-    
-    if (!allowedHosts) {
-      return false;
-    }
-    
-    // Wildcard allows any URL (useful for development)
-    if (allowedHosts.includes('*')) {
-      return true;
-    }
-    
-    // Check if hostname is in the allowed list
-    return allowedHosts.includes(hostname);
+    return ALLOWED_DESTINATIONS.includes(hostname);
   } catch (error) {
     return false;
   }
 }
 
 /**
- * Get list of supported OAuth providers
+ * Get list of allowed OAuth destination hostnames
  * 
- * @returns {string[]} Array of supported provider names
+ * @returns {string[]} Array of allowed hostnames
  */
-export function getSupportedProviders() {
-  return Object.keys(TRUSTED_PROVIDERS);
+export function getAllowedDestinations() {
+  return ALLOWED_DESTINATIONS;
 }

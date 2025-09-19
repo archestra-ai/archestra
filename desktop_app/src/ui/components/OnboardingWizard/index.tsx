@@ -1,9 +1,16 @@
-import { ChevronRight, Rocket, Shield, Sparkles, Zap } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
-import { Dialog, DialogContent } from '@ui/components/ui/dialog';
-import { useChatStore, useUserStore } from '@ui/stores';
+import { Label } from '@ui/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@ui/components/ui/popover';
+import { Switch } from '@ui/components/ui/switch';
+import { useUserStore } from '@ui/stores';
+
+import getStartedImage from '/images/a-group-of-people-building-a-vessel-in-the-distanc.png';
+import welcomeImage from '/images/a-group-of-people-connecting-mechanisms-with-wires.png';
+import privacyImage from '/images/a-group-of-people-next-to-the-open-door--green-lan.png';
+import featuresImage from '/images/a-group-of-people-surrounded-by-a-massive-wooden-f.png';
 
 enum OnboardingStep {
   Welcome = 0,
@@ -19,49 +26,29 @@ interface OnboardingWizardProps {
 export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(OnboardingStep.Welcome);
-  const [_countdown, setCountdown] = useState(5);
-  const [isButtonEnabled, setIsButtonEnabled] = useState(false);
+  const [previousStep, setPreviousStep] = useState<OnboardingStep | null>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [telemetryEnabled, setTelemetryEnabled] = useState(true);
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const { user, markOnboardingCompleted } = useUserStore();
-  const { chats, loadChats } = useChatStore();
-
-  useEffect(() => {
-    // Load chats to check if user has existing memories
-    loadChats();
-  }, []);
+  const { user, markOnboardingCompleted, toggleTelemetryCollectionStatus, toggleAnalyticsCollectionStatus } =
+    useUserStore();
 
   useEffect(() => {
-    // Skip onboarding if user has existing chats (memories)
-    if (user && !user.hasCompletedOnboarding && chats.length === 0) {
+    if (user && !user.hasCompletedOnboarding) {
       setIsOpen(true);
-    } else if (user && !user.hasCompletedOnboarding && chats.length > 0) {
-      // Auto-complete onboarding if user has existing chats
-      markOnboardingCompleted();
     }
-  }, [user, chats]);
+    // Sync preferences with user data
+    if (user) {
+      setTelemetryEnabled(user.collectTelemetryData ?? true);
+      setAnalyticsEnabled(user.collectAnalyticsData ?? true);
+    }
+  }, [user]);
 
   useEffect(() => {
     onOpenChange?.(isOpen);
   }, [isOpen, onOpenChange]);
-
-  // Reset countdown when step changes
-  useEffect(() => {
-    setCountdown(5);
-    setIsButtonEnabled(false);
-
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          setIsButtonEnabled(true);
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [currentStep]);
 
   const completeOnboarding = async () => {
     try {
@@ -74,7 +61,13 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
 
   const handleNext = () => {
     if (currentStep < OnboardingStep.GetStarted) {
+      setPreviousStep(currentStep);
+      setIsTransitioning(true);
       setCurrentStep(currentStep + 1);
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setPreviousStep(null);
+      }, 500); // Animation duration
     } else {
       completeOnboarding();
     }
@@ -82,40 +75,43 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
 
   const handlePrevious = () => {
     if (currentStep > OnboardingStep.Welcome) {
+      setPreviousStep(currentStep);
+      setIsTransitioning(true);
       setCurrentStep(currentStep - 1);
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setPreviousStep(null);
+      }, 500); // Animation duration
     }
   };
 
-  const renderStepContent = () => {
-    switch (currentStep) {
+  const handleTelemetryToggle = async (checked: boolean) => {
+    setTelemetryEnabled(checked);
+    await toggleTelemetryCollectionStatus(checked);
+  };
+
+  const handleAnalyticsToggle = async (checked: boolean) => {
+    setAnalyticsEnabled(checked);
+    await toggleAnalyticsCollectionStatus(checked);
+  };
+
+  const renderStepContent = (step: OnboardingStep) => {
+    switch (step) {
       case OnboardingStep.Welcome:
         return (
-          <div className="flex gap-12 h-full">
-            <div className="flex-[1.5] min-w-0 flex items-center h-full">
-              <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-connecting-mechanisms-with-wires.png"
-                  alt="Welcome to Archestra"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-32 h-32 text-blue-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <div>
-                <h2 className="text-2xl font-bold">Welcome to Archestra! 👋</h2>
-                <p className="text-base text-muted-foreground mt-2">
-                  Desktop AI agent with thousands of data connectors.
-                </p>
-                <p className="text-sm text-muted-foreground mt-4">
-                  We hope you don't mind if we take a 1 minute to show you around.
+          <div className="relative w-full h-full overflow-hidden">
+            <img
+              src={welcomeImage}
+              alt="Welcome to Archestra"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
+                <h2 className="text-2xl font-bold">Premier MCP Orchestrator Built for Business</h2>
+                <p className="text-lg text-muted-foreground mt-4">
+                  We're entering the era of applied agents in enterprise environments. Archestra is the missing
+                  component to connect AI and corporate data to make it a reality.
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -123,14 +119,10 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       Previous
                     </Button>
                   )}
-                  <Button onClick={handleNext} className="min-w-[120px] relative" disabled={!isButtonEnabled}>
+                  <Button onClick={handleNext} className="min-w-[120px] relative">
                     <span className="flex items-center">
                       Next
-                      {!isButtonEnabled ? (
-                        <span className="inline-block w-4 h-4 ml-1 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      )}
+                      <ChevronRight className="w-4 h-4 ml-1" />
                     </span>
                   </Button>
                 </div>
@@ -141,59 +133,46 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
 
       case OnboardingStep.Features:
         return (
-          <div className="flex gap-12 h-full">
-            <div className="flex-[1.5] min-w-0 flex items-center h-full">
-              <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-surrounded-by-a-massive-wooden-f.png"
-                  alt="Powerful Features"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-green-100 to-teal-100 dark:from-green-900/20 dark:to-teal-900/20 rounded-lg flex items-center justify-center">
-                  <Zap className="w-32 h-32 text-green-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <div>
+          <div className="relative w-full h-full">
+            <img src={featuresImage} alt="Powerful Features" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-3xl">
                 <h2 className="text-2xl font-bold">Packed with Security Measures</h2>
-                <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-                  AI connected to data without security measures may leak sensitive information. Even worse, the
-                  open-source supply chain may be used to attack your machine.
+                <p className="text-base text-muted-foreground mt-3 leading-relaxed">
+                  AI connected to data possesses additional security risks.
                 </p>
                 <div className="space-y-3 mt-6">
                   <div className="flex items-start">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mt-0.5">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">1</span>
                     </div>
-                    <p className="ml-3 text-sm text-muted-foreground">
-                      Archestra runs open-source MCP servers (connectors) in isolated virtual machines.
+                    <p className="ml-3 text-base text-muted-foreground mt-0.5">
+                      All data processing occurs <span className="font-semibold">locally on your machine</span>, never
+                      through cloud services.
                     </p>
                   </div>
                   <div className="flex items-start">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mt-0.5">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">2</span>
                     </div>
-                    <p className="ml-3 text-sm text-muted-foreground">
-                      Archestra dynamically manages permissions for AI, reducing the risk of data leaks.
+                    <p className="ml-3 text-base text-muted-foreground mt-0.5">
+                      MCP connectors operate within <span className="font-semibold">isolated virtual machines</span> for
+                      enhanced security.
                     </p>
                   </div>
                   <div className="flex items-start">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mt-0.5">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                       <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">3</span>
                     </div>
-                    <p className="ml-3 text-sm text-muted-foreground">
-                      Archestra keeps dangerous content in envelopes to help avoiding prompt injections.
+                    <p className="ml-3 text-base text-muted-foreground mt-0.5">
+                      Granular tool permissions ensure controlled data access for each agent.
                     </p>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-6 leading-relaxed">
-                  Sometimes security features cause delays. We're working on improving this!
+                <p className="text-base text-muted-foreground mt-6 leading-relaxed">
+                  Archestra team is dedicated to delivering state-of-the-art agentic security measures, more to come,
+                  stay tuned!
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -201,14 +180,10 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       Previous
                     </Button>
                   )}
-                  <Button onClick={handleNext} className="min-w-[120px] relative" disabled={!isButtonEnabled}>
+                  <Button onClick={handleNext} className="min-w-[120px] relative">
                     <span className="flex items-center">
                       Next
-                      {!isButtonEnabled ? (
-                        <span className="inline-block w-4 h-4 ml-1 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      )}
+                      <ChevronRight className="w-4 h-4 ml-1" />
                     </span>
                   </Button>
                 </div>
@@ -219,29 +194,22 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
 
       case OnboardingStep.Privacy:
         return (
-          <div className="flex gap-12 h-full">
-            <div className="flex-[1.5] min-w-0 flex items-center h-full">
-              <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-next-to-the-open-door--green-lan.png"
-                  alt="Your Privacy Matters"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg flex items-center justify-center">
-                  <Shield className="w-32 h-32 text-indigo-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <div>
-                <h2 className="text-2xl font-bold">Archestra is Open Source (MIT) and Ready for Enterprises</h2>
-                <p className="text-muted-foreground mt-2">
-                  Important to note that Archestra also exists as a multi-tenant platform for Enterprises.
+          <div className="relative w-full h-full">
+            <img
+              src={privacyImage}
+              alt="Your Privacy Matters"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
+                <h2 className="text-2xl font-bold">For Everyone, Not Only Engineers</h2>
+                <p className="text-lg text-muted-foreground mt-3 leading-relaxed">
+                  MCP protocol launched in November 2024 to connect AI with data. While engineers quickly adopted it,
+                  non-technical users were left behind. Archestra changes that -{' '}
+                  <span className="font-semibold">no API keys, no complex setup</span>. Enabling{' '}
+                  <span className="font-semibold">secure, reliable and easy to use AI agents</span> for finance, legal,
+                  and every other team.
                 </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
@@ -249,14 +217,10 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       Previous
                     </Button>
                   )}
-                  <Button onClick={handleNext} className="min-w-[120px] relative" disabled={!isButtonEnabled}>
+                  <Button onClick={handleNext} className="min-w-[120px] relative">
                     <span className="flex items-center">
                       Next
-                      {!isButtonEnabled ? (
-                        <span className="inline-block w-4 h-4 ml-1 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      )}
+                      <ChevronRight className="w-4 h-4 ml-1" />
                     </span>
                   </Button>
                 </div>
@@ -267,49 +231,69 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
 
       case OnboardingStep.GetStarted:
         return (
-          <div className="flex gap-12 h-full">
-            <div className="flex-[1.5] min-w-0 flex items-center h-full">
-              <div className="w-full aspect-[3/2]">
-                <img
-                  src="/images/a-group-of-people-building-a-vessel-in-the-distanc.png"
-                  alt="Get Started"
-                  className="w-full h-full object-cover rounded-lg"
-                  onError={(e) => {
-                    // Fallback to placeholder if image doesn't exist
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="hidden w-full h-full bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/20 dark:to-red-900/20 rounded-lg flex items-center justify-center">
-                  <Rocket className="w-32 h-32 text-orange-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <div>
-                <h2 className="text-2xl font-bold">Early Preview Version</h2>
-                <p className="text-muted-foreground mt-2">
-                  We're working hard on Archestra, but bugs may still happen. Please let us know about them on GitHub!
+          <div className="relative w-full h-full">
+            <img src={getStartedImage} alt="Get Started" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
+                <h2 className="text-2xl font-bold">Early Access Program</h2>
+                <p className="text-lg text-muted-foreground mt-2">
+                  You're among the first to experience Archestra. Your feedback shapes our development - please report
+                  any issues on GitHub.
                 </p>
-                <div className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg mt-6">
-                  <p className="text-sm font-medium text-center">
-                    We collect anonymous statistics and error traces. If you disagree with sharing, please wait for the
-                    production version to be ready!
-                  </p>
-                </div>
+                <p className="text-base text-muted-foreground mt-4">
+                  We collect anonymous usage analytics and error reports to improve the product. You can opt out of data
+                  collection{' '}
+                  <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button className="text-blue-600/80 dark:text-blue-400/80 underline hover:text-blue-700 dark:hover:text-blue-300 font-medium">
+                        here
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <h4 className="font-semibold text-sm">Privacy Settings</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Control what data we collect to improve Archestra
+                          </p>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="telemetry" className="text-sm font-medium">
+                                Error Reporting
+                              </Label>
+                              <p className="text-xs text-muted-foreground">Help us fix crashes and bugs</p>
+                            </div>
+                            <Switch id="telemetry" checked={telemetryEnabled} onCheckedChange={handleTelemetryToggle} />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="analytics" className="text-sm font-medium">
+                                Usage Analytics
+                              </Label>
+                              <p className="text-xs text-muted-foreground">Help us understand feature usage</p>
+                            </div>
+                            <Switch id="analytics" checked={analyticsEnabled} onCheckedChange={handleAnalyticsToggle} />
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t">
+                          <p className="text-xs text-muted-foreground">Changes are saved automatically</p>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  .
+                </p>
                 <div className="flex space-x-2 mt-8">
                   {currentStep > OnboardingStep.Welcome && (
                     <Button variant="outline" onClick={handlePrevious}>
                       Previous
                     </Button>
                   )}
-                  <Button onClick={handleNext} className="min-w-[120px] relative" disabled={!isButtonEnabled}>
-                    <span className="flex items-center">
-                      Get Started
-                      {!isButtonEnabled && (
-                        <span className="inline-block w-4 h-4 ml-1 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                      )}
-                    </span>
+                  <Button onClick={handleNext} className="min-w-[120px] relative">
+                    <span className="flex items-center">Get Started</span>
                   </Button>
                 </div>
               </div>
@@ -319,15 +303,33 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent
-        className="sm:max-w-[1200px] w-[90vw] max-h-[70vh] h-[65vh]"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        showCloseButton={false}
-      >
-        {renderStepContent()}
-      </DialogContent>
-    </Dialog>
+    <>
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .fade-in {
+          animation: fadeIn 500ms ease-in-out forwards;
+        }
+      `}</style>
+      <div className="fixed inset-0 z-50 bg-black" data-testid="onboarding-wizard-dialog">
+        {/* Previous step (stays visible during transition) */}
+        {previousStep !== null && isTransitioning && (
+          <div className="absolute inset-0">{renderStepContent(previousStep)}</div>
+        )}
+
+        {/* Current step (fades in on top) */}
+        <div className={`absolute inset-0 ${isTransitioning ? 'fade-in' : ''}`}>{renderStepContent(currentStep)}</div>
+      </div>
+    </>
   );
 }

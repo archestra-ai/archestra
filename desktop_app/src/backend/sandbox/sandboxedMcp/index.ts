@@ -1,20 +1,15 @@
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { type experimental_MCPClient, experimental_createMCPClient } from 'ai';
 import type { RawReplyDefaultExpression } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
 
 import config from '@backend/config';
 import { type McpServer } from '@backend/models/mcpServer';
 import { ToolModel } from '@backend/models/tools';
 import PodmanContainer from '@backend/sandbox/podman/container';
-import {
-  type AvailableTool,
-  AvailableToolSchema,
-  McpServerContainerLogsSchema,
-  type SandboxedMcpServerStatusSummary,
-  SandboxedMcpServerStatusSummarySchema,
-} from '@backend/sandbox/schemas';
+import { type AvailableTool, type SandboxedMcpServerStatusSummary } from '@backend/sandbox/schemas';
+import { areTokensExpired } from '@backend/server/plugins/mcp-oauth';
 import log from '@backend/utils/logger';
+import WebSocketService from '@backend/websocket';
 
 const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.http;
 
@@ -51,6 +46,9 @@ export default class SandboxedMcpServer {
   private podmanContainer?: PodmanContainer;
 
   private mcpClient: experimental_MCPClient;
+
+  // Assigned HTTP port for streamable HTTP servers (stored in memory)
+  assignedHttpPort?: number;
   private analysisUpdateInterval: NodeJS.Timeout | null = null;
 
   tools: McpTools = {};
@@ -59,8 +57,7 @@ export default class SandboxedMcpServer {
     {
       is_read: boolean | null;
       is_write: boolean | null;
-      idempotent: boolean | null;
-      reversible: boolean | null;
+      analyzed_at: string | null;
     }
   > = new Map();
 
@@ -81,21 +78,72 @@ export default class SandboxedMcpServer {
       this.mcpServerUrl = remoteUrl;
       log.info(`Creating SandboxedMcpServer for remote server: ${mcpServer.name} at ${remoteUrl}`);
     } else {
-      // For local servers, use the proxy URL and set up container
+      // For local servers, set up container first
       if (!podmanSocketPath) {
         throw new Error(`Local server ${mcpServer.id} requires podmanSocketPath`);
       }
-      this.mcpServerUrl = this.mcpServerProxyUrl;
       this.podmanSocketPath = podmanSocketPath;
       this.podmanContainer = new PodmanContainer(mcpServer, podmanSocketPath);
-      log.info(`Creating SandboxedMcpServer for local server: ${mcpServer.name} via proxy`);
-    }
 
-    // Try to fetch cached tools on initialization
-    this.fetchCachedTools();
+      // For streamable HTTP servers, use direct container URL instead of proxy
+      if (this.isStreamableHttpServer()) {
+        // We'll set this dynamically after container starts and port is discovered
+        this.mcpServerUrl = 'http://localhost:0/mcp'; // Placeholder, will be updated
+      } else {
+        // For stdio servers, use the proxy URL
+        this.mcpServerUrl = this.mcpServerProxyUrl;
+      }
+    }
 
     // Set up periodic updates for cached analysis
     this.startPeriodicAnalysisUpdates();
+  }
+
+  /**
+   * Get the assigned HTTP port for streamable HTTP servers
+   */
+  getAssignedHttpPort(): number | undefined {
+    return this.podmanContainer?.assignedHttpPort;
+  }
+
+  /**
+   * Check if this server is a streamable HTTP server based on OAuth config
+   */
+  isStreamableHttpServer(): boolean {
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      return !!oauthConfig?.streamable_http_url;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Update the MCP server URL for streamable HTTP servers after port discovery
+   */
+  updateStreamableHttpUrl(): void {
+    if (!this.isStreamableHttpServer() || !this.podmanContainer) {
+      return;
+    }
+
+    const assignedPort = this.podmanContainer.assignedHttpPort;
+    if (!assignedPort) {
+      log.warn(`Cannot update streamable HTTP URL: no assigned port for ${this.mcpServerId}`);
+      return;
+    }
+
+    try {
+      const oauthConfig = this.mcpServer.oauthConfig ? JSON.parse(this.mcpServer.oauthConfig as any) : null;
+      const streamableHttpUrl = oauthConfig?.streamable_http_url;
+
+      if (streamableHttpUrl) {
+        const url = new URL(streamableHttpUrl);
+        url.port = assignedPort.toString();
+        this.mcpServerUrl = url.toString();
+      }
+    } catch (error) {
+      log.error(`Failed to update streamable HTTP URL for ${this.mcpServerId}:`, error);
+    }
   }
 
   /**
@@ -103,20 +151,66 @@ export default class SandboxedMcpServer {
    */
   private async fetchCachedTools() {
     try {
+      log.info(`[fetchCachedTools] Fetching cached tools for ${this.mcpServerId}`);
       const cachedTools = await ToolModel.getByMcpServerId(this.mcpServerId);
-      if (cachedTools.length > 0) {
-        log.info(`Found ${cachedTools.length} cached tool analysis results for ${this.mcpServerId}`);
+      log.info(`[fetchCachedTools] Found ${cachedTools.length} tools in database for ${this.mcpServerId}`);
 
-        // Only cache the analysis results, not the tools themselves
+      if (cachedTools.length > 0) {
+        // Count how many tools actually have analysis results
+        let analyzedCount = 0;
+
+        // Log Google tools for debugging
+        const googleTools = cachedTools.filter(
+          (t) => t.name.includes('gmail') || t.name.includes('drive') || t.name.includes('google')
+        );
+        if (googleTools.length > 0) {
+          log.info(
+            `[fetchCachedTools] Found ${googleTools.length} Google tools in database:`,
+            googleTools.map((t) => ({
+              name: t.name,
+              analyzed_at: t.analyzed_at,
+              is_read: t.is_read,
+              is_write: t.is_write,
+            }))
+          );
+        }
+
+        // Cache all tools from the database, regardless of analysis status
         for (const cachedTool of cachedTools) {
-          // Cache the analysis results
+          // Cache the tool with whatever analysis data it has (nulls are fine)
           this.cachedToolAnalysis.set(cachedTool.name, {
             is_read: cachedTool.is_read,
             is_write: cachedTool.is_write,
-            idempotent: cachedTool.idempotent,
-            reversible: cachedTool.reversible,
+            analyzed_at: cachedTool.analyzed_at,
           });
+
+          // Log caching for Google tools
+          if (cachedTool.name.includes('gmail') || cachedTool.name.includes('drive')) {
+            log.info(`[fetchCachedTools] Caching Google tool: ${cachedTool.name}`, {
+              is_read: cachedTool.is_read,
+              is_write: cachedTool.is_write,
+              analyzed_at: cachedTool.analyzed_at,
+            });
+          }
+
+          // Count tools that have been analyzed
+          if (cachedTool.analyzed_at) {
+            analyzedCount++;
+          }
         }
+
+        log.info(
+          `[fetchCachedTools] Cached ${cachedTools.length} tools for ${this.mcpServerId} (${analyzedCount} analyzed)`
+        );
+
+        // Always broadcast when we cache tools, regardless of analysis status
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Loaded ${cachedTools.length} tools (${analyzedCount} analyzed)`,
+          },
+        });
       }
     } catch (error) {
       log.error(`Failed to fetch cached tool analysis results for ${this.mcpServerId}:`, error);
@@ -135,21 +229,18 @@ export default class SandboxedMcpServer {
       for (const tool of tools) {
         const cachedAnalysis = this.cachedToolAnalysis.get(tool.name);
 
-        // Check if this tool has new analysis results
+        // Check if this tool's analysis has changed
         if (
-          tool.analyzed_at &&
-          (!cachedAnalysis ||
-            cachedAnalysis.is_read !== tool.is_read ||
-            cachedAnalysis.is_write !== tool.is_write ||
-            cachedAnalysis.idempotent !== tool.idempotent ||
-            cachedAnalysis.reversible !== tool.reversible)
+          !cachedAnalysis ||
+          cachedAnalysis.is_read !== tool.is_read ||
+          cachedAnalysis.is_write !== tool.is_write ||
+          cachedAnalysis.analyzed_at !== tool.analyzed_at
         ) {
-          // Update cache
+          // Update cache with whatever data we have (nulls are fine)
           this.cachedToolAnalysis.set(tool.name, {
             is_read: tool.is_read,
             is_write: tool.is_write,
-            idempotent: tool.idempotent,
-            reversible: tool.reversible,
+            analyzed_at: tool.analyzed_at,
           });
           hasUpdates = true;
           log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
@@ -172,6 +263,15 @@ export default class SandboxedMcpServer {
       const hasUpdates = await this.updateCachedAnalysis();
       if (hasUpdates) {
         log.info(`Analysis cache updated for MCP server ${this.mcpServerId}`);
+
+        // Broadcast that tools have been updated
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Tool analysis updated for ${this.mcpServer.name}`,
+          },
+        });
       }
     }, 5000);
   }
@@ -212,6 +312,20 @@ export default class SandboxedMcpServer {
       try {
         log.info(`Starting async analysis of tools for ${this.mcpServerId}...`);
         await ToolModel.analyze(tools, this.mcpServerId);
+
+        // After tools are saved to database, try to fetch any existing cached analysis
+        // This is important because on first startup, fetchCachedTools() in constructor
+        // runs before tools exist in the database
+        await this.fetchCachedTools();
+
+        // Broadcast that tools are now available (even if not yet analyzed)
+        WebSocketService.broadcast({
+          type: 'tools-updated',
+          payload: {
+            mcpServerId: this.mcpServerId,
+            message: `Discovered ${newToolCount} tools for ${this.mcpServer.name}`,
+          },
+        });
       } catch (error) {
         log.error(`Failed to save tools for ${this.mcpServerId}:`, error);
         // Continue even if saving fails
@@ -224,43 +338,66 @@ export default class SandboxedMcpServer {
       return;
     }
 
-    try {
-      // Check if this MCP server has OAuth tokens
-      const headers: Record<string, string> = {};
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      if (this.mcpServer.oauthTokens?.access_token) {
-        log.info(`Using OAuth authentication for MCP server ${this.mcpServerId}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if this MCP server has OAuth tokens
+        const headers: Record<string, string> = {};
 
-        // Check if tokens are expired and refresh if needed
-        try {
-          const { ensureValidTokens } = await import('@backend/server/plugins/mcp-oauth');
+        if (this.mcpServer.oauthTokens?.access_token) {
+          try {
+            // We need the OAuth config to refresh tokens, but it's not stored with the server
+            // For now, check if tokens are expired manually and warn if they might be
+            // Ensure token has required fields for MCP SDK compatibility
+            const tokensWithDefaults = {
+              ...this.mcpServer.oauthTokens,
+              token_type: this.mcpServer.oauthTokens.token_type || 'Bearer', // Default to Bearer if not set
+            };
 
-          // Get server config based on provider (this needs to be determined from the server)
-          // For now, we'll try to use the stored access token directly
-          // TODO: Implement proper token refresh logic with provider configs
-          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
-        } catch (error) {
-          log.warn(`Failed to ensure valid OAuth tokens for ${this.mcpServerId}:`, error);
-          // Fall back to using existing token
-          headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+            if (areTokensExpired(tokensWithDefaults, 5)) {
+              log.warn(
+                `OAuth tokens for ${this.mcpServerId} are expired or expiring soon. You may need to reinstall the server to refresh OAuth tokens.`
+              );
+            }
+
+            headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+          } catch (error) {
+            log.warn(`Failed to validate OAuth tokens for ${this.mcpServerId}:`, error);
+            // Fall back to using existing token
+            headers['Authorization'] = `Bearer ${this.mcpServer.oauthTokens.access_token}`;
+          }
+        }
+
+        // Use the appropriate URL: remote_url for remote servers, proxy URL for local servers
+        const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerUrl), {
+          requestInit: {
+            headers,
+          },
+        });
+
+        this.mcpClient = await experimental_createMCPClient({ transport });
+
+        // Success - break out of retry loop
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        log.error(`Failed to connect MCP client for ${this.mcpServerId} (attempt ${attempt}/${maxRetries}):`, error);
+
+        if (attempt < maxRetries) {
+          // Wait before retry with exponential backoff
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 1s, 2s, 4s (capped at 5s)
+          log.info(`Retrying MCP client connection in ${waitTime}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       }
-
-      // Use the appropriate URL: remote_url for remote servers, proxy URL for local servers
-      const transport = new StreamableHTTPClientTransport(new URL(this.mcpServerUrl), {
-        requestInit: {
-          headers,
-        },
-      });
-
-      this.mcpClient = await experimental_createMCPClient({ transport });
-
-      if (this.mcpServer.oauthTokens?.access_token) {
-        log.info(`✅ MCP client connected with OAuth authentication for ${this.mcpServerId}`);
-      }
-    } catch (error) {
-      log.error(`Failed to connect MCP client for ${this.mcpServerId}:`, error);
     }
+
+    // If we get here, all retries failed
+    const errorMsg = `Failed to create MCP client for ${this.mcpServerId} after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`;
+    log.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   /**
@@ -272,37 +409,44 @@ export default class SandboxedMcpServer {
    * TODO: this should be baked into the MCP Server Dockfile's health check (to replace the current one)
    */
   private async pingMcpServerContainerUntilHealthy() {
-    const MAX_PING_ATTEMPTS = 10;
-    const PING_INTERVAL_MS = 500;
+    const MAX_PING_ATTEMPTS = 30;
+    const BASE_PING_INTERVAL_MS = 1000;
     let attempts = 0;
 
     while (attempts < MAX_PING_ATTEMPTS) {
-      log.info(`Pinging MCP server container ${this.mcpServerId} until healthy...`);
+      try {
+        // Initialize MCP client connection for this ping attempt
+        if (!this.mcpClient) {
+          await this.createMcpClient();
+        }
 
-      const response = await fetch(this.mcpServerProxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: uuidv4(),
-          method: 'ping',
-        }),
-      });
+        // Use MCP client's tools() method as a health check
+        await this.mcpClient.tools();
 
-      if (response.ok) {
-        log.info(`MCP server container ${this.mcpServerId} is healthy!`);
         return;
-      } else {
-        log.info(`MCP server container ${this.mcpServerId} is not healthy, retrying...`);
+      } catch (error) {
         attempts++;
-        await new Promise((resolve) => setTimeout(resolve, PING_INTERVAL_MS));
+
+        if (attempts >= MAX_PING_ATTEMPTS) {
+          const errorMsg = `MCP server container ${this.mcpServerId} failed to become healthy after ${MAX_PING_ATTEMPTS} attempts`;
+          log.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        // Exponential backoff with jitter for OAuth containers
+        const backoffMultiplier = this.mcpServer.oauthTokens ? 1.2 : 1.0;
+        const jitter = Math.random() * 200;
+        const waitTime = Math.min(BASE_PING_INTERVAL_MS * Math.pow(backoffMultiplier, attempts) + jitter, 5000);
+
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
     }
   }
 
   async start() {
+    // Ensure cache is populated before proceeding
+    await this.fetchCachedTools();
+
     if (this.isRemoteServer) {
       // For remote servers, skip container operations
       log.info(`Starting remote MCP server: ${this.mcpServer.name}`);
@@ -311,12 +455,48 @@ export default class SandboxedMcpServer {
     } else {
       // For local servers, use existing container startup logic
       log.info(`Starting local MCP server: ${this.mcpServer.name}`);
+
+      // Validate OAuth tokens are properly set if this is an OAuth server
+      if (this.mcpServer.oauthTokens && !this.mcpServer.oauthTokens.access_token) {
+        throw new Error(`OAuth MCP server ${this.mcpServer.name} is missing access_token - cannot start container`);
+      }
+
       this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
 
-      await this.podmanContainer.startOrCreateContainer();
-      await this.pingMcpServerContainerUntilHealthy();
-      await this.createMcpClient();
-      await this.fetchTools();
+      try {
+        await this.podmanContainer.startOrCreateContainer();
+
+        // For streamable HTTP servers, update the URL with the discovered port
+        if (this.isStreamableHttpServer()) {
+          this.updateStreamableHttpUrl();
+        }
+
+        await this.pingMcpServerContainerUntilHealthy();
+        await this.createMcpClient();
+        await this.fetchTools();
+
+        /**
+         * Fetch cached tools again after tools are discovered
+         * This ensures the cache is up-to-date with any newly discovered tools
+         */
+        await this.fetchCachedTools();
+
+        log.info(`Successfully started MCP server: ${this.mcpServer.name} (OAuth: ${!!this.mcpServer.oauthTokens})`);
+      } catch (error) {
+        log.error(`Failed to start MCP server container ${this.mcpServer.name}:`, error);
+
+        // Clean up container if it was created but startup failed
+        if (this.podmanContainer) {
+          try {
+            await this.podmanContainer.removeContainer();
+            log.info(`Cleaned up failed container for MCP server: ${this.mcpServer.name}`);
+          } catch (cleanupError) {
+            log.warn(`Failed to clean up container for MCP server ${this.mcpServer.name}:`, cleanupError);
+          }
+        }
+
+        throw error;
+      }
     }
   }
 
@@ -392,8 +572,27 @@ export default class SandboxedMcpServer {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
 
+      /**
+       * For some mcp servers, their id looks like:
+       *  servers__src__filesystem__list_allowed_directorie
+       *
+       * so we need to get just the actual tool name for cache lookup
+       */
+      let cacheKey = toolName;
+
+      // Find the last occurrence of '__' which should be before the actual tool name
+      const lastDoubleUnderscore = toolName.lastIndexOf('__');
+      if (lastDoubleUnderscore !== -1) {
+        // Get everything after the last '__'
+        cacheKey = toolName.substring(lastDoubleUnderscore + 2);
+      }
+
       // Get analysis results from cache if available
-      const cachedAnalysis = this.cachedToolAnalysis.get(toolName);
+      const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
+
+      // Check if the tool has actually been analyzed (has analyzed_at timestamp)
+      const hasAnalysis =
+        cachedAnalysis && cachedAnalysis.analyzed_at !== null && cachedAnalysis.analyzed_at !== undefined;
 
       return {
         id,
@@ -402,23 +601,19 @@ export default class SandboxedMcpServer {
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: this.mcpServerId,
         mcpServerName: this.mcpServer.name,
-        // Include analysis results - default to awaiting_ollama_model if not analyzed
-        analysis: cachedAnalysis
+        // Include analysis results - show correct status based on whether analysis exists
+        analysis: hasAnalysis
           ? {
               status: 'completed',
               error: null,
               is_read: cachedAnalysis.is_read,
               is_write: cachedAnalysis.is_write,
-              idempotent: cachedAnalysis.idempotent,
-              reversible: cachedAnalysis.reversible,
             }
           : {
               status: 'awaiting_ollama_model',
               error: null,
               is_read: null,
               is_write: null,
-              idempotent: null,
-              reversible: null,
             },
       };
     });

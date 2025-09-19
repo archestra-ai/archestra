@@ -47,7 +47,10 @@ class ArchestraMcpClient {
       log.info(`Connecting to Archestra MCP server at ${this.archestraMcpUrl}...`);
 
       const transport = new StreamableHTTPClientTransport(new URL(this.archestraMcpUrl));
+      log.info('Transport created, creating MCP client...');
+
       this.mcpClient = await experimental_createMCPClient({ transport });
+      log.info('MCP client created, fetching tools...');
 
       await this.fetchTools();
       this.isConnected = true;
@@ -55,6 +58,7 @@ class ArchestraMcpClient {
       log.info('Successfully connected to Archestra MCP server');
     } catch (error) {
       log.error('Failed to connect to Archestra MCP server:', error);
+      log.error('Error details:', JSON.stringify(error, null, 2));
       throw error;
     }
   }
@@ -152,6 +156,24 @@ class ArchestraMcpClient {
       const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
       const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
 
+      // Static evaluation for all Archestra MCP tools
+      const toolEvaluations: Record<string, { is_read: boolean; is_write: boolean }> = {
+        // Memory management tools
+        list_memories: { is_read: true, is_write: false },
+        set_memory: { is_read: false, is_write: true },
+        delete_memory: { is_read: false, is_write: true },
+
+        // Tool management tools
+        list_available_tools: { is_read: true, is_write: false },
+        enable_tools: { is_read: false, is_write: true },
+        disable_tools: { is_read: false, is_write: true },
+      };
+
+      const evaluation = toolEvaluations[toolName] || {
+        is_read: false,
+        is_write: false,
+      };
+
       return {
         id,
         name: toolName,
@@ -159,14 +181,12 @@ class ArchestraMcpClient {
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: ARCHESTRA_MCP_SERVER_ID,
         mcpServerName: 'Archestra',
-        // Built-in tools don't need analysis
+        // Static evaluations for built-in tools
         analysis: {
           status: 'completed',
           error: null,
-          is_read: toolName === 'list_installed_mcp_servers',
-          is_write: toolName !== 'list_installed_mcp_servers',
-          idempotent: toolName === 'list_installed_mcp_servers',
-          reversible: toolName === 'uninstall_mcp_server',
+          is_read: evaluation.is_read,
+          is_write: evaluation.is_write,
         },
       };
     });

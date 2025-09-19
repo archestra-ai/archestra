@@ -123,15 +123,39 @@ export default function McpServerInstallDialog({
   };
 
   const handleDirectorySelect = async (key: string, multiple?: boolean) => {
-    // In a real implementation, this would open a directory picker dialog
-    // For now, we'll just show a placeholder message
-    alert('Directory picker not implemented yet. Please enter the path manually.');
+    try {
+      const res = await window.electronAPI.showOpenDialog({
+        properties: multiple ? ['openDirectory', 'multiSelections'] : ['openDirectory'],
+      });
+      if (!res || res.canceled) return;
+      const paths = res.filePaths;
+      if (multiple) {
+        handleConfigChange(key, paths);
+      } else {
+        handleConfigChange(key, paths[0]);
+      }
+    } catch (error) {
+      // Fallback alert
+      alert('Unable to open directory picker. Please enter the path manually.');
+    }
   };
 
   const handleFileSelect = async (key: string, multiple?: boolean) => {
-    // In a real implementation, this would open a file picker dialog
-    // For now, we'll just show a placeholder message
-    alert('File picker not implemented yet. Please enter the path manually.');
+    try {
+      const res = await window.electronAPI.showOpenDialog({
+        properties: multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+      });
+      if (!res || res.canceled) return;
+      const paths = res.filePaths;
+      if (multiple) {
+        handleConfigChange(key, paths);
+      } else {
+        handleConfigChange(key, paths[0]);
+      }
+    } catch (error) {
+      // Fallback alert
+      alert('Unable to open file picker. Please enter the path manually.');
+    }
   };
 
   const expandEnvVariables = (value: string | string[]): string => {

@@ -41,8 +41,6 @@ export const toolsTable = sqliteTable(
      */
     is_read: integer({ mode: 'boolean' }),
     is_write: integer({ mode: 'boolean' }),
-    idempotent: integer({ mode: 'boolean' }),
-    reversible: integer({ mode: 'boolean' }),
 
     /**
      * Timestamp of when the analysis was performed
@@ -65,15 +63,11 @@ export const toolsTable = sqliteTable(
 export const ToolAnalysisResultSchema = z.object({
   is_read: z.boolean(),
   is_write: z.boolean(),
-  idempotent: z.boolean(),
-  reversible: z.boolean(),
 });
 
 export const ToolSchema = createSelectSchema(toolsTable).extend({
   is_read: z.boolean().nullable(),
   is_write: z.boolean().nullable(),
-  idempotent: z.boolean().nullable(),
-  reversible: z.boolean().nullable(),
 });
 
 // Register schemas for OpenAPI generation

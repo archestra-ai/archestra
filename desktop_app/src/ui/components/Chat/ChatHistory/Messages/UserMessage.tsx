@@ -6,19 +6,15 @@ import { Textarea } from '@ui/components/ui/textarea';
 
 interface UserMessageProps {
   message: UIMessage;
-  messageIndex: number;
-  isEditing: boolean;
-  editingContent: string;
-  onEditStart: () => void;
-  onEditCancel: () => void;
-  onEditSave: () => void;
-  onEditChange: (content: string) => void;
-  onDelete: () => void;
+  isEditing?: boolean;
+  editingContent?: string;
+  onEditStart?: () => void;
+  onEditCancel?: () => void;
+  onEditSave?: () => Promise<void>;
+  onEditChange?: (content: string) => void;
+  onDelete?: () => Promise<void>;
 }
 
-/**
- * TODO: fix the typing issues in this file (also remove the "as" casts)
- */
 export default function UserMessage({
   message,
   isEditing,
@@ -44,7 +40,7 @@ export default function UserMessage({
       <div className="space-y-2">
         <Textarea
           value={editingContent}
-          onChange={(e) => onEditChange(e.target.value)}
+          onChange={(e) => onEditChange?.(e.target.value)}
           className="min-h-[100px] resize-none"
           autoFocus
         />
@@ -64,10 +60,11 @@ export default function UserMessage({
     <div className="relative group">
       <div className="text-sm whitespace-pre-wrap pr-20 min-h-6 pt-0.5">{textContent}</div>
 
-      <div className="absolute hidden group-hover:flex top-0 right-0  gap-1">
+      <div className="absolute hidden group-hover:flex top-0 right-0 gap-1">
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onEditStart} title="Edit message">
           <Edit2 className="h-3 w-3" />
         </Button>
+
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onDelete} title="Delete message">
           <Trash2 className="h-3 w-3" />
         </Button>

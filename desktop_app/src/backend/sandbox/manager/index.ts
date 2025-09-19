@@ -62,27 +62,29 @@ class McpServerSandboxManager {
 
     // Start all servers in parallel
     const startPromises = installedMcpServers.map(async (mcpServer) => {
-      try {
-        await this.startServer(mcpServer);
-      } catch (error) {
-        throw error;
-      }
+      await this.startServer(mcpServer);
     });
 
     const results = await Promise.allSettled(startPromises);
 
-    // Check for failures
+    // Count how many servers started vs failed
     const failures = results.filter((result) => result.status === 'rejected');
+    const successes = results.filter((result) => result.status === 'fulfilled');
+
     if (failures.length > 0) {
-      log.error(`Failed to start ${failures.length} MCP server(s):`);
-      failures.forEach((failure, index) => {
-        log.error(`  - ${(failure as PromiseRejectedResult).reason}`);
+      log.warn(`${failures.length} MCP server(s) failed to start, but will remain visible with error state`);
+      failures.forEach((failure) => {
+        log.warn(`  - ${(failure as PromiseRejectedResult).reason}`);
       });
-      this.onSandboxStartupError(new Error(`Failed to start ${failures.length} MCP server(s)`));
-      return;
     }
 
-    log.info('All MCP server containers started successfully');
+    if (successes.length > 0) {
+      log.info(`${successes.length} MCP server(s) started successfully`);
+    }
+
+    // Always call success callback even if some servers failed
+    // Failed servers will be visible in error state
+    log.info('MCP server initialization complete');
     this.onSandboxStartupSuccess();
   }
 
@@ -109,7 +111,7 @@ class McpServerSandboxManager {
     const sandboxedMcpServer = new SandboxedMcpServer(mcpServer, this.socketPath);
 
     /**
-     * TODO: this is a bit sub-optimal.. register the sandboxedMcpServer in mcpServerIdToSandboxedMcpServerMap
+     * Register the sandboxedMcpServer in mcpServerIdToSandboxedMcpServerMap
      * BEFORE calling sandboxedMcpServer.start because, internally, start calls POST /mcp_proxy/:mcp_server_id
      * which does a check against McpServerSandboxManager.mcpServerIdToSandboxedMcpServerMap to make sure
      * that the sandboxed mcp server "exists"
@@ -117,7 +119,19 @@ class McpServerSandboxManager {
     this.mcpServerIdToSandboxedMcpServerMap.set(id, sandboxedMcpServer);
     log.info(`Registered sandboxed MCP server ${id} in map`);
 
-    await sandboxedMcpServer.start();
+    try {
+      await sandboxedMcpServer.start();
+      log.info(`Successfully started and registered MCP server ${id} (${name})`);
+    } catch (error) {
+      log.error(`Failed to start MCP server ${id} (${name}):`, error);
+
+      // Keep the server in the map even if it failed to start
+      // This ensures it appears in WebSocket updates so the UI can show its error state
+      log.warn(`MCP server ${id} failed to start but remains registered for error display`);
+
+      // Don't throw - allow other servers to continue starting
+      // The server will remain in error state but still be visible in the UI
+    }
   }
 
   /**
@@ -143,9 +157,13 @@ class McpServerSandboxManager {
       log.info(`✅ Remote MCP server ${name} started successfully`);
     } catch (error) {
       log.error(`Failed to start remote MCP server ${name}:`, error);
-      // Clean up on failure
-      this.mcpServerIdToSandboxedMcpServerMap.delete(id);
-      throw error;
+
+      // Keep the server in the map even if it failed to start
+      // This ensures it appears in WebSocket updates so the UI can show its error state
+      log.warn(`Remote MCP server ${id} failed to start but remains registered for error display`);
+
+      // Don't throw - allow other servers to continue starting
+      // The server will remain in error state but still be visible in the UI
     }
   }
 

@@ -9,6 +9,8 @@ import {
   installMcpServerWithOauth,
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
+import posthogClient from '@ui/lib/posthog';
+import { useStatusBarStore } from '@ui/stores/status-bar-store';
 import { ConnectedMcpServer } from '@ui/types';
 
 /**
@@ -61,6 +63,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
     oauthClientInfo: null,
     oauthServerMetadata: null,
     oauthResourceMetadata: null,
+    oauthConfig: null,
     status: 'installed',
     serverType: 'local',
     remoteUrl: null,
@@ -137,15 +140,28 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
   },
 
   installMcpServer: async (requiresOAuth: boolean, installData: InstallMcpServerData['body']) => {
-    const { id } = installData || {};
+    const { id, displayName } = installData || {};
+    const installId = id || uuidv4();
+    const { updateTask, removeTask } = useStatusBarStore.getState();
+
     try {
       set({
         /**
          * If it is a custom MCP server installation, let's generate a temporary UUID for it
          * (just for UI purposes of tracking state of "MCP server currently being installed")
          */
-        installingMcpServerId: id || uuidv4(),
+        installingMcpServerId: installId,
         errorInstallingMcpServer: null,
+      });
+
+      // Add installation task to StatusBar
+      updateTask(`install-${installId}`, {
+        id: `install-${installId}`,
+        type: 'server',
+        title: 'Installing MCP Server',
+        description: displayName || id || 'Installing server...',
+        status: 'active',
+        timestamp: Date.now(),
       });
 
       // Special handling for browser-based authentication
@@ -174,6 +190,14 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
           if (data) {
             get().addMcpServerToInstalledMcpServers(data);
+
+            // Track browser auth installation in PostHog
+            posthogClient.capture('mcp_server_installed', {
+              serverId: data.id,
+              serverName: data.name || displayName,
+              serverType: data.serverType,
+              authMethod: 'browser',
+            });
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -189,25 +213,8 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
        * If OAuth is required, use the new simple oauth_install endpoint
        */
       if (requiresOAuth) {
-        // Show confirmation dialog before starting OAuth flow
-        const provider = (installData as any).oauthProvider || 'google';
-        const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-        const serviceDescription = provider === 'slack' ? 'Slack workspace' : 'Gmail account';
-
-        const userConfirmed = window.confirm(
-          `You're about to connect ${installData?.displayName || id} to Archestra.\n\n` +
-            `This will:\n` +
-            `• Open ${providerName}'s authentication page in your browser\n` +
-            `• Request permission to access your ${serviceDescription}\n` +
-            `• Securely store your credentials in Archestra\n\n` +
-            `Do you want to continue?`
-        );
-
-        if (!userConfirmed) {
-          console.log('User cancelled OAuth flow');
-          set({ installingMcpServerId: null });
-          return;
-        }
+        // OAuth confirmation is now handled in the UI layer
+        // The UI will only call this function after user confirms
 
         try {
           // Check if this is a generic OAuth flow
@@ -227,11 +234,6 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
             }
 
             const result = await response.json();
-
-            // For generic OAuth, the response includes authUrl - open it in browser
-            if (result.authUrl) {
-              window.open(result.authUrl, '_blank');
-            }
 
             // Update the server in our store with oauth_pending status
             if (result.server) {
@@ -271,19 +273,57 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         }
 
         get().addMcpServerToInstalledMcpServers(newlyInstalledMcpServer);
+
+        // Track MCP server installation in PostHog
+        posthogClient.capture('mcp_server_installed', {
+          serverId: newlyInstalledMcpServer.id,
+          serverName: newlyInstalledMcpServer.name,
+          serverType: newlyInstalledMcpServer.serverType,
+        });
       }
+
+      // Mark installation as completed in StatusBar
+      updateTask(`install-${installId}`, {
+        status: 'completed',
+        description: 'Installation complete',
+      });
+      setTimeout(() => removeTask(`install-${installId}`), 2000);
     } catch (error) {
       set({ errorInstallingMcpServer: error as string });
+
+      // Mark installation as failed in StatusBar
+      updateTask(`install-${installId}`, {
+        status: 'error',
+        description: 'Installation failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      setTimeout(() => removeTask(`install-${installId}`), 10000);
     } finally {
       set({ installingMcpServerId: null });
     }
   },
 
   uninstallMcpServer: async (mcpServerId: string) => {
+    const { updateTask, removeTask } = useStatusBarStore.getState();
+
     try {
       set({
         uninstallingMcpServerId: mcpServerId,
         errorUninstallingMcpServer: null,
+      });
+
+      // Get server name if available
+      const server = get().installedMcpServers.find((s) => s.id === mcpServerId);
+      const serverName = server?.name || server?.id || mcpServerId;
+
+      // Add uninstallation task to StatusBar
+      updateTask(`uninstall-${mcpServerId}`, {
+        id: `uninstall-${mcpServerId}`,
+        type: 'server',
+        title: 'Uninstalling MCP Server',
+        description: serverName,
+        status: 'active',
+        timestamp: Date.now(),
       });
 
       await uninstallMcpServer({
@@ -292,8 +332,29 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
       // Remove from MCP servers store
       useMcpServersStore.getState().removeMcpServerFromInstalledMcpServers(mcpServerId);
+
+      // Track MCP server uninstallation in PostHog
+      posthogClient.capture('mcp_server_uninstalled', {
+        serverId: mcpServerId,
+        serverName: serverName,
+      });
+
+      // Mark uninstallation as completed
+      updateTask(`uninstall-${mcpServerId}`, {
+        status: 'completed',
+        description: 'Uninstalled successfully',
+      });
+      setTimeout(() => removeTask(`uninstall-${mcpServerId}`), 2000);
     } catch (error) {
       set({ errorUninstallingMcpServer: error as string });
+
+      // Mark uninstallation as failed
+      updateTask(`uninstall-${mcpServerId}`, {
+        status: 'error',
+        description: 'Uninstallation failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      setTimeout(() => removeTask(`uninstall-${mcpServerId}`), 10000);
     } finally {
       set({ uninstallingMcpServerId: null });
     }

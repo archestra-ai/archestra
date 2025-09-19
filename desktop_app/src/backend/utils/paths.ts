@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import path from 'node:path';
 
-let DATABASE_FILE_NAME: string;
+export let DATABASE_FILE_NAME: string;
 export let USER_DATA_DIRECTORY: string;
 export let LOGS_DIRECTORY: string;
 

@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AlertCircle, Filter, Package, Search } from 'lucide-react';
+import { AlertCircle, MessageSquare, Package, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 
-import { type LocalMcpServerManifest } from '@ui/catalog_local';
-import AlphaDisclaimerMessage from '@ui/components/ConnectorCatalog/AlphaDisclaimerMessage';
+import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
+import McpServers from '@ui/components/Settings/McpServers';
+import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
 import { Input } from '@ui/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui/components/ui/select';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useConnectorCatalogStore, useMcpServersStore } from '@ui/stores';
 import { type McpServerUserConfigValues } from '@ui/types';
@@ -17,28 +17,26 @@ export const Route = createFileRoute('/connectors')({
 });
 
 function ConnectorCatalogPage() {
-  const [selectedServerForInstall, setSelectedServerForInstall] = useState<
-    ArchestraMcpServerManifest | LocalMcpServerManifest | null
-  >(null);
+  const [selectedServerForInstall, setSelectedServerForInstall] = useState<ArchestraMcpServerManifest | null>(null);
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const [oauthConfirmDialogOpen, setOauthConfirmDialogOpen] = useState(false);
+  const [pendingOAuthServer, setPendingOAuthServer] = useState<ArchestraMcpServerManifest | null>(null);
+  const [pendingBrowserAuth, setPendingBrowserAuth] = useState(false);
 
   const {
     connectorCatalog,
-    connectorCatalogCategories,
     catalogSearchQuery,
-    catalogSelectedCategory,
     catalogHasMore,
     catalogTotalCount,
     loadingConnectorCatalog,
     errorFetchingConnectorCatalog,
     setCatalogSearchQuery,
-    setCatalogSelectedCategory,
     loadMoreCatalogServers,
   } = useConnectorCatalogStore();
   const { installedMcpServers, installMcpServer: _installMcpServer, uninstallMcpServer } = useMcpServersStore();
 
   const installMcpServer = async (
-    mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest,
+    mcpServer: ArchestraMcpServerManifest,
     userConfigValues?: McpServerUserConfigValues,
     useBrowserAuth: boolean = false
   ) => {
@@ -63,11 +61,13 @@ function ConnectorCatalogPage() {
           ? `${mcpServer.archestra_config.oauth.provider}-browser`
           : mcpServer.archestra_config?.oauth?.provider,
       // Include OAuth config from catalog if available (new approach)
-      ...((mcpServer as LocalMcpServerManifest).oauth_config && {
-        oauthConfig: (mcpServer as LocalMcpServerManifest).oauth_config,
+      ...(mcpServer.oauth_config && {
+        oauthConfig: mcpServer.oauth_config,
       }),
       // Include remote_url for remote MCP servers
-      ...(mcpServer.remote_url && { remote_url: mcpServer.remote_url }),
+      ...(mcpServer.server.type === 'remote' && { remote_url: mcpServer.server.url }),
+      // Include archestra_config for browser auth provider lookup
+      ...(mcpServer.archestra_config && { archestra_config: mcpServer.archestra_config }),
     };
 
     // Add useBrowserAuth flag for internal handling
@@ -78,7 +78,7 @@ function ConnectorCatalogPage() {
     _installMcpServer(mcpServer.archestra_config?.oauth?.required || false, installData);
   };
 
-  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
+  const handleInstallClick = (mcpServer: ArchestraMcpServerManifest) => {
     // If server has user_config, show the dialog
     if (mcpServer.user_config && Object.keys(mcpServer.user_config).length > 0) {
       setSelectedServerForInstall(mcpServer);
@@ -89,15 +89,31 @@ function ConnectorCatalogPage() {
     }
   };
 
-  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
-    // For OAuth install, skip the config dialog and go straight to OAuth flow
-    await installMcpServer(mcpServer);
+  const handleOAuthInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
+    // Show OAuth confirmation dialog for all OAuth-based servers (including Remote MCP)
+    setPendingOAuthServer(mcpServer);
+    setPendingBrowserAuth(false);
+    setOauthConfirmDialogOpen(true);
   };
 
-  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest | LocalMcpServerManifest) => {
-    // For any server that supports browser-based authentication
-    // Directly install with browser auth flag
-    await installMcpServer(mcpServer, undefined, true);
+  const handleBrowserInstallClick = async (mcpServer: ArchestraMcpServerManifest) => {
+    // Show OAuth confirmation dialog for browser auth
+    setPendingOAuthServer(mcpServer);
+    setPendingBrowserAuth(true);
+    setOauthConfirmDialogOpen(true);
+  };
+
+  const handleOAuthConfirm = async () => {
+    if (pendingOAuthServer) {
+      await installMcpServer(pendingOAuthServer, undefined, pendingBrowserAuth);
+      setPendingOAuthServer(null);
+      setPendingBrowserAuth(false);
+    }
+  };
+
+  const handleOAuthCancel = () => {
+    setPendingOAuthServer(null);
+    setPendingBrowserAuth(false);
   };
 
   const handleInstallWithConfig = async (config: McpServerUserConfigValues) => {
@@ -113,39 +129,35 @@ function ConnectorCatalogPage() {
       {/* Header with search and filters */}
       <div className="space-y-3">
         <div>
-          <h1 className="text-3xl font-bold">MCP Server Catalog</h1>
+          <h1 className="text-3xl font-bold">MCP Сonnectors</h1>
           <p className="text-muted-foreground mt-1">
-            Browse and install Model Context Protocol servers to extend your AI capabilities
+            MCP Connectors allow AI to access your data. Archestra is able to run hundreds of local MCP servers and
+            connect to remote ones.
           </p>
         </div>
 
-        <AlphaDisclaimerMessage />
+        {/* Installed MCP Servers */}
+        <div>
+          <McpServers />
+        </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search servers..."
-              value={catalogSearchQuery}
-              onChange={(e) => setCatalogSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={catalogSelectedCategory} onValueChange={setCatalogSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {connectorCatalogCategories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Catalog Section */}
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold">Catalog</h2>
+          <p className="text-sm text-muted-foreground mt-1 mb-3">
+            Our MCP catalog is an open source initiative to categorize and curate servers maintained by the community.
+          </p>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search servers..."
+            value={catalogSearchQuery}
+            onChange={(e) => setCatalogSearchQuery(e.target.value)}
+            className="pl-10"
+          />
         </div>
 
         <div className="flex items-center justify-between">
@@ -179,7 +191,33 @@ function ConnectorCatalogPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {/* Request MCP Server Tile - Always First */}
+        <Card
+          className="transition-all duration-200 hover:shadow-md border-dashed cursor-pointer group"
+          onClick={() => window.electronAPI.openExternal('https://github.com/archestra-ai/archestra/issues')}
+        >
+          <CardHeader className="p-3 pb-2">
+            <div className="space-y-1">
+              <div className="grid grid-cols-[auto_1fr] items-center gap-1 max-w-full">
+                <Plus className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                <h3 className="font-medium text-sm text-muted-foreground group-hover:text-foreground">
+                  Request MCP Server
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Can't find the MCP server you need? Request it and we'll add it to the catalog.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 pt-0">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-foreground">
+              <MessageSquare className="h-3 w-3" />
+              <span>Open GitHub Issue</span>
+            </div>
+          </CardContent>
+        </Card>
+
         {connectorCatalog.map((connectorCatalogMcpServer) => (
           <McpServer
             key={connectorCatalogMcpServer.name}
@@ -237,13 +275,18 @@ function ConnectorCatalogPage() {
           )}
         </div>
       )}
-
-      {/* Install Dialog */}
       <McpServerInstallDialog
         mcpServer={selectedServerForInstall}
         open={installDialogOpen}
         onOpenChange={setInstallDialogOpen}
         onInstall={handleInstallWithConfig}
+      />
+      <AuthConfirmationDialog
+        open={oauthConfirmDialogOpen}
+        onOpenChange={setOauthConfirmDialogOpen}
+        isBrowserAuth={pendingBrowserAuth}
+        onConfirm={handleOAuthConfirm}
+        onCancel={handleOAuthCancel}
       />
     </div>
   );

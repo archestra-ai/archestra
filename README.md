@@ -1,50 +1,82 @@
-<div align="center">  
-  
-  # Archestra
-  
-  **Enterprise MCP Platform for AI Agents**
+# Archestra Desktop, the Most Simple and Safe MCP Client
 
-  **[📅 Schedule a meeting with us at KubeCon + CloudNativeCon North America 2025!](https://calendly.com/motakuk/meet-archestra-at-kubecon-north-america-2025)**
-  
-  <br />
-  
-  [![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
-  [![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
-  [![Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack)](https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg)
+
+- 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!
+- 🔒 **Sandboxed MCP Runtime** — Isolated sandbox protecting the host from supply chain attacks.
+- 🔌 **Full OSS MCPs Support** — Compatible with thousands of existing MCP servers.
+- 💻 **Local-First Architecture** — Privacy-focused design with local LLM.
+
+![Archestra Screenshot](./docs/assets/screenshot.png)
+
+<div align="center">
+
+[![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
+<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
+<img alt="Github Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
+[![Contributors](https://img.shields.io/github/contributors/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/graphs/contributors)
+
 </div>
 
----
+<p align="center">
+  <a href="https://www.archestra.ai/docs/getting-started-desktop">Getting Started</a>
+  - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
+  - <a href="https://github.com/archestra-ai/archestra/issues">Bug reports</a>
+  - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Commuity</a>
+</p>
 
-## ⚠️ Early Development Notice
 
-**Archestra is in very early development**, and it's not yet ready for general download.
+## Overview
 
-**Want to get notified when we launch?** Drop your email at [Archestra.AI](https://www.archestra.ai/) to be the first to know when Archestra is ready.
+Archestra is a 100% local runtime for MCP (Model Context Protocol) servers and a ChatGPT-like UI allowing non-technical users to build safe and private agents with powerful data access.
 
-## 🚀 Overview
 
-Archestra is an enterprise-grade platform that enables non-technical users to safely leverage AI agents and MCP (Model Context Protocol) servers. Built as a privacy-focused desktop application, Archestra provides a secure runtime environment for AI interactions with sandboxing, resource controls, and prompt injection prevention.
+## Installation
 
-![Archestra Screenshot](desktop_app/public/images/screenshot.png)
+Download from [archestra.ai](https://archestra.ai/) or [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
 
-### Key Features
+## Build from Source
 
-- 🔒 **Secure Runtime** - Isolated execution environment for AI agents with sandboxing and resource controls
-- 🛡️ **Prompt Injection Prevention** - Advanced security to prevent context leakage and behavior manipulation
-- 🔌 **MCP Protocol Support** - Compatible with thousands of existing MCP servers and custom implementations
-- 💻 **Local-First Architecture** - Privacy-focused design with local LLM
-- 🎯 **Enterprise Ready** - Built for non-technical users with enterprise-level security and compliance
-- 🔧 **Extensible Tool System** - Support most of MCP servers: GitHub, Gmail, Slack, PostgreSQL, filesystem, and more
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18 or higher)
+- **pnpm** (v8 or higher) - Install with `npm install -g pnpm`
+- **Git**
+
+Clone the Repository
+
+```bash
+git clone https://github.com/archestra-ai/archestra.git
+cd archestra/desktop_app
+```
+
+Use pnpm to install all required dependencies:
+
+```bash
+pnpm install
+```
+
+Start Dev Environment
+
+```bash
+pnpm start
+```
 
 ## 🤝 Contributing
 
 We welcome contributions from the community! [Contribution guideline](https://www.archestra.ai/docs/contributing).
 
+Thank you for contributing and continuously making <b>Archestra</b> better, <b>you're awesome</b> 🫶
+
+<a href="https://github.com/archestra-ai/archestra/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" />
+</a>
+
+
 ---
 
 <div align="center">
   <br />
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="desktop_app/public/images/linux-foundation-logo.png" height="50" alt="Linux Foundation" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/linux-foundation-logo.png" height="50" alt="Linux Foundation" /></a>
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="desktop_app/public/images/cncf-logo.png" height="50" alt="CNCF" /></a>
+  <a href="https://www.archestra.ai/blog/archestra-joins-cncf-linux-foundation"><img src="./docs/assets/cncf-logo.png" height="50" alt="CNCF" /></a>
 </div>

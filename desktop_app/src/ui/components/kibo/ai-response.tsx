@@ -51,11 +51,30 @@ const components: Options['components'] = {
       {children}
     </span>
   ),
-  a: ({ node, children, className, ...props }) => (
-    <a className={cn('font-medium text-primary underline', className)} rel="noreferrer" target="_blank" {...props}>
-      {children}
-    </a>
-  ),
+  a: ({ node, children, className, href, ...props }) => {
+    const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (href) {
+        e.preventDefault();
+        if (window.electronAPI?.openExternal) {
+          window.electronAPI.openExternal(href);
+        } else {
+          window.open(href, '_blank');
+        }
+      }
+    };
+
+    return (
+      <a
+        className={cn('font-medium text-primary underline', className)}
+        rel="noreferrer"
+        href={href}
+        onClick={handleClick}
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
   h1: ({ node, children, className, ...props }) => (
     <h1 className={cn('mt-6 mb-2 font-semibold text-3xl', className)} {...props}>
       {children}

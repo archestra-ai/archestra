@@ -5,9 +5,11 @@
  * Handles OAuth authentication flow using @modelcontextprotocol/sdk/client/auth.js
  */
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
+import { discoverAuthorizationServerMetadata } from '@modelcontextprotocol/sdk/client/auth.js';
 import { OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
+import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 import { McpOAuthProvider } from './provider';
@@ -37,14 +39,63 @@ export async function performOAuth(provider: McpOAuthProvider, config: OAuthServ
     // Now try with the captured authorization code
     if (provider.authorizationCode) {
       log.info('🔐 Using captured authorization code for token exchange...');
-      authResult = await auth(provider, {
-        serverUrl: config.server_url,
-        scope: config.scopes.join(' '),
-        authorizationCode: provider.authorizationCode,
-        resourceMetadataUrl: config.resource_metadata_url ? new URL(config.resource_metadata_url) : undefined,
-      });
 
-      log.info('✅ OAuth result (with code):', authResult);
+      // Check if we should use OAuth proxy for token exchange
+      if (config.requires_proxy) {
+        log.info('🔄 Using OAuth proxy for token exchange...');
+
+        // Log client information being used
+        const clientInfo = await provider.clientInformation();
+        log.info('🔑 OAuth client info:', {
+          client_id: clientInfo?.client_id,
+          has_client_secret: !!clientInfo?.client_secret,
+          client_secret_value: clientInfo?.client_secret === 'REDACTED' ? 'REDACTED' : 'HAS_VALUE',
+        });
+
+        // Use OAuth proxy client for token exchange instead of MCP SDK
+        // Discover the token endpoint from OAuth server metadata
+        let tokenEndpoint: string;
+        try {
+          // Try to discover token endpoint from well-known URL
+          const wellKnownUrl = config.well_known_url || `${config.server_url}/.well-known/oauth-authorization-server`;
+          const metadata = await discoverAuthorizationServerMetadata(wellKnownUrl);
+          tokenEndpoint = metadata?.token_endpoint || `${config.server_url}/oauth/token`;
+          log.info('🔍 Discovered token endpoint:', tokenEndpoint);
+        } catch (error) {
+          // Fallback to common OAuth endpoint pattern
+          tokenEndpoint = `${config.server_url}/oauth/token`;
+          log.info('⚠️ Could not discover token endpoint, using fallback:', tokenEndpoint);
+        }
+
+        // Exchange authorization code for tokens via OAuth proxy
+        // Pass MCP server URL for discovery, not the token endpoint
+        const tokens = await OAuthProxyClient.exchangeTokens(
+          provider.getServerId(),
+          config.server_url, // Pass server URL for OAuth discovery
+          {
+            grant_type: 'authorization_code',
+            code: provider.authorizationCode,
+            redirect_uri: provider.redirectUrl,
+            code_verifier: await provider.codeVerifier(),
+          }
+        );
+
+        // Store the tokens in the provider
+        await provider.saveTokens(tokens);
+
+        log.info('✅ OAuth token exchange completed via proxy');
+        authResult = 'AUTHORIZED';
+      } else {
+        // Use standard MCP SDK flow for non-proxy OAuth
+        authResult = await auth(provider, {
+          serverUrl: config.server_url,
+          scope: config.scopes.join(' '),
+          authorizationCode: provider.authorizationCode,
+          resourceMetadataUrl: config.resource_metadata_url ? new URL(config.resource_metadata_url) : undefined,
+        });
+
+        log.info('✅ OAuth result (with code):', authResult);
+      }
     } else {
       throw new Error('No authorization code captured');
     }

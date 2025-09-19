@@ -1,8 +1,32 @@
-const OLLAMA_SERVER_PORT = parseInt(process.env.ARCHESTRA_OLLAMA_SERVER_PORT || '54589', 10);
-const OLLAMA_GUARD_MODEL = 'llama-guard3:1b';
-const OLLAMA_GENERAL_MODEL = 'qwen3:8b';
+import { app } from 'electron';
+import * as os from 'os';
 
-const DEBUG = !['production', 'prod'].includes(process.env.NODE_ENV?.toLowerCase() || '');
+import { SYSTEM_MODELS } from '../constants';
+
+const OLLAMA_SERVER_PORT = parseInt(process.env.ARCHESTRA_OLLAMA_SERVER_PORT || '54589', 10);
+const OLLAMA_GUARD_MODEL = SYSTEM_MODELS.GUARD;
+const OLLAMA_GENERAL_MODEL = SYSTEM_MODELS.GENERAL;
+
+// Determine recommended Qwen3 model based on system RAM
+const getRecommendedQwenModel = () => {
+  const totalMemoryGB = Math.floor(os.totalmem() / (1024 * 1024 * 1024));
+
+  if (totalMemoryGB >= 32) {
+    return { model: 'qwen3:14b', reason: 'Recommended model for chat (32GB+ RAM, 14B parameters)' };
+  } else if (totalMemoryGB >= 16) {
+    return { model: 'qwen3:8b', reason: 'Recommended model for chat (16GB+ RAM, 8B parameters)' };
+  } else {
+    return { model: 'qwen3:1.7b', reason: 'Recommended model for chat (8GB+ RAM, 1.7B parameters)' };
+  }
+};
+
+const RECOMMENDED_QWEN_MODEL = getRecommendedQwenModel();
+
+/**
+ * NOTE: in the context of codegen, app is not available (undefined), so we default to false
+ * (also the reason why we use the ?. operator)
+ */
+const DEBUG = !app?.isPackaged;
 
 export default {
   debug: DEBUG,
@@ -23,6 +47,7 @@ export default {
     },
     guardModel: OLLAMA_GUARD_MODEL,
     generalModel: OLLAMA_GENERAL_MODEL,
+    recommendedModel: RECOMMENDED_QWEN_MODEL.model,
     requiredModels: [
       {
         model: OLLAMA_GUARD_MODEL,
@@ -32,6 +57,7 @@ export default {
         model: OLLAMA_GENERAL_MODEL,
         reason: 'General tasks (tools analysis, chat summarization)',
       },
+      RECOMMENDED_QWEN_MODEL,
     ],
   },
   sandbox: {

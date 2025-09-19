@@ -14,6 +14,7 @@ Note: The README.md includes a Developer Quickstart section that shows basic set
 2. **ALWAYS use pnpm** (not npm or yarn) for package management
 3. **Run database commands from `desktop_app/`** directory
 4. **Use Podman** (not Docker) for container operations
+5. **Prettier** for ANY code that you push, make sure you run `pnpm prettier --write .` to ensure it is properly formatted
 
 ## Common Development Commands
 
@@ -29,7 +30,7 @@ pnpm start:server       # Start backend server only
 
 ```bash
 cd desktop_app
-pnpm package           # Package app for current platform
+pnpm package          # Package app for current platform
 pnpm make             # Create platform installer
 pnpm build:universal  # Build universal macOS binary
 ```
@@ -38,11 +39,12 @@ pnpm build:universal  # Build universal macOS binary
 
 ```bash
 cd desktop_app
-pnpm test             # Run all tests
-pnpm test:ui          # Run UI tests only
-pnpm test:backend     # Run backend tests only
-pnpm typecheck        # Check TypeScript types
-pnpm prettier         # Format code
+pnpm test                       # Run all tests
+pnpm test:ui                    # Run UI tests only
+pnpm test:backend               # Run backend tests only
+pnpm test:e2e:packaged          # Run E2E tests on packaged app
+pnpm typecheck                  # Check TypeScript types
+pnpm prettier --write .         # Format code
 ```
 
 ### Database Management
@@ -184,10 +186,11 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
   - Centralized user settings and preferences
   - Onboarding flow tracking with `has_completed_onboarding` field
   - Telemetry opt-in functionality with `collect_telemetry_data` field
+  - Analytics opt-in functionality with `collect_analytics_data` field (defaults to true)
   - Automatic user record creation on application startup via `ensureUserExists()`
   - Primary API endpoints:
     - `GET /api/user` - Returns complete user object
-    - `PATCH /api/user` - Allows partial updates (hasCompletedOnboarding, collectTelemetryData, etc.)
+    - `PATCH /api/user` - Allows partial updates (hasCompletedOnboarding, collectTelemetryData, collectAnalyticsData, etc.)
   - Legacy API endpoints (maintained for backward compatibility):
     - `GET /api/onboarding/status` - Returns onboarding completion status
     - `POST /api/onboarding/complete` - Marks onboarding as complete
@@ -230,6 +233,28 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
     - Special handling in `llm/index.ts` to bypass standard provider validation
     - Provider type: `'ollama'` in the provider registry
     - Known limitation: Some MCP tool calls may not work correctly
+- **PostHog Analytics**:
+  - **Privacy-First Implementation**:
+    - Disabled in development (non-packaged) builds
+    - User opt-in via `collectAnalyticsData` field in user settings
+    - Anonymous identification using `user_{uniqueId}`
+  - **Session Recording**:
+    - All inputs masked by default (`maskAllInputs: true`)
+    - Sensitive data selectors for additional masking (`[data-sensitive]`)
+    - Password, email, and tel inputs always masked
+  - **Integration** (`src/ui/lib/posthog.ts`):
+    - Lazy initialization after user data loads
+    - Conditional initialization based on user preference
+    - Graceful shutdown with `opt_out_capturing()` when disabled
+    - Event capture with error handling
+  - **Configuration**:
+    - API key and host in `src/ui/config.ts`
+    - EU data residency (`https://eu.i.posthog.com`)
+    - Local storage + cookie persistence
+  - **User Control**:
+    - Toggle via `toggleAnalyticsCollectionStatus()` in user store
+    - Real-time enable/disable without restart
+    - Settings persist across sessions
 - **Routing System** (Tanstack Router):
   - File-based routing with automatic route generation
   - Type-safe navigation with `@tanstack/react-router`
@@ -386,10 +411,13 @@ Key tables (snake_case naming):
 
 ### Testing Patterns
 
-- **Vitest** for all tests
+- **Vitest** for unit and integration tests
 - UI tests use jsdom environment
 - Backend tests use node environment
 - Test files colocated with source files (`.test.ts` extension)
+- **WebDriverIO** for E2E tests on packaged applications
+- E2E tests located in `test/e2e/` directory
+- E2E tests run against built applications in CI
 
 ### CI/CD Workflows
 
@@ -401,7 +429,7 @@ Key tables (snake_case naming):
   - **Workflow Structure**:
     - `claude-code.yml` and `claude-pull-requests.yml`: Reusable workflow templates
     - `user-scoped-claude-code.yml` and `user-scoped-claude-pull-requests.yml`: User-specific orchestrators
-  - **Authorized Users**: Currently configured for `joeyorlando`, `Matvey-Kuk`, and `iskhakov`
+  - **Authorized Users**: Currently configured for `joeyorlando` and `iskhakov`
   - **Compliance**: Ensures adherence to Anthropic's single-account OAuth token policy
   - **Adding New Users**: Add repository secret `USERNAME_CLAUDE_CODE_OAUTH_TOKEN` and update user-scoped workflows
 

@@ -19,6 +19,7 @@ import {
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpServerSandboxManager from '@backend/sandbox';
 import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
+import { getBrowserAuthProvider, hasBrowserAuthProvider } from '@backend/server/plugins/browser-auth/provider-registry';
 import log from '@backend/utils/logger';
 
 export const McpServerInstallSchema = z.object({
@@ -51,15 +52,9 @@ export const McpServerInstallSchema = z.object({
   serverType: z.enum(['local', 'remote']).optional(),
   /** Remote URL for remote MCP servers */
   remote_url: z.string().optional(),
+  /** Archestra configuration from catalog (includes browser_based config) */
+  archestra_config: z.any().optional(),
 });
-
-// Interface for catalog search parameters
-interface CatalogSearchParams {
-  q?: string;
-  category?: string;
-  limit?: number;
-  offset?: number;
-}
 
 export default class McpServerModel {
   static async create(data: typeof mcpServersTable.$inferInsert) {
@@ -122,6 +117,7 @@ export default class McpServerModel {
     status,
     serverType,
     remote_url,
+    archestra_config,
   }: z.infer<typeof McpServerInstallSchema>) {
     /**
      * Check if an mcp server with this id already exists
@@ -139,9 +135,32 @@ export default class McpServerModel {
       throw new Error(`MCP server ${id} is already installed`);
     }
 
-    // OAuth tokens are now handled directly by the MCP client transport layer
-    // No need to add tokens to environment variables - they're used for HTTP auth headers
+    // Handle browser authentication tokens and map them to environment variables
     let finalServerConfig = serverConfig;
+
+    // Map browser auth tokens to environment variables
+    const providerName = archestra_config?.browser_based?.provider;
+
+    if (providerName && oauthTokens && hasBrowserAuthProvider(providerName)) {
+      const provider = getBrowserAuthProvider(providerName);
+      const tokenMapping = provider.browserAuthConfig?.tokenMapping;
+
+      if (tokenMapping) {
+        if (!finalServerConfig.env) {
+          finalServerConfig.env = {};
+        }
+
+        if (tokenMapping.primary && oauthTokens.access_token) {
+          finalServerConfig.env[tokenMapping.primary] = oauthTokens.access_token;
+        }
+
+        if (tokenMapping.secondary && oauthTokens.refresh_token) {
+          finalServerConfig.env[tokenMapping.secondary] = oauthTokens.refresh_token;
+        }
+
+        log.info(`Browser auth tokens mapped for provider: ${providerName}`);
+      }
+    }
 
     // OAuth validation is now handled by the frontend-provided oauthConfig
 
@@ -168,6 +187,7 @@ export default class McpServerModel {
         oauthClientInfo: oauthClientInfo || null,
         oauthServerMetadata: oauthServerMetadata || null,
         oauthResourceMetadata: oauthResourceMetadata || null,
+        oauthConfig: oauthConfig ? (JSON.stringify(oauthConfig) as string) : null,
         createdAt: now.toISOString(),
       })
       .returning();
@@ -196,44 +216,6 @@ export default class McpServerModel {
 
     // Sync all connected external MCP clients after uninstalling
     await ExternalMcpClientModel.syncAllConnectedExternalMcpClients();
-  }
-
-  /**
-   * Search the MCP server catalog
-   * This method acts as a proxy to the external catalog API
-   */
-  static async searchCatalog(params: CatalogSearchParams) {
-    // Get the catalog URL from environment or use default
-    const catalogUrl = process.env.ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api';
-
-    // Build query string
-    const queryParams = new URLSearchParams();
-    if (params.q) queryParams.append('q', params.q);
-    if (params.category) queryParams.append('category', params.category);
-    if (params.limit) queryParams.append('limit', params.limit.toString());
-    if (params.offset) queryParams.append('offset', params.offset.toString());
-
-    const url = `${catalogUrl}/search?${queryParams.toString()}`;
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Archestra-Desktop/1.0',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Catalog API returned ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      log.error('Failed to fetch from catalog API:', error);
-      throw error;
-    }
   }
 }
 

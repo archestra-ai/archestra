@@ -1,6 +1,5 @@
-import * as Sentry from '@sentry/electron/main';
 import { config as dotenvConfig } from 'dotenv';
-import { BrowserWindow, NativeImage, app, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,8 +10,9 @@ import { runDatabaseMigrations } from '@backend/database';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';
 import McpServerSandboxManager from '@backend/sandbox';
-import { startFastifyServer } from '@backend/server';
+import { startFastifyServer, stopFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
+import sentryClient from '@backend/utils/sentry';
 import WebSocketServer from '@backend/websocket';
 
 import config from './config';
@@ -20,6 +20,16 @@ import { setupProviderBrowserAuthHandlers } from './main-browser-auth';
 
 // Load environment variables from .env file
 dotenvConfig();
+
+/**
+ * Initialize Sentry early for error tracking
+ *
+ * Don't initialize Sentry when running in codegen mode as it leads to some issues
+ * with the code generation process.
+ */
+if (!process.env.CODEGEN) {
+  sentryClient.initialize();
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -44,35 +54,75 @@ if (process.defaultApp) {
 }
 
 /**
- * Configure Sentry for error monitoring, logs, session replay, and tracing
- * https://docs.sentry.io/platforms/javascript/guides/electron/#configure
- */
-Sentry.init({
-  dsn: config.sentry.dsn,
-  /**
-   * TODO: pull from User.collectTelemetryData..
-   */
-});
-
-/**
  * Enable automatic updates
  * https://github.com/electron/update-electron-app?tab=readme-ov-file#usage
  */
 updateElectronApp({
   repo: `${config.build.github.owner}/${config.build.github.repoName}`,
   updateInterval: config.build.updateInterval,
+  logger: log,
 });
 
 let mainWindow: BrowserWindow | null = null;
+let isCleaningUp = false;
+
+/**
+ * Cleanup function to gracefully shut down all backend services
+ */
+async function cleanup(): Promise<void> {
+  if (isCleaningUp) {
+    return; // Prevent multiple cleanup attempts
+  }
+
+  isCleaningUp = true;
+  log.info('Starting graceful shutdown cleanup...');
+
+  try {
+    // Stop Fastify server first to prevent new requests
+    await stopFastifyServer();
+  } catch (error) {
+    log.error('Error stopping Fastify server:', error);
+  }
+
+  try {
+    // Stop WebSocket server
+    WebSocketServer.stop();
+  } catch (error) {
+    log.error('Error stopping WebSocket server:', error);
+  }
+
+  try {
+    // Disconnect from Archestra MCP server
+    await ArchestraMcpClient.disconnect();
+  } catch (error) {
+    log.error('Error disconnecting Archestra MCP client:', error);
+  }
+
+  try {
+    // Turn off sandbox manager (stops all MCP containers)
+    McpServerSandboxManager.turnOffSandbox();
+  } catch (error) {
+    log.error('Error turning off sandbox:', error);
+  }
+
+  try {
+    // Stop Ollama server
+    await OllamaServer.stopServer();
+  } catch (error) {
+    log.error('Error stopping Ollama server:', error);
+  }
+
+  log.info('Graceful shutdown cleanup completed');
+}
 
 // Resolve icon path for both dev and packaged builds
 function resolveIconFilename(): string | undefined {
   const isMac = process.platform === 'darwin';
   const isWin = process.platform === 'win32';
   const repoRoot = process.cwd();
-  const projectIconsDir = path.join(repoRoot, 'icons');
-  const siblingIconsFromBuild = path.join(__dirname, '../../icons');
-  const packagedIconsDir = path.join(process.resourcesPath, 'icons');
+  const projectIconsDir = path.join(repoRoot, 'assets', 'icons');
+  const siblingIconsFromBuild = path.join(__dirname, '../../assets', 'icons');
+  const packagedIconsDir = path.join(process.resourcesPath, 'assets', 'icons');
 
   const candidates: string[] = isMac ? ['icon.icns', 'icon.png'] : isWin ? ['icon.ico', 'icon.png'] : ['icon.png'];
   const searchDirs = app.isPackaged
@@ -130,7 +180,12 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      devTools: !app.isPackaged,
+      /**
+       * NOTE: for now we'll just keep devtools enabled while we're in alpha stage
+       *
+       * later on we should probably disable this for packaged buidls (ie. `devTools: !app.isPackaged`)
+       */
+      devTools: true,
     },
   });
 
@@ -158,7 +213,10 @@ async function startBackendServer(): Promise<void> {
 
   try {
     await runDatabaseMigrations();
-    await UserModel.ensureUserExists();
+    const user = await UserModel.ensureUserExists();
+
+    // Set Sentry user context now that user is available
+    sentryClient.setUserContext(user);
 
     // Start WebSocket and Fastify servers first so they're ready for MCP connections
     WebSocketServer.start();
@@ -166,12 +224,25 @@ async function startBackendServer(): Promise<void> {
 
     // Connect to the Archestra MCP server after Fastify is running
     try {
+      // Add a small delay to ensure the MCP endpoint is ready
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       await ArchestraMcpClient.connect();
       log.info('Archestra MCP client connected successfully');
     } catch (error) {
       log.error('Failed to connect Archestra MCP client:', error);
       // Continue anyway - the app can work without Archestra tools
     }
+
+    // Start Ollama server first
+    await OllamaServer.startServer();
+
+    /**
+     * Ensure that ollama models that're required for various app functionality are available,
+     * downloading them if necessary. This must be done BEFORE starting MCP servers
+     * so that tool analysis can proceed without waiting forever.
+     */
+    await OllamaClient.ensureModelsAvailable();
 
     // Now start the sandbox manager which will connect MCP clients
     McpServerSandboxManager.onSandboxStartupSuccess = () => {
@@ -181,14 +252,6 @@ async function startBackendServer(): Promise<void> {
       log.error('Sandbox startup error:', error);
     };
     McpServerSandboxManager.start();
-
-    await OllamaServer.startServer();
-
-    /**
-     * Ensure that ollama models that're required for various app functionality are available,
-     * downloading them if necessary
-     */
-    await OllamaClient.ensureModelsAvailable();
 
     log.info('Backend server started successfully in main process');
   } catch (error) {
@@ -202,8 +265,86 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   await shell.openExternal(url);
 });
 
-ipcMain.handle('get-app-version', () => {
-  return app.getVersion();
+ipcMain.handle('get-app-info', () => {
+  return {
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+  };
+});
+
+ipcMain.handle(
+  'show-open-dialog',
+  async (_event, options: { properties: Array<'openDirectory' | 'openFile' | 'multiSelections'> }) => {
+    return dialog.showOpenDialog(mainWindow!, options);
+  }
+);
+
+ipcMain.handle('get-system-info', () => {
+  const os = require('os');
+  const { execSync } = require('child_process');
+
+  // Get CPU info
+  const cpus = os.cpus();
+  const cpuModel = cpus[0]?.model || 'Unknown';
+  const cpuCores = cpus.length;
+
+  // Get memory info
+  const totalMemory = os.totalmem();
+  const freeMemory = os.freemem();
+
+  // Get disk info (macOS/Linux using df command, Windows using wmic)
+  let diskInfo = { total: 0, free: 0, freePercent: '0' };
+  try {
+    if (process.platform === 'win32') {
+      const output = execSync('wmic logicaldisk get size,freespace,caption', { encoding: 'utf8' });
+      const lines = output.trim().split('\n').slice(1);
+      let totalSize = 0;
+      let totalFree = 0;
+      lines.forEach((line: string) => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3 && parts[1] && parts[2]) {
+          totalFree += parseInt(parts[1]) || 0;
+          totalSize += parseInt(parts[2]) || 0;
+        }
+      });
+      diskInfo.total = totalSize;
+      diskInfo.free = totalFree;
+      diskInfo.freePercent = totalSize > 0 ? ((totalFree / totalSize) * 100).toFixed(1) : '0';
+    } else {
+      // macOS and Linux
+      const output = execSync('df -k /', { encoding: 'utf8' });
+      const lines = output.trim().split('\n');
+      const dataLine = lines[1];
+      const parts = dataLine.split(/\s+/);
+      const total = parseInt(parts[1]) * 1024; // Convert from KB to bytes
+      const used = parseInt(parts[2]) * 1024;
+      const available = parseInt(parts[3]) * 1024;
+      diskInfo.total = total;
+      diskInfo.free = available;
+      diskInfo.freePercent = total > 0 ? ((available / total) * 100).toFixed(1) : '0';
+    }
+  } catch (error) {
+    console.error('Error getting disk info:', error);
+  }
+
+  // Format sizes to human-readable
+  const formatBytes = (bytes: number) => {
+    const gb = bytes / (1024 * 1024 * 1024);
+    return gb.toFixed(2) + ' GB';
+  };
+
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    osVersion: os.release(),
+    nodeVersion: process.versions.node,
+    electronVersion: process.versions.electron,
+    cpu: `${cpuModel} (${cpuCores} cores)`,
+    totalMemory: formatBytes(totalMemory),
+    freeMemory: formatBytes(freeMemory),
+    totalDisk: formatBytes(diskInfo.total),
+    freeDisk: formatBytes(diskInfo.free),
+  };
 });
 
 // Set up OAuth callback handler
@@ -224,6 +365,62 @@ const handleProtocol = (url: string) => {
   if (url.startsWith('archestra-ai://oauth-callback')) {
     const urlObj = new URL(url);
     const params = Object.fromEntries(urlObj.searchParams.entries());
+
+    // Store authorization code for MCP OAuth flows using proxy
+    if (params.code && params.state) {
+      log.info('📥 Received OAuth callback with code and state, sending to backend server...');
+
+      // Send authorization code to backend server via HTTP request
+      const serverPort = process.env.ARCHESTRA_API_SERVER_PORT || '54587';
+      const serverUrl = `http://localhost:${serverPort}/api/oauth/store-code`;
+
+      log.info('🌐 About to send HTTP request to backend server');
+      log.info('📍 Target URL:', serverUrl);
+      log.info('🔌 Server port:', serverPort);
+      log.info('📦 Request body:', JSON.stringify({ state: params.state, code: params.code }));
+
+      fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          state: params.state,
+          code: params.code,
+        }),
+      })
+        .then((response) => {
+          log.info('📥 Received response from backend server');
+          log.info('📊 Response status:', response.status);
+          log.info('📋 Response headers:', Object.fromEntries(response.headers.entries()));
+
+          if (response.ok) {
+            log.info('✅ HTTP request successful, parsing JSON response...');
+            return response.json();
+          } else {
+            log.error('❌ HTTP request failed with status:', response.status);
+            return response.text().then((errorText) => {
+              log.error('📄 Error response body:', errorText);
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            });
+          }
+        })
+        .then((result) => {
+          log.info('✅ Successfully sent authorization code to backend server');
+          log.info('📨 Backend server response:', result);
+        })
+        .catch((error) => {
+          log.error('❌ Failed to send authorization code to backend server');
+          log.error('🔍 Error type:', error.constructor.name);
+          log.error('📝 Error message:', error.message);
+          log.error('📚 Error stack:', error.stack);
+
+          // Check if it's a network error
+          if (error.cause) {
+            log.error('🔗 Error cause:', error.cause);
+          }
+        });
+    }
 
     // Send to renderer process
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -269,8 +466,14 @@ if (!gotTheLock) {
  * Some APIs can only be used after this event occurs.
  */
 app.on('ready', async () => {
-  await startBackendServer();
+  /**
+   * IMPORTANT: create the main app window before starting the backend server.
+   * Don't await for startBackendServer() to complete before creating the window as this
+   * will lead to the main app window feeling like it's taking forever to boot up
+   */
   createWindow();
+
+  await startBackendServer();
 
   // Set Dock icon explicitly for macOS in development (packaged build uses icns automatically)
   if (process.platform === 'darwin') {
@@ -305,4 +508,42 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+/**
+ * Handle graceful shutdown on app quit
+ */
+app.on('before-quit', async (event) => {
+  if (!isCleaningUp) {
+    event.preventDefault();
+    await cleanup();
+    app.quit(); // Quit after cleanup is done
+  }
+});
+
+/**
+ * Handle process termination signals for graceful shutdown
+ */
+process.on('SIGTERM', async () => {
+  log.info('Received SIGTERM signal');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  log.info('Received SIGINT signal (Ctrl+C)');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on('uncaughtException', async (error) => {
+  log.error('Uncaught exception:', error);
+  await cleanup();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  log.error('Unhandled rejection at:', promise, 'reason:', reason);
+  await cleanup();
+  process.exit(1);
 });

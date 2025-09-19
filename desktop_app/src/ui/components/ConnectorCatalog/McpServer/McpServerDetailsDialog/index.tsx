@@ -18,7 +18,6 @@ export default function McpServerDetailsDialog({ server, open, onOpenChange }: M
   const {
     name,
     display_name,
-    version,
     description,
     long_description,
     author,
@@ -50,7 +49,6 @@ export default function McpServerDetailsDialog({ server, open, onOpenChange }: M
           <div className="space-y-6">
             {/* Version and Quality Score */}
             <div className="flex items-center gap-4">
-              <Badge variant="secondary">v{version}</Badge>
               {quality_score && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">Trust Score:</span>

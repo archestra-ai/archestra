@@ -1,4 +1,5 @@
 import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
@@ -6,14 +7,27 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { PublisherGitHubConfig } from '@electron-forge/publisher-github';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { copy, mkdirs } from 'fs-extra';
-import { dirname, join, resolve } from 'path';
+import fs from 'fs-extra';
+import path from 'path';
 
 import config from './src/config';
 
 const {
   build: { productName, description, authors, appBundleId, github },
 } = config;
+
+const PLATFORM = process.platform;
+const ARCHITECTURE = process.arch === 'x64' ? 'x86_64' : process.arch;
+const IS_MAC = PLATFORM === 'darwin';
+const IS_WINDOWS = PLATFORM === 'win32';
+
+const BINARIES_DIRECTORY = `./resources/bin/${IS_MAC ? 'mac' : IS_WINDOWS ? 'win' : 'linux'}/${ARCHITECTURE}`;
+
+const binaryFilePaths: string[] = [];
+for (const binaryFileName of fs.readdirSync(BINARIES_DIRECTORY)) {
+  const binaryFilePath = path.join(BINARIES_DIRECTORY, binaryFileName);
+  binaryFilePaths.push(binaryFilePath);
+}
 
 const forgeConfig: ForgeConfig = {
   packagerConfig: {
@@ -25,19 +39,11 @@ const forgeConfig: ForgeConfig = {
      * https://electron.github.io/packager/main/interfaces/Options.html#asar
      */
     asar: true,
-    /**
-     * Copy platform-specific binaries to Resources folder.
-     * This will preserve the directory structure (e.g., Resources/mac/arm64/)
-     */
-    extraResource:
-      process.platform === 'darwin'
-        ? [`./resources/bin/mac/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
-        : process.platform === 'win32'
-          ? [`./resources/bin/windows/${process.arch === 'x64' ? 'x86_64' : process.arch}`]
-          : [`./resources/bin/linux/${process.arch === 'x64' ? 'x86_64' : process.arch}`],
-    icon: './icons/icon',
+    extraResource: binaryFilePaths,
+    icon: './assets/icons/icon',
     name: productName,
     appBundleId,
+    appCopyright: `Copyright © ${new Date().getFullYear()} Archestra Limited`,
 
     /**
      * Only enable signing/notarization in CI or when explicitly requested
@@ -58,7 +64,14 @@ const forgeConfig: ForgeConfig = {
      */
     ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
-          osxSign: {},
+          osxSign: {
+            optionsForFile: (filePath) => ({
+              /**
+               * Use entitlements to allow necessary exceptions
+               */
+              entitlements: './entitlements.plist',
+            }),
+          },
           /**
            * We are currently using the "app-specific password" method for "notarizing" the macOS app
            *
@@ -106,19 +119,19 @@ const forgeConfig: ForgeConfig = {
     async packageAfterCopy(_forgeConfig, buildPath) {
       const requiredNativePackages = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
 
-      // __dirname isn't accessible from here
-      const dirnamePath: string = '.';
-      const sourceNodeModulesPath = resolve(dirnamePath, 'node_modules');
-      const destNodeModulesPath = resolve(buildPath, 'node_modules');
+      const sourceNodeModulesPath = path.resolve(__dirname, 'node_modules');
+      const destNodeModulesPath = path.resolve(buildPath, 'node_modules');
 
       // Copy all asked packages in /node_modules directory inside the asar archive
       await Promise.all(
         requiredNativePackages.map(async (packageName) => {
-          const sourcePath = join(sourceNodeModulesPath, packageName);
-          const destPath = join(destNodeModulesPath, packageName);
+          const sourcePath = path.join(sourceNodeModulesPath, packageName);
+          const destPath = path.join(destNodeModulesPath, packageName);
 
-          await mkdirs(dirname(destPath));
-          await copy(sourcePath, destPath, {
+          console.log(`Copying ${sourcePath} to ${destPath}`);
+
+          await fs.mkdirs(path.dirname(destPath));
+          await fs.copy(sourcePath, destPath, {
             recursive: true,
             preserveTimestamps: true,
           });
@@ -126,15 +139,17 @@ const forgeConfig: ForgeConfig = {
       );
 
       // Copy database migrations to the build directory
-      const sourceMigrationsPath = resolve(dirnamePath, 'src/backend/database/migrations');
-      const destMigrationsPath = resolve(buildPath, '.vite/build/migrations');
+      const sourceMigrationsPath = path.resolve(__dirname, 'src/backend/database/migrations');
+      const destMigrationsPath = path.resolve(buildPath, '.vite/build/migrations');
 
-      await mkdirs(destMigrationsPath);
-      await copy(sourceMigrationsPath, destMigrationsPath, {
+      console.log(`Copying database migration files from ${sourceMigrationsPath} to ${destMigrationsPath}`);
+
+      await fs.mkdirs(destMigrationsPath);
+      await fs.copy(sourceMigrationsPath, destMigrationsPath, {
         recursive: true,
         preserveTimestamps: true,
       });
-      console.log(`Copied migrations from ${sourceMigrationsPath} to ${destMigrationsPath}`);
+      console.log(`Copied database migration files from ${sourceMigrationsPath} to ${destMigrationsPath}`);
     },
   },
   makers: [
@@ -149,7 +164,8 @@ const forgeConfig: ForgeConfig = {
     //   setupIcon: './icons/icon.ico',
     // }),
     /**
-     * ZIP for macOS and Windows
+     * NOTE: zip assets are required for update-electron-app (ie. auto updater) to work properly
+     * see https://github.com/electron/update-electron-app
      */
     new MakerZIP({}, ['darwin', 'win32']),
     new MakerRpm({
@@ -157,6 +173,7 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
     }),
     new MakerDeb({
@@ -164,7 +181,46 @@ const forgeConfig: ForgeConfig = {
         name: productName,
         productName,
         description,
+        icon: './assets/icons/icon.png',
       },
+    }),
+    /**
+     * See the following resources for configuration documentation:
+     *
+     * https://www.npmjs.com/package/@electron-forge/maker-dmg
+     * https://github.com/LinusU/node-appdmg
+     */
+    new MakerDMG({
+      /**
+       * re: background -- from the maker-dmg docs:
+       *
+       * Path to the background image for the DMG window. Image should be of size 658x498.
+       *
+       * If you need to want to add a second Retina-compatible size, add a separate `@2x` image.
+       * For example, if your image is called `background.png`, create a `background@2x.png` that is
+       * double the size.
+       */
+      background: './assets/dmg-background.png',
+      format: 'ULFO', // ULFO = lzfse-compressed image (macOS 10.11+ only)
+      icon: './assets/icons/icon.icns', // this is the volume icon to replace the default Electron icon
+      title: 'Archestra',
+      contents: [
+        {
+          x: 210,
+          y: 245,
+          type: 'file',
+          /**
+           * path was a bit of a pain here to configure, see https://stackoverflow.com/a/68840039
+           */
+          path: `${process.cwd()}/out/Archestra-darwin-${process.arch}/Archestra.app`,
+        },
+        {
+          x: 470,
+          y: 245,
+          type: 'link',
+          path: '/Applications',
+        },
+      ],
     }),
   ],
   plugins: [
@@ -211,19 +267,8 @@ const forgeConfig: ForgeConfig = {
           owner: github.owner,
           name: github.repoName,
         },
-
-        /**
-         * The desktop app release-please generated GitHub releases have a tag prefix of `desktop_app-v<version>`,
-         * so we need to match that here.
-         *
-         * Otherwise, the electron-forge publisher will try to create a release with a tag of `v<version>` and the
-         * build assets will not get attached to the proper GitHub Release.
-         *
-         * The alternative is to set "include-component-in-tag" to "false" in the release-please config
-         * (specifically for the "desktop_app" 'component') but there is a bug that we ran into with release-please
-         * that was causing issues (https://github.com/googleapis/release-please/issues/2214)
-         */
-        tagPrefix: 'desktop_app-v',
+        // default tag prefix is "v" which aligns with release-please's default tag prefix
+        // tagPrefix: 'desktop_app-v',
         prerelease: true,
         draft: false,
       } as PublisherGitHubConfig,

@@ -69,7 +69,8 @@ export function EditableTitle({ title, isAnimated, onSave, className = '' }: Edi
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         disabled={isSaving}
-        className={`h-6 px-1 py-0 text-sm ${className}`}
+        className={`h-6 px-1 py-0 text-sm bg-background text-foreground selection:bg-primary selection:text-primary-foreground ${className}`}
+        onClick={(e) => e.stopPropagation()}
       />
     );
   }
@@ -77,7 +78,7 @@ export function EditableTitle({ title, isAnimated, onSave, className = '' }: Edi
   return (
     <div
       className={`cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 flex items-center gap-1 ${className}`}
-      onClick={() => setIsEditing(true)}
+      onDoubleClick={() => setIsEditing(true)}
     >
       <span className="truncate">{isAnimated ? <TypewriterText text={title} speed={20} /> : title}</span>
       <Pencil className="h-3 w-3 opacity-0 group-hover/chat-button:opacity-50" />

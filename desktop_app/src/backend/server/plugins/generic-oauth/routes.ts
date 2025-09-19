@@ -6,7 +6,6 @@ import { McpServerSchema } from '@backend/database/schema/mcpServer';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
 import { ErrorResponseSchema } from '@backend/schemas';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import { resolveOAuthConfig } from '@backend/utils/env-resolver';
 import log from '@backend/utils/logger';
 
 import { completeGenericOAuthFlow, startGenericOAuthFlow } from './flow';
@@ -109,14 +108,15 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'oauthConfig is required for OAuth installation' });
         }
 
-        // Use OAuth config from frontend
-        const config = resolveOAuthConfig(installData.oauthConfig);
+        // Use OAuth config directly from catalog
+        const config = installData.oauthConfig;
 
-        log.info('Generic OAuth config resolved:', {
+        log.info('Generic OAuth config loaded:', {
           configName: config.name,
           isGenericOAuth: !!config.generic_oauth,
           hasClientId: !!config.client_id,
           serverUrl: config.server_url,
+          requiresProxy: !!config.requires_proxy,
           hasAccessTokenEnvVar: !!config.access_token_env_var,
         });
 
@@ -145,7 +145,6 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: 'Complete generic OAuth flow with authorization code',
         tags: ['OAuth'],
         body: z.object({
-          serverId: z.string(),
           code: z.string(),
           state: z.string(),
         }),
@@ -160,19 +159,18 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      const { serverId, code, state } = body;
+      const { code, state } = body;
 
       try {
-        // Get the server record to find the OAuth config
-        const servers = await McpServerModel.getById(serverId);
-        if (!servers.length) {
-          return reply.code(400).send({ error: 'Server not found' });
+        // Find the server with oauth_pending status (should be unique for the state)
+        const allServers = await McpServerModel.getAll();
+        const server = allServers.find((s) => s.status === 'oauth_pending');
+
+        if (!server) {
+          return reply.code(400).send({ error: 'No server found with oauth_pending status' });
         }
 
-        const server = servers[0];
-        if (server.status !== 'oauth_pending') {
-          return reply.code(400).send({ error: 'Server is not in OAuth pending state' });
-        }
+        const serverId = server.id;
 
         // Retrieve the OAuth config from the stored client info
         const storedConfig = server.oauthClientInfo?.generic_oauth_config;
@@ -180,28 +178,12 @@ const genericOAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.code(400).send({ error: 'OAuth config not found in server record' });
         }
 
-        // Complete the generic OAuth flow
+        // Complete the generic OAuth flow (this handles token storage, status update, and server startup)
         const tokens = await completeGenericOAuthFlow(storedConfig as OAuthServerConfig, serverId, code, state);
 
-        // Convert generic tokens to MCP format
-        const mcpTokens = {
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_in: tokens.expires_in,
-          token_type: tokens.token_type || 'Bearer',
-        };
-
-        // Update server record with tokens and installed status
-        const [updatedServer] = await McpServerModel.update(serverId, {
-          status: 'installed',
-          oauthTokens: mcpTokens,
-          oauthClientInfo: null, // Clear the temporary config storage
-        });
-
-        // Start the MCP server if it's a local server
-        if (server.serverType === 'local') {
-          await McpServerModel.startServerAndSyncAllConnectedExternalMcpClients(updatedServer);
-        }
+        // Get the updated server record
+        const servers = await McpServerModel.getById(serverId);
+        const updatedServer = servers[0];
 
         return reply.send({
           server: updatedServer,

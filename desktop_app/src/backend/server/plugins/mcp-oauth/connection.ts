@@ -18,7 +18,8 @@ import { McpOAuthProvider } from './provider';
  */
 export async function connectMcpServer(
   config: OAuthServerConfig,
-  serverId: string
+  serverId: string,
+  remote_url?: string
 ): Promise<{ client: Client; accessToken: string }> {
   // Configuration is validated by Zod schema
 
@@ -29,26 +30,43 @@ export async function connectMcpServer(
     // Perform OAuth authentication
     const accessToken = await performOAuth(provider, config);
 
-    // Test MCP connection
-    log.info('🔌 Testing MCP connection...');
-    const transport = new StreamableHTTPClientTransport(new URL(config.server_url), {
-      requestInit: {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    });
+    // Check if this is a remote server (has remote_url)
+    const isRemoteServer = !!remote_url;
 
-    const client = new Client({ name: 'archestra-mcp-client', version: '1.0.0' }, { capabilities: { sampling: {} } });
+    if (!isRemoteServer) {
+      log.info('🔌 Local server detected - skipping MCP connection test (container not started yet)');
+      // For local servers, return a mock client since the container isn't running yet
+      // The real MCP connection will be established when the container is started
+      const mockClient = {
+        close: async () => {
+          /* no-op for mock client */
+        },
+        listTools: async () => ({ tools: [] }),
+      } as unknown as Client;
+      return { client: mockClient, accessToken };
+    } else {
+      // Test MCP connection for remote servers
+      log.info('🔌 Testing MCP connection to remote server...');
+      const mcpUrl = remote_url || (config as any).streamable_http_url || config.server_url;
+      const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+        requestInit: {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      });
 
-    await client.connect(transport);
-    log.info('✅ MCP connected!');
+      const client = new Client({ name: 'archestra-mcp-client', version: '1.0.0' }, { capabilities: { sampling: {} } });
 
-    const tools = await client.listTools();
-    log.info(
-      `🛠️  Found ${tools.tools.length} tools:`,
-      tools.tools.map((t) => t.name)
-    );
+      await client.connect(transport);
+      log.info('✅ MCP connected!');
 
-    return { client, accessToken };
+      const tools = await client.listTools();
+      log.info(
+        `🛠️  Found ${tools.tools.length} tools:`,
+        tools.tools.map((t) => t.name)
+      );
+
+      return { client, accessToken };
+    }
   } catch (error) {
     log.error('❌ OAuth/MCP connection error:', (error as Error).message);
     throw error;

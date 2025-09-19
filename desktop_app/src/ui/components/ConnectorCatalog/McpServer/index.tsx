@@ -3,7 +3,6 @@ import {
   Code,
   Database,
   FileText,
-  GitFork,
   Globe,
   Info,
   Loader2,
@@ -13,26 +12,20 @@ import {
   Settings,
   Star,
   Users,
-  Wrench,
 } from 'lucide-react';
-import { useState } from 'react';
 
-import { type LocalMcpServerManifest } from '@ui/catalog_local';
 import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
-import { Separator } from '@ui/components/ui/separator';
 import { ArchestraMcpServerManifest } from '@ui/lib/clients/archestra/catalog/gen';
 import { useMcpServersStore, useSandboxStore } from '@ui/stores';
 
-import McpServerDetailsDialog from './McpServerDetailsDialog';
-
 interface McpServerProps {
-  server: ArchestraMcpServerManifest | LocalMcpServerManifest;
-  onInstallClick: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
-  onOAuthInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
-  onBrowserInstallClick?: (server: ArchestraMcpServerManifest | LocalMcpServerManifest) => void;
+  server: ArchestraMcpServerManifest;
+  onInstallClick: (server: ArchestraMcpServerManifest) => void;
+  onOAuthInstallClick?: (server: ArchestraMcpServerManifest) => void;
+  onBrowserInstallClick?: (server: ArchestraMcpServerManifest) => void;
   onUninstallClick: (serverId: string) => void;
 }
 
@@ -43,27 +36,15 @@ export default function McpServer({
   onBrowserInstallClick,
   onUninstallClick,
 }: McpServerProps) {
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const { installedMcpServers, installingMcpServerId, uninstallingMcpServerId } = useMcpServersStore();
   const { isRunning: sandboxIsRunning } = useSandboxStore();
 
-  const {
-    name,
-    display_name,
-    description,
-    github_info: gitHubInfo,
-    category,
-    archestra_config,
-    programming_language: programmingLanguage,
-    quality_score: qualityScore,
-    tools,
-    prompts,
-    license,
-  } = server;
+  const { name, display_name, description, github_info: gitHubInfo, category, archestra_config, tools } = server;
 
   // Safely extract OAuth and browser-based config with null checks
-  const requiresOAuthSetup = !!(server as LocalMcpServerManifest).oauth_config;
+  const requiresOAuthSetup = !!server.oauth_config;
   const requiresBrowserBasedSetup = archestra_config?.browser_based?.required ?? false;
+  const isRemoteMcp = server.server.type === 'remote';
 
   // Determine installation state
   const isInstalled = installedMcpServers.some((s) => s.id === name);
@@ -114,184 +95,163 @@ export default function McpServer({
 
   return (
     <>
-      <Card className={`transition-all duration-200 hover:shadow-lg ${isInstalled ? 'ring-2 ring-green-500/20' : ''}`}>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                {getCategoryIcon(category)}
-                <h3 className="font-semibold text-lg truncate" title={displayName}>
-                  {displayName}
-                </h3>
+      <Card
+        className={`transition-all duration-200 hover:shadow-md overflow-hidden ${isInstalled ? 'ring-1 ring-green-500/30' : ''}`}
+      >
+        <CardHeader className="p-3 pb-2">
+          <div className="space-y-1">
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-1 max-w-full">
+              {getCategoryIcon(category)}
+              <h3 className="font-medium text-sm truncate" title={displayName}>
+                {displayName}
+              </h3>
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => window.electronAPI.openExternal(`https://www.archestra.ai/mcp-catalog/${name}`)}
+                  className="h-5 w-5 p-0 cursor-pointer"
+                  title="View in MCP Catalog"
+                >
+                  <Info className="h-3 w-3" />
+                </Button>
+                <ReportIssueWithCatalogEntry catalogId={name} />
+                {isInstalled && <CheckCircle className="h-3.5 w-3.5 text-green-500" />}
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">{description}</p>
             </div>
-            <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setDetailsDialogOpen(true)}
-                className="h-8 w-8 p-0 cursor-pointer"
-                title="View details"
-              >
-                <Info className="h-4 w-4" />
-              </Button>
-              <ReportIssueWithCatalogEntry catalogId={name} />
-              {isInstalled && <CheckCircle className="h-5 w-5 text-green-500" />}
-            </div>
+            <p className="text-xs text-muted-foreground line-clamp-2 break-words">{description}</p>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="p-3 pt-0 space-y-2 overflow-hidden">
           {/* Enhanced Metadata */}
-          <div className="flex flex-wrap gap-3 text-xs">
+          <div className="flex flex-wrap gap-2 text-xs">
             {gitHubInfo && gitHubInfo.stars > 0 && (
-              <div className="flex items-center gap-1 text-muted-foreground">
+              <div className="flex items-center gap-0.5 text-muted-foreground">
                 <Star className="h-3 w-3" />
                 <span>{gitHubInfo.stars.toLocaleString()}</span>
               </div>
             )}
             {gitHubInfo && gitHubInfo.contributors > 0 && (
-              <div className="flex items-center gap-1 text-muted-foreground">
+              <div className="flex items-center gap-0.5 text-muted-foreground">
                 <Users className="h-3 w-3" />
                 <span>{gitHubInfo.contributors}</span>
               </div>
             )}
             {tools && tools.length > 0 && (
-              <div className="flex items-center gap-1 text-muted-foreground">
+              <div className="flex items-center gap-0.5 text-muted-foreground">
                 <Settings className="h-3 w-3" />
-                <span>{tools.length} tools</span>
-              </div>
-            )}
-            {prompts && prompts.length > 0 && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <MessageSquare className="h-3 w-3" />
-                <span>{prompts.length} prompts</span>
+                <span>{tools.length}</span>
               </div>
             )}
           </div>
 
-          {/* Repository info */}
-          {gitHubInfo?.owner && gitHubInfo?.repo && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <GitFork className="h-3 w-3" />
-              <span className="truncate" title={`${gitHubInfo.owner}/${gitHubInfo.repo}`}>
-                {gitHubInfo.owner}/{gitHubInfo.repo}
-              </span>
-            </div>
-          )}
-
           {/* Tags */}
-          <div className="flex flex-wrap gap-1.5">
-            {'isLocalDeveloper' in server && server.isLocalDeveloper && (
-              <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20">
-                <Wrench className="h-3 w-3 mr-1" />
-                Developer
-              </Badge>
-            )}
+          <div className="flex flex-wrap gap-1">
             {category && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs py-0 px-1.5">
                 {category}
               </Badge>
             )}
-            {programmingLanguage && (
-              <Badge variant="outline" className="text-xs">
-                {programmingLanguage}
-              </Badge>
-            )}
-            {license && (
-              <Badge variant="outline" className="text-xs">
-                {license}
-              </Badge>
-            )}
             {requiresOAuthSetup && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs py-0 px-1.5">
                 OAuth
               </Badge>
             )}
-            {getQualityBadge(qualityScore)}
           </div>
 
-          <Separator />
-
           {/* Actions */}
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">v{server.version}</div>
-            <div>
-              {!sandboxIsRunning ? (
-                <Button size="sm" variant="ghost" disabled>
-                  <Loader2 className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                  Sandbox Initializing...
-                </Button>
-              ) : isInstalled ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onUninstallClick(name)}
-                  disabled={isUninstalling}
-                  className="text-destructive hover:text-destructive cursor-pointer"
-                >
-                  {isUninstalling ? (
-                    <>
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                      Uninstalling...
-                    </>
-                  ) : (
-                    'Uninstall'
-                  )}
-                </Button>
-              ) : isInstalling ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  <span className="text-sm">Installing...</span>
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-1">
+          <div className="pt-2">
+            {!sandboxIsRunning ? (
+              <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Initializing...
+              </Button>
+            ) : isInstalled ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onUninstallClick(name)}
+                disabled={isUninstalling}
+                className="w-full h-7 text-xs text-destructive hover:text-destructive cursor-pointer"
+              >
+                {isUninstalling ? (
+                  <>
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
+                    Uninstalling...
+                  </>
+                ) : (
+                  'Uninstall'
+                )}
+              </Button>
+            ) : isInstalling ? (
+              <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
+                Installing...
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {/* For Remote MCP, only show Install (OAuth) button */}
+                {isRemoteMcp ? (
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => onInstallClick(server)}
+                    variant="default"
+                    onClick={() => onOAuthInstallClick?.(server)}
                     disabled={isInstalling}
-                    className="cursor-pointer text-xs px-2 h-7"
+                    className="w-full h-7 text-xs cursor-pointer"
                   >
                     Install
                   </Button>
-                  {requiresOAuthSetup && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onOAuthInstallClick?.(server)}
-                      disabled={isInstalling}
-                      className="cursor-pointer text-xs px-2 h-7"
-                    >
-                      Install (OAuth)
-                    </Button>
-                  )}
-                  {requiresBrowserBasedSetup && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => {
-                        if (onBrowserInstallClick) {
-                          onBrowserInstallClick(server);
-                        } else {
-                          onInstallClick(server);
-                        }
-                      }}
-                      disabled={isInstalling}
-                      className="cursor-pointer text-xs px-2 h-7"
-                    >
-                      Install (Browser)
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+                ) : (
+                  <>
+                    {!requiresOAuthSetup && !requiresBrowserBasedSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onInstallClick(server)}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        {server.user_config && Object.keys(server.user_config).length > 0
+                          ? 'Install (config)'
+                          : 'Install'}
+                      </Button>
+                    )}
+                    {requiresOAuthSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onOAuthInstallClick?.(server)}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        Install (OAuth)
+                      </Button>
+                    )}
+                    {requiresBrowserBasedSetup && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => {
+                          if (onBrowserInstallClick) {
+                            onBrowserInstallClick(server);
+                          } else {
+                            onInstallClick(server);
+                          }
+                        }}
+                        disabled={isInstalling}
+                        className="w-full h-7 text-xs cursor-pointer"
+                      >
+                        Install (Browser)
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-
-      <McpServerDetailsDialog server={server} open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen} />
     </>
   );
 }

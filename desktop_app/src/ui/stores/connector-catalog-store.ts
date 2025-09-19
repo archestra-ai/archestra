@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 
-import { type LocalMcpServerManifest, localCatalogServers } from '@ui/catalog_local';
-import { getMcpServerCategories, searchMcpServerCatalog } from '@ui/lib/clients/archestra/catalog/gen';
+import { localCatalogServers } from '@ui/catalog_local';
+import config from '@ui/config';
+import {
+  type ArchestraMcpServerManifest,
+  type SearchMcpServerCatalogData,
+  getMcpServerCategories,
+  searchMcpServerCatalog,
+} from '@ui/lib/clients/archestra/catalog/gen';
 
 /**
  * NOTE: ideally should be divisible by 3 to make it look nice in the UI (as we tend to have 3 "columns" of servers)
@@ -9,7 +15,7 @@ import { getMcpServerCategories, searchMcpServerCatalog } from '@ui/lib/clients/
 const CATALOG_PAGE_SIZE = 24;
 
 interface ConnectorCatalogState {
-  connectorCatalog: LocalMcpServerManifest[];
+  connectorCatalog: ArchestraMcpServerManifest[];
   loadingConnectorCatalog: boolean;
   errorFetchingConnectorCatalog: string | null;
 
@@ -62,9 +68,10 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
         errorFetchingConnectorCatalog: null,
       });
 
-      const params: any = {
+      const params: SearchMcpServerCatalogData['query'] = {
         limit: CATALOG_PAGE_SIZE,
         offset: append ? catalogOffset : 0,
+        worksInArchestra: true,
       };
 
       if (catalogSearchQuery) {
@@ -72,16 +79,16 @@ export const useConnectorCatalogStore = create<ConnectorCatalogStore>((set, get)
       }
 
       if (catalogSelectedCategory && catalogSelectedCategory !== 'all') {
-        params.category = catalogSelectedCategory;
+        params.category = catalogSelectedCategory as NonNullable<SearchMcpServerCatalogData['query']>['category'];
       }
 
       const { data } = await searchMcpServerCatalog({ query: params });
 
       if (data) {
-        let filteredLocalServers: LocalMcpServerManifest[] = [];
+        let filteredLocalServers: ArchestraMcpServerManifest[] = [];
 
         // Only include local catalog servers in development mode
-        if (import.meta.env.DEV) {
+        if (config.isDev) {
           filteredLocalServers = localCatalogServers;
 
           if (catalogSearchQuery) {

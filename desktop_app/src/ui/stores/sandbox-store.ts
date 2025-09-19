@@ -32,7 +32,7 @@ export const useSandboxStore = create<SandboxStore>((set, _get) => ({
   },
 
   _updateStateFromStatusSummary: (payload: SandboxStatusSummaryWebSocketPayload) => {
-    const { updateMcpServer } = useMcpServersStore.getState();
+    const { updateMcpServer, installedMcpServers } = useMcpServersStore.getState();
     const { setAvailableTools } = useToolsStore.getState();
 
     const { mcpServers: sandboxedMcpServers, allAvailableTools: aggregatedTools, ...statusSummary } = payload as any;
@@ -53,8 +53,26 @@ export const useSandboxStore = create<SandboxStore>((set, _get) => ({
       Object.entries(sandboxedMcpServers).flatMap(([_mcpServerId, server]) => (server as any).tools || []);
     setAvailableTools(allAvailableTools);
 
+    // Track which servers have been updated from the sandbox
+    const updatedServerIds = new Set<string>();
+
+    // Update servers that are in the sandbox
     Object.entries(sandboxedMcpServers).forEach(([mcpServerId, server]) => {
       updateMcpServer(mcpServerId, (server as any).container);
+      updatedServerIds.add(mcpServerId);
+    });
+
+    // For any installed servers not in the sandbox, set them to 'not_created' state
+    // This prevents them from being stuck in 'initializing' state
+    installedMcpServers.forEach((server) => {
+      if (!updatedServerIds.has(server.id)) {
+        updateMcpServer(server.id, {
+          state: 'not_created',
+          startupPercentage: 0,
+          message: 'Server not started',
+          error: null,
+        });
+      }
     });
   },
 }));

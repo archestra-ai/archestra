@@ -5,6 +5,7 @@ import { useState } from 'react';
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
+import { Alert, AlertDescription } from '@ui/components/ui/alert';
 import {
   Dialog,
   DialogContent,
@@ -99,6 +100,17 @@ function OllamaProviderPage() {
   return (
     <>
       <div className="space-y-6">
+        {showSuccessMessage && (
+          <Alert className="border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20">
+            <AlertDescription>{showSuccessMessage}</AlertDescription>
+          </Alert>
+        )}
+        {showErrorMessage && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{showErrorMessage}</AlertDescription>
+          </Alert>
+        )}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Bot className="h-6 w-6" />
@@ -262,6 +274,28 @@ function OllamaProviderPage() {
           ))}
         </div>
       </div>
+
+      {/* Uninstall confirmation dialog */}
+      <Dialog open={showUninstallDialog} onOpenChange={setShowUninstallDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Uninstall model</DialogTitle>
+            <DialogDescription>
+              {modelToUninstall
+                ? `Are you sure you want to uninstall ${modelToUninstall}? This will remove the model from disk.`
+                : 'Are you sure you want to uninstall this model?'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={handleCancelUninstall}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleConfirmUninstall}>
+              Uninstall
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

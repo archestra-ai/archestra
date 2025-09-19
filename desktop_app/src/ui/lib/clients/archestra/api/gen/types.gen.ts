@@ -1996,52 +1996,6 @@ export type SetMemoryResponses = {
 
 export type SetMemoryResponse = SetMemoryResponses[keyof SetMemoryResponses];
 
-export type GetMemoryData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type GetMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: LegacyMemoryResponse;
-};
-
-export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
-
-export type UpdateMemoryData = {
-  body?: WriteMemoryInput;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type UpdateMemoryErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-    message: string;
-  };
-};
-
-export type UpdateMemoryError = UpdateMemoryErrors[keyof UpdateMemoryErrors];
-
-export type UpdateMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-  };
-};
-
-export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
-
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;
   path?: never;

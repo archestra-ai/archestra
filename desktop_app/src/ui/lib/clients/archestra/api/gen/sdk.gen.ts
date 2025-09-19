@@ -69,8 +69,6 @@ import type {
   GetMcpServersResponses,
   GetMemoryByNameData,
   GetMemoryByNameResponses,
-  GetMemoryData,
-  GetMemoryResponses,
   GetOllamaRequiredModelsStatusData,
   GetOllamaRequiredModelsStatusResponses,
   GetSupportedExternalMcpClientsData,
@@ -118,9 +116,6 @@ import type {
   UpdateChatMessageErrors,
   UpdateChatMessageResponses,
   UpdateChatResponses,
-  UpdateMemoryData,
-  UpdateMemoryErrors,
-  UpdateMemoryResponses,
   UpdateUserData,
   UpdateUserResponses,
 } from './types.gen';
@@ -666,32 +661,6 @@ export const setMemory = <ThrowOnError extends boolean = false>(options: Options
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
-    },
-  });
-};
-
-/**
- * Get the current user memory (legacy format)
- */
-export const getMemory = <ThrowOnError extends boolean = false>(options?: Options<GetMemoryData, ThrowOnError>) => {
-  return (options?.client ?? _heyApiClient).get<GetMemoryResponses, unknown, ThrowOnError>({
-    url: '/api/memory',
-    ...options,
-  });
-};
-
-/**
- * Update the current user memory (legacy format)
- */
-export const updateMemory = <ThrowOnError extends boolean = false>(
-  options?: Options<UpdateMemoryData, ThrowOnError>
-) => {
-  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, UpdateMemoryErrors, ThrowOnError>({
-    url: '/api/memory',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
     },
   });
 };

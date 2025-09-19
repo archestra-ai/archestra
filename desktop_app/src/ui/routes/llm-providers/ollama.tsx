@@ -22,6 +22,10 @@ export const Route = createFileRoute('/llm-providers/ollama')({
 
 function OllamaProviderPage() {
   const [modelsBeingUninstalled, setModelsBeingUninstalled] = useState<Set<string>>(new Set());
+  const [modelToUninstall, setModelToUninstall] = useState<string | null>(null);
+  const [showUninstallDialog, setShowUninstallDialog] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
+  const [showErrorMessage, setShowErrorMessage] = useState<string | null>(null);
   const {
     installedModels,
     downloadModel,
@@ -237,7 +241,7 @@ function OllamaProviderPage() {
                                 variant="destructive"
                                 disabled={isUninstalling || isDownloading}
                                 onClick={() => handleUninstallClick(fullModelName)}
-                                className="h-7 w-7 cursor-pointer"
+                                className="h-7 w-7 cursor-pointer hover:bg-destructive/95 dark:hover:bg-destructive/80"
                                 title="Uninstall model"
                               >
                                 {isUninstalling ? (

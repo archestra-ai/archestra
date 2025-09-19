@@ -85,7 +85,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         // Check if it's a required model - don't allow removal of required models
         const isRequiredModel = ollamaRequiredModels.some((m) => m.model === modelName);
-        
+
         if (isRequiredModel) {
           return reply.code(400).send({
             error: `Cannot remove required model: ${modelName}. This model is needed for app functionality.`,
@@ -93,7 +93,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         await OllamaClient.remove(modelName);
-        
+
         return reply.code(200).send({
           success: true,
           message: `Model ${modelName} successfully removed`,

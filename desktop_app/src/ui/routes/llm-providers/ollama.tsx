@@ -3,9 +3,10 @@ import { AlertCircle, Bot, Check, CheckCircle, Clock, Cpu, Download, HardDrive, 
 import { useState } from 'react';
 
 import DetailedProgressBar from '@ui/components/DetailedProgressBar';
+import { Alert, AlertDescription } from '@ui/components/ui/alert';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
-import { Alert, AlertDescription } from '@ui/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '@ui/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@ui/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@ui/components/ui/card';
 import { useAvailableModels, useOllamaStore } from '@ui/stores';
 
 export const Route = createFileRoute('/llm-providers/ollama')({
@@ -54,24 +54,22 @@ function OllamaProviderPage() {
     if (!modelToUninstall) return;
 
     setShowUninstallDialog(false);
-    setModelsBeingUninstalled(prev => new Set([...prev, modelToUninstall]));
-    
+    setModelsBeingUninstalled((prev) => new Set([...prev, modelToUninstall]));
+
     try {
       await uninstallModel(modelToUninstall);
-      
+
       // Show success message
       setShowSuccessMessage(`Successfully uninstalled ${modelToUninstall}`);
       setTimeout(() => setShowSuccessMessage(null), 3000);
-      
     } catch (error) {
       console.error('Failed to uninstall model:', error);
-      
+
       // Show error message
       setShowErrorMessage(`Failed to uninstall ${modelToUninstall}. Please try again.`);
       setTimeout(() => setShowErrorMessage(null), 5000);
-      
     } finally {
-      setModelsBeingUninstalled(prev => {
+      setModelsBeingUninstalled((prev) => {
         const newSet = new Set(prev);
         newSet.delete(modelToUninstall);
         return newSet;
@@ -197,7 +195,9 @@ function OllamaProviderPage() {
                       const isDownloading = modelsBeingDownloaded.has(fullModelName);
                       const isUninstalling = modelsBeingUninstalled.has(fullModelName);
                       const isInstalled = isModelInstalled(fullModelName);
-                      const isRequired = requiredModelsStatus.some(({ model: requiredModel }) => requiredModel === fullModelName);
+                      const isRequired = requiredModelsStatus.some(
+                        ({ model: requiredModel }) => requiredModel === fullModelName
+                      );
 
                       return (
                         <div key={tag} className="p-3 rounded border flex items-center justify-between gap-3">
@@ -231,25 +231,31 @@ function OllamaProviderPage() {
                                 isDownloading
                                   ? `Downloading ${fullModelName}`
                                   : isInstalled
-                                  ? `${fullModelName} installed`
-                                  : `Download ${fullModelName}`
+                                    ? `${fullModelName} installed`
+                                    : `Download ${fullModelName}`
                               }
                               className={`h-6 sm:h-7 max-[420px]:w-6 w-auto px-2 max-[420px]:px-0 min-[1024px]:px-1 min-[1056px]:px-2 justify-center text-xs whitespace-nowrap ${isInstalled ? 'cursor-default' : 'cursor-pointer'}`}
                             >
                               {isDownloading ? (
                                 <div className="flex items-center gap-1">
                                   <Loader2 className="h-3 w-3 animate-spin" />
-                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">{progress ? `${progress}%` : '...'}</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">
+                                    {progress ? `${progress}%` : '...'}
+                                  </span>
                                 </div>
                               ) : isInstalled ? (
                                 <div className="flex items-center gap-1">
                                   <Check className="h-3 w-3" />
-                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">Installed</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">
+                                    Installed
+                                  </span>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1">
                                   <Download className="h-3 w-3" />
-                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">Download</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">
+                                    Download
+                                  </span>
                                 </div>
                               )}
                             </Button>

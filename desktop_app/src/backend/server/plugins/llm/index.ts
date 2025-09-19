@@ -9,13 +9,13 @@ import { createOllama } from 'ollama-ai-provider-v2';
 import { type McpTools } from '@backend/archestraMcp';
 import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
-import { getModelContextWindow } from '@backend/llms/modelContextWindows';
 import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
 import ollamaClient from '@backend/ollama/client';
 
 import sharedConfig from '../../../../config';
+import { getModelContextWindow } from './modelContextWindows';
 
 interface StreamRequestBody {
   model: string;

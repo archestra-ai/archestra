@@ -4,9 +4,10 @@
  * Handles communication with the oauth-proxy server to securely exchange tokens
  * without exposing client secrets in the desktop application.
  */
+import config from '@backend/config';
 import log from '@backend/utils/logger';
 
-const OAUTH_PROXY_BASE_URL = process.env.OAUTH_PROXY_URL || 'https://oauth.dev.archestra.ai';
+const { url: baseUrl } = config.oauthProxy;
 
 export interface OAuthTokens {
   access_token: string;
@@ -36,7 +37,7 @@ class OAuthProxyClient {
     log.info(`Exchanging generic OAuth tokens via oauth-proxy for MCP server: ${mcpServerId}`);
 
     try {
-      const response = await fetch(`${OAUTH_PROXY_BASE_URL}/oauth/token`, {
+      const response = await fetch(`${baseUrl}/oauth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,7 +83,7 @@ class OAuthProxyClient {
 
     try {
       // Use the new MCP SDK-based proxy route for perfect compatibility
-      const response = await fetch(`${OAUTH_PROXY_BASE_URL}/mcp/sdk-token/${mcpServerId}`, {
+      const response = await fetch(`${baseUrl}/mcp/sdk-token/${mcpServerId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -17,8 +17,10 @@ export default function ThinkBlock({ content, className, isStreaming = false }: 
     // Auto-expand when streaming starts
     if (isStreaming) {
       setIsExpanded(true);
+    } else {
+      // Auto-collapse when streaming ends
+      setIsExpanded(false);
     }
-    // Don't auto-collapse when streaming ends - let user control it
   }, [isStreaming]);
 
   return (

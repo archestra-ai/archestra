@@ -3,7 +3,6 @@ import { Edit2, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import ThinkBlock from '@ui/components/ThinkBlock';
-import TokenUsageDisplay from '@ui/components/TokenUsageDisplay';
 import ToolInvocation from '@ui/components/ToolInvocation';
 import { AIResponse } from '@ui/components/kibo/ai-response';
 import { Button } from '@ui/components/ui/button';
@@ -23,13 +22,6 @@ interface AssistantMessageProps {
   onDelete: () => void;
   onRegenerate: () => void;
   isRegenerating?: boolean;
-  tokenUsage?: {
-    promptTokens?: number | null;
-    completionTokens?: number | null;
-    totalTokens?: number | null;
-    model?: string | null;
-    modelContextWindow?: number | null;
-  };
 }
 
 export default function AssistantMessage({
@@ -43,7 +35,6 @@ export default function AssistantMessage({
   onDelete,
   onRegenerate,
   isRegenerating = false,
-  tokenUsage,
 }: AssistantMessageProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -142,20 +133,6 @@ export default function AssistantMessage({
       <div className="gap-y-2 grid grid-cols-1 pr-24">
         {isRegenerating ? <RegenerationSkeleton /> : orderedElements}
       </div>
-
-      {/* Token usage display */}
-      {tokenUsage && tokenUsage.totalTokens && (
-        <div className="mt-2 flex items-center gap-2">
-          <TokenUsageDisplay
-            promptTokens={tokenUsage.promptTokens}
-            completionTokens={tokenUsage.completionTokens}
-            totalTokens={tokenUsage.totalTokens}
-            model={tokenUsage.model}
-            contextWindow={tokenUsage.modelContextWindow}
-            variant="inline"
-          />
-        </div>
-      )}
 
       {isHovered && (
         <div className="absolute top-0 right-0 flex gap-1">

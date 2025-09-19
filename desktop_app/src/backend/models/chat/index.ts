@@ -399,6 +399,45 @@ export default class ChatModel {
     }
   }
 
+  static async resetTokenUsage(sessionId: string): Promise<void> {
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Resetting token usage for chat ${chat.id}`);
+
+    // Reset all token usage fields to 0/null
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage reset
+    WebSocketService.broadcast({
+      type: 'chat-token-usage-updated',
+      payload: {
+        chatId: chat.id,
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        contextUsagePercent: 0,
+      },
+    });
+  }
+
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
     // First, find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);

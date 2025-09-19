@@ -1356,6 +1356,40 @@ export type UpdateChatMessageResponses = {
 
 export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
+export type ResetChatTokenUsageData = {
+  body?: never;
+  path: {
+    /**
+     * The session ID of the chat
+     */
+    sessionId: string;
+  };
+  query?: never;
+  url: '/api/chat/{sessionId}/reset-token-usage';
+};
+
+export type ResetChatTokenUsageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type ResetChatTokenUsageError = ResetChatTokenUsageErrors[keyof ResetChatTokenUsageErrors];
+
+export type ResetChatTokenUsageResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    message: string;
+  };
+};
+
+export type ResetChatTokenUsageResponse = ResetChatTokenUsageResponses[keyof ResetChatTokenUsageResponses];
+
 export type GetAvailableCloudProvidersData = {
   body?: never;
   path?: never;

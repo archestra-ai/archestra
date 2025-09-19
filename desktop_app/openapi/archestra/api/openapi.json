@@ -4236,6 +4236,60 @@
         }
       }
     },
+    "/api/chat/{sessionId}/reset-token-usage": {
+      "post": {
+        "operationId": "resetChatTokenUsage",
+        "tags": ["Chat"],
+        "description": "Reset token usage counters for a chat session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "description": "The session ID of the chat"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cloud-providers/available": {
       "get": {
         "operationId": "getAvailableCloudProviders",

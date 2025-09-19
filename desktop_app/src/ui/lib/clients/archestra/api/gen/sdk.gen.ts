@@ -86,6 +86,9 @@ import type {
   PostApiOllamaPullData,
   PostApiOllamaPullErrors,
   PostApiOllamaPullResponses,
+  ResetChatTokenUsageData,
+  ResetChatTokenUsageErrors,
+  ResetChatTokenUsageResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -324,6 +327,18 @@ export const updateChatMessage = <ThrowOnError extends boolean = false>(
       'Content-Type': 'application/json',
       ...options.headers,
     },
+  });
+};
+
+/**
+ * Reset token usage counters for a chat session
+ */
+export const resetChatTokenUsage = <ThrowOnError extends boolean = false>(
+  options: Options<ResetChatTokenUsageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<ResetChatTokenUsageResponses, ResetChatTokenUsageErrors, ThrowOnError>({
+    url: '/api/chat/{sessionId}/reset-token-usage',
+    ...options,
   });
 };
 

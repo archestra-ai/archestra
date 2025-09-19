@@ -380,6 +380,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     }
   );
+
+  fastify.post(
+    '/api/chat/:sessionId/reset-token-usage',
+    {
+      schema: {
+        operationId: 'resetChatTokenUsage',
+        description: 'Reset token usage counters for a chat session',
+        tags: ['Chat'],
+        params: z.object({
+          sessionId: z.string().describe('The session ID of the chat'),
+        }),
+        response: {
+          200: z.object({
+            message: z.string(),
+          }),
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ params: { sessionId } }, reply) => {
+      try {
+        await ChatModel.resetTokenUsage(sessionId);
+        return reply.code(200).send({ message: 'Token usage reset successfully' });
+      } catch (error) {
+        return reply.code(404).send({ error: 'Chat not found' });
+      }
+    }
+  );
 };
 
 export default chatRoutes;

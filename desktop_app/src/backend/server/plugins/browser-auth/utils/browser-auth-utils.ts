@@ -84,7 +84,7 @@ export const BROWSER_AUTH_WINDOW_CONFIG = {
   },
   // Show standard window chrome for transparency
   autoHideMenuBar: false,
-  titleBarStyle: 'default' as const,
+  titleBarStyle: 'default',
   frame: true,
 };
 

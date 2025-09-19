@@ -33,7 +33,6 @@ import {
 import { ChatMessageStatus } from '@ui/types/chat';
 import type { Tool } from '@ui/types/tools';
 
-
 import './chat-input.css';
 
 interface ChatInputProps {

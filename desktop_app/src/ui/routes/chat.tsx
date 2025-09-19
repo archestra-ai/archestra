@@ -116,7 +116,8 @@ function ChatPage() {
     sendMessage({ text: messageText });
   };
 
-  const isSubmittingDisabled = !currentInput.trim() || isLoading || isSubmitting || !selectedModel || selectedModel === '';
+  const isSubmittingDisabled =
+    !currentInput.trim() || isLoading || isSubmitting || !selectedModel || selectedModel === '';
 
   const isChatEmpty = messages.length === 0;
 

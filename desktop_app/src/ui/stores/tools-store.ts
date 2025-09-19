@@ -27,7 +27,6 @@ interface ToolApprovalRequest {
 
 interface ApprovalRule {
   toolId: string;
-  argsHash?: string; // Optional hash of arguments for argument-specific approvals
   decision: 'approve_always' | 'decline_always';
   timestamp: number;
 }
@@ -68,11 +67,6 @@ interface ToolsActions {
 }
 
 type ToolsStore = ToolsState & ToolsActions;
-
-// Helper function to create a hash of arguments for comparison
-const hashArgs = (args: Record<string, any>): string => {
-  return JSON.stringify(args, Object.keys(args).sort());
-};
 
 export const useToolsStore = create<ToolsStore>()(
   persist(
@@ -284,10 +278,8 @@ export const useToolsStore = create<ToolsStore>()(
         if (alwaysApprove) {
           set((state) => {
             const newRules = new Map(state.sessionApprovalRules);
-            const ruleKey = `${request.toolId}:${hashArgs(request.args)}`;
-            newRules.set(ruleKey, {
+            newRules.set(request.toolId, {
               toolId: request.toolId,
-              argsHash: hashArgs(request.args),
               decision: 'approve_always',
               timestamp: Date.now(),
             });
@@ -323,10 +315,8 @@ export const useToolsStore = create<ToolsStore>()(
         if (alwaysDecline) {
           set((state) => {
             const newRules = new Map(state.sessionApprovalRules);
-            const ruleKey = `${request.toolId}:${hashArgs(request.args)}`;
-            newRules.set(ruleKey, {
+            newRules.set(request.toolId, {
               toolId: request.toolId,
-              argsHash: hashArgs(request.args),
               decision: 'decline_always',
               timestamp: Date.now(),
             });
@@ -357,18 +347,8 @@ export const useToolsStore = create<ToolsStore>()(
       checkSessionRule: (toolId, args) => {
         const rules = get().sessionApprovalRules;
 
-        // Check for exact match with arguments
-        if (args) {
-          const exactRuleKey = `${toolId}:${hashArgs(args)}`;
-          const exactRule = rules.get(exactRuleKey);
-          if (exactRule) {
-            return exactRule.decision === 'approve_always' ? 'approve' : 'decline';
-          }
-        }
-
-        // Check for tool-level rule (without specific arguments)
-        const toolRuleKey = `${toolId}:{}`;
-        const toolRule = rules.get(toolRuleKey);
+        // Check for tool-level rule
+        const toolRule = rules.get(toolId);
         if (toolRule) {
           return toolRule.decision === 'approve_always' ? 'approve' : 'decline';
         }

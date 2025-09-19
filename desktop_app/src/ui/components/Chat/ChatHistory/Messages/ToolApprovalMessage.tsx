@@ -118,7 +118,7 @@ export default function ToolApprovalMessage({
               htmlFor={`remember-${requestId}`}
               className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              Don't ask again for this tool with these arguments in this session
+              Don't ask again for this tool in this session
             </label>
           </div>
 

@@ -24,7 +24,6 @@ interface ApprovalRequest {
 
 interface SessionRule {
   toolId: string;
-  argsHash?: string;
   decision: 'always_approve' | 'always_decline';
   timestamp: number;
 }
@@ -108,10 +107,10 @@ export class ToolService {
   }
 
   /**
-   * Helper to create a hash key for tool + arguments combination
+   * Helper to create a key for tool-level approval rules
    */
-  private createApprovalRuleKey(toolId: string, args: Record<string, any>): string {
-    return `${toolId}:${JSON.stringify(args, Object.keys(args).sort())}`;
+  private createApprovalRuleKey(toolId: string): string {
+    return toolId;
   }
 
   /**
@@ -135,7 +134,7 @@ export class ToolService {
   }
 
   /**
-   * Check session rules for a specific tool and arguments
+   * Check session rules for a specific tool
    */
   checkSessionRule(
     sessionId: string,
@@ -145,13 +144,8 @@ export class ToolService {
     const sessionRules = this.sessionApprovalRules.get(sessionId);
     if (!sessionRules) return null;
 
-    // Check for exact match (tool + args)
-    const exactKey = this.createApprovalRuleKey(toolId, args);
-    const exactRule = sessionRules.get(exactKey);
-    if (exactRule) return exactRule;
-
-    // Check for tool-level rule (without args)
-    const toolKey = this.createApprovalRuleKey(toolId, {});
+    // Check for tool-level rule
+    const toolKey = this.createApprovalRuleKey(toolId);
     return sessionRules.get(toolKey) || null;
   }
 
@@ -169,7 +163,7 @@ export class ToolService {
     }
 
     const sessionRules = this.sessionApprovalRules.get(sessionId)!;
-    const key = this.createApprovalRuleKey(toolId, args);
+    const key = this.createApprovalRuleKey(toolId);
     sessionRules.set(key, decision);
 
     log.info(`Added session rule for ${sessionId}: ${key} -> ${decision}`);

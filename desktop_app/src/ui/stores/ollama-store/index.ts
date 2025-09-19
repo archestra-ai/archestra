@@ -1,5 +1,6 @@
 import { ModelResponse } from 'ollama/browser';
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 import config from '@ui/config';
 import {
@@ -8,7 +9,6 @@ import {
   getOllamaRequiredModelsStatus,
 } from '@ui/lib/clients/archestra/api/gen';
 import { ArchestraOllamaClient } from '@ui/lib/clients/ollama';
-import { OllamaLocalStorage } from '@ui/lib/localStorage';
 import websocketService from '@ui/lib/websocket';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
@@ -33,7 +33,7 @@ interface OllamaActions {
   downloadModel: (fullModelName: string) => Promise<void>;
   uninstallModel: (fullModelName: string) => Promise<void>;
   fetchInstalledModels: () => Promise<void>;
-  setSelectedModel: (model: string) => void | Promise<void>;
+  setSelectedModel: (model: string) => void;
 
   fetchRequiredModelsStatus: () => Promise<void>;
   updateRequiredModelDownloadProgress: (progress: OllamaModelDownloadProgress) => void;
@@ -41,306 +41,314 @@ interface OllamaActions {
 
 type OllamaStore = OllamaState & OllamaActions;
 
-export const useOllamaStore = create<OllamaStore>((set, get) => ({
-  // State
-  installedModels: [],
-  downloadProgress: {},
-  loadingInstalledModels: false,
-  loadingInstalledModelsError: null,
-  selectedModel: OllamaLocalStorage.getSelectedModel() || undefined,
-  modelsBeingDownloaded: new Set(),
-  requiredModelsStatus: [],
-  requiredModelsDownloadProgress: {},
-  loadingRequiredModels: true,
-
-  // Actions
-  fetchInstalledModels: async () => {
-    const MAX_RETRIES = 30;
-    const RETRY_DELAY_MILLISECONDS = 1000;
-    let retries = 0;
-
-    const attemptConnection = async (): Promise<boolean> => {
-      try {
-        const { selectedModel } = get();
-        const { models } = await ollamaClient.list();
-        set({ installedModels: models });
-
-        // Don't auto-select a model - let user choose
-        // const firstInstalledModel = models[0];
-        // if (!selectedModel && firstInstalledModel && firstInstalledModel.model) {
-        //   get().setSelectedModel(firstInstalledModel.model);
-        // }
-
-        return true;
-      } catch (error) {
-        return false;
-      }
-    };
-
-    set({ loadingInstalledModels: true, loadingInstalledModelsError: null });
-
-    // Keep trying to connect until successful or max retries reached
-    while (retries < MAX_RETRIES) {
-      const connected = await attemptConnection();
-      if (connected) {
-        set({ loadingInstalledModels: false });
-        return;
-      }
-
-      retries++;
-      if (retries < MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MILLISECONDS));
-      }
-    }
-
-    // If we've exhausted all retries, set error state
-    set({
+export const useOllamaStore = create<OllamaStore>()(
+  persist(
+    (set, get) => ({
+      // State
+      installedModels: [],
+      downloadProgress: {},
       loadingInstalledModels: false,
-      loadingInstalledModelsError: new Error('Failed to connect to Ollama after maximum retries'),
-    });
-  },
+      loadingInstalledModelsError: null,
+      selectedModel: undefined,
+      modelsBeingDownloaded: new Set(),
+      requiredModelsStatus: [],
+      requiredModelsDownloadProgress: {},
+      loadingRequiredModels: true,
 
-  downloadModel: async (fullModelName: string) => {
-    try {
-      // Update progress and downloading set
-      set((state) => ({
-        downloadProgress: { ...state.downloadProgress, [fullModelName]: 0.1 },
-        modelsBeingDownloaded: new Set([...state.modelsBeingDownloaded, fullModelName]),
-      }));
+      // Actions
+      fetchInstalledModels: async () => {
+        const MAX_RETRIES = 30;
+        const RETRY_DELAY_MILLISECONDS = 1000;
+        let retries = 0;
 
-      // Use the new backend endpoint that sends WebSocket progress
-      const response = await fetch('/api/ollama/pull', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ model: fullModelName }),
-      });
+        const attemptConnection = async (): Promise<boolean> => {
+          try {
+            const { selectedModel } = get();
+            const { models } = await ollamaClient.list();
+            set({ installedModels: models });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Failed to download model: ${error}`);
-      }
+            // Don't auto-select a model - let user choose
+            // const firstInstalledModel = models[0];
+            // if (!selectedModel && firstInstalledModel && firstInstalledModel.model) {
+            //   get().setSelectedModel(firstInstalledModel.model);
+            // }
 
-      // The WebSocket events will update the progress via the subscription below
-      // Just wait for completion
-      const result = await response.json();
-      console.log('Model download completed:', result);
-
-      await get().fetchInstalledModels();
-    } catch (error) {
-      console.error('Failed to download model:', error);
-    } finally {
-      set((state) => {
-        const newModelsBeingDownloaded = new Set(state.modelsBeingDownloaded);
-        newModelsBeingDownloaded.delete(fullModelName);
-
-        const newDownloadProgress = { ...state.downloadProgress };
-        delete newDownloadProgress[fullModelName];
-
-        return {
-          modelsBeingDownloaded: newModelsBeingDownloaded,
-          downloadProgress: newDownloadProgress,
-        };
-      });
-    }
-  },
-
-  uninstallModel: async (fullModelName: string) => {
-    const statusBarStore = useStatusBarStore.getState();
-    const taskId = `ollama-uninstall-${fullModelName}`;
-    try {
-      // Show uninstall task
-      statusBarStore.updateTask(taskId, {
-        id: taskId,
-        type: 'model',
-        title: 'Model',
-        description: `Uninstalling ${fullModelName} (1/5)...`,
-        progress: 1,
-        status: 'active',
-        timestamp: Date.now(),
-      });
-
-      // Simulate step-wise progress while backend processes the uninstall
-      // Steps: 1/5 -> 2/5 -> 3/5 -> 4/5 -> 5/5 (90%)
-      const stepTargets = [5, 25, 50, 75, 90];
-      let simulated = 1;
-      let stepIndex = 0;
-      let finalizeTimer: number | undefined;
-      const progressTimer = setInterval(() => {
-        simulated = Math.min(simulated + 2, 90);
-        if (stepIndex < stepTargets.length && simulated >= stepTargets[stepIndex]) {
-          statusBarStore.updateTask(taskId, {
-            progress: simulated,
-            description: `Uninstalling ${fullModelName} (${stepIndex + 1}/5)...`,
-          });
-          stepIndex++;
-        } else {
-          statusBarStore.updateTask(taskId, { progress: simulated });
-        }
-        if (simulated >= 90) clearInterval(progressTimer);
-      }, 200);
-
-      // Call API directly (SDK function not generated in this build)
-      const res = await fetch(`/api/ollama/models/${encodeURIComponent(fullModelName)}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to uninstall ${fullModelName}`);
-      }
-
-      // Refresh the installed models list after successful uninstall
-      await get().fetchInstalledModels();
-
-      // Finish progress and show a brief success state using the same active layout
-      clearInterval(progressTimer);
-      // Smoothly animate to 100% keeping the uninstalling copy
-      finalizeTimer = setInterval(() => {
-        simulated = Math.min(simulated + 2, 100);
-        if (simulated < 100) {
-          statusBarStore.updateTask(taskId, {
-            progress: simulated,
-            description: `Uninstalling ${fullModelName} (5/5)...`,
-          });
-        } else {
-          clearInterval(finalizeTimer);
-          statusBarStore.updateTask(taskId, { progress: 100 });
-          // Keep as active briefly so it shows in the collapsed header
-          statusBarStore.updateTask(taskId, {
-            status: 'active',
-            description: `Uninstalled ${fullModelName} successfully`,
-          });
-          setTimeout(() => statusBarStore.removeTask(taskId), 3000);
-        }
-      }, 60);
-    } catch (error) {
-      console.error('Failed to uninstall model:', error);
-      // Stop simulated progress
-      clearInterval(progressTimer as unknown as number);
-      if (finalizeTimer) clearInterval(finalizeTimer as unknown as number);
-      statusBarStore.updateTask(taskId, {
-        status: 'error',
-        description: `Failed to uninstall ${fullModelName}`,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      setTimeout(() => statusBarStore.removeTask(taskId), 5000);
-      throw error;
-    }
-  },
-
-  setSelectedModel: async (model: string) => {
-    const previousModel = get().selectedModel;
-
-    // Track model switching in StatusBar
-    const statusBarStore = useStatusBarStore.getState();
-
-    if (previousModel && previousModel !== model) {
-      // Show unloading previous model
-      statusBarStore.updateTask('ollama-model-switch', {
-        id: 'ollama-model-switch',
-        type: 'model',
-        title: 'Switching Model',
-        description: `Unloading ${previousModel}...`,
-        status: 'active',
-        timestamp: Date.now(),
-      });
-
-      // Unload the previous model by setting keep_alive to 0
-      try {
-        await fetch('/llm/ollama/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: previousModel,
-            keep_alive: 0,
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to unload previous model:', error);
-      }
-    }
-
-    // Update selected model
-    OllamaLocalStorage.setSelectedModel(model);
-    set({ selectedModel: model });
-
-    // Show loading new model
-    statusBarStore.updateTask('ollama-model-switch', {
-      id: 'ollama-model-switch',
-      type: 'model',
-      title: 'Loading Model',
-      description: `Loading ${model} into memory...`,
-      status: 'active',
-      timestamp: Date.now(),
-    });
-
-    // Pre-load the new model with keep_alive to keep it in memory
-    try {
-      await fetch('/llm/ollama/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          prompt: '',
-          keep_alive: '30m', // Keep model loaded for 30 minutes
-        }),
-      });
-
-      // Mark as completed
-      statusBarStore.updateTask('ollama-model-switch', {
-        status: 'completed',
-        description: `${model} loaded`,
-      });
-      setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 2000);
-    } catch (error) {
-      console.error('Failed to load new model:', error);
-      statusBarStore.updateTask('ollama-model-switch', {
-        status: 'error',
-        description: 'Failed to load model',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 5000);
-    }
-  },
-
-  fetchRequiredModelsStatus: async () => {
-    try {
-      const { data } = await getOllamaRequiredModelsStatus();
-      if (data) {
-        set({ requiredModelsStatus: data.models, loadingRequiredModels: false });
-      }
-    } catch (error) {
-      console.error('Failed to fetch required models:', error);
-      set({ loadingRequiredModels: false });
-    }
-  },
-
-  updateRequiredModelDownloadProgress: (progress: OllamaModelDownloadProgress) => {
-    set((state) => ({
-      requiredModelsDownloadProgress: {
-        ...state.requiredModelsDownloadProgress,
-        [progress.model]: progress,
-      },
-      // Also update the general download progress for user-initiated downloads
-      downloadProgress: state.modelsBeingDownloaded.has(progress.model)
-        ? {
-            ...state.downloadProgress,
-            [progress.model]: progress.progress,
+            return true;
+          } catch (error) {
+            return false;
           }
-        : state.downloadProgress,
-    }));
+        };
 
-    // When download is completed, refresh the installed models list
-    if (progress.status === 'completed') {
-      // Add a small delay to ensure Ollama has registered the model
-      setTimeout(() => {
-        get().fetchInstalledModels();
-        get().fetchRequiredModelsStatus();
-      }, 500);
+        set({ loadingInstalledModels: true, loadingInstalledModelsError: null });
+
+        // Keep trying to connect until successful or max retries reached
+        while (retries < MAX_RETRIES) {
+          const connected = await attemptConnection();
+          if (connected) {
+            set({ loadingInstalledModels: false });
+            return;
+          }
+
+          retries++;
+          if (retries < MAX_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MILLISECONDS));
+          }
+        }
+
+        // If we've exhausted all retries, set error state
+        set({
+          loadingInstalledModels: false,
+          loadingInstalledModelsError: new Error('Failed to connect to Ollama after maximum retries'),
+        });
+      },
+
+      downloadModel: async (fullModelName: string) => {
+        try {
+          // Update progress and downloading set
+          set((state) => ({
+            downloadProgress: { ...state.downloadProgress, [fullModelName]: 0.1 },
+            modelsBeingDownloaded: new Set([...state.modelsBeingDownloaded, fullModelName]),
+          }));
+
+          // Use the new backend endpoint that sends WebSocket progress
+          const response = await fetch('/api/ollama/pull', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model: fullModelName }),
+          });
+
+          if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Failed to download model: ${error}`);
+          }
+
+          // The WebSocket events will update the progress via the subscription below
+          // Just wait for completion
+          const result = await response.json();
+          console.log('Model download completed:', result);
+
+          await get().fetchInstalledModels();
+        } catch (error) {
+          console.error('Failed to download model:', error);
+        } finally {
+          set((state) => {
+            const newModelsBeingDownloaded = new Set(state.modelsBeingDownloaded);
+            newModelsBeingDownloaded.delete(fullModelName);
+
+            const newDownloadProgress = { ...state.downloadProgress };
+            delete newDownloadProgress[fullModelName];
+
+            return {
+              modelsBeingDownloaded: newModelsBeingDownloaded,
+              downloadProgress: newDownloadProgress,
+            };
+          });
+        }
+      },
+
+      uninstallModel: async (fullModelName: string) => {
+        const statusBarStore = useStatusBarStore.getState();
+        const taskId = `ollama-uninstall-${fullModelName}`;
+        let finalizeTimer: NodeJS.Timeout | undefined;
+        let progressTimer: NodeJS.Timeout | undefined;
+
+        try {
+          // Show uninstall task
+          statusBarStore.updateTask(taskId, {
+            id: taskId,
+            type: 'model',
+            title: 'Model',
+            description: `Uninstalling ${fullModelName} (1/5)...`,
+            progress: 1,
+            status: 'active',
+            timestamp: Date.now(),
+          });
+
+          // Simulate step-wise progress while backend processes the uninstall
+          // Steps: 1/5 -> 2/5 -> 3/5 -> 4/5 -> 5/5 (90%)
+          const stepTargets = [5, 25, 50, 75, 90];
+          let simulated = 1;
+          let stepIndex = 0;
+          progressTimer = setInterval(() => {
+            simulated = Math.min(simulated + 2, 90);
+            if (stepIndex < stepTargets.length && simulated >= stepTargets[stepIndex]) {
+              statusBarStore.updateTask(taskId, {
+                progress: simulated,
+                description: `Uninstalling ${fullModelName} (${stepIndex + 1}/5)...`,
+              });
+              stepIndex++;
+            } else {
+              statusBarStore.updateTask(taskId, { progress: simulated });
+            }
+            if (simulated >= 90) clearInterval(progressTimer);
+          }, 200);
+
+          // Call API directly (SDK function not generated in this build)
+          const res = await fetch(`/api/ollama/models/${encodeURIComponent(fullModelName)}`, {
+            method: 'DELETE',
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Failed to uninstall ${fullModelName}`);
+          }
+
+          // Refresh the installed models list after successful uninstall
+          await get().fetchInstalledModels();
+
+          // Finish progress and show a brief success state using the same active layout
+          clearInterval(progressTimer);
+          // Smoothly animate to 100% keeping the uninstalling copy
+          finalizeTimer = setInterval(() => {
+            simulated = Math.min(simulated + 2, 100);
+            if (simulated < 100) {
+              statusBarStore.updateTask(taskId, {
+                progress: simulated,
+                description: `Uninstalling ${fullModelName} (5/5)...`,
+              });
+            } else {
+              clearInterval(finalizeTimer);
+              statusBarStore.updateTask(taskId, { progress: 100 });
+              // Keep as active briefly so it shows in the collapsed header
+              statusBarStore.updateTask(taskId, {
+                status: 'active',
+                description: `Uninstalled ${fullModelName} successfully`,
+              });
+              setTimeout(() => statusBarStore.removeTask(taskId), 3000);
+            }
+          }, 60);
+        } catch (error) {
+          console.error('Failed to uninstall model:', error);
+          clearInterval(progressTimer);
+          if (finalizeTimer) clearInterval(finalizeTimer);
+          statusBarStore.updateTask(taskId, {
+            status: 'error',
+            description: `Failed to uninstall ${fullModelName}`,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          setTimeout(() => statusBarStore.removeTask(taskId), 5000);
+          throw error;
+        }
+      },
+
+      setSelectedModel: async (model: string) => {
+        const previousModel = get().selectedModel;
+
+        // Track model switching in StatusBar
+        const statusBarStore = useStatusBarStore.getState();
+
+        if (previousModel && previousModel !== model) {
+          // Show unloading previous model
+          statusBarStore.updateTask('ollama-model-switch', {
+            id: 'ollama-model-switch',
+            type: 'model',
+            title: 'Switching Model',
+            description: `Unloading ${previousModel}...`,
+            status: 'active',
+            timestamp: Date.now(),
+          });
+
+          // Unload the previous model by setting keep_alive to 0
+          try {
+            await fetch('/llm/ollama/api/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: previousModel,
+                keep_alive: 0,
+              }),
+            });
+          } catch (error) {
+            console.error('Failed to unload previous model:', error);
+          }
+        }
+
+        set({ selectedModel: model });
+
+        // Show loading new model
+        statusBarStore.updateTask('ollama-model-switch', {
+          id: 'ollama-model-switch',
+          type: 'model',
+          title: 'Loading Model',
+          description: `Loading ${model} into memory...`,
+          status: 'active',
+          timestamp: Date.now(),
+        });
+
+        // Pre-load the new model with keep_alive to keep it in memory
+        try {
+          await fetch('/llm/ollama/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model,
+              prompt: '',
+              keep_alive: '30m', // Keep model loaded for 30 minutes
+            }),
+          });
+
+          // Mark as completed
+          statusBarStore.updateTask('ollama-model-switch', {
+            status: 'completed',
+            description: `${model} loaded`,
+          });
+          setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 2000);
+        } catch (error) {
+          console.error('Failed to load new model:', error);
+          statusBarStore.updateTask('ollama-model-switch', {
+            status: 'error',
+            description: 'Failed to load model',
+            error: error instanceof Error ? error.message : String(error),
+          });
+          setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 5000);
+        }
+      },
+
+      fetchRequiredModelsStatus: async () => {
+        try {
+          const { data } = await getOllamaRequiredModelsStatus();
+          if (data) {
+            set({ requiredModelsStatus: data.models, loadingRequiredModels: false });
+          }
+        } catch (error) {
+          console.error('Failed to fetch required models:', error);
+          set({ loadingRequiredModels: false });
+        }
+      },
+
+      updateRequiredModelDownloadProgress: (progress: OllamaModelDownloadProgress) => {
+        set((state) => ({
+          requiredModelsDownloadProgress: {
+            ...state.requiredModelsDownloadProgress,
+            [progress.model]: progress,
+          },
+          // Also update the general download progress for user-initiated downloads
+          downloadProgress: state.modelsBeingDownloaded.has(progress.model)
+            ? {
+                ...state.downloadProgress,
+                [progress.model]: progress.progress,
+              }
+            : state.downloadProgress,
+        }));
+
+        // When download is completed, refresh the installed models list
+        if (progress.status === 'completed') {
+          // Add a small delay to ensure Ollama has registered the model
+          setTimeout(() => {
+            get().fetchInstalledModels();
+            get().fetchRequiredModelsStatus();
+          }, 500);
+        }
+      },
+    }),
+    {
+      name: 'ollama',
+      // Only persist the selected model
+      partialize: (state) => ({ selectedModel: state.selectedModel }),
     }
-  },
-}));
+  )
+);
 
 // Fetch installed/required-models-status on store creation
 useOllamaStore.getState().fetchInstalledModels();

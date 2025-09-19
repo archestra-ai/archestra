@@ -16,6 +16,7 @@ import posthogClient from '@ui/lib/posthog';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages, type ServerChatWithMessagesRepresentation } from '@ui/types';
 
+import { useUserSelectableModels } from './ollama-store';
 import { useToolsStore } from './tools-store';
 
 interface ChatState {
@@ -336,6 +337,10 @@ export const useChatStore = create<ChatStore>()(
       },
 
       setSelectedModel: (model: string) => {
+        const userSelectableOllamaModels = useUserSelectableModels();
+
+        console.log('userSelectableOllamaModels', userSelectableOllamaModels, model);
+
         set({ selectedModel: model });
       },
     }),

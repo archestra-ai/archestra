@@ -181,10 +181,11 @@ function OllamaProviderPage() {
                       const isDownloading = modelsBeingDownloaded.has(fullModelName);
                       const isUninstalling = modelsBeingUninstalled.has(fullModelName);
                       const isInstalled = isModelInstalled(fullModelName);
+                      const isRequired = requiredModelsStatus.some(({ model: requiredModel }) => requiredModel === fullModelName);
 
                       return (
                         <div key={tag} className="p-2 rounded border flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <Cpu className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm font-mono font-medium">{tag}</span>
@@ -204,7 +205,7 @@ function OllamaProviderPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <Button
                               size="sm"
                               variant={isInstalled ? 'secondary' : 'default'}
@@ -230,9 +231,9 @@ function OllamaProviderPage() {
                               )}
                             </Button>
 
-                            {isInstalled && (
+                            {isInstalled && !isRequired && (
                               <Button
-                                size="sm"
+                                size="icon"
                                 variant="destructive"
                                 disabled={isUninstalling || isDownloading}
                                 onClick={async () => {
@@ -247,19 +248,13 @@ function OllamaProviderPage() {
                                     });
                                   }
                                 }}
-                                className="h-7 px-2 cursor-pointer"
+                                className="h-7 w-7 cursor-pointer"
                                 title="Uninstall model"
                               >
                                 {isUninstalling ? (
-                                  <div className="flex items-center gap-1">
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    <span className="text-xs">Removing...</span>
-                                  </div>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <div className="flex items-center gap-1">
-                                    <Trash2 className="h-3 w-3" />
-                                    <span className="text-xs">Uninstall</span>
-                                  </div>
+                                  <Trash2 className="h-4 w-4" />
                                 )}
                               </Button>
                             )}

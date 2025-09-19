@@ -7,7 +7,7 @@ import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { useChatAgent } from '@ui/contexts/chat-agent-context';
-import { useChatStore, useToolsStore } from '@ui/stores';
+import { useChatStore, useOllamaStore, useToolsStore } from '@ui/stores';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
@@ -16,6 +16,7 @@ export const Route = createFileRoute('/chat')({
 function ChatPage() {
   const { saveDraftMessage, getDraftMessage, clearDraftMessage } = useChatStore();
   const { setOnlyTools } = useToolsStore();
+  const { selectedModel } = useOllamaStore();
   const {
     messages,
     setMessages,
@@ -115,7 +116,8 @@ function ChatPage() {
     sendMessage({ text: messageText });
   };
 
-  const isSubmittingDisabled = !currentInput.trim() || isLoading || isSubmitting;
+  const isSubmittingDisabled =
+    !currentInput.trim() || isLoading || isSubmitting || !selectedModel || selectedModel === '';
 
   const isChatEmpty = messages.length === 0;
 

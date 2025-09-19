@@ -5,11 +5,10 @@ import {
   deselectAllChatTools,
   deselectChatTools,
   getAvailableTools,
-  selectAllChatTools,
   selectChatTools,
 } from '@ui/lib/clients/archestra/api/gen';
 import websocketService from '@ui/lib/websocket';
-import type { AvailableToolsMap, Tool, ToolChoice } from '@ui/types/tools';
+import type { Tool } from '@ui/types/tools';
 
 import { useChatStore } from './chat-store';
 
@@ -20,23 +19,16 @@ interface ToolsState {
 
   selectedToolIds: Set<string>;
   hasInitializedSelection: boolean;
-
-  toolChoice: ToolChoice;
 }
 
 interface ToolsActions {
   addSelectedTool: (toolId: string) => void;
   removeSelectedTool: (toolId: string) => void;
-  clearAllTools: () => void;
   setOnlyTools: (toolIds: string[]) => void;
-
-  setToolChoice: (choice: ToolChoice) => void;
 
   fetchAvailableTools: () => void;
   setAvailableTools: (tools: Tool[]) => void;
   mergeAvailableTools: (tools: Tool[]) => void;
-
-  getAvailableToolsMap: () => AvailableToolsMap;
 }
 
 type ToolsStore = ToolsState & ToolsActions;
@@ -51,8 +43,6 @@ export const useToolsStore = create<ToolsStore>()(
 
       selectedToolIds: new Set(),
       hasInitializedSelection: false,
-
-      toolChoice: 'auto',
 
       // Actions
       addSelectedTool: async (toolId: string) => {
@@ -101,23 +91,6 @@ export const useToolsStore = create<ToolsStore>()(
         }
       },
 
-      clearAllTools: async () => {
-        const currentChat = useChatStore.getState().getCurrentChat();
-
-        set({ selectedToolIds: new Set() });
-
-        // Save to backend if we have a current chat
-        if (currentChat) {
-          try {
-            await deselectAllChatTools({
-              path: { id: currentChat.id.toString() },
-            });
-          } catch (error) {
-            console.error('Failed to clear all tools in backend:', error);
-          }
-        }
-      },
-
       setOnlyTools: async (toolIds: string[]) => {
         const currentChat = useChatStore.getState().getCurrentChat();
 
@@ -142,10 +115,6 @@ export const useToolsStore = create<ToolsStore>()(
             console.error('Failed to set only specified tools in backend:', error);
           }
         }
-      },
-
-      setToolChoice: (choice: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }) => {
-        set({ toolChoice: choice });
       },
 
       fetchAvailableTools: async () => {
@@ -231,13 +200,6 @@ export const useToolsStore = create<ToolsStore>()(
           set({ availableTools: finalTools });
         }
       },
-
-      getAvailableToolsMap: () => {
-        return get().availableTools.reduce((acc, tool) => {
-          acc[tool.id] = tool;
-          return acc;
-        }, {} as AvailableToolsMap);
-      },
     }),
     {
       name: 'tools-selection-storage',
@@ -245,7 +207,6 @@ export const useToolsStore = create<ToolsStore>()(
       partialize: (state) => ({
         selectedToolIds: Array.from(state.selectedToolIds),
         hasInitializedSelection: state.hasInitializedSelection,
-        toolChoice: state.toolChoice,
       }),
       // Convert array back to Set on rehydration
       onRehydrateStorage: () => (state) => {

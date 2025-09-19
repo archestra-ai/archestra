@@ -32,7 +32,6 @@ interface AssistantMessageProps {
   };
 }
 
-
 export default function AssistantMessage({
   message,
   isEditing,

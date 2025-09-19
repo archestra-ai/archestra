@@ -24,7 +24,7 @@ interface ChatState {
   currentChatSessionId: string | null;
   isLoadingChats: boolean;
   draftMessages: Map<number, string>; // chatId -> draft content
-  selectedModel: string | null;
+  selectedModel: string | undefined;
 }
 
 interface ChatActions {
@@ -98,7 +98,7 @@ export const useChatStore = create<ChatStore>()(
       currentChatSessionId: null,
       isLoadingChats: false,
       draftMessages: new Map(),
-      selectedModel: null,
+      selectedModel: undefined,
 
       loadChats: async () => {
         set({ isLoadingChats: true });

@@ -231,8 +231,6 @@ export default class SandboxedMcpServer {
     this.analysisUpdateInterval = setInterval(async () => {
       const hasUpdates = await this.updateCachedAnalysis();
       if (hasUpdates) {
-        log.info(`Analysis cache updated for MCP server ${this.mcpServerId}`);
-
         // Broadcast that tools have been updated
         WebSocketService.broadcast({
           type: 'tools-updated',

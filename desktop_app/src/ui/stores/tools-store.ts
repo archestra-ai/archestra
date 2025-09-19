@@ -451,8 +451,6 @@ websocketService.subscribe('chat-tools-updated', ({ payload }) => {
         selectedToolIds: new Set(selectedTools),
       });
     }
-
-    console.log(`Tools updated for chat ${chatId}:`, selectedTools?.length ?? 'all', 'tools selected');
   }
 });
 

@@ -112,7 +112,7 @@ export default function ToolApprovalMessage({
               id={`remember-${requestId}`}
               checked={rememberChoice}
               onCheckedChange={(checked) => setRememberChoice(!!checked)}
-              className="h-3 w-3"
+              className="h-3 w-3 cursor-pointer"
             />
             <label
               htmlFor={`remember-${requestId}`}
@@ -124,11 +124,11 @@ export default function ToolApprovalMessage({
 
           {/* Action Buttons */}
           <div className="flex gap-2">
-            <Button size="sm" variant="default" onClick={handleApprove} className="h-7 text-xs">
+            <Button size="sm" variant="default" onClick={handleApprove} className="h-7 text-xs cursor-pointer">
               <Check className="h-3 w-3 mr-1" />
               Approve
             </Button>
-            <Button size="sm" variant="destructive" onClick={handleDecline} className="h-7 text-xs">
+            <Button size="sm" variant="destructive" onClick={handleDecline} className="h-7 text-xs cursor-pointer">
               <X className="h-3 w-3 mr-1" />
               Decline
             </Button>

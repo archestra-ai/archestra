@@ -40,7 +40,7 @@ interface OllamaActions {
   fetchRequiredModelsStatus: () => Promise<void>;
   updateRequiredModelDownloadProgress: (progress: OllamaModelDownloadProgress) => void;
 
-  conditionallyHandleOllamaModelChange: (previousModelName: string | null, newModelName: string) => Promise<void>;
+  conditionallyHandleOllamaModelChange: (previousModelName: string | undefined, newModelName: string) => Promise<void>;
 }
 
 type OllamaStore = OllamaState & OllamaActions;
@@ -284,7 +284,7 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
     }
   },
 
-  conditionallyHandleOllamaModelChange: async (previousModelName: string | null, newModelName: string) => {
+  conditionallyHandleOllamaModelChange: async (previousModelName: string | undefined, newModelName: string) => {
     const { installedModels } = get();
     const statusBarStore = useStatusBarStore.getState();
 

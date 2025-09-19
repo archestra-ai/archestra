@@ -41,13 +41,13 @@ interface ChatActions {
 
 type ChatStore = ChatState & ChatActions;
 
-export const initializeChat = (chat: ServerChatWithMessagesRepresentation): ChatWithMessages => {
-  return {
-    ...chat,
-    messages: chat.messages.map((message) => message.content as any), // Content is already a UIMessage from the backend
-    // Token usage fields will be included from the chat object
-  };
-};
+export const initializeChat = (chat: ServerChatWithMessagesRepresentation): ChatWithMessages => ({
+  ...chat,
+  /**
+   * `message.content` is already persisted as a `UIMessage` on the backend
+   */
+  messages: chat.messages.map((message) => message.content as UIMessage),
+});
 
 /**
  * Listen for chat title updates from the backend via WebSocket

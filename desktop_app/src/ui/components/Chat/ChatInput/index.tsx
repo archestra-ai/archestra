@@ -28,11 +28,11 @@ import {
   useMcpServersStore,
   useOllamaStore,
   useToolsStore,
+  useUserSelectableModels,
 } from '@ui/stores';
 import { ChatMessageStatus } from '@ui/types/chat';
 import type { Tool } from '@ui/types/tools';
 
-import { SYSTEM_MODEL_NAMES } from '../../../../constants';
 
 import './chat-input.css';
 
@@ -79,12 +79,9 @@ export default function ChatInput({
   isSubmitting = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
-  const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
+  const { selectedModel, setSelectedModel } = useOllamaStore();
+  const userSelectableModels = useUserSelectableModels();
   const { availableCloudProviderModels } = useCloudProvidersStore();
-
-  // Filter out only the system models (phi3:3.8b and llama-guard3:1b)
-  // Keep the recommended Qwen model in the list
-  const userSelectableModels = installedModels.filter((model) => !SYSTEM_MODEL_NAMES.includes(model.model));
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
 

@@ -168,7 +168,7 @@ function OllamaProviderPage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
           {availableModels.map((model) => (
             <Card key={model.name} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
@@ -200,7 +200,7 @@ function OllamaProviderPage() {
                       const isRequired = requiredModelsStatus.some(({ model: requiredModel }) => requiredModel === fullModelName);
 
                       return (
-                        <div key={tag} className="p-2 rounded border flex items-center justify-between gap-2">
+                        <div key={tag} className="p-3 rounded border flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <Cpu className="h-4 w-4 text-muted-foreground" />
@@ -221,28 +221,35 @@ function OllamaProviderPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-1 sm:gap-2 lg:gap-1 2xl:gap-2 shrink-0 ml-1 sm:ml-2 lg:ml-1 2xl:ml-2">
                             <Button
                               size="sm"
                               variant={isInstalled ? 'secondary' : 'default'}
                               disabled={isDownloading}
-                              onClick={() => downloadModel(fullModelName)}
-                              className="h-7 px-2 cursor-pointer"
+                              onClick={() => !isInstalled && downloadModel(fullModelName)}
+                              aria-label={
+                                isDownloading
+                                  ? `Downloading ${fullModelName}`
+                                  : isInstalled
+                                  ? `${fullModelName} installed`
+                                  : `Download ${fullModelName}`
+                              }
+                              className={`h-6 sm:h-7 max-[420px]:w-6 w-auto px-2 max-[420px]:px-0 min-[1024px]:px-1 min-[1056px]:px-2 justify-center text-xs whitespace-nowrap ${isInstalled ? 'cursor-default' : 'cursor-pointer'}`}
                             >
                               {isDownloading ? (
                                 <div className="flex items-center gap-1">
                                   <Loader2 className="h-3 w-3 animate-spin" />
-                                  <span className="text-xs">{progress ? `${progress}%` : '...'}</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">{progress ? `${progress}%` : '...'}</span>
                                 </div>
                               ) : isInstalled ? (
                                 <div className="flex items-center gap-1">
                                   <Check className="h-3 w-3" />
-                                  <span className="text-xs">Installed</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">Installed</span>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1">
                                   <Download className="h-3 w-3" />
-                                  <span className="text-xs">Download</span>
+                                  <span className="text-xs max-[420px]:hidden min-[1024px]:hidden min-[1056px]:inline">Download</span>
                                 </div>
                               )}
                             </Button>
@@ -253,7 +260,7 @@ function OllamaProviderPage() {
                                 variant="destructive"
                                 disabled={isUninstalling || isDownloading}
                                 onClick={() => handleUninstallClick(fullModelName)}
-                                className="h-7 w-7 cursor-pointer hover:bg-destructive/95 dark:hover:bg-destructive/80"
+                                className="h-6 w-6 sm:h-7 sm:w-7 cursor-pointer hover:bg-destructive/95 dark:hover:bg-destructive/80 shrink-0"
                                 title="Uninstall model"
                               >
                                 {isUninstalling ? (

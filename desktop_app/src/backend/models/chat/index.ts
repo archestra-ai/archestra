@@ -8,12 +8,11 @@ import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
-import toolAggregator from '@backend/llms/toolAggregator';
 import ollamaClient from '@backend/ollama/client';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
-
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
+import { DEFAULT_ARCHESTRA_TOOLS } from '@constants';
 
 const TransformedMessageSchema = DatabaseMessageRepresentationSchema.extend({
   /**
@@ -92,7 +91,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list
       // Get all available tools and ensure the new ones are included
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Make sure all tools including the new ones are in the list
@@ -121,7 +120,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list first
       // then remove the specified tools
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Remove specified tools from the full list

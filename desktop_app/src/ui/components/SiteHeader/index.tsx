@@ -145,7 +145,7 @@ Put relevant logs here (if any)
         </Button>
 
         <Button
-          className="hidden sm:flex"
+          className="hidden sm:flex cursor-pointer"
           variant="ghost"
           size="sm"
           onClick={async () => {

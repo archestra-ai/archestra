@@ -83,9 +83,9 @@ import type {
   InstallMcpServerWithOauthData,
   InstallMcpServerWithOauthErrors,
   InstallMcpServerWithOauthResponses,
-  PostApiOllamaPullData,
-  PostApiOllamaPullErrors,
-  PostApiOllamaPullResponses,
+  PullOllamaModelData,
+  PullOllamaModelErrors,
+  PullOllamaModelResponses,
   RemoveOllamaModelData,
   RemoveOllamaModelErrors,
   RemoveOllamaModelResponses,
@@ -696,19 +696,6 @@ export const updateMemory = <ThrowOnError extends boolean = false>(
   });
 };
 
-export const postApiOllamaPull = <ThrowOnError extends boolean = false>(
-  options: Options<PostApiOllamaPullData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<PostApiOllamaPullResponses, PostApiOllamaPullErrors, ThrowOnError>({
-    url: '/api/ollama/pull',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-};
-
 /**
  * Get the status of all Ollama required models
  */
@@ -730,6 +717,22 @@ export const removeOllamaModel = <ThrowOnError extends boolean = false>(
   return (options.client ?? _heyApiClient).delete<RemoveOllamaModelResponses, RemoveOllamaModelErrors, ThrowOnError>({
     url: '/api/ollama/models/{modelName}',
     ...options,
+  });
+};
+
+/**
+ * Pull an Ollama model
+ */
+export const pullOllamaModel = <ThrowOnError extends boolean = false>(
+  options: Options<PullOllamaModelData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<PullOllamaModelResponses, PullOllamaModelErrors, ThrowOnError>({
+    url: '/api/ollama/pull',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 

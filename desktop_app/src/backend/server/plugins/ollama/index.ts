@@ -3,10 +3,9 @@ import { z } from 'zod';
 
 import config from '@backend/config';
 import OllamaClient from '@backend/ollama/client';
+import log from '@backend/utils/logger';
 
-const {
-  ollama: { requiredModels: ollamaRequiredModels },
-} = config;
+const { requiredModels } = config.ollama;
 
 const OllamaRequiredModelStatusSchema = z.object({
   model: z.string(),
@@ -22,7 +21,7 @@ z.globalRegistry.add(OllamaRequiredModelStatusSchema, {
   id: 'OllamaRequiredModelStatus',
 });
 
-const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const ollamaRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get status of required models
   fastify.get(
     '/api/ollama/required-models',
@@ -30,7 +29,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: 'getOllamaRequiredModelsStatus',
         description: 'Get the status of all Ollama required models',
-        tags: ['MCP Server'],
+        tags: ['Ollama'],
         response: {
           200: z.object({
             models: z.array(OllamaRequiredModelStatusSchema),
@@ -44,7 +43,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const installedModelNames = installedModels.map((m) => m.name);
 
         return {
-          models: ollamaRequiredModels.map((model) => ({
+          models: requiredModels.map((model) => ({
             ...model,
             installed: installedModelNames.includes(model.model),
           })),
@@ -63,7 +62,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: 'removeOllamaModel',
         description: 'Remove/uninstall an Ollama model',
-        tags: ['MCP Server'],
+        tags: ['Ollama'],
         params: z.object({
           modelName: z.string(),
         }),
@@ -84,9 +83,7 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { modelName } }, reply) => {
       try {
         // Check if it's a required model - don't allow removal of required models
-        const isRequiredModel = ollamaRequiredModels.some((m) => m.model === modelName);
-
-        if (isRequiredModel) {
+        if (requiredModels.some((m) => m.model === modelName)) {
           return reply.code(400).send({
             error: `Cannot remove required model: ${modelName}. This model is needed for app functionality.`,
           });
@@ -106,6 +103,49 @@ const ollamaMetadataRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     }
   );
+
+  fastify.post(
+    '/api/ollama/pull',
+    {
+      schema: {
+        operationId: 'pullOllamaModel',
+        description: 'Pull an Ollama model',
+        tags: ['Ollama'],
+        body: z.object({
+          model: z.string().describe('The model name to pull'),
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            message: z.string(),
+          }),
+          500: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { model } = request.body;
+
+      try {
+        log.info({ model }, 'Starting Ollama model pull with WebSocket progress');
+
+        // This method sends WebSocket progress events
+        await OllamaClient.pull({ name: model });
+
+        return reply.send({
+          success: true,
+          message: `Successfully pulled model ${model}`,
+        });
+      } catch (error) {
+        log.error({ error, model }, 'Failed to pull Ollama model');
+        return reply.code(500).send({
+          error: `Failed to pull model: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+  );
 };
 
-export default ollamaMetadataRoutes;
+export default ollamaRoutes;

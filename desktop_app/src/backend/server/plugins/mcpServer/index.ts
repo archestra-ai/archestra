@@ -7,7 +7,6 @@ import {
   McpServerSchema,
   McpServerUserConfigValuesSchema,
 } from '@backend/database/schema/mcpServer';
-import toolAggregator from '@backend/llms/toolAggregator';
 import ExternalMcpClientModel from '@backend/models/externalMcpClient';
 import McpRequestLog from '@backend/models/mcpRequestLog';
 import McpServerModel, { McpServerInstallSchema } from '@backend/models/mcpServer';
@@ -15,6 +14,7 @@ import McpServerSandboxManager from '@backend/sandbox/manager';
 import { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/sandboxedMcp';
 import { ErrorResponseSchema } from '@backend/schemas';
 import { McpOAuthProvider, connectMcpServer } from '@backend/server/plugins/mcp-oauth';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 
 /**
@@ -313,7 +313,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (_request, reply) => {
       // Get tools from both sandboxed servers and Archestra MCP server
-      return reply.send(toolAggregator.getAllAvailableTools());
+      return reply.send(toolService.getAllAvailableTools());
     }
   );
 

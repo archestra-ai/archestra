@@ -4,8 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
 import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
+import { useToolsStore } from '@ui/stores';
 
-import { AssistantMessage, ErrorMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
+import {
+  AssistantMessage,
+  ErrorMessage,
+  MemoriesMessage,
+  OtherMessage,
+  ToolApprovalMessage,
+  UserMessage,
+} from './Messages';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
 const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-area-viewport]`;
@@ -123,6 +131,8 @@ const getMessageClassName = (role: string) => {
 
 export default function ChatHistory({
   messages,
+  chatId,
+  sessionId,
   editingMessageId,
   editingContent,
   onEditStart,
@@ -139,6 +149,9 @@ export default function ChatHistory({
   const scrollAreaRef = useRef<HTMLElement | null>(null);
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get pending approvals from the tools store
+  const { pendingApprovals } = useToolsStore();
 
   // Filter out system messages except for special ones like system-memories
   const visibleMessages = messages.filter((message) => {
@@ -206,6 +219,9 @@ export default function ChatHistory({
     return () => clearTimeout(timeoutId);
   }, [messages, isSubmitting, scrollToBottom]);
 
+  // Filter pending approvals for this chat
+  const chatPendingApprovals = Array.from(pendingApprovals.values()).filter((approval) => approval.chatId === chatId);
+
   return (
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
       <div className="p-4 space-y-4 max-w-full overflow-hidden">
@@ -238,6 +254,22 @@ export default function ChatHistory({
                 regeneratingIndex={regeneratingIndex}
               />
             </div>
+          </div>
+        ))}
+
+        {/* Render pending tool approvals for this chat */}
+        {chatPendingApprovals.map((approval) => (
+          <div key={approval.requestId} className="animate-in fade-in-0 slide-in-from-bottom-2">
+            <ToolApprovalMessage
+              requestId={approval.requestId}
+              toolId={approval.toolId}
+              toolName={approval.toolName}
+              toolDescription={approval.toolDescription}
+              args={approval.args}
+              isWrite={approval.isWrite}
+              sessionId={approval.sessionId}
+              chatId={approval.chatId}
+            />
           </div>
         ))}
       </div>

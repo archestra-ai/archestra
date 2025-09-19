@@ -2,11 +2,11 @@ import { type UIMessage } from 'ai';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
-import toolAggregator from '@backend/llms/toolAggregator';
 import ChatModel, { ChatWithMessagesSchema } from '@backend/models/chat';
 import MessageModel from '@backend/models/message';
 import { AvailableToolSchema } from '@backend/sandbox/schemas';
 import { ErrorResponseSchema, StringNumberIdSchema } from '@backend/schemas';
+import toolService from '@backend/services/tool';
 
 const MessageIdSchema = z
   .string()
@@ -158,7 +158,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id } }, reply) => {
       try {
         const selectedTools = await ChatModel.getSelectedTools(id);
-        const availableTools = toolAggregator.getAllAvailableTools();
+        const availableTools = toolService.getAllAvailableTools();
 
         return reply.code(200).send({
           selectedTools,
@@ -323,7 +323,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      const availableTools = toolAggregator.getAllAvailableTools();
+      const availableTools = toolService.getAllAvailableTools();
       return reply.code(200).send(availableTools);
     }
   );

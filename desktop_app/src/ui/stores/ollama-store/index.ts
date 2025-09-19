@@ -2,21 +2,24 @@ import { ModelResponse } from 'ollama/browser';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { SYSTEM_MODEL_NAMES } from '@constants';
 import config from '@ui/config';
 import {
   OllamaModelDownloadProgress,
   OllamaRequiredModelStatus,
   getOllamaRequiredModelsStatus,
+  pullOllamaModel,
   removeOllamaModel,
 } from '@ui/lib/clients/archestra/api/gen';
 import { ArchestraOllamaClient } from '@ui/lib/clients/ollama';
 import websocketService from '@ui/lib/websocket';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
-import { SYSTEM_MODEL_NAMES } from '../../../constants';
 import { AVAILABLE_MODELS } from './available_models';
 
-const ollamaClient = new ArchestraOllamaClient({ host: config.archestra.ollamaProxyUrl });
+const { ollamaProxyUrl } = config.archestra;
+
+const ollamaClient = new ArchestraOllamaClient({ host: ollamaProxyUrl });
 
 interface OllamaState {
   installedModels: ModelResponse[];
@@ -42,6 +45,16 @@ interface OllamaActions {
 }
 
 type OllamaStore = OllamaState & OllamaActions;
+
+const preloadModel = async (model: string, keepAlive: string) =>
+  fetch(`${ollamaProxyUrl}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      keep_alive: keepAlive,
+    }),
+  });
 
 export const useOllamaStore = create<OllamaStore>()(
   persist(
@@ -127,24 +140,19 @@ export const useOllamaStore = create<OllamaStore>()(
             modelsBeingDownloaded: new Set([...state.modelsBeingDownloaded, fullModelName]),
           }));
 
-          // Use the new backend endpoint that sends WebSocket progress
-          const response = await fetch('/api/ollama/pull', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
+          const { data } = await pullOllamaModel({
+            body: {
+              model: fullModelName,
             },
-            body: JSON.stringify({ model: fullModelName }),
           });
 
-          if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Failed to download model: ${error}`);
+          if (!data) {
+            throw new Error('Failed to download model');
           }
 
-          // The WebSocket events will update the progress via the subscription below
-          // Just wait for completion
-          const result = await response.json();
-          console.log('Model download completed:', result);
+          if (!data.success) {
+            throw new Error(`Failed to download model: ${data.message}`);
+          }
 
           await get().fetchInstalledModels();
         } catch (error) {
@@ -283,16 +291,9 @@ export const useOllamaStore = create<OllamaStore>()(
             timestamp: Date.now(),
           });
 
-          // Unload the previous model by setting keep_alive to 0
           try {
-            await fetch('/llm/ollama/api/generate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: previousModel,
-                keep_alive: 0,
-              }),
-            });
+            // Unload the previous model by setting keep_alive to 0
+            await preloadModel(previousModel, '0');
           } catch (error) {
             console.error('Failed to unload previous model:', error);
           }
@@ -310,17 +311,9 @@ export const useOllamaStore = create<OllamaStore>()(
           timestamp: Date.now(),
         });
 
-        // Pre-load the new model with keep_alive to keep it in memory
         try {
-          await fetch('/llm/ollama/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model,
-              prompt: '',
-              keep_alive: '30m', // Keep model loaded for 30 minutes
-            }),
-          });
+          // Pre-load the new model with keep_alive to keep it in memory
+          await preloadModel(model, '30m');
 
           // Mark as completed
           statusBarStore.updateTask('ollama-model-switch', {

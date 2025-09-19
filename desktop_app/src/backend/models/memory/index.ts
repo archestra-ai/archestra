@@ -178,54 +178,6 @@ export default class MemoryModel {
       throw error;
     }
   }
-
-  /**
-   * Legacy method for backward compatibility - returns all memories as markdown
-   */
-  static async getMemories(): Promise<string> {
-    try {
-      const memories = await this.getAllMemories();
-      if (memories.length === 0) {
-        return '';
-      }
-
-      // Format as markdown list
-      return memories.map((m) => `**${m.name}**: ${m.value}`).join('\n');
-    } catch (error) {
-      log.error('Failed to get memories (legacy):', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Legacy method for backward compatibility - overwrites all memories
-   */
-  static async writeMemories(content: string): Promise<void> {
-    try {
-      // Parse content as key-value pairs (expecting format: "key: value")
-      const lines = content.split('\n').filter((line) => line.trim());
-
-      // Clear existing memories
-      await this.deleteAllMemories();
-
-      // Add new memories
-      for (const line of lines) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex > 0) {
-          const name = line.substring(0, colonIndex).replace(/\*\*/g, '').trim();
-          const value = line.substring(colonIndex + 1).trim();
-          if (name && value) {
-            await this.setMemory(name, value);
-          }
-        }
-      }
-
-      log.info('Wrote memories (legacy method)');
-    } catch (error) {
-      log.error('Failed to write memories (legacy):', error);
-      throw error;
-    }
-  }
 }
 
 export { SelectMemorySchema };

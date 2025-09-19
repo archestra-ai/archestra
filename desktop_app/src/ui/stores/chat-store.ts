@@ -1,6 +1,7 @@
 import { UIMessage } from 'ai';
 import { create } from 'zustand';
 
+import { DEFAULT_ARCHESTRA_TOOLS } from '@constants';
 import config from '@ui/config';
 import {
   createChat,
@@ -14,7 +15,6 @@ import posthogClient from '@ui/lib/posthog';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages, type ServerChatWithMessagesRepresentation } from '@ui/types';
 
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../constants';
 import { useToolsStore } from './tools-store';
 
 interface ChatState {

@@ -98,6 +98,19 @@ class WebSocketService {
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
+
+  send(message: WebSocketMessage): void {
+    if (!this.isConnected()) {
+      console.error('WebSocket not connected, cannot send message');
+      return;
+    }
+
+    try {
+      this.ws?.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('Failed to send WebSocket message:', error);
+    }
+  }
 }
 
 // Create singleton instance

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Clock, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Shield, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
 import { ScrollArea, ScrollBar } from '@ui/components/ui/scroll-area';
@@ -50,6 +50,10 @@ export default function ToolInvocation({
       className={cn(
         'border rounded-lg overflow-hidden transition-all',
         state === 'pending' && 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20',
+        state === 'awaiting_approval' && 'border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20',
+        state === 'approved' && 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20',
+        state === 'declined' && 'border-gray-500 bg-gray-50/50 dark:bg-gray-950/20',
+        state === 'executing' && 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20',
         state === 'completed' && 'border-green-500 bg-green-50/50 dark:bg-green-950/20',
         state === 'error' && 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
       )}
@@ -61,14 +65,21 @@ export default function ToolInvocation({
         <div className="flex-shrink-0">
           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </div>
-        <Wrench
-          className={cn(
-            'h-4 w-4 flex-shrink-0',
-            state === 'pending' && 'text-blue-600 animate-pulse',
-            state === 'completed' && 'text-green-600',
-            state === 'error' && 'text-red-600'
-          )}
-        />
+        {state === 'awaiting_approval' ? (
+          <Shield className={cn('h-4 w-4 flex-shrink-0', 'text-yellow-600 animate-pulse')} />
+        ) : (
+          <Wrench
+            className={cn(
+              'h-4 w-4 flex-shrink-0',
+              state === 'pending' && 'text-blue-600 animate-pulse',
+              state === 'approved' && 'text-blue-600',
+              state === 'declined' && 'text-gray-600',
+              state === 'executing' && 'text-blue-600 animate-pulse',
+              state === 'completed' && 'text-green-600',
+              state === 'error' && 'text-red-600'
+            )}
+          />
+        )}
         <span className="font-medium text-sm flex-1 text-left">{toolName}</span>
         {duration !== null && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -77,6 +88,11 @@ export default function ToolInvocation({
           </div>
         )}
         {state === 'pending' && <span className="text-xs text-blue-600 animate-pulse">Running...</span>}
+        {state === 'awaiting_approval' && (
+          <span className="text-xs text-yellow-600 animate-pulse">Awaiting approval...</span>
+        )}
+        {state === 'declined' && <span className="text-xs text-gray-600">Declined</span>}
+        {state === 'executing' && <span className="text-xs text-blue-600 animate-pulse">Executing...</span>}
       </button>
 
       {isExpanded && (

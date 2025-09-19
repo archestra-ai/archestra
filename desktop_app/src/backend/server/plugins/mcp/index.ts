@@ -4,11 +4,12 @@ import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
 
 import ArchestraMcpContext from '@backend/archestraMcp/context';
-import toolAggregator from '@backend/llms/toolAggregator';
 import ChatModel from '@backend/models/chat';
 import MemoryModel from '@backend/models/memory';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
+import { ARCHESTRA_MCP_TOOLS, FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS, constructToolId } from '@constants';
 
 // Workaround for fastify-mcp bug: declare global to store tool arguments
 declare global {
@@ -22,44 +23,48 @@ export const createArchestraMcpServer = () => {
   }) as any;
 
   // Memory CRUD tools
-  archestraMcpServer.tool('list_memories', 'List all stored memory entries with their names and values', async () => {
-    log.info('list_memories called');
-    try {
-      const memories = await MemoryModel.getAllMemories();
-      if (memories.length === 0) {
+  archestraMcpServer.tool(
+    ARCHESTRA_MCP_TOOLS.LIST_MEMORIES,
+    'List all stored memory entries with their names and values',
+    async () => {
+      log.info('list_memories called');
+      try {
+        const memories = await MemoryModel.getAllMemories();
+        if (memories.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No memories stored yet.',
+              },
+            ],
+          };
+        }
+
+        const formatted = memories.map((m) => `${m.name}: ${m.value}`).join('\n');
         return {
           content: [
             {
               type: 'text',
-              text: 'No memories stored yet.',
+              text: formatted,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error listing memories: ${error instanceof Error ? error.message : 'Unknown error'}`,
             },
           ],
         };
       }
-
-      const formatted = memories.map((m) => `${m.name}: ${m.value}`).join('\n');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: formatted,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error listing memories: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          },
-        ],
-      };
     }
-  });
+  );
 
   archestraMcpServer.tool(
-    'set_memory',
+    ARCHESTRA_MCP_TOOLS.SET_MEMORY,
     'Set or update a memory entry with a specific name and value. Example: {"name": "favorite_color", "value": "blue"}',
     z.object({
       name: z.string().describe('The name/key for the memory entry'),
@@ -126,7 +131,7 @@ export const createArchestraMcpServer = () => {
   );
 
   archestraMcpServer.tool(
-    'delete_memory',
+    ARCHESTRA_MCP_TOOLS.DELETE_MEMORY,
     'Delete a specific memory entry by name',
     z.object({
       name: z.string().describe('The name of the memory to delete'),
@@ -176,7 +181,7 @@ export const createArchestraMcpServer = () => {
 
   // Tool management tools
   archestraMcpServer.tool(
-    'list_available_tools',
+    ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS,
     'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
     z.object({
       mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
@@ -199,7 +204,7 @@ export const createArchestraMcpServer = () => {
         }
 
         // Get all available tools
-        const allTools = toolAggregator.getAllAvailableTools();
+        const allTools = toolService.getAllAvailableTools();
 
         // Get selected tools for the chat
         const selectedTools = await ChatModel.getSelectedTools(chatId);
@@ -298,13 +303,13 @@ export const createArchestraMcpServer = () => {
   );
 
   archestraMcpServer.tool(
-    'enable_tools',
-    'Enable specific tools for use in the current chat. Use list_available_tools to see tool IDs if you don\'t have them. Example: {"toolIds": ["filesystem__read_file", "filesystem__write_file", "remote-mcp__search_repositories"]}',
+    ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS,
+    `Enable specific tools for use in the current chat. Use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} to see tool IDs if you don\'t have them. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
     z.object({
       toolIds: z
         .array(z.string())
         .describe(
-          'Array of tool IDs from list_available_tools output. Example: ["archestra__list_memories", "filesystem__read_file", "remote-mcp__create_issue"]'
+          `Array of tool IDs from ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} output. Example: ["${FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS.LIST_MEMORIES}", "${constructToolId('filesystem', 'read_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"}`
         ),
     }) as any,
     async (context: any) => {
@@ -336,7 +341,7 @@ export const createArchestraMcpServer = () => {
         }
 
         // Get all available tools to validate the tool IDs exist
-        const allTools = toolAggregator.getAllAvailableTools();
+        const allTools = toolService.getAllAvailableTools();
         const availableToolIds = new Set(allTools.map((t) => t.id));
 
         // Get currently selected tools for the chat
@@ -408,7 +413,7 @@ export const createArchestraMcpServer = () => {
   );
 
   archestraMcpServer.tool(
-    'disable_tools',
+    ARCHESTRA_MCP_TOOLS.DISABLE_TOOLS,
     'Disable specific tools from the current chat',
     z.object({
       toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
@@ -442,7 +447,7 @@ export const createArchestraMcpServer = () => {
         }
 
         // Get all available tools to validate the tool IDs exist
-        const allTools = toolAggregator.getAllAvailableTools();
+        const allTools = toolService.getAllAvailableTools();
         const availableToolIds = new Set(allTools.map((t) => t.id));
 
         // Get currently selected tools for the chat

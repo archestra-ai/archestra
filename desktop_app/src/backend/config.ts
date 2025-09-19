@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import * as os from 'os';
 
-import { SYSTEM_MODELS } from '../constants';
+import { SYSTEM_MODELS } from '@constants';
 
 const OLLAMA_SERVER_PORT = parseInt(process.env.ARCHESTRA_OLLAMA_SERVER_PORT || '54589', 10);
 const OLLAMA_GUARD_MODEL = SYSTEM_MODELS.GUARD;

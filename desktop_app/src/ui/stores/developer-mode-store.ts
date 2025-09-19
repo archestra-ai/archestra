@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { DEFAULT_SYSTEM_PROMPT } from '../../constants';
+import { DEFAULT_SYSTEM_PROMPT } from '@constants';
 
 interface DeveloperModeState {
   isDeveloperMode: boolean;

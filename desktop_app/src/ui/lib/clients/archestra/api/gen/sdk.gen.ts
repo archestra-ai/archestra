@@ -86,6 +86,9 @@ import type {
   PostApiOllamaPullData,
   PostApiOllamaPullErrors,
   PostApiOllamaPullResponses,
+  RemoveOllamaModelData,
+  RemoveOllamaModelErrors,
+  RemoveOllamaModelResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -714,6 +717,18 @@ export const getOllamaRequiredModelsStatus = <ThrowOnError extends boolean = fal
 ) => {
   return (options?.client ?? _heyApiClient).get<GetOllamaRequiredModelsStatusResponses, unknown, ThrowOnError>({
     url: '/api/ollama/required-models',
+    ...options,
+  });
+};
+
+/**
+ * Remove/uninstall an Ollama model
+ */
+export const removeOllamaModel = <ThrowOnError extends boolean = false>(
+  options: Options<RemoveOllamaModelData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<RemoveOllamaModelResponses, RemoveOllamaModelErrors, ThrowOnError>({
+    url: '/api/ollama/models/{modelName}',
     ...options,
   });
 };

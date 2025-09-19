@@ -7,6 +7,7 @@ import {
   OllamaModelDownloadProgress,
   OllamaRequiredModelStatus,
   getOllamaRequiredModelsStatus,
+  removeOllamaModel,
 } from '@ui/lib/clients/archestra/api/gen';
 import { ArchestraOllamaClient } from '@ui/lib/clients/ollama';
 import websocketService from '@ui/lib/websocket';
@@ -187,6 +188,7 @@ export const useOllamaStore = create<OllamaStore>()(
           const stepTargets = [5, 25, 50, 75, 90];
           let simulated = 1;
           let stepIndex = 0;
+
           progressTimer = setInterval(() => {
             simulated = Math.min(simulated + 2, 90);
             if (stepIndex < stepTargets.length && simulated >= stepTargets[stepIndex]) {
@@ -194,20 +196,25 @@ export const useOllamaStore = create<OllamaStore>()(
                 progress: simulated,
                 description: `Uninstalling ${fullModelName} (${stepIndex + 1}/5)...`,
               });
+
               stepIndex++;
             } else {
               statusBarStore.updateTask(taskId, { progress: simulated });
             }
-            if (simulated >= 90) clearInterval(progressTimer);
+
+            if (simulated >= 90) {
+              clearInterval(progressTimer);
+            }
           }, 200);
 
-          // Call API directly (SDK function not generated in this build)
-          const res = await fetch(`/api/ollama/models/${encodeURIComponent(fullModelName)}`, {
-            method: 'DELETE',
+          const { data } = await removeOllamaModel({
+            path: {
+              modelName: fullModelName,
+            },
           });
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(text || `Failed to uninstall ${fullModelName}`);
+
+          if (data && !data.success) {
+            throw new Error(data.message || `Failed to uninstall ${fullModelName}`);
           }
 
           // Refresh the installed models list after successful uninstall
@@ -218,6 +225,7 @@ export const useOllamaStore = create<OllamaStore>()(
           // Smoothly animate to 100% keeping the uninstalling copy
           finalizeTimer = setInterval(() => {
             simulated = Math.min(simulated + 2, 100);
+
             if (simulated < 100) {
               statusBarStore.updateTask(taskId, {
                 progress: simulated,
@@ -225,25 +233,35 @@ export const useOllamaStore = create<OllamaStore>()(
               });
             } else {
               clearInterval(finalizeTimer);
+
               statusBarStore.updateTask(taskId, { progress: 100 });
+
               // Keep as active briefly so it shows in the collapsed header
               statusBarStore.updateTask(taskId, {
                 status: 'active',
                 description: `Uninstalled ${fullModelName} successfully`,
               });
+
               setTimeout(() => statusBarStore.removeTask(taskId), 3000);
             }
           }, 60);
         } catch (error) {
           console.error('Failed to uninstall model:', error);
+
           clearInterval(progressTimer);
-          if (finalizeTimer) clearInterval(finalizeTimer);
+
+          if (finalizeTimer) {
+            clearInterval(finalizeTimer);
+          }
+
           statusBarStore.updateTask(taskId, {
             status: 'error',
             description: `Failed to uninstall ${fullModelName}`,
             error: error instanceof Error ? error.message : String(error),
           });
+
           setTimeout(() => statusBarStore.removeTask(taskId), 5000);
+
           throw error;
         }
       },

@@ -21,13 +21,10 @@ interface ToolApprovalMessageProps {
 
 export default function ToolApprovalMessage({
   requestId,
-  toolId,
   toolName,
   toolDescription,
   args,
   isWrite,
-  sessionId,
-  chatId,
 }: ToolApprovalMessageProps) {
   const { approveRequest, declineRequest, pendingApprovals } = useToolsStore();
   const [rememberChoice, setRememberChoice] = useState(false);
@@ -57,7 +54,9 @@ export default function ToolApprovalMessage({
   };
 
   // If not pending, don't show anything (request was already handled)
-  if (!isPending) return null;
+  if (!isPending) {
+    return null;
+  }
 
   return (
     <div className="border-2 border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/20 rounded-lg p-4 space-y-3">
@@ -80,7 +79,6 @@ export default function ToolApprovalMessage({
             {toolDescription && <p className="text-xs text-muted-foreground mt-1">{toolDescription}</p>}
           </div>
 
-          {/* Warning for Write Operations */}
           {isWrite && (
             <Alert className="border-yellow-600/50 bg-yellow-100/50 dark:bg-yellow-900/30">
               <AlertTriangle className="h-4 w-4" />
@@ -90,7 +88,6 @@ export default function ToolApprovalMessage({
             </Alert>
           )}
 
-          {/* Arguments (collapsible) */}
           {formattedArgs && (
             <Collapsible open={showArgs} onOpenChange={setShowArgs}>
               <CollapsibleTrigger asChild>
@@ -106,7 +103,6 @@ export default function ToolApprovalMessage({
             </Collapsible>
           )}
 
-          {/* Remember Choice */}
           <div className="flex items-center space-x-2">
             <Checkbox
               id={`remember-${requestId}`}
@@ -122,7 +118,6 @@ export default function ToolApprovalMessage({
             </label>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex gap-2">
             <Button size="sm" variant="default" onClick={handleApprove} className="h-7 text-xs cursor-pointer">
               <Check className="h-3 w-3 mr-1" />

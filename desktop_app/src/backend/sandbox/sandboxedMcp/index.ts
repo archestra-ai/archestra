@@ -213,7 +213,6 @@ export default class SandboxedMcpServer {
         ) {
           this.updateToolInCache(tool);
           hasUpdates = true;
-          log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
         }
       }
 

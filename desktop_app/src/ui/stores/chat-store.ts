@@ -16,7 +16,7 @@ import posthogClient from '@ui/lib/posthog';
 import websocketService from '@ui/lib/websocket';
 import { type ChatWithMessages, type ServerChatWithMessagesRepresentation } from '@ui/types';
 
-import { useUserSelectableModels } from './ollama-store';
+import { useOllamaStore } from './ollama-store';
 import { useToolsStore } from './tools-store';
 
 interface ChatState {
@@ -24,7 +24,7 @@ interface ChatState {
   currentChatSessionId: string | null;
   isLoadingChats: boolean;
   draftMessages: Map<number, string>; // chatId -> draft content
-  selectedModel: string | undefined;
+  selectedModel: string | null;
 }
 
 interface ChatActions {
@@ -98,7 +98,7 @@ export const useChatStore = create<ChatStore>()(
       currentChatSessionId: null,
       isLoadingChats: false,
       draftMessages: new Map(),
-      selectedModel: undefined,
+      selectedModel: null,
 
       loadChats: async () => {
         set({ isLoadingChats: true });
@@ -336,12 +336,12 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
-      setSelectedModel: (model: string) => {
-        const userSelectableOllamaModels = useUserSelectableModels();
+      setSelectedModel: (newModelName: string) => {
+        const { selectedModel: currentModelName } = get();
 
-        console.log('userSelectableOllamaModels', userSelectableOllamaModels, model);
+        set({ selectedModel: newModelName });
 
-        set({ selectedModel: model });
+        useOllamaStore.getState().conditionallyHandleOllamaModelChange(currentModelName, newModelName);
       },
     }),
     {

@@ -109,10 +109,13 @@ export default function ChatInput({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSubmit();
+        // Only submit if a model is selected and not disabled
+        if (!disabled) {
+          handleSubmit();
+        }
       }
     },
-    [handleSubmit]
+    [handleSubmit, disabled]
   );
 
   // Helper function to find common prefix

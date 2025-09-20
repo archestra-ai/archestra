@@ -7,6 +7,8 @@ import { ToolCallStatus } from '@ui/types';
 
 interface ToolInvocationProps {
   toolName: string;
+  mcpServerName?: string;
+  prettyToolName?: string;
   args: any;
   result?: any;
   state?: ToolCallStatus;
@@ -16,6 +18,8 @@ interface ToolInvocationProps {
 
 export default function ToolInvocation({
   toolName,
+  mcpServerName,
+  prettyToolName,
   args,
   result,
   state = ToolCallStatus.Completed,
@@ -80,7 +84,9 @@ export default function ToolInvocation({
             )}
           />
         )}
-        <span className="font-medium text-sm flex-1 text-left">{toolName}</span>
+        <span className="font-medium text-sm flex-1 text-left">
+          {mcpServerName && prettyToolName ? `${mcpServerName} - ${prettyToolName}` : toolName}
+        </span>
         {duration !== null && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />

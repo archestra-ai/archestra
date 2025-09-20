@@ -1,7 +1,6 @@
 /**
  * OAuth Flow Implementation using MCP SDK
  *
- * Based on performOAuth from linear-mcp-oauth-minimal.ts
  * Handles OAuth authentication flow using @modelcontextprotocol/sdk/client/auth.js
  */
 import { auth, discoverAuthorizationServerMetadata } from '@modelcontextprotocol/sdk/client/auth.js';

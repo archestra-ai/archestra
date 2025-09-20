@@ -1,7 +1,6 @@
 /**
  * MCP OAuth Connection Implementation
  *
- * Based on connectMcpServer from linear-mcp-oauth-minimal.ts
  * Handles complete OAuth flow and MCP server connection
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';

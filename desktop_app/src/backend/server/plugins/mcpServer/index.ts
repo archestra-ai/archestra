@@ -317,7 +317,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
   );
 
-  // Simple OAuth install endpoint - mirrors connectMcpServer from linear-mcp-oauth-minimal.ts
+  // Simple OAuth install endpoint
   fastify.post(
     '/api/mcp_server/oauth_install',
     {

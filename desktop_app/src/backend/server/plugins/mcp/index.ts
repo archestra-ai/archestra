@@ -1,4 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+/**
+ * NOTE: we are only using the @socotra/modelcontextprotocol-sdk forked package until
+ * This PR is merged https://github.com/modelcontextprotocol/typescript-sdk/pull/869#issuecomment-3300474160
+ *
+ * (that PR adds zod v4 support to @modelcontextprotocol/sdk)
+ */
+import { McpServer } from '@socotra/modelcontextprotocol-sdk/server/mcp.js';
 import { FastifyPluginAsync } from 'fastify';
 import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
@@ -45,12 +51,14 @@ export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
     name: 'archestra-server',
     version: '1.0.0',
-  }) as any;
+  });
 
-  // Memory CRUD tools
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.LIST_MEMORIES,
-    'List all stored memory entries with their names and values',
+    {
+      title: 'List memories',
+      description: 'List all stored memory entries with their names and values',
+    },
     async () => {
       log.info('list_memories called');
       try {
@@ -66,12 +74,11 @@ export const createArchestraMcpServer = () => {
           };
         }
 
-        const formatted = memories.map((m) => `${m.name}: ${m.value}`).join('\n');
         return {
           content: [
             {
               type: 'text',
-              text: formatted,
+              text: memories.map((m) => `${m.name}: ${m.value}`).join('\n'),
             },
           ],
         };
@@ -88,40 +95,21 @@ export const createArchestraMcpServer = () => {
     }
   );
 
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.SET_MEMORY,
-    'Set or update a memory entry with a specific name and value. Example: {"name": "favorite_color", "value": "blue"}',
-    z.object({
-      name: z.string().describe('The name/key for the memory entry'),
-      value: z.string().describe('The value/content to store'),
-    }) as any,
-    async ({ name, value }: any) => {
+    {
+      title: 'Set memory',
+      description:
+        'Set or update a memory entry with a specific name and value. Example: {"name": "favorite_color", "value": "blue"}',
+      inputSchema: {
+        name: z.string().describe('The name/key for the memory entry'),
+        value: z.string().describe('The value/content to store'),
+      },
+    },
+    async ({ name, value }) => {
       log.info('set_memory called with:', { name, value });
 
       try {
-        // Validation
-        if (!name || !name.trim()) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: "name" parameter is required and cannot be empty',
-              },
-            ],
-          };
-        }
-
-        if (value === undefined || value === null) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Error: "value" parameter is required',
-              },
-            ],
-          };
-        }
-
         const memory = await MemoryModel.setMemory(name.trim(), value);
 
         // Emit WebSocket event for memory update
@@ -153,13 +141,16 @@ export const createArchestraMcpServer = () => {
     }
   );
 
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.DELETE_MEMORY,
-    'Delete a specific memory entry by name',
-    z.object({
-      name: z.string().describe('The name of the memory to delete'),
-    }) as any,
-    async ({ name }: any) => {
+    {
+      title: 'Delete memory',
+      description: 'Delete a specific memory entry by name',
+      inputSchema: {
+        name: z.string().describe('The name of the memory to delete'),
+      },
+    },
+    async ({ name }) => {
       try {
         const deleted = await MemoryModel.deleteMemory(name);
 
@@ -203,13 +194,17 @@ export const createArchestraMcpServer = () => {
   );
 
   // Tool management tools
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS,
-    'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
-    z.object({
-      mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
-    }) as any,
-    async ({ mcp_server }: any) => {
+    {
+      title: 'List available tools',
+      description:
+        'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
+      inputSchema: {
+        mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
+      },
+    },
+    async ({ mcp_server }) => {
       try {
         const chatId = archestraMcpContext.getCurrentChatId();
         if (!chatId) {
@@ -322,17 +317,20 @@ export const createArchestraMcpServer = () => {
     }
   );
 
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS,
-    `Enable specific tools for use in the current chat. Use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} to see tool IDs if you don\'t have them. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
-    z.object({
-      toolIds: z
-        .array(z.string())
-        .describe(
-          `Array of tool IDs from ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} output. Example: ["${FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS.LIST_MEMORIES}", "${constructToolId('filesystem', 'read_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"}`
-        ),
-    }) as any,
-    async ({ toolIds }: any) => {
+    {
+      title: 'Enable tools',
+      description: `Enable specific tools for use in the current chat. Use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} to see tool IDs if you don\'t have them. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
+      inputSchema: {
+        toolIds: z
+          .array(z.string())
+          .describe(
+            `Array of tool IDs from ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} output. Example: ["${FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS.LIST_MEMORIES}", "${constructToolId('filesystem', 'read_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"}`
+          ),
+      },
+    },
+    async ({ toolIds }) => {
       const chatId = archestraMcpContext.getCurrentChatId();
 
       try {
@@ -430,13 +428,16 @@ export const createArchestraMcpServer = () => {
     }
   );
 
-  archestraMcpServer.tool(
+  archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.DISABLE_TOOLS,
-    'Disable specific tools from the current chat',
-    z.object({
-      toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
-    }) as any,
-    async ({ toolIds }: any) => {
+    {
+      title: 'Disable tools',
+      description: 'Disable specific tools from the current chat',
+      inputSchema: {
+        toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
+      },
+    },
+    async ({ toolIds }) => {
       const chatId = archestraMcpContext.getCurrentChatId();
 
       try {

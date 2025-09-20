@@ -118,6 +118,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/electron": "^6.11.0",
     "@shikijs/transformers": "^3.12.2",
+    "@socotra/modelcontextprotocol-sdk": "^1.18.0",
     "@tanstack/react-router": "^1.131.44",
     "@tanstack/react-router-devtools": "^1.131.44",
     "@vitejs/plugin-react": "^5.0.2",

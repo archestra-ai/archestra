@@ -1,7 +1,6 @@
 /**
  * MCP OAuth Provider Implementation
  *
- * Based on GenericMcpOAuthProvider from linear-mcp-oauth-minimal.ts
  * Implements OAuthClientProvider interface from @modelcontextprotocol/sdk/client/auth.js
  */
 import {

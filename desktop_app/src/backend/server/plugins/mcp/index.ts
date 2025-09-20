@@ -11,11 +11,6 @@ import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
 import { ARCHESTRA_MCP_TOOLS, FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS, constructToolId } from '@constants';
 
-// Workaround for fastify-mcp bug: declare global to store tool arguments
-declare global {
-  var _mcpToolArguments: any;
-}
-
 export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
     name: 'archestra-server',
@@ -70,9 +65,7 @@ export const createArchestraMcpServer = () => {
       name: z.string().describe('The name/key for the memory entry'),
       value: z.string().describe('The value/content to store'),
     }) as any,
-    async (context: any) => {
-      // Workaround for fastify-mcp bug: get arguments from global
-      const { name, value } = global._mcpToolArguments || {};
+    async ({ name, value }: any) => {
       log.info('set_memory called with:', { name, value });
 
       try {
@@ -186,10 +179,7 @@ export const createArchestraMcpServer = () => {
     z.object({
       mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
     }) as any,
-    async (context: any) => {
-      // Workaround for fastify-mcp bug: get arguments from global
-      const { mcp_server } = global._mcpToolArguments || {};
-
+    async ({ mcp_server }: any) => {
       try {
         const chatId = ArchestraMcpContext.getCurrentChatId();
         if (!chatId) {
@@ -312,9 +302,7 @@ export const createArchestraMcpServer = () => {
           `Array of tool IDs from ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} output. Example: ["${FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS.LIST_MEMORIES}", "${constructToolId('filesystem', 'read_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"}`
         ),
     }) as any,
-    async (context: any) => {
-      // Workaround for fastify-mcp bug: get arguments from global
-      const { toolIds } = global._mcpToolArguments || {};
+    async ({ toolIds }: any) => {
       const chatId = ArchestraMcpContext.getCurrentChatId();
 
       try {
@@ -418,9 +406,7 @@ export const createArchestraMcpServer = () => {
     z.object({
       toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
     }) as any,
-    async (context: any) => {
-      // Workaround for fastify-mcp bug: get arguments from global
-      const { toolIds } = global._mcpToolArguments || {};
+    async ({ toolIds }: any) => {
       const chatId = ArchestraMcpContext.getCurrentChatId();
 
       try {
@@ -523,17 +509,6 @@ export const createArchestraMcpServer = () => {
 
 const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
   log.info('Registering Archestra MCP server plugin...');
-
-  // Store the current request arguments globally as a workaround
-  fastify.addHook('preHandler', async (request, reply) => {
-    if (request.url === '/mcp' && request.body) {
-      const body = request.body as any;
-      if (body.method === 'tools/call' && body.params && body.params.arguments) {
-        global._mcpToolArguments = body.params.arguments;
-        log.info('Stored tool arguments globally:', global._mcpToolArguments);
-      }
-    }
-  });
 
   await fastify.register(streamableHttp, {
     stateful: false,

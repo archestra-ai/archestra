@@ -124,6 +124,25 @@ export type OllamaModelDownloadProgressInput = {
   message: string;
 };
 
+export type ToolApprovalRequestInput = {
+  requestId: string;
+  toolId: string;
+  toolName: string;
+  toolDescription?: string;
+  args: {
+    [key: string]: unknown;
+  };
+  isWrite: boolean;
+  sessionId: string;
+  chatId: number;
+};
+
+export type ToolApprovalResponseInput = {
+  requestId: string;
+  decision: 'approve' | 'approve_always' | 'decline';
+  sessionId: string;
+};
+
 export type WebSocketMessageInput =
   | {
       type: 'chat-title-updated';
@@ -190,6 +209,14 @@ export type WebSocketMessageInput =
         lastContextWindow: number | null;
         contextUsagePercent: number;
       };
+    }
+  | {
+      type: 'tool-approval-request';
+      payload: ToolApprovalRequestInput;
+    }
+  | {
+      type: 'tool-approval-response';
+      payload: ToolApprovalResponseInput;
     };
 
 export type ChatWithMessagesInput = {
@@ -595,6 +622,25 @@ export type OllamaModelDownloadProgress = {
   message: string;
 };
 
+export type ToolApprovalRequest = {
+  requestId: string;
+  toolId: string;
+  toolName: string;
+  toolDescription?: string;
+  args: {
+    [key: string]: unknown;
+  };
+  isWrite: boolean;
+  sessionId: string;
+  chatId: number;
+};
+
+export type ToolApprovalResponse = {
+  requestId: string;
+  decision: 'approve' | 'approve_always' | 'decline';
+  sessionId: string;
+};
+
 export type WebSocketMessage =
   | {
       type: 'chat-title-updated';
@@ -661,6 +707,14 @@ export type WebSocketMessage =
         lastContextWindow: number | null;
         contextUsagePercent: number;
       };
+    }
+  | {
+      type: 'tool-approval-request';
+      payload: ToolApprovalRequest;
+    }
+  | {
+      type: 'tool-approval-response';
+      payload: ToolApprovalResponse;
     };
 
 export type ChatWithMessages = {
@@ -1942,87 +1996,6 @@ export type SetMemoryResponses = {
 
 export type SetMemoryResponse = SetMemoryResponses[keyof SetMemoryResponses];
 
-export type GetMemoryData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type GetMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: LegacyMemoryResponse;
-};
-
-export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
-
-export type UpdateMemoryData = {
-  body?: WriteMemoryInput;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type UpdateMemoryErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-    message: string;
-  };
-};
-
-export type UpdateMemoryError = UpdateMemoryErrors[keyof UpdateMemoryErrors];
-
-export type UpdateMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-  };
-};
-
-export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
-
-export type PostApiOllamaPullData = {
-  body: {
-    /**
-     * The model name to pull
-     */
-    model: string;
-  };
-  path?: never;
-  query?: never;
-  url: '/api/ollama/pull';
-};
-
-export type PostApiOllamaPullErrors = {
-  /**
-   * Default Response
-   */
-  500: {
-    error: string;
-  };
-};
-
-export type PostApiOllamaPullError = PostApiOllamaPullErrors[keyof PostApiOllamaPullErrors];
-
-export type PostApiOllamaPullResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-    message: string;
-  };
-};
-
-export type PostApiOllamaPullResponse = PostApiOllamaPullResponses[keyof PostApiOllamaPullResponses];
-
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;
   path?: never;
@@ -2079,6 +2052,41 @@ export type RemoveOllamaModelResponses = {
 };
 
 export type RemoveOllamaModelResponse = RemoveOllamaModelResponses[keyof RemoveOllamaModelResponses];
+
+export type PullOllamaModelData = {
+  body: {
+    /**
+     * The model name to pull
+     */
+    model: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/ollama/pull';
+};
+
+export type PullOllamaModelErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type PullOllamaModelError = PullOllamaModelErrors[keyof PullOllamaModelErrors];
+
+export type PullOllamaModelResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type PullOllamaModelResponse = PullOllamaModelResponses[keyof PullOllamaModelResponses];
 
 export type RestartSandboxData = {
   body?: never;

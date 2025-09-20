@@ -4,18 +4,9 @@ import { type experimental_MCPClient, experimental_createMCPClient } from 'ai';
 import config from '@backend/config';
 import { type AvailableTool } from '@backend/sandbox/schemas';
 import log from '@backend/utils/logger';
+import { ARCHESTRA_MCP_SERVER_ID, ARCHESTRA_MCP_TOOLS, constructToolId, deconstructToolId } from '@constants';
 
 const { host: serverHost, port: serverPort } = config.server.http;
-
-/**
- * Tool ID separator for Archestra MCP server tools
- */
-const TOOL_ID_SEPARATOR = '__';
-
-/**
- * Archestra MCP server ID
- */
-const ARCHESTRA_MCP_SERVER_ID = 'archestra';
 
 export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
 
@@ -81,7 +72,7 @@ class ArchestraMcpClient {
 
       // Transform tool IDs to include the Archestra prefix
       for (const [toolName, tool] of Object.entries(tools)) {
-        const toolId = `${ARCHESTRA_MCP_SERVER_ID}${TOOL_ID_SEPARATOR}${toolName}`;
+        const toolId = constructToolId(ARCHESTRA_MCP_SERVER_ID, toolName);
         this.tools[toolId] = tool;
       }
 
@@ -153,20 +144,19 @@ class ArchestraMcpClient {
    */
   get availableToolsList(): AvailableTool[] {
     return Object.entries(this.tools).map(([id, tool]) => {
-      const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
-      const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
+      const { toolName } = deconstructToolId(id);
 
       // Static evaluation for all Archestra MCP tools
       const toolEvaluations: Record<string, { is_read: boolean; is_write: boolean }> = {
         // Memory management tools
-        list_memories: { is_read: true, is_write: false },
-        set_memory: { is_read: false, is_write: true },
-        delete_memory: { is_read: false, is_write: true },
+        [ARCHESTRA_MCP_TOOLS.LIST_MEMORIES]: { is_read: true, is_write: false },
+        [ARCHESTRA_MCP_TOOLS.SET_MEMORY]: { is_read: false, is_write: true },
+        [ARCHESTRA_MCP_TOOLS.DELETE_MEMORY]: { is_read: false, is_write: true },
 
         // Tool management tools
-        list_available_tools: { is_read: true, is_write: false },
-        enable_tools: { is_read: false, is_write: true },
-        disable_tools: { is_read: false, is_write: true },
+        [ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS]: { is_read: true, is_write: false },
+        [ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS]: { is_read: false, is_write: true },
+        [ARCHESTRA_MCP_TOOLS.DISABLE_TOOLS]: { is_read: false, is_write: true },
       };
 
       const evaluation = toolEvaluations[toolName] || {

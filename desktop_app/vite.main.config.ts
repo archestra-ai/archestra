@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@backend': path.resolve(__dirname, './src/backend'),
+      '@constants': path.resolve(__dirname, './src/constants.ts'),
       '@ui': path.resolve(__dirname, './src/ui'),
     },
   },
@@ -39,6 +40,18 @@ export default defineConfig({
           name: {
             label: 'node',
             color: 'green',
+          },
+          environment: 'node',
+        },
+      },
+      {
+        extends: true,
+        test: {
+          setupFiles: [],
+          include: ['src/*test.{ts,tsx}'],
+          name: {
+            label: 'common',
+            color: 'blue',
           },
           environment: 'node',
         },

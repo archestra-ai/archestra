@@ -1,12 +1,12 @@
 import PromptCollection from '@ui/components/Chat/PromptCollection';
-import { useOllamaStore } from '@ui/stores';
+import { useChatStore } from '@ui/stores';
 
 interface EmptyChatStateProps {
   onPromptSelect: (prompt: string) => void;
 }
 
 export default function EmptyChatState({ onPromptSelect }: EmptyChatStateProps) {
-  const { selectedModel } = useOllamaStore();
+  const { selectedModel } = useChatStore();
   const hasSelectedModel = !!(selectedModel && selectedModel !== '');
 
   if (!hasSelectedModel) {

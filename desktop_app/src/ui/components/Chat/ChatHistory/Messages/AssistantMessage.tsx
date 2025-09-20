@@ -8,7 +8,6 @@ import ToolInvocation from '@ui/components/ToolInvocation';
 import { AIResponse } from '@ui/components/kibo/ai-response';
 import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
-import { ToolCallStatus } from '@ui/types';
 
 import RegenerationSkeleton from './RegenerationSkeleton';
 
@@ -113,23 +112,7 @@ export default function AssistantMessage({
 
   // Add tool invocations
   toolParts.forEach((tool, index) => {
-    orderedElements.push(
-      <ToolInvocation
-        key={tool.toolCallId || `tool-${index}`}
-        toolName={tool.toolName}
-        args={'input' in tool ? tool.input : {}}
-        result={'output' in tool ? tool.output : undefined}
-        state={
-          tool.state === 'output-available'
-            ? ToolCallStatus.Completed
-            : tool.state === 'output-error'
-              ? ToolCallStatus.Error
-              : tool.state === 'input-streaming'
-                ? ToolCallStatus.Pending
-                : ToolCallStatus.Pending
-        }
-      />
-    );
+    orderedElements.push(<ToolInvocation key={tool.toolCallId || `tool-${index}`} tool={tool} />);
   });
 
   // Add final text content last

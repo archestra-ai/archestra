@@ -1,6 +1,7 @@
 import { Agent, fetch } from 'undici';
 import { z } from 'zod';
 
+import { imageInspectLibpod } from '@backend/clients/libpod/gen';
 import config from '@backend/config';
 import log from '@backend/utils/logger';
 
@@ -27,6 +28,53 @@ export default class PodmanImage {
   private pullPercentage = 0;
   private pullMessage: string | null = null;
   private pullError: string | null = null;
+
+  // Checks if the base image already exists locally
+  async checkBaseImageExists(): Promise<boolean> {
+    try {
+      const response = await imageInspectLibpod({
+        path: {
+          name: this.BASE_IMAGE_NAME,
+        },
+      });
+
+      if (response.error) {
+        return false;
+      }
+
+      return !!response.data;
+    } catch {
+      return false;
+    }
+  }
+
+  // Ensures the base image is available locally, pulling it only if necessary.
+  async ensureBaseImageAvailable(machineSocketPath: string) {
+    this.pullPercentage = 0;
+    this.pullMessage = `Checking if base image ${this.BASE_IMAGE_NAME} exists locally...`;
+    this.pullError = null;
+
+    try {
+      const imageExists = await this.checkBaseImageExists();
+
+      if (imageExists) {
+        this.pullPercentage = 100;
+        this.pullMessage = `Base image ${this.BASE_IMAGE_NAME} already exists locally`;
+        return;
+      }
+
+      await this.pullBaseImage(machineSocketPath);
+    } catch (error) {
+      log.error(`Error ensuring base image availability:`, error);
+      this.pullPercentage = 0;
+      this.pullMessage = null;
+      this.pullError =
+        error instanceof Error
+          ? error.message
+          : `Unknown error ensuring base image ${this.BASE_IMAGE_NAME} availability`;
+      throw error;
+    }
+  }
 
   /**
    * Pulls the base image using Podman's image pull API.

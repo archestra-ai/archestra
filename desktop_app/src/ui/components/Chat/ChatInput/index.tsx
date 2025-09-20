@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { AlertCircle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { deconstructToolId } from '@constants';
 import ChatTokenUsage from '@ui/components/ChatTokenUsage';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
@@ -23,10 +24,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/co
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
 import {
+  useChatStore,
   useCloudProvidersStore,
   useDeveloperModeStore,
   useMcpServersStore,
-  useOllamaStore,
   useToolsStore,
   useUserSelectableModels,
 } from '@ui/stores';
@@ -78,7 +79,7 @@ export default function ChatInput({
   isSubmitting = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
-  const { selectedModel, setSelectedModel } = useOllamaStore();
+  const { selectedModel, setSelectedModel } = useChatStore();
   const userSelectableModels = useUserSelectableModels();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
@@ -95,11 +96,6 @@ export default function ChatInput({
 
     return () => clearInterval(interval);
   }, []);
-
-  // Use the selected model from Ollama store
-  // Convert empty string to undefined so the placeholder shows
-  const currentModel = !selectedModel || selectedModel === '' ? undefined : selectedModel;
-  const handleModelChange = setSelectedModel;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -155,12 +151,6 @@ export default function ChatInput({
     return '';
   };
 
-  // Helper function to extract server ID from tool ID (format: serverId__toolName)
-  const extractServerIdFromToolId = (toolId: string): string => {
-    const parts = toolId.split('__');
-    return parts[0] || '';
-  };
-
   // Helper function to check if server is still initializing
   const isServerInitializing = (serverId: string): boolean => {
     const mcpServer = installedMcpServers.find((s) => s.id === serverId);
@@ -198,7 +188,7 @@ export default function ChatInput({
       const tool = availableTools.find((t) => t.id === toolId);
       if (tool) {
         const serverName = tool.mcpServerName || 'Unknown';
-        const serverId = extractServerIdFromToolId(tool.id);
+        const serverId = deconstructToolId(tool.id).serverName;
         if (!groups[serverName]) {
           groups[serverName] = {
             tools: [],
@@ -572,13 +562,13 @@ export default function ChatInput({
         </div>
         <AIInputToolbar>
           <AIInputTools>
-            <AIInputModelSelect value={currentModel} onValueChange={handleModelChange} disabled={false}>
+            <AIInputModelSelect value={selectedModel} onValueChange={setSelectedModel} disabled={false}>
               <AIInputModelSelectTrigger
-                className={!currentModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
+                className={!selectedModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
               >
                 <AIInputModelSelectValue
                   placeholder="No model selected, choose one!"
-                  className={!currentModel ? 'text-green-600 font-medium' : ''}
+                  className={!selectedModel ? 'text-green-600 font-medium' : ''}
                 />
               </AIInputModelSelectTrigger>
               <AIInputModelSelectContent>

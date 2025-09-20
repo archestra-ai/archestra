@@ -82,7 +82,7 @@ describe('binaries utilities', () => {
       });
 
       it('should map various linux platform identifiers', async () => {
-        const linuxPlatforms = ['aix', 'freebsd', 'linux', 'openbsd', 'android'] as const;
+        const linuxPlatforms = ['aix', 'freebsd', 'linux', 'openbsd', 'android'];
 
         for (const platform of linuxPlatforms) {
           vi.resetModules();
@@ -95,7 +95,7 @@ describe('binaries utilities', () => {
       });
 
       it('should map darwin and sunos to mac', async () => {
-        const macPlatforms = ['darwin', 'sunos'] as const;
+        const macPlatforms = ['darwin', 'sunos'];
 
         for (const platform of macPlatforms) {
           vi.resetModules();
@@ -194,7 +194,7 @@ describe('binaries utilities', () => {
       });
 
       it('should not add .exe extension on non-Windows platforms', async () => {
-        const nonWindowsPlatforms = ['linux', 'darwin'] as const;
+        const nonWindowsPlatforms = ['linux', 'darwin'];
 
         for (const platform of nonWindowsPlatforms) {
           vi.resetModules();

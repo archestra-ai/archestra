@@ -289,10 +289,9 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
 
   // Pre-load a model into memory, by setting keep_alive to 30 minutes
   loadModelIntoMemory: async (modelName: string) => {
-    const { installedModels } = get();
     const statusBarStore = useStatusBarStore.getState();
 
-    if (installedModels.some((model) => model.model === modelName)) {
+    if (isOllamaModel(modelName)) {
       statusBarStore.updateTask('ollama-model-switch', {
         id: 'ollama-model-switch',
         type: 'model',
@@ -323,10 +322,9 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
 
   // Unload a model from memory, by setting keep_alive to 0
   unloadModelFromMemory: async (modelName: string) => {
-    const { installedModels } = get();
     const statusBarStore = useStatusBarStore.getState();
 
-    if (installedModels.some((model) => model.model === modelName)) {
+    if (isOllamaModel(modelName)) {
       statusBarStore.updateTask('ollama-model-switch', {
         id: 'ollama-model-switch',
         type: 'model',
@@ -387,3 +385,12 @@ export const useUserSelectableModels = () => {
 function getUserSelectableModels(models: ModelResponse[] = []): ModelResponse[] {
   return models.filter((model) => !SYSTEM_MODEL_NAMES.includes(model.model));
 }
+
+/**
+ * NOTE: this isn't the most reliable way to check if a model is an ollama model
+ * (because it doesn't check all parameter tagged possibilities like '32b', '7b', etc.)
+ * but it's good enough for our use case
+ */
+const isOllamaModel = (modelName: string) => {
+  return AVAILABLE_MODELS.some((model) => modelName.includes(model.name));
+};

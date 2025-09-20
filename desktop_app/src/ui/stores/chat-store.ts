@@ -348,25 +348,30 @@ export const useChatStore = create<ChatStore>()(
       name: 'chat',
       // Only persist the selected model
       partialize: (state) => ({ selectedModel: state.selectedModel }),
+
+      /**
+       * On persisted state rehydration, load the selected ollama model into memory
+       * (the ollama store method handles the case where the selected model is not an ollama model)
+       *
+       * See https://zustand.docs.pmnd.rs/integrations/persisting-store-data#onrehydratestorage
+       */
+      onRehydrateStorage: (_state) => {
+        /**
+         * hydration starts here, selectedModel would not have been loaded
+         * from local storage yet
+         */
+        return (state, error) => {
+          /**
+           * At this point, the state is hydrated, and selectedModel is loaded from local storage
+           */
+          if (!error && state?.selectedModel) {
+            useOllamaStore.getState().loadModelIntoMemory(state.selectedModel);
+          }
+        };
+      },
     }
   )
 );
 
 // Initialize the chat store on mount
 useChatStore.getState().initializeStore();
-
-/**
- * On persisted state rehydration, load the selected ollama model into memory
- * (the ollama store method handles the case where the selected model is not an ollama model)
- *
- * See https://zustand.docs.pmnd.rs/integrations/persisting-store-data#onfinishhydration
- */
-useChatStore.persist.onHydrate(({ selectedModel }) => {
-  const { loadModelIntoMemory } = useOllamaStore.getState();
-
-  console.log('YOOOOO', selectedModel);
-
-  if (selectedModel) {
-    loadModelIntoMemory(selectedModel);
-  }
-});

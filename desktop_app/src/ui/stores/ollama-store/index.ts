@@ -41,11 +41,14 @@ interface OllamaActions {
   updateRequiredModelDownloadProgress: (progress: OllamaModelDownloadProgress) => void;
 
   conditionallyHandleOllamaModelChange: (previousModelName: string | undefined, newModelName: string) => Promise<void>;
+
+  loadModelIntoMemory: (modelName: string) => Promise<void>;
+  unloadModelFromMemory: (modelName: string) => Promise<void>;
 }
 
 type OllamaStore = OllamaState & OllamaActions;
 
-const preloadOllamaModel = async (model: string, keepAlive: string) =>
+const makeModelGenerateRequest = (model: string, keepAlive: string) =>
   fetch(`${ollamaProxyUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -284,66 +287,80 @@ export const useOllamaStore = create<OllamaStore>((set, get) => ({
     }
   },
 
-  conditionallyHandleOllamaModelChange: async (previousModelName: string | undefined, newModelName: string) => {
+  // Pre-load a model into memory, by setting keep_alive to 30 minutes
+  loadModelIntoMemory: async (modelName: string) => {
     const { installedModels } = get();
     const statusBarStore = useStatusBarStore.getState();
 
-    const previousModelIsOllamaModel = installedModels.some((model) => model.model === previousModelName);
-    const newModelIsOllamaModel = installedModels.some((model) => model.model === newModelName);
-
-    if (previousModelName && previousModelIsOllamaModel) {
-      statusBarStore.updateTask('ollama-model-switch', {
-        id: 'ollama-model-switch',
-        type: 'model',
-        title: 'Switching Model',
-        description: `Unloading ${previousModelName}...`,
-        status: 'active',
-        timestamp: Date.now(),
-      });
-
-      try {
-        // Unload the previous model by setting keep_alive to 0
-        await preloadOllamaModel(previousModelName, '0');
-      } catch (error) {
-        console.error('Failed to unload previous model:', error);
-      }
-
-      setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 5000);
-    }
-
-    if (newModelIsOllamaModel) {
-      // Show loading new model
+    if (installedModels.some((model) => model.model === modelName)) {
       statusBarStore.updateTask('ollama-model-switch', {
         id: 'ollama-model-switch',
         type: 'model',
         title: 'Loading Model',
-        description: `Loading ${newModelName} into memory...`,
+        description: `Loading ${modelName} into memory...`,
         status: 'active',
         timestamp: Date.now(),
       });
 
       try {
-        // Pre-load the new model with keep_alive to keep it in memory (for 30 minutes)
-        await preloadOllamaModel(newModelName, '30m');
+        await makeModelGenerateRequest(modelName, '30m');
 
         statusBarStore.updateTask('ollama-model-switch', {
           status: 'completed',
-          description: `${newModelName} loaded`,
+          description: `${modelName} loaded`,
         });
-
-        setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 2000);
       } catch (error) {
-        console.error('Failed to load new model:', error);
-
         statusBarStore.updateTask('ollama-model-switch', {
           status: 'error',
           description: 'Failed to load model',
           error: error instanceof Error ? error.message : String(error),
         });
-
+      } finally {
         setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 5000);
       }
     }
+  },
+
+  // Unload a model from memory, by setting keep_alive to 0
+  unloadModelFromMemory: async (modelName: string) => {
+    const { installedModels } = get();
+    const statusBarStore = useStatusBarStore.getState();
+
+    if (installedModels.some((model) => model.model === modelName)) {
+      statusBarStore.updateTask('ollama-model-switch', {
+        id: 'ollama-model-switch',
+        type: 'model',
+        title: 'Switching Model',
+        description: `Unloading ${modelName}...`,
+        status: 'active',
+        timestamp: Date.now(),
+      });
+
+      try {
+        await makeModelGenerateRequest(modelName, '0');
+
+        statusBarStore.updateTask('ollama-model-switch', {
+          status: 'completed',
+          description: `${modelName} unloaded`,
+        });
+      } catch (error) {
+        statusBarStore.updateTask('ollama-model-switch', {
+          status: 'error',
+          description: 'Failed to unload model',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setTimeout(() => statusBarStore.removeTask('ollama-model-switch'), 5000);
+      }
+    }
+  },
+
+  conditionallyHandleOllamaModelChange: async (previousModelName: string | undefined, newModelName: string) => {
+    const { loadModelIntoMemory, unloadModelFromMemory } = get();
+    if (previousModelName) {
+      await unloadModelFromMemory(previousModelName);
+    }
+    await loadModelIntoMemory(newModelName);
   },
 }));
 

@@ -354,3 +354,19 @@ export const useChatStore = create<ChatStore>()(
 
 // Initialize the chat store on mount
 useChatStore.getState().initializeStore();
+
+/**
+ * On persisted state rehydration, load the selected ollama model into memory
+ * (the ollama store method handles the case where the selected model is not an ollama model)
+ *
+ * See https://zustand.docs.pmnd.rs/integrations/persisting-store-data#onfinishhydration
+ */
+useChatStore.persist.onHydrate(({ selectedModel }) => {
+  const { loadModelIntoMemory } = useOllamaStore.getState();
+
+  console.log('YOOOOO', selectedModel);
+
+  if (selectedModel) {
+    loadModelIntoMemory(selectedModel);
+  }
+});

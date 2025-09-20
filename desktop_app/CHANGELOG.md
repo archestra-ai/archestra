@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.0.9](https://github.com/archestra-ai/archestra/compare/v0.0.8...v0.0.9) (2025-09-20)
+
+
+### Features
+
+* Add Ollama model uninstall functionality ([#331](https://github.com/archestra-ai/archestra/issues/331)) ([0d8a459](https://github.com/archestra-ai/archestra/commit/0d8a459a245ef9270cbe20b157b1cb8dcc9a0157))
+* display pretty tool names in `AssistantMessage` ([#497](https://github.com/archestra-ai/archestra/issues/497)) ([26be529](https://github.com/archestra-ai/archestra/commit/26be5295e1b287b555fdf59a8a8cb0fd1ac67aae))
+* preload selected ollama model on `zustand` store hydration ([#500](https://github.com/archestra-ai/archestra/issues/500)) ([a9cf6a4](https://github.com/archestra-ai/archestra/commit/a9cf6a422e6c5e1cafc9aa7c5d7d9510013f19be))
+* user-approval UX for write tools ([#485](https://github.com/archestra-ai/archestra/issues/485)) ([995f9b4](https://github.com/archestra-ai/archestra/commit/995f9b472a558011f647cb91f788e07a129cd8a9))
+
+
+### Bug Fixes
+
+* Archestra MCP server's `set_memory` tool parameter handling ([#499](https://github.com/archestra-ai/archestra/issues/499)) ([8c799fe](https://github.com/archestra-ai/archestra/commit/8c799fe60db847175d9b08c0cfdd6fdc3975f0d6))
+* Fix `MemoriesMessage` display when memory values contain newline characters ([#498](https://github.com/archestra-ai/archestra/issues/498)) ([4433eb5](https://github.com/archestra-ai/archestra/commit/4433eb58d8e7300a088bde6b840624f71b149564))
+* fix cases when no model ([#486](https://github.com/archestra-ai/archestra/issues/486)) ([0b4bf9b](https://github.com/archestra-ai/archestra/commit/0b4bf9be76fa091e6848d564455712ebe66deb47))
+* Move `selectedModel` from `ollama-store` to `chat-store` for proper persistence ([#493](https://github.com/archestra-ai/archestra/issues/493)) ([e7610b7](https://github.com/archestra-ai/archestra/commit/e7610b730fb844ace2851c6e03fdfd5960ffcbec))
+* Podman - only pull base Docker image if required ([#396](https://github.com/archestra-ai/archestra/issues/396)) ([02247c1](https://github.com/archestra-ai/archestra/commit/02247c1a18402f27c4a96d593b695f1c20fd66eb))
+* show thinking, simplify logic ([#480](https://github.com/archestra-ai/archestra/issues/480)) ([1217680](https://github.com/archestra-ai/archestra/commit/1217680c295943a4b124c5f5b19255b7bff571f6))
+
 ## [0.0.8](https://github.com/archestra-ai/archestra/compare/v0.0.7...v0.0.8) (2025-09-18)
 
 

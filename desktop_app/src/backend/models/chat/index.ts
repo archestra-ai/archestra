@@ -2,13 +2,13 @@ import { type UIMessage } from 'ai';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import ollamaClient from '@backend/clients/ollama';
 import db from '@backend/database';
 import { SelectChatSchema, chatsTable } from '@backend/database/schema/chat';
 import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
-import ollamaClient from '@backend/ollama/client';
 import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';

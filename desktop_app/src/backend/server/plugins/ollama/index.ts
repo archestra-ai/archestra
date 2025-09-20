@@ -1,8 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 
+import ollamaClient from '@backend/clients/ollama';
 import config from '@backend/config';
-import OllamaClient from '@backend/ollama/client';
 import log from '@backend/utils/logger';
 
 const { requiredModels } = config.ollama;
@@ -39,7 +39,7 @@ const ollamaRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (_request, _reply) => {
       try {
-        const { models: installedModels } = await OllamaClient.list();
+        const { models: installedModels } = await ollamaClient.list();
         const installedModelNames = installedModels.map((m) => m.name);
 
         return {
@@ -89,7 +89,7 @@ const ollamaRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        await OllamaClient.remove(modelName);
+        await ollamaClient.remove(modelName);
 
         return reply.code(200).send({
           success: true,
@@ -132,7 +132,7 @@ const ollamaRoutes: FastifyPluginAsyncZod = async (fastify) => {
         log.info({ model }, 'Starting Ollama model pull with WebSocket progress');
 
         // This method sends WebSocket progress events
-        await OllamaClient.pull({ name: model });
+        await ollamaClient.pull({ name: model });
 
         return reply.send({
           success: true,

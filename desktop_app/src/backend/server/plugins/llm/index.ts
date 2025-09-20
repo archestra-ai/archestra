@@ -6,10 +6,10 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
+import ollamaClient from '@backend/clients/ollama';
 import config from '@backend/config';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
-import ollamaClient from '@backend/ollama/client';
 import { archestraMcpContext } from '@backend/server/plugins/mcp';
 import toolService from '@backend/services/tool';
 import { type McpTools } from '@backend/types';

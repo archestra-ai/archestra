@@ -8,21 +8,12 @@ import { type Tool, ToolModel } from '@backend/models/tools';
 import PodmanContainer from '@backend/sandbox/podman/container';
 import { type AvailableTool, type SandboxedMcpServerStatusSummary } from '@backend/sandbox/schemas';
 import { areTokensExpired } from '@backend/server/plugins/mcp-oauth';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
 import { constructToolId, deconstructToolId } from '@constants';
 
 const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.http;
-
-// Re-export schemas for backward compatibility
-export {
-  AvailableToolSchema,
-  McpServerContainerLogsSchema,
-  SandboxedMcpServerStatusSummarySchema,
-} from '@backend/sandbox/schemas';
-export type { AvailableTool } from '@backend/sandbox/schemas';
-
-export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
 
 /**
  * SandboxedMcpServer represents an MCP server connection - either running in a local podman container
@@ -517,9 +508,7 @@ export default class SandboxedMcpServer {
   /**
    * Helper function to make schema JSON-serializable by removing symbols
    */
-  private cleanToolInputSchema = (
-    schema: Awaited<ReturnType<experimental_MCPClient['tools']>>[string]['inputSchema']
-  ): any => {
+  private cleanToolInputSchema = (schema: McpTools[string]['inputSchema']): any => {
     if (!schema) return undefined;
 
     try {
@@ -589,3 +578,5 @@ export default class SandboxedMcpServer {
     }
   }
 }
+
+export { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/schemas';

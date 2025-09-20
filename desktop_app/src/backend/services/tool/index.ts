@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto';
 
-import ArchestraMcpClient, { type McpTools } from '@backend/archestraMcp';
+import ArchestraMcpClient from '@backend/clients/archestraMcp';
 import { ToolModel } from '@backend/models/tools';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { type AvailableTool } from '@backend/sandbox/schemas';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
 import { ARCHESTRA_MCP_SERVER_ID, TOOL_ID_SERVER_TOOL_NAME_SEPARATOR, deconstructToolId } from '@constants';

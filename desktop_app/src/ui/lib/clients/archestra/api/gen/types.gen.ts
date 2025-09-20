@@ -470,13 +470,6 @@ export type DeleteResponseInput = {
   count?: number;
 };
 
-export type WriteMemoryInput = {
-  /**
-   * Markdown content to store as memory
-   */
-  content: string;
-};
-
 export type OllamaRequiredModelStatusInput = {
   model: string;
   reason: string;
@@ -966,13 +959,6 @@ export type DeleteResponse = {
   success: boolean;
   deleted?: boolean;
   count?: number;
-};
-
-export type WriteMemory = {
-  /**
-   * Markdown content to store as memory
-   */
-  content: string;
 };
 
 export type OllamaRequiredModelStatus = {

@@ -1706,16 +1706,6 @@
         },
         "required": ["success"]
       },
-      "WriteMemoryInput": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"]
-      },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
         "properties": {
@@ -3532,17 +3522,6 @@
           }
         },
         "required": ["success"],
-        "additionalProperties": false
-      },
-      "WriteMemory": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"],
         "additionalProperties": false
       },
       "OllamaRequiredModelStatus": {

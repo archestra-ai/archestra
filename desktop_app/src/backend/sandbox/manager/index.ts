@@ -1,15 +1,13 @@
 import { setSocketPath } from '@backend/clients/libpod/client';
 import McpServerModel, { type McpServer } from '@backend/models/mcpServer';
 import PodmanRuntime from '@backend/sandbox/podman/runtime';
-import SandboxedMcpServer, { type McpTools } from '@backend/sandbox/sandboxedMcp';
+import SandboxedMcpServer from '@backend/sandbox/sandboxedMcp';
 import { type AvailableTool, type SandboxStatus, type SandboxStatusSummary } from '@backend/sandbox/schemas';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 
-// Re-export for backward compatibility
-export { SandboxStatusSummarySchema } from '@backend/sandbox/schemas';
-
 /**
- * McpServerSandboxManager is a singleton "manager" responsible for.. managing
+ * McpServerSandboxManager is a "manager" responsible for.. managing
  * the installation/status of sandboxed MCP servers running in Podman
  */
 class McpServerSandboxManager {

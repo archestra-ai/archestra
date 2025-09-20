@@ -3,15 +3,14 @@ import { type experimental_MCPClient, experimental_createMCPClient } from 'ai';
 
 import config from '@backend/config';
 import { type AvailableTool } from '@backend/sandbox/schemas';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import { ARCHESTRA_MCP_SERVER_ID, ARCHESTRA_MCP_TOOLS, constructToolId, deconstructToolId } from '@constants';
 
 const { host: serverHost, port: serverPort } = config.server.http;
 
-export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
-
 /**
- * ArchestraMcpClient is a singleton client for the built-in Archestra MCP server.
+ * ArchestraMcpClient is a client for the built-in Archestra MCP server.
  * It connects to the local MCP endpoint and provides tools for managing MCP servers.
  */
 class ArchestraMcpClient {
@@ -126,9 +125,7 @@ class ArchestraMcpClient {
   /**
    * Helper function to make schema JSON-serializable by removing symbols
    */
-  private cleanToolInputSchema = (
-    schema: Awaited<ReturnType<experimental_MCPClient['tools']>>[string]['inputSchema']
-  ): any => {
+  private cleanToolInputSchema = (schema: McpTools[string]['inputSchema']): any => {
     if (!schema) return undefined;
 
     try {

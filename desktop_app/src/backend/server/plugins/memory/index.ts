@@ -31,11 +31,6 @@ const DeleteResponseSchema = z.object({
   count: z.number().optional(),
 });
 
-// Legacy schema for backward compatibility
-const WriteMemorySchema = z.object({
-  content: z.string().describe('Markdown content to store as memory'),
-});
-
 // Register schemas in global registry for OpenAPI spec
 z.globalRegistry.add(MemoryEntrySchema, { id: 'MemoryEntry' });
 z.globalRegistry.add(MemoryListResponseSchema, { id: 'MemoryListResponse' });
@@ -43,7 +38,6 @@ z.globalRegistry.add(MemoryResponseSchema, { id: 'MemoryResponse' });
 z.globalRegistry.add(LegacyMemoryResponseSchema, { id: 'LegacyMemoryResponse' });
 z.globalRegistry.add(CreateMemorySchema, { id: 'CreateMemory' });
 z.globalRegistry.add(DeleteResponseSchema, { id: 'DeleteResponse' });
-z.globalRegistry.add(WriteMemorySchema, { id: 'WriteMemory' });
 
 const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get all memories (new endpoint)

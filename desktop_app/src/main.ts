@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
-import ArchestraMcpClient from '@backend/archestraMcp';
+import ArchestraMcpClient from '@backend/clients/archestraMcp';
 import { runDatabaseMigrations } from '@backend/database';
 import UserModel from '@backend/models/user';
 import { OllamaClient, OllamaServer } from '@backend/ollama';

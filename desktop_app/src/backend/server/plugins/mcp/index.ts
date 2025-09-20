@@ -3,13 +3,43 @@ import { FastifyPluginAsync } from 'fastify';
 import { streamableHttp } from 'fastify-mcp';
 import { z } from 'zod';
 
-import ArchestraMcpContext from '@backend/archestraMcp/context';
 import ChatModel from '@backend/models/chat';
 import MemoryModel from '@backend/models/memory';
 import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import websocketService from '@backend/websocket';
 import { ARCHESTRA_MCP_TOOLS, FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS, constructToolId } from '@constants';
+
+/**
+ * Context manager for Archestra MCP server
+ * Stores the current chat context for MCP tool execution
+ */
+class ArchestraMcpContext {
+  private currentChatId: number | null = null;
+
+  /**
+   * Set the current chat ID for MCP tool execution
+   */
+  setCurrentChatId(chatId: number | null) {
+    this.currentChatId = chatId;
+  }
+
+  /**
+   * Get the current chat ID
+   */
+  getCurrentChatId(): number | null {
+    return this.currentChatId;
+  }
+
+  /**
+   * Clear the current context
+   */
+  clear() {
+    this.currentChatId = null;
+  }
+}
+
+export const archestraMcpContext = new ArchestraMcpContext();
 
 export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
@@ -181,7 +211,7 @@ export const createArchestraMcpServer = () => {
     }) as any,
     async ({ mcp_server }: any) => {
       try {
-        const chatId = ArchestraMcpContext.getCurrentChatId();
+        const chatId = archestraMcpContext.getCurrentChatId();
         if (!chatId) {
           return {
             content: [
@@ -303,7 +333,7 @@ export const createArchestraMcpServer = () => {
         ),
     }) as any,
     async ({ toolIds }: any) => {
-      const chatId = ArchestraMcpContext.getCurrentChatId();
+      const chatId = archestraMcpContext.getCurrentChatId();
 
       try {
         if (!chatId) {
@@ -407,7 +437,7 @@ export const createArchestraMcpServer = () => {
       toolIds: z.array(z.string()).describe('Array of tool IDs to disable'),
     }) as any,
     async ({ toolIds }: any) => {
-      const chatId = ArchestraMcpContext.getCurrentChatId();
+      const chatId = archestraMcpContext.getCurrentChatId();
 
       try {
         if (!chatId) {

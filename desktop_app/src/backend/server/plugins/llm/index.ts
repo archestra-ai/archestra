@@ -6,13 +6,13 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
-import { type McpTools } from '@backend/archestraMcp';
-import ArchestraMcpContext from '@backend/archestraMcp/context';
 import config from '@backend/config';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
 import ollamaClient from '@backend/ollama/client';
+import { archestraMcpContext } from '@backend/server/plugins/mcp';
 import toolService from '@backend/services/tool';
+import { type McpTools } from '@backend/types';
 
 import sharedConfig from '../../../../config';
 import { getModelContextWindow } from './modelContextWindows';
@@ -78,7 +78,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         // Set the chat context for Archestra MCP tools
         if (chatId) {
-          ArchestraMcpContext.setCurrentChatId(chatId);
+          archestraMcpContext.setCurrentChatId(chatId);
         }
 
         // Get tools based on chat selection or requested tools

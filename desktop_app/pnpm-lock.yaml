@@ -101,6 +101,9 @@ importers:
       '@shikijs/transformers':
         specifier: ^3.12.2
         version: 3.12.2
+      '@socotra/modelcontextprotocol-sdk':
+        specifier: ^1.18.0
+        version: 1.18.0
       '@tanstack/react-router':
         specifier: ^1.131.44
         version: 1.131.44(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -2698,6 +2701,10 @@ packages:
 
   '@sindresorhus/merge-streams@4.0.0':
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
+    engines: {node: '>=18'}
+
+  '@socotra/modelcontextprotocol-sdk@1.18.0':
+    resolution: {integrity: sha512-/b80qIRkUduwALDF3B75zh6EyLCfR7VcepD0x5Ac6EbGQloXfxDnaq+Btl0XP+tWwXN2ReCZ1xQ2iUcnJgXt5A==}
     engines: {node: '>=18'}
 
   '@standard-schema/spec@1.0.0':
@@ -7851,6 +7858,9 @@ packages:
   zod@4.1.8:
     resolution: {integrity: sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ==}
 
+  zod@4.1.9:
+    resolution: {integrity: sha512-HI32jTq0AUAC125z30E8bQNz0RQ+9Uc+4J7V97gLYjZVKRjeydPgGt6dvQzFrav7MYOUGFqqOGiHpA/fdbd0cQ==}
+
   zustand@5.0.8:
     resolution: {integrity: sha512-gyPKpIaxY9XcO2vSMrLbiER7QMAMGOQZVRdJ6Zi782jkbzZygq5GI9nG8g+sMgitRtndwaBSl7uiqC49o1SSiw==}
     engines: {node: '>=12.20.0'}
@@ -8569,7 +8579,7 @@ snapshots:
       '@electron/universal': 2.0.3
       '@electron/windows-sign': 1.2.2
       '@malept/cross-spawn-promise': 2.0.0
-      debug: 4.4.1
+      debug: 4.4.3(supports-color@8.1.1)
       extract-zip: 2.0.1
       filenamify: 4.3.0
       fs-extra: 11.3.2
@@ -9791,7 +9801,7 @@ snapshots:
 
   '@puppeteer/browsers@2.3.0':
     dependencies:
-      debug: 4.4.1
+      debug: 4.4.3(supports-color@8.1.1)
       extract-zip: 2.0.1
       progress: 2.0.3
       proxy-agent: 6.5.0
@@ -10519,6 +10529,22 @@ snapshots:
   '@sindresorhus/is@4.6.0': {}
 
   '@sindresorhus/merge-streams@4.0.0': {}
+
+  '@socotra/modelcontextprotocol-sdk@1.18.0':
+    dependencies:
+      ajv: 6.12.6
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.1.0
+      express-rate-limit: 7.5.1(express@5.1.0)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.1
+      zod: 4.1.9
+    transitivePeerDependencies:
+      - supports-color
 
   '@standard-schema/spec@1.0.0': {}
 
@@ -15564,7 +15590,7 @@ snapshots:
   socks-proxy-agent@8.0.5:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.1
+      debug: 4.4.3(supports-color@8.1.1)
       socks: 2.8.6
     transitivePeerDependencies:
       - supports-color
@@ -16506,6 +16532,8 @@ snapshots:
   zod@3.25.76: {}
 
   zod@4.1.8: {}
+
+  zod@4.1.9: {}
 
   zustand@5.0.8(@types/react@19.1.13)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1)):
     optionalDependencies:

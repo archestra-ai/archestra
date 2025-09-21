@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { AlertCircle, ChevronDown, ChevronRight, Loader2, Plus, PlusCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { deconstructToolId } from '@constants';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
@@ -23,16 +24,10 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
 
   const { availableTools, loadingAvailableTools, selectedToolIds, addSelectedTool, removeSelectedTool } =
     useToolsStore();
-  const { installedMcpServers, archestraMcpServer } = useMcpServersStore();
+  const { installedMcpServers } = useMcpServersStore();
 
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
   const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Helper function to extract server ID from tool ID (format: serverId__toolName)
-  const extractServerIdFromToolId = (toolId: string): string => {
-    const parts = toolId.split('__');
-    return parts[0] || '';
-  };
 
   // Helper function to check if server is still initializing
   const isServerInitializing = (serverId: string): boolean => {
@@ -123,7 +118,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
         tool
       ) => {
         const serverName = tool.mcpServerName || 'Unknown';
-        const serverId = extractServerIdFromToolId(tool.id);
+        const serverId = deconstructToolId(tool.id).serverName;
 
         if (!acc[serverName]) {
           acc[serverName] = {

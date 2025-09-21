@@ -23,8 +23,7 @@ import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@bac
 import log from '@backend/utils/logger';
 import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
-
-import { FILE_SYSTEM_BASE_MOUNT_PATH } from '../../../../constants';
+import { FILE_SYSTEM_BASE_MOUNT_PATH } from '@constants';
 
 export const PodmanContainerStateSchema = z.enum([
   'not_created',

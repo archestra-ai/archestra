@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 
+import { ARCHESTRA_MCP_SERVER_ID } from '@constants';
 import {
   type InstallMcpServerData,
   type McpServer,
@@ -12,13 +13,6 @@ import {
 import posthogClient from '@ui/lib/posthog';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 import { ConnectedMcpServer } from '@ui/types';
-
-/**
- * NOTE: these are here because the "archestra" MCP server is "injected" into the list of "installed" MCP servers
- * (since it is not actually persisted in the database)
- */
-const ARCHESTRA_MCP_SERVER_ID = 'archestra';
-const ARCHESTRA_MCP_SERVER_NAME = 'Archestra.ai';
 
 interface McpServersState {
   archestraMcpServer: ConnectedMcpServer;
@@ -51,7 +45,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
   // State
   archestraMcpServer: {
     id: ARCHESTRA_MCP_SERVER_ID,
-    name: ARCHESTRA_MCP_SERVER_NAME,
+    name: 'Archestra.ai',
     createdAt: new Date().toISOString(),
     serverConfig: {
       command: '',

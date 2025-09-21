@@ -310,7 +310,6 @@ const setupWebSocketSubscriptions = () => {
   // Subscribe to Ollama model download events
   websocketService.subscribe('ollama-model-download-progress', ({ payload }) => {
     const store = useStatusBarStore.getState();
-    console.log('Ollama download progress:', payload);
 
     if (payload.model && payload.status) {
       const taskId = `ollama-${payload.model}`;

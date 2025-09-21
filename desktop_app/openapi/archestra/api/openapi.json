@@ -484,6 +484,53 @@
         },
         "required": ["model", "status", "progress", "message"]
       },
+      "ToolApprovalRequestInput": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolDescription": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "isWrite": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "number"
+          }
+        },
+        "required": ["requestId", "toolId", "toolName", "args", "isWrite", "sessionId", "chatId"]
+      },
+      "ToolApprovalResponseInput": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "approve_always", "decline"]
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": ["requestId", "decision", "sessionId"]
+      },
       "WebSocketMessageInput": {
         "anyOf": [
           {
@@ -753,6 +800,32 @@
                   "lastContextWindow",
                   "contextUsagePercent"
                 ]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-request"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalRequestInput"
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-response"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalResponseInput"
               }
             },
             "required": ["type", "payload"]
@@ -1633,16 +1706,6 @@
         },
         "required": ["success"]
       },
-      "WriteMemoryInput": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"]
-      },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
         "properties": {
@@ -2201,6 +2264,55 @@
         "required": ["model", "status", "progress", "message"],
         "additionalProperties": false
       },
+      "ToolApprovalRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolDescription": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "isWrite": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "number"
+          }
+        },
+        "required": ["requestId", "toolId", "toolName", "args", "isWrite", "sessionId", "chatId"],
+        "additionalProperties": false
+      },
+      "ToolApprovalResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "approve_always", "decline"]
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": ["requestId", "decision", "sessionId"],
+        "additionalProperties": false
+      },
       "WebSocketMessage": {
         "anyOf": [
           {
@@ -2484,6 +2596,34 @@
                   "contextUsagePercent"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-request"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalRequest"
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-response"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalResponse"
               }
             },
             "required": ["type", "payload"],
@@ -3382,17 +3522,6 @@
           }
         },
         "required": ["success"],
-        "additionalProperties": false
-      },
-      "WriteMemory": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"],
         "additionalProperties": false
       },
       "OllamaRequiredModelStatus": {
@@ -5410,37 +5539,50 @@
         }
       }
     },
-    "/api/memory": {
+    "/api/ollama/required-models": {
       "get": {
-        "operationId": "getMemory",
-        "tags": ["Memory"],
-        "description": "Get the current user memory (legacy format)",
+        "operationId": "getOllamaRequiredModelsStatus",
+        "tags": ["Ollama"],
+        "description": "Get the status of all Ollama required models",
         "responses": {
           "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LegacyMemoryResponse"
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OllamaRequiredModelStatus"
+                      }
+                    }
+                  },
+                  "required": ["models"],
+                  "additionalProperties": false
                 }
               }
             }
           }
         }
-      },
-      "put": {
-        "operationId": "updateMemory",
-        "tags": ["Memory"],
-        "description": "Update the current user memory (legacy format)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WriteMemoryInput"
-              }
-            }
+      }
+    },
+    "/api/ollama/models/{modelName}": {
+      "delete": {
+        "operationId": "removeOllamaModel",
+        "tags": ["Ollama"],
+        "description": "Remove/uninstall an Ollama model",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "modelName",
+            "required": true
           }
-        },
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -5451,9 +5593,12 @@
                   "properties": {
                     "success": {
                       "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
                     }
                   },
-                  "required": ["success"],
+                  "required": ["success", "message"],
                   "additionalProperties": false
                 }
               }
@@ -5468,12 +5613,26 @@
                   "properties": {
                     "error": {
                       "type": "string"
-                    },
-                    "message": {
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
                       "type": "string"
                     }
                   },
-                  "required": ["error", "message"],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -5484,6 +5643,9 @@
     },
     "/api/ollama/pull": {
       "post": {
+        "operationId": "pullOllamaModel",
+        "tags": ["Ollama"],
+        "description": "Pull an Ollama model",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5534,35 +5696,6 @@
                     }
                   },
                   "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ollama/required-models": {
-      "get": {
-        "operationId": "getOllamaRequiredModelsStatus",
-        "tags": ["MCP Server"],
-        "description": "Get the status of all Ollama required models",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "models": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/OllamaRequiredModelStatus"
-                      }
-                    }
-                  },
-                  "required": ["models"],
                   "additionalProperties": false
                 }
               }

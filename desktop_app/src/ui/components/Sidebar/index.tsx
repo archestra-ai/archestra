@@ -1,11 +1,10 @@
 import { Link, useLocation } from '@tanstack/react-router';
-import { Bot, ChevronRight, Cloud, HardDrive, MessageCircle, Network, Settings } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { Bot, Cloud, HardDrive, MessageCircle, Network } from 'lucide-react';
+import React from 'react';
 
 import MemoryIndicator from '@ui/components/MemoryIndicator';
 import { SiteHeader } from '@ui/components/SiteHeader';
 import StatusBar from '@ui/components/StatusBar';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
   Sidebar as SidebarBase,
   SidebarContent,
@@ -15,9 +14,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
 } from '@ui/components/ui/sidebar';
 
@@ -43,8 +39,8 @@ export default function Sidebar({ children }: SidebarProps) {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild className="hover:bg-transparent cursor-default">
-                        <Link to="/chat" onClick={(e) => e.preventDefault()}>
+                      <SidebarMenuButton asChild className="hover:bg-transparent">
+                        <Link to="/chat">
                           <MessageCircle className="h-4 w-4" />
                           <span>Agents</span>
                         </Link>

@@ -6,10 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { updateElectronApp } from 'update-electron-app';
 
-import ArchestraMcpClient from '@backend/archestraMcp';
+import ArchestraMcpClient from '@backend/clients/archestraMcp';
+import ollamaClient from '@backend/clients/ollama';
 import { runDatabaseMigrations } from '@backend/database';
 import UserModel from '@backend/models/user';
-import { OllamaClient, OllamaServer } from '@backend/ollama';
+import ollamaServer from '@backend/ollamaServer';
 import McpServerSandboxManager from '@backend/sandbox';
 import { startFastifyServer, stopFastifyServer } from '@backend/server';
 import log from '@backend/utils/logger';
@@ -108,7 +109,7 @@ async function cleanup(): Promise<void> {
 
   try {
     // Stop Ollama server
-    await OllamaServer.stopServer();
+    await ollamaServer.stopServer();
   } catch (error) {
     log.error('Error stopping Ollama server:', error);
   }
@@ -239,14 +240,14 @@ async function startBackendServer(): Promise<void> {
     }
 
     // Start Ollama server first
-    await OllamaServer.startServer();
+    await ollamaServer.startServer();
 
     /**
      * Ensure that ollama models that're required for various app functionality are available,
      * downloading them if necessary. This must be done BEFORE starting MCP servers
      * so that tool analysis can proceed without waiting forever.
      */
-    await OllamaClient.ensureModelsAvailable();
+    await ollamaClient.ensureModelsAvailable();
 
     // Now start the sandbox manager which will connect MCP clients
     McpServerSandboxManager.onSandboxStartupSuccess = () => {

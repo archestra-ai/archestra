@@ -8,9 +8,9 @@
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 
+import OAuthProxyClient from '@backend/clients/oauthProxy';
 import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider

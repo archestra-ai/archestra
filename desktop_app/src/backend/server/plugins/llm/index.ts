@@ -6,16 +6,16 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
-import { type McpTools } from '@backend/archestraMcp';
-import ArchestraMcpContext from '@backend/archestraMcp/context';
+import ollamaClient from '@backend/clients/ollama';
 import config from '@backend/config';
-import { getModelContextWindow } from '@backend/llms/modelContextWindows';
-import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
-import ollamaClient from '@backend/ollama/client';
+import { archestraMcpContext } from '@backend/server/plugins/mcp';
+import toolService from '@backend/services/tool';
+import { type McpTools } from '@backend/types';
 
 import sharedConfig from '../../../../config';
+import { getModelContextWindow } from './modelContextWindows';
 
 interface StreamRequestBody {
   model: string;
@@ -78,7 +78,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         // Set the chat context for Archestra MCP tools
         if (chatId) {
-          ArchestraMcpContext.setCurrentChatId(chatId);
+          archestraMcpContext.setCurrentChatId(chatId);
         }
 
         // Get tools based on chat selection or requested tools
@@ -90,18 +90,24 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (chatSelectedTools === null) {
             // null means all tools are selected
-            tools = toolAggregator.getAllTools();
+            tools = toolService.getAllTools();
           } else if (chatSelectedTools.length > 0) {
             // Use only the selected tools for this chat
-            tools = toolAggregator.getToolsById(chatSelectedTools);
+            tools = toolService.getToolsById(chatSelectedTools);
           }
           // If chatSelectedTools is empty array, tools remains empty (no tools enabled)
         } else if (requestedTools && requestedTools.length > 0) {
           // Fallback to requested tools if no chatId
-          tools = toolAggregator.getToolsById(requestedTools);
+          tools = toolService.getToolsById(requestedTools);
         } else {
           // Default to all tools if no specific selection
-          tools = toolAggregator.getAllTools();
+          tools = toolService.getAllTools();
+        }
+
+        // Wrap tools with approval logic
+        const wrappedTools: any = {};
+        for (const [toolId, tool] of Object.entries(tools)) {
+          wrappedTools[toolId] = toolService.wrapToolWithApproval(tool, toolId, sessionId || '', chatId || 0);
         }
 
         // Create the stream with the appropriate model
@@ -162,8 +168,8 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         };
 
         // Only add tools and toolChoice if tools are available
-        if (tools && Object.keys(tools).length > 0) {
-          streamConfig.tools = tools;
+        if (wrappedTools && Object.keys(wrappedTools).length > 0) {
+          streamConfig.tools = wrappedTools;
           streamConfig.toolChoice = toolChoice || 'auto';
         }
 

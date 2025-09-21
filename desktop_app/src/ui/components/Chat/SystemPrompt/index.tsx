@@ -1,9 +1,8 @@
+import { DEFAULT_SYSTEM_PROMPT } from '@constants';
 import { Button } from '@ui/components/ui/button';
 import { Label } from '@ui/components/ui/label';
 import { Textarea } from '@ui/components/ui/textarea';
 import { useDeveloperModeStore } from '@ui/stores';
-
-import { DEFAULT_SYSTEM_PROMPT } from '../../../../constants';
 
 interface SystemPromptProps {}
 

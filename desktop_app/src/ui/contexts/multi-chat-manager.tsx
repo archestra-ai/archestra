@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import config from '@ui/config';
 import { useMessageActions } from '@ui/hooks/use-message-actions';
-import { useChatStore, useCloudProvidersStore, useMemoryStore, useOllamaStore, useToolsStore } from '@ui/stores';
+import { useChatStore, useCloudProvidersStore, useMemoryStore, useToolsStore } from '@ui/stores';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 
 const {
@@ -65,9 +65,8 @@ function ChatInstanceManager({
   onInstanceCreated: (instance: ChatInstance) => void;
   initialMessages?: UIMessage[];
 }) {
-  const { getCurrentChat } = useChatStore();
+  const { getCurrentChat, selectedModel } = useChatStore();
   const { selectedToolIds } = useToolsStore();
-  const { selectedModel } = useOllamaStore();
   const { memories } = useMemoryStore();
   const { availableCloudProviderModels } = useCloudProvidersStore();
   const { setChatInference } = useStatusBarStore();

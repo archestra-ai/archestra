@@ -1,4 +1,4 @@
-import { Bug, CheckCircle, Copy, ExternalLink, FileText, RefreshCw, Terminal } from 'lucide-react';
+import { Bug, CheckCircle, Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
@@ -51,26 +51,6 @@ export default function BugReportDialog({
   const fetchFrontendLogs = () => {
     const logs = logCapture.getFormattedLogs();
     setFrontendLogs(logs || 'No frontend logs captured');
-  };
-
-  const handleCopyBackendLogs = async () => {
-    try {
-      await navigator.clipboard.writeText(backendLogs);
-      setCopiedBackend(true);
-      setTimeout(() => setCopiedBackend(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy logs:', err);
-    }
-  };
-
-  const handleCopyFrontendLogs = async () => {
-    try {
-      await navigator.clipboard.writeText(frontendLogs);
-      setCopiedFrontend(true);
-      setTimeout(() => setCopiedFrontend(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy logs:', err);
-    }
   };
 
   const handleCopyAllLogs = async () => {

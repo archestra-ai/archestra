@@ -1,7 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import fs from 'fs';
 import path from 'path';
-import { z } from 'zod';
 
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
 

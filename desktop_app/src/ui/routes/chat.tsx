@@ -7,6 +7,7 @@ import EmptyChatState from '@ui/components/Chat/EmptyChatState';
 import SystemPrompt from '@ui/components/Chat/SystemPrompt';
 import config from '@ui/config';
 import { useChatAgent } from '@ui/contexts/chat-agent-context';
+import { resetChatTokenUsage } from '@ui/lib/clients/archestra/api/gen';
 import { useChatStore, useToolsStore } from '@ui/stores';
 
 export const Route = createFileRoute('/chat')({
@@ -90,7 +91,6 @@ function ChatPage() {
 
     // Reset token usage for this chat session
     try {
-      const { resetChatTokenUsage } = await import('@ui/lib/clients/archestra/api/gen');
       await resetChatTokenUsage({
         path: { sessionId: currentChat.sessionId },
       });

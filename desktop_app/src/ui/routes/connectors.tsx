@@ -33,7 +33,12 @@ function ConnectorCatalogPage() {
     setCatalogSearchQuery,
     loadMoreCatalogServers,
   } = useConnectorCatalogStore();
-  const { installedMcpServers, installMcpServer: _installMcpServer, uninstallMcpServer } = useMcpServersStore();
+  const {
+    installedMcpServers,
+    installMcpServer: _installMcpServer,
+    uninstallMcpServer,
+    cancelMcpServerInstallation,
+  } = useMcpServersStore();
 
   const installMcpServer = async (
     mcpServer: ArchestraMcpServerManifest,
@@ -226,6 +231,7 @@ function ConnectorCatalogPage() {
             onOAuthInstallClick={handleOAuthInstallClick}
             onBrowserInstallClick={handleBrowserInstallClick}
             onUninstallClick={uninstallMcpServer}
+            onCancelInstallClick={cancelMcpServerInstallation}
           />
         ))}
       </div>

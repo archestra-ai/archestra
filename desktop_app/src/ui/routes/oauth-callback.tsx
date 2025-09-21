@@ -92,8 +92,20 @@ function OAuthCallbackPage() {
       window.electronAPI.onOAuthCallback(handleOAuthCallback);
     }
 
-    // Also check URL parameters (for testing or direct navigation)
-    const urlParams = new URLSearchParams(window.location.search);
+    // Check URL parameters from both search and hash (for hash routing)
+    // First try regular search params
+    let urlParams = new URLSearchParams(window.location.search);
+
+    // If no params in search, check if they're in the hash (for hash routing)
+    if (!urlParams.get('code') && !urlParams.get('access_token')) {
+      const hash = window.location.hash;
+      const hashQueryIndex = hash.indexOf('?');
+      if (hashQueryIndex !== -1) {
+        const hashQuery = hash.substring(hashQueryIndex + 1);
+        urlParams = new URLSearchParams(hashQuery);
+      }
+    }
+
     if (urlParams.get('code') || urlParams.get('access_token')) {
       handleOAuthCallback({
         service: urlParams.get('service') ?? undefined,

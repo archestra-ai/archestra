@@ -435,31 +435,25 @@ const handleProtocol = async (url: string) => {
       await createWindow();
     }
 
-    // Send to renderer process
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      // Navigate to the OAuth callback route
-      const currentURL = mainWindow.webContents.getURL();
-      if (!currentURL.includes('/oauth-callback')) {
-        // Navigate to oauth-callback route in the renderer
-        if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-          mainWindow.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}#/oauth-callback`);
-        } else {
-          mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`), {
-            hash: '/oauth-callback',
-          });
-        }
-      }
+    // For regular OAuth flows (non-generic), the backend handles everything after storing the code
+    // We don't need to navigate to oauth-callback page, just focus the window
+    // The backend will complete the OAuth flow and the server will be installed
 
-      // Send OAuth parameters after navigation
-      mainWindow.webContents.once('did-finish-load', () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('oauth-callback', params);
-        }
-      });
+    // Note: Generic OAuth flows would have different params and would need the oauth-callback page
+    // For now, Google Workspace and other proxy-based OAuth flows don't need frontend involvement
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Just focus the window, don't navigate anywhere
+      // The backend has already handled the OAuth completion
+      log.info('OAuth handled by backend, focusing main window');
 
       // Focus the window
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+
+      // Optionally reload the current page to refresh the connectors list
+      // This ensures the newly installed connector appears
+      mainWindow.webContents.reload();
     }
 
     // Reset OAuth handling flag after a delay

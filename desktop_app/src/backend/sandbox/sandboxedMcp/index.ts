@@ -424,8 +424,20 @@ export default class SandboxedMcpServer {
       try {
         await this.podmanContainer.startOrCreateContainer();
 
-        // For streamable HTTP servers, update the URL with the discovered port
+        // For streamable HTTP servers, wait for port discovery and update the URL
         if (this.isStreamableHttpServer()) {
+          // Wait for port to be discovered (max 5 seconds)
+          const maxWaitTime = 5000;
+          const startTime = Date.now();
+
+          while (!this.podmanContainer.assignedHttpPort && Date.now() - startTime < maxWaitTime) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          if (!this.podmanContainer.assignedHttpPort) {
+            log.warn(`Port discovery timed out for streamable HTTP server ${this.mcpServerId}`);
+          }
+
           this.updateStreamableHttpUrl();
         }
 

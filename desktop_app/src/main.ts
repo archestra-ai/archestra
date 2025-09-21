@@ -67,6 +67,7 @@ updateElectronApp({
 
 let mainWindow: BrowserWindow | null = null;
 let isCleaningUp = false;
+let isHandlingOAuth = false;
 
 /**
  * Cleanup function to gracefully shut down all backend services
@@ -363,11 +364,12 @@ ipcMain.handle('oauth-callback', async (_event, params: any) => {
 setupProviderBrowserAuthHandlers();
 
 // Handle protocol for OAuth callbacks (Windows/Linux)
-const handleProtocol = (url: string) => {
+const handleProtocol = async (url: string) => {
   log.info('Protocol handler called with URL:', url);
 
   // Parse the OAuth callback URL
   if (url.startsWith('archestra-ai://oauth-callback')) {
+    isHandlingOAuth = true;
     const urlObj = new URL(url);
     const params = Object.fromEntries(urlObj.searchParams.entries());
 
@@ -427,14 +429,43 @@ const handleProtocol = (url: string) => {
         });
     }
 
+    // Ensure we have a main window before sending OAuth callback
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      log.info('Main window not available, creating new window...');
+      await createWindow();
+    }
+
     // Send to renderer process
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('oauth-callback', params);
+      // Navigate to the OAuth callback route
+      const currentURL = mainWindow.webContents.getURL();
+      if (!currentURL.includes('/oauth-callback')) {
+        // Navigate to oauth-callback route in the renderer
+        if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+          mainWindow.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}#/oauth-callback`);
+        } else {
+          mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`), {
+            hash: '/oauth-callback',
+          });
+        }
+      }
+
+      // Send OAuth parameters after navigation
+      mainWindow.webContents.once('did-finish-load', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('oauth-callback', params);
+        }
+      });
 
       // Focus the window
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+
+    // Reset OAuth handling flag after a delay
+    setTimeout(() => {
+      isHandlingOAuth = false;
+    }, 1000);
   }
 };
 
@@ -450,17 +481,22 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_event, commandLine) => {
-    // Someone tried to run a second instance, we should focus our window instead.
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-
+  app.on('second-instance', async (_event, commandLine) => {
     // Handle protocol URL from command line (Windows/Linux)
     const url = commandLine.find((arg) => arg.startsWith('archestra-ai://'));
     if (url) {
-      handleProtocol(url);
+      // Handle the protocol first, which will ensure window is created if needed
+      await handleProtocol(url);
+    } else {
+      // For non-protocol launches, ensure window exists and focus it
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        await createWindow();
+      }
+
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
     }
   });
 }
@@ -510,7 +546,7 @@ app.on('activate', () => {
    * On OS X it's common to re-create a window in the app when the
    * dock icon is clicked and there are no other windows open.
    */
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (BrowserWindow.getAllWindows().length === 0 && !isHandlingOAuth) {
     createWindow();
   }
 });

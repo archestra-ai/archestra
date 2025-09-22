@@ -1,6 +1,8 @@
 import { UIMessage } from 'ai';
 import { useState } from 'react';
 
+import { deleteChatMessage } from '@ui/lib/clients/archestra/api/gen';
+
 interface UseMessageActionsProps {
   messages: UIMessage[];
   setMessages: (messages: UIMessage[]) => void;
@@ -59,7 +61,9 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
 
     // Save to database
     if (sessionId) {
-      await saveMessagesToDatabase(sessionId, updatedMessages);
+      await deleteChatMessage({
+        path: { id: messageId },
+      });
     }
   };
 

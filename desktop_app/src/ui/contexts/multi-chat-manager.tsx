@@ -279,6 +279,7 @@ function ChatInstanceManager({
   const prevStatusRef = useRef<string>(null);
   const prevLoadingRef = useRef<boolean>(null);
   const prevSubmittingRef = useRef<boolean>(null);
+  const prevMessagesRef = useRef<UIMessage[]>([]);
   const hasNotified = useRef(false);
 
   useEffect(() => {
@@ -286,11 +287,13 @@ function ChatInstanceManager({
     const loadingChanged = prevLoadingRef.current !== isLoading;
     const submittingChanged = prevSubmittingRef.current !== isSubmitting;
     const isFirstTime = !hasNotified.current;
+    const messagesChanged = prevMessagesRef.current !== messages;
 
-    if (isFirstTime || statusChanged || loadingChanged || submittingChanged) {
+    if (isFirstTime || statusChanged || loadingChanged || submittingChanged || messagesChanged) {
       prevStatusRef.current = status;
       prevLoadingRef.current = isLoading;
       prevSubmittingRef.current = isSubmitting;
+      prevMessagesRef.current = messages;
       hasNotified.current = true;
 
       onInstanceCreated(instance);

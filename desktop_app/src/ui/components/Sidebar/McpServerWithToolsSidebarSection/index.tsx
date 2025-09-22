@@ -314,6 +314,15 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                               if (isActuallyInitializing) {
                                 return 'Loading...';
                               }
+                              // Check if this server has any tools at all (selected or unselected)
+                              const serverHasAnyTools = availableTools.some((tool) => {
+                                const toolServerId = deconstructToolId(tool.id).serverName;
+                                return toolServerId === serverData.serverId;
+                              });
+                              if (serverHasAnyTools) {
+                                // Server has tools but they're all selected
+                                return 'All tools selected';
+                              }
                               // Server is running or in another state but has no tools
                               return 'No tools available';
                             }
@@ -359,7 +368,35 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       {!hasTools ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                            {isError ? 'Server error - check Settings' : 'Loading tools...'}
+                            {(() => {
+                              if (isError) {
+                                return 'Server error - check Settings';
+                              }
+
+                              // Check if server is actually initializing
+                              const server = installedMcpServers.find((s) => s.id === serverData.serverId);
+                              const isActuallyInitializing =
+                                server &&
+                                (server.state === 'not_created' ||
+                                  server.state === 'created' ||
+                                  server.state === 'initializing');
+
+                              if (isActuallyInitializing) {
+                                return 'Loading tools...';
+                              }
+
+                              // Check if this server has any tools at all
+                              const serverHasAnyTools = availableTools.some((tool) => {
+                                const toolServerId = deconstructToolId(tool.id).serverName;
+                                return toolServerId === serverData.serverId;
+                              });
+
+                              if (serverHasAnyTools) {
+                                return 'All tools are selected';
+                              }
+
+                              return 'No tools available';
+                            })()}
                           </div>
                         </SidebarMenuItem>
                       ) : (

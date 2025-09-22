@@ -1,6 +1,6 @@
+import fastifyMultipart from '@fastify/multipart';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import fastifyMultipart from '@fastify/multipart';
 
 import CloudProviderModel from '@backend/models/cloudProvider';
 import log from '@backend/utils/logger';
@@ -47,7 +47,7 @@ const speechPlugin: FastifyPluginAsync = async (fastify) => {
 
         if (!providerConfig) {
           return reply.status(400).send({
-            error: 'OpenAI provider not configured. Please configure OpenAI in Settings → Cloud Providers.'
+            error: 'OpenAI provider not configured. Please configure OpenAI in Settings → Cloud Providers.',
           });
         }
 
@@ -69,7 +69,7 @@ const speechPlugin: FastifyPluginAsync = async (fastify) => {
         const response = await fetch(`${baseUrl}/audio/transcriptions`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
           },
           body: formData,
         });
@@ -78,7 +78,7 @@ const speechPlugin: FastifyPluginAsync = async (fastify) => {
           const errorText = await response.text();
           log.error(`OpenAI API error: ${response.status} - ${errorText}`);
           return reply.status(500).send({
-            error: `Transcription failed: ${response.status} ${response.statusText}`
+            error: `Transcription failed: ${response.status} ${response.statusText}`,
           });
         }
 
@@ -88,11 +88,10 @@ const speechPlugin: FastifyPluginAsync = async (fastify) => {
         log.info(`Transcription successful: "${transcription.slice(0, 100)}..."`);
 
         return reply.send({ text: transcription });
-
       } catch (error) {
         log.error('Speech transcription error:', error);
         return reply.status(500).send({
-          error: 'Internal server error during transcription'
+          error: 'Internal server error during transcription',
         });
       }
     }

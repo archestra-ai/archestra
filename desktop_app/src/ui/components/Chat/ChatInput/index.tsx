@@ -21,9 +21,9 @@ import {
   AIInputTools,
 } from '@ui/components/kibo/ai-input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
+import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
-import config from '@ui/config';
 import {
   useChatStore,
   useCloudProvidersStore,
@@ -119,15 +119,9 @@ export default function ChatInput({
     if (!selectedModel) return false;
 
     // Only OpenAI models support speech generation via AI SDK
-    const speechModels = [
-      'gpt-4o',
-      'gpt-4o-mini',
-      'gpt-4o-audio'
-    ];
+    const speechModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4o-audio'];
 
-    return speechModels.some(model =>
-      selectedModel.toLowerCase().includes(model.toLowerCase())
-    );
+    return speechModels.some((model) => selectedModel.toLowerCase().includes(model.toLowerCase()));
   }, [selectedModel]);
 
   // Handle voice input toggle
@@ -189,14 +183,18 @@ export default function ChatInput({
 
             // Show error message
             const errorEvent = {
-              target: { value: `❌ Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease configure OpenAI in Settings → Cloud Providers or type your message manually.` },
-              currentTarget: { value: `❌ Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease configure OpenAI in Settings → Cloud Providers or type your message manually.` },
+              target: {
+                value: `❌ Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease configure OpenAI in Settings → Cloud Providers or type your message manually.`,
+              },
+              currentTarget: {
+                value: `❌ Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease configure OpenAI in Settings → Cloud Providers or type your message manually.`,
+              },
             } as React.ChangeEvent<HTMLTextAreaElement>;
             handleInputChange(errorEvent);
           }
 
           // Stop all tracks
-          stream.getTracks().forEach(track => track.stop());
+          stream.getTracks().forEach((track) => track.stop());
         };
 
         recorder.start();
@@ -210,7 +208,6 @@ export default function ChatInput({
           currentTarget: { value: '🎤 Listening... speak now' },
         } as React.ChangeEvent<HTMLTextAreaElement>;
         handleInputChange(syntheticEvent);
-
       } catch (error) {
         console.error('Could not access microphone:', error);
         alert('Could not access microphone. Please check permissions.');
@@ -448,9 +445,7 @@ export default function ChatInput({
                         {/* Tool lists (simplified for brevity) */}
                         {data.tools.map((tool) => {
                           const fullName = formatToolName(tool.name || tool.id);
-                          const displayName = data.commonPrefix
-                            ? fullName.slice(data.commonPrefix.length)
-                            : fullName;
+                          const displayName = data.commonPrefix ? fullName.slice(data.commonPrefix.length) : fullName;
                           return (
                             <ToolHoverCard
                               key={tool.id}
@@ -497,8 +492,9 @@ export default function ChatInput({
             minHeight={48}
             maxHeight={164}
             className={cn(
-              "relative z-10",
-              isListening && "bg-gradient-to-r from-red-50/50 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/20"
+              'relative z-10',
+              isListening &&
+                'bg-gradient-to-r from-red-50/50 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/20'
             )}
           />
 
@@ -520,9 +516,7 @@ export default function ChatInput({
                     />
                   ))}
                 </div>
-                <span className="text-sm font-medium text-red-600 dark:text-red-400 animate-pulse">
-                  Recording...
-                </span>
+                <span className="text-sm font-medium text-red-600 dark:text-red-400 animate-pulse">Recording...</span>
               </div>
             </div>
           )}
@@ -623,16 +617,9 @@ export default function ChatInput({
                 <TooltipTrigger asChild>
                   <AIInputButton
                     onClick={handleVoiceToggle}
-                    className={cn(
-                      'transition-all duration-200',
-                      isListening && 'bg-red-500/20 animate-pulse'
-                    )}
+                    className={cn('transition-all duration-200', isListening && 'bg-red-500/20 animate-pulse')}
                   >
-                    {isListening ? (
-                      <MicOff size={16} className="text-red-600 dark:text-red-400" />
-                    ) : (
-                      <Mic size={16} />
-                    )}
+                    {isListening ? <MicOff size={16} className="text-red-600 dark:text-red-400" /> : <Mic size={16} />}
                   </AIInputButton>
                 </TooltipTrigger>
                 <TooltipContent>

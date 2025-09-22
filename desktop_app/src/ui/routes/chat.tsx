@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { type ChatStatus } from 'ai';
 
 import { FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS, constructToolId } from '@constants';
 import ChatHistory from '@ui/components/Chat/ChatHistory';
@@ -183,7 +184,7 @@ function ChatPage() {
           onRerunAgent={handleRerunAgent}
           rerunAgentDisabled={isLoading || isSubmitting}
           isSubmitting={isSubmitting}
-          status={status}
+          status={status as ChatStatus}
         />
       </div>
     </div>

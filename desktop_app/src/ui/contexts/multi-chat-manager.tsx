@@ -1,5 +1,5 @@
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, UIMessage } from 'ai';
+import { type ChatStatus, DefaultChatTransport, UIMessage } from 'ai';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import config from '@ui/config';
@@ -17,7 +17,7 @@ interface ChatInstanceState {
   chatId: number;
   title: string;
   messages: UIMessage[];
-  status: string;
+  status: ChatStatus;
   isLoading: boolean;
   isSubmitting: boolean;
   editingMessageId: string | null;

@@ -1,4 +1,4 @@
-import { UIMessage } from 'ai';
+import { type ChatStatus, UIMessage } from 'ai';
 import { createContext, useContext } from 'react';
 
 import { useChatStore } from '@ui/stores';
@@ -10,7 +10,7 @@ interface IChatAgentContext {
   setMessages: (msgs: UIMessage[]) => void;
   sendMessage: (args: { text: string }) => void;
   stop: () => void;
-  status: string;
+  status: ChatStatus;
   regenerate: () => void;
   isLoading: boolean;
   isSubmitting: boolean;

@@ -135,6 +135,21 @@ function ChatInstanceManager({
     transport,
     onError: (error) => {
       console.error('Chat error:', error);
+
+      // Create an error message that will be displayed to the user
+      const errorMessage: UIMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: JSON.stringify(error, null, 2),
+          },
+        ],
+      };
+
+      // Add the error message to the chat
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
     },
     messages: messagesWithMemories,
   });

@@ -45,7 +45,7 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
 
     // Save to database
     if (sessionId && updatedMessage) {
-      updateChatMessage({
+      await updateChatMessage({
         path: { id: messageId },
         body: {
           content: updatedMessage,

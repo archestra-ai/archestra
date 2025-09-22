@@ -5,11 +5,11 @@ import { constructToolId, deconstructToolId } from './constants';
 describe('Tool ID Functions', () => {
   describe('constructToolId', () => {
     it.each([
-      ['server_name', 'tool_id', 'server_name__tool_id'],
+      ['server_name', 'tool_id', 'server_nam__tool_id'],
       [
         'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem',
         'read_file',
-        'modelcontextprotocol__servers__src__filesystem__servers__src__filesystem__read_file',
+        'modelconte__read_file',
       ],
     ])('serverName: %s, toolName: %s should be %s', (serverName, toolName, expected) => {
       const result = constructToolId(serverName, toolName);

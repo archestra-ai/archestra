@@ -6,7 +6,7 @@ export default {
     replaysOnErrorSampleRate: 1.0,
   },
   vercelSdk: {
-    maxToolCalls: 10,
+    maxToolCalls: 30,
   },
   build: {
     updateInterval: '1 hour',

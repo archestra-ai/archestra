@@ -22,6 +22,7 @@ function ChatPage() {
     setMessages,
     sendMessage,
     stop,
+    status,
     isLoading,
     isSubmitting,
     setIsSubmitting,
@@ -182,7 +183,7 @@ function ChatPage() {
           onRerunAgent={handleRerunAgent}
           rerunAgentDisabled={isLoading || isSubmitting}
           isSubmitting={isSubmitting}
-          status={isLoading ? 'streaming' : isSubmitting ? 'submitted' : 'ready'}
+          status={status}
         />
       </div>
     </div>

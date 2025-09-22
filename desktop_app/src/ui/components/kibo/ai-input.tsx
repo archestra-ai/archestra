@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2Icon, SendIcon, SquareIcon, XIcon } from 'lucide-react';
+import { SendIcon, SquareIcon, XIcon } from 'lucide-react';
 import type { ComponentProps, HTMLAttributes, KeyboardEventHandler } from 'react';
 import React, { Children, useCallback, useEffect, useRef } from 'react';
 
@@ -147,9 +147,7 @@ export const AIInputSubmit = ({
   ...props
 }: AIInputSubmitProps) => {
   let Icon = <SendIcon />;
-  if (status === ChatMessageStatus.Submitted) {
-    Icon = <Loader2Icon className="animate-spin" />;
-  } else if (status === ChatMessageStatus.Streaming) {
+  if (status === ChatMessageStatus.Submitted || status === ChatMessageStatus.Streaming) {
     Icon = <SquareIcon />;
   }
 

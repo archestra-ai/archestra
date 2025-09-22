@@ -1,12 +1,13 @@
 import { type DynamicToolUIPart, ReasoningUIPart, type TextUIPart, UIMessage } from 'ai';
-import { Edit2, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Edit2, RefreshCw, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import ThinkBlock from '@ui/components/ThinkBlock';
 import ToolInvocation from '@ui/components/ToolInvocation';
 import { AIResponse } from '@ui/components/kibo/ai-response';
 import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
+import { useSpeechSynthesis } from '@ui/hooks/useSpeechSynthesis';
 
 import RegenerationSkeleton from './RegenerationSkeleton';
 
@@ -36,12 +37,14 @@ export default function AssistantMessage({
   isRegenerating = false,
 }: AssistantMessageProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const { isSpeaking, speak, stop, isSupported: speechSupported } = useSpeechSynthesis();
+  const [hasSpokenThisMessage, setHasSpokenThisMessage] = useState(false);
 
   if (!message.parts) {
     return null;
   }
 
-  // Extract text content for editing
+  // Extract text content for editing and speech
   let fullTextContent = '';
   if (message.parts) {
     fullTextContent = message.parts
@@ -49,6 +52,25 @@ export default function AssistantMessage({
       .map((part) => (part as TextUIPart).text)
       .join('');
   }
+
+  // Auto-speak new messages if speech is supported and enabled
+  useEffect(() => {
+    // Check if this is a new message that hasn't been spoken yet
+    // and if the message has text content
+    if (speechSupported && fullTextContent && !hasSpokenThisMessage && !isRegenerating) {
+      // For now, we'll just mark messages as spoken without auto-playing
+      // Auto-play could be added as a user preference later
+      setHasSpokenThisMessage(true);
+    }
+  }, [fullTextContent, hasSpokenThisMessage, speechSupported, isRegenerating]);
+
+  const toggleSpeech = () => {
+    if (isSpeaking) {
+      stop();
+    } else if (fullTextContent) {
+      speak(fullTextContent, { rate: 1.1, pitch: 1.0 });
+    }
+  };
 
   if (isEditing) {
     return (
@@ -119,6 +141,21 @@ export default function AssistantMessage({
 
       {isHovered && (
         <div className="absolute top-0 right-0 flex gap-1">
+          {speechSupported && fullTextContent && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={toggleSpeech}
+              title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
+            >
+              {isSpeaking ? (
+                <VolumeX className="h-3 w-3 text-red-600 dark:text-red-400" />
+              ) : (
+                <Volume2 className="h-3 w-3" />
+              )}
+            </Button>
+          )}
           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onEditStart()} title="Edit message">
             <Edit2 className="h-3 w-3" />
           </Button>

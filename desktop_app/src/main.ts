@@ -1,6 +1,5 @@
 import { config as dotenvConfig } from 'dotenv';
 import { BrowserWindow, NativeImage, app, dialog, ipcMain, nativeImage, shell } from 'electron';
-import { REACT_DEVELOPER_TOOLS, installExtension } from 'electron-devtools-installer';
 import started from 'electron-squirrel-startup';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -200,9 +199,15 @@ const createWindow = async () => {
 
   // Open the DevTools only in development mode
   if (!app.isPackaged) {
-    // note that Components and Profiler tabs start to appear after first reload
-    // https://github.com/electron/electron/issues/41613
-    await installExtension(REACT_DEVELOPER_TOOLS);
+    // Install React Developer Tools if available
+    try {
+      const { installExtension, REACT_DEVELOPER_TOOLS } = await import('electron-devtools-installer');
+      // note that Components and Profiler tabs start to appear after first reload
+      // https://github.com/electron/electron/issues/41613
+      await installExtension(REACT_DEVELOPER_TOOLS);
+    } catch (error) {
+      console.log('React DevTools extension could not be loaded:', error);
+    }
     mainWindow.webContents.openDevTools();
   }
 };

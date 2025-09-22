@@ -281,6 +281,8 @@ function ChatInstanceManager({
   const prevSubmittingRef = useRef<boolean>(null);
   const prevMessagesRef = useRef<UIMessage[]>([]);
   const prevRegeneratingIndexRef = useRef<number | null>(null);
+  const prevEditingMessageIdRef = useRef<string | null>(null);
+  const prevEditingContentRef = useRef<string>(null);
   const hasNotified = useRef(false);
 
   useEffect(() => {
@@ -290,6 +292,8 @@ function ChatInstanceManager({
     const isFirstTime = !hasNotified.current;
     const messagesChanged = prevMessagesRef.current !== messages;
     const regeneratingIndexChanged = prevRegeneratingIndexRef.current !== regeneratingIndex;
+    const editingMessageIdChanged = prevEditingMessageIdRef.current !== editingMessageId;
+    const editingContentChanged = prevEditingContentRef.current !== editingContent;
 
     if (
       isFirstTime ||
@@ -297,18 +301,31 @@ function ChatInstanceManager({
       loadingChanged ||
       submittingChanged ||
       messagesChanged ||
-      regeneratingIndexChanged
+      regeneratingIndexChanged ||
+      editingMessageIdChanged ||
+      editingContentChanged
     ) {
       prevStatusRef.current = status;
       prevLoadingRef.current = isLoading;
       prevSubmittingRef.current = isSubmitting;
       prevMessagesRef.current = messages;
       prevRegeneratingIndexRef.current = regeneratingIndex;
+      prevEditingMessageIdRef.current = editingMessageId;
+      prevEditingContentRef.current = editingContent;
       hasNotified.current = true;
 
       onInstanceCreated(instance);
     }
-  }, [status, isLoading, isSubmitting, instance, onInstanceCreated, regeneratingIndex]);
+  }, [
+    status,
+    isLoading,
+    isSubmitting,
+    instance,
+    onInstanceCreated,
+    regeneratingIndex,
+    editingMessageId,
+    editingContent,
+  ]);
 
   // This component doesn't render anything
   return null;
@@ -340,7 +357,9 @@ export function MultiChatManagerProvider({ children }: { children: React.ReactNo
           existing.isLoading !== instance.isLoading ||
           existing.isSubmitting !== instance.isSubmitting ||
           existing.messages.length !== instance.messages.length ||
-          existing.regeneratingIndex !== instance.regeneratingIndex
+          existing.regeneratingIndex !== instance.regeneratingIndex ||
+          existing.editingMessageId !== instance.editingMessageId ||
+          existing.editingContent !== instance.editingContent
         ) {
           const newMap = new Map(prev);
           newMap.set(instance.sessionId, instance);

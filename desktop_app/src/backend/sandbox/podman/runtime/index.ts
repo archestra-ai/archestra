@@ -115,6 +115,8 @@ export default class PodmanRuntime {
   private binaryPath = getBinaryExecPath('podman-remote-static-v5.5.2');
 
   private baseImage: PodmanImage;
+  private initRetryCount = 0;
+  private readonly MAX_INIT_RETRIES = 2;
 
   /**
    * NOTE: see here as to why we need to bundle, and configure, `gvproxy` + `vfkit`, alongside `podman`:
@@ -371,14 +373,176 @@ export default class PodmanRuntime {
             // Call the success callback - socket setup will happen there first
             this.onMachineInstallationSuccess();
           } else {
-            const errorMessage = `Podman machine init failed with code ${code} and signal ${signal}`;
-            const fullError = stderrOutput ? `${errorMessage}. Error: ${stderrOutput}` : errorMessage;
-            this.handleMachineError(new Error(fullError));
+            // Check if this is a connection conflict error that we can auto-resolve
+            if (stderrOutput.includes('system connection') && stderrOutput.includes('already exists') && this.initRetryCount < this.MAX_INIT_RETRIES) {
+              log.info(`Detected system connection conflict. Attempting automatic cleanup and retry... (attempt ${this.initRetryCount + 1}/${this.MAX_INIT_RETRIES})`);
+              this.initRetryCount++;
+              this.cleanupConflictingConnectionsAndRetry();
+            } else {
+              const errorMessage = `Podman machine init failed with code ${code} and signal ${signal}`;
+              const fullError = stderrOutput ? `${errorMessage}. Error: ${stderrOutput}` : errorMessage;
+
+              if (this.initRetryCount >= this.MAX_INIT_RETRIES) {
+                log.error(`Max retry attempts (${this.MAX_INIT_RETRIES}) reached for machine initialization`);
+              }
+
+              this.handleMachineError(new Error(fullError));
+            }
           }
         },
         onError: this.handleMachineError.bind(this),
       },
     });
+  }
+
+  /**
+   * Clean up conflicting system connections and retry machine initialization.
+   * This handles the case where stale connections prevent machine creation.
+   */
+  private cleanupConflictingConnectionsAndRetry() {
+    this.machineStartupMessage = 'Cleaning up conflicting connections...';
+
+    // First, try to remove any existing connections for our machine
+    this.runCommand({
+      command: ['system', 'connection', 'rm', this.ARCHESTRA_MACHINE_NAME],
+      pipes: {
+        onStderr: (data) => {
+          // It's OK if this fails - the connection might not exist
+          log.info(`[Podman connection cleanup stderr]: ${data}`);
+        },
+        onExit: (code) => {
+          // Try to remove the root connection as well
+          this.runCommand({
+            command: ['system', 'connection', 'rm', `${this.ARCHESTRA_MACHINE_NAME}-root`],
+            pipes: {
+              onStderr: (data) => {
+                // It's OK if this fails - the connection might not exist
+                log.info(`[Podman root connection cleanup stderr]: ${data}`);
+              },
+              onExit: () => {
+                // Try to remove any existing machine with the same name
+                this.runCommand({
+                  command: ['machine', 'rm', '--force', this.ARCHESTRA_MACHINE_NAME],
+                  pipes: {
+                    onStderr: (data) => {
+                      // It's OK if this fails - the machine might not exist
+                      log.info(`[Podman machine cleanup stderr]: ${data}`);
+                    },
+                    onExit: () => {
+                      // Now retry the initialization
+                      log.info('Cleanup complete. Retrying machine initialization...');
+                      this.machineStartupMessage = 'Retrying machine initialization...';
+                      this.initArchestraMachine();
+                    },
+                    onError: (error) => {
+                      log.error('Error during machine cleanup:', error);
+                      // Still try to proceed with initialization
+                      this.initArchestraMachine();
+                    },
+                  },
+                });
+              },
+              onError: (error) => {
+                log.error('Error during root connection cleanup:', error);
+                // Still proceed with machine cleanup
+                this.runCommand({
+                  command: ['machine', 'rm', '--force', this.ARCHESTRA_MACHINE_NAME],
+                  pipes: {
+                    onExit: () => this.initArchestraMachine(),
+                    onError: () => this.initArchestraMachine(),
+                  },
+                });
+              },
+            },
+          });
+        },
+        onError: (error) => {
+          log.error('Error during connection cleanup:', error);
+          // Still proceed with other cleanup steps
+          this.runCommand({
+            command: ['system', 'connection', 'rm', `${this.ARCHESTRA_MACHINE_NAME}-root`],
+            pipes: {
+              onExit: () => this.initArchestraMachine(),
+              onError: () => this.initArchestraMachine(),
+            },
+          });
+        },
+      },
+    });
+  }
+
+  /**
+   * Clean up all Archestra-related Podman data for testing purposes.
+   * This removes machines, connections, and any related files.
+   */
+  cleanupAllArchestraData(): Promise<void> {
+    return new Promise((resolve) => {
+      log.info('Starting comprehensive cleanup of all Archestra Podman data...');
+
+      // Step 1: Stop machine if running
+      this.runCommand({
+        command: ['machine', 'stop', this.ARCHESTRA_MACHINE_NAME],
+        pipes: {
+          onExit: () => {
+            // Step 2: Remove machine
+            this.runCommand({
+              command: ['machine', 'rm', '--force', this.ARCHESTRA_MACHINE_NAME],
+              pipes: {
+                onExit: () => {
+                  // Step 3: Remove connections
+                  this.runCommand({
+                    command: ['system', 'connection', 'rm', this.ARCHESTRA_MACHINE_NAME],
+                    pipes: {
+                      onExit: () => {
+                        // Step 4: Remove root connection
+                        this.runCommand({
+                          command: ['system', 'connection', 'rm', `${this.ARCHESTRA_MACHINE_NAME}-root`],
+                          pipes: {
+                            onExit: () => {
+                              log.info('Comprehensive cleanup completed successfully');
+                              resolve();
+                            },
+                            onError: () => {
+                              log.info('Cleanup completed (some steps may have failed, but that\'s expected)');
+                              resolve();
+                            },
+                          },
+                        });
+                      },
+                      onError: () => {
+                        log.info('Cleanup completed (some steps may have failed, but that\'s expected)');
+                        resolve();
+                      },
+                    },
+                  });
+                },
+                onError: () => {
+                  log.info('Cleanup completed (some steps may have failed, but that\'s expected)');
+                  resolve();
+                },
+              },
+            });
+          },
+          onError: () => {
+            // Machine might not be running, continue with removal
+            this.runCommand({
+              command: ['machine', 'rm', '--force', this.ARCHESTRA_MACHINE_NAME],
+              pipes: {
+                onExit: () => resolve(),
+                onError: () => resolve(),
+              },
+            });
+          },
+        },
+      });
+    });
+  }
+
+  /**
+   * Reset the initialization retry count. Called when starting a fresh initialization attempt.
+   */
+  private resetRetryCount() {
+    this.initRetryCount = 0;
   }
 
   /**
@@ -393,6 +557,8 @@ export default class PodmanRuntime {
    * or output to stderr, so we're not going to do anything with it for now
    */
   ensureArchestraMachineIsRunning() {
+    // Reset retry count for fresh initialization attempt
+    this.resetRetryCount();
     let stderrOutput = '';
 
     this.runCommand<PodmanMachineListOutput>({

@@ -30,6 +30,7 @@
     "test:e2e:packaged": "wdio run ./wdio.conf.ts",
     "prettier": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/prettier/bin/prettier.cjs --write .",
     "db": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/drizzle-kit/bin.cjs",
+    "db:dev:clean": "rm ~/Library/Application\\ Support/Archestra/archestra-dev.db",
     "codegen:all": "pnpm codegen:libpod && pnpm codegen:archestra:api && pnpm codegen:archestra:catalog && pnpm prettier",
     "codegen:libpod": "ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/libpod/openapi-ts.config.ts && npx tsx ./openapi/libpod/fix-type-generation.ts",
     "codegen:archestra:api": "ELECTRON_RUN_AS_NODE=1 CODEGEN=1 pnpm exec electron ./node_modules/tsx/dist/cli.mjs openapi/archestra/api/generate-openapi.ts && ELECTRON_RUN_AS_NODE=1 pnpm exec electron ./node_modules/@hey-api/openapi-ts/bin/index.cjs --file openapi/archestra/api/openapi-ts.config.ts",

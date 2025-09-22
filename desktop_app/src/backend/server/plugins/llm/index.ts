@@ -139,7 +139,6 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             ollama: {},
           },
           onFinish: async ({ response, usage, text: _text, finishReason: _finishReason }) => {
-            console.log(JSON.stringify(response.messages));
             // Save chat token usage
             if (usage && sessionId) {
               let contextWindow: number;

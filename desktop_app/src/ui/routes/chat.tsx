@@ -182,6 +182,7 @@ function ChatPage() {
           onRerunAgent={handleRerunAgent}
           rerunAgentDisabled={isLoading || isSubmitting}
           isSubmitting={isSubmitting}
+          status={isLoading ? 'streaming' : isSubmitting ? 'submitted' : 'ready'}
         />
       </div>
     </div>

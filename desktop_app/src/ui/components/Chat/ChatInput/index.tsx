@@ -656,7 +656,7 @@ export default function ChatInput({
             )}
             <AIInputSubmit
               onClick={status === 'streaming' || status === 'submitted' || isSubmitting ? stop : undefined}
-              disabled={disabled}
+              disabled={status === 'streaming' || status === 'submitted' || isSubmitting ? false : disabled}
               status={
                 isSubmitting
                   ? ChatMessageStatus.Submitted

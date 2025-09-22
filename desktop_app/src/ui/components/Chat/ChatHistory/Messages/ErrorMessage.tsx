@@ -152,7 +152,7 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
   return (
     <div className="space-y-3">
       {/* Main error message */}
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3 pt-2">
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
         </div>
@@ -182,7 +182,7 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-between text-muted-foreground hover:text-foreground"
+            className="w-full justify-between text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <span className="text-xs">Show error details</span>
             {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}

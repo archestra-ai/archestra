@@ -1544,7 +1544,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Tool ID in format sanitizedServerId__sanitizedToolName",
+            "description": "Tool ID in format sanitizedS__sanitizedToolName",
             "type": "string"
           },
           "name": {
@@ -3376,7 +3376,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Tool ID in format sanitizedServerId__sanitizedToolName",
+            "description": "Tool ID in format sanitizedS__sanitizedToolName",
             "type": "string"
           },
           "name": {

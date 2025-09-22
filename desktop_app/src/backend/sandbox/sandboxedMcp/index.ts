@@ -106,15 +106,38 @@ export default class SandboxedMcpServer {
   /**
    * Update the MCP server URL for streamable HTTP servers after port discovery
    */
-  updateStreamableHttpUrl(): void {
+  async updateStreamableHttpUrl(): Promise<void> {
     if (!this.isStreamableHttpServer() || !this.podmanContainer) {
       return;
     }
 
-    const assignedPort = this.podmanContainer.assignedHttpPort;
+    let assignedPort = this.podmanContainer.assignedHttpPort;
     if (!assignedPort) {
       log.warn(`Cannot update streamable HTTP URL: no assigned port for ${this.mcpServerId}`);
-      return;
+      let attempts = 0;
+      const maxAttempts = 5; 
+
+      while (attempts < maxAttempts) {
+        if (!assignedPort) {
+          const waitTime = attempts > 0 ? 500 : 0; 
+          if (waitTime > 0) {
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+          }
+
+          try {
+            await this.podmanContainer.discoverAssignedHttpPort();
+            assignedPort = this.podmanContainer.assignedHttpPort;
+            break;
+          } catch (error) {
+            log.warn(`Port discovery attempt ${attempts + 1} failed:`, error);
+            attempts++;
+            continue;
+          }
+        }
+      }
+      if (!assignedPort) {
+        throw new Error(`Failed to discover assigned HTTP port after ${maxAttempts} attempts`);
+      }
     }
 
     try {
@@ -426,7 +449,7 @@ export default class SandboxedMcpServer {
 
         // For streamable HTTP servers, update the URL with the discovered port
         if (this.isStreamableHttpServer()) {
-          this.updateStreamableHttpUrl();
+          await this.updateStreamableHttpUrl();
         }
 
         await this.pingMcpServerContainerUntilHealthy();

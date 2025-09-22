@@ -1,6 +1,8 @@
 import { UIMessage } from 'ai';
 import { useState } from 'react';
 
+import { deleteChatMessage, updateChatMessage } from '@ui/lib/clients/archestra/api/gen';
+
 interface UseMessageActionsProps {
   messages: UIMessage[];
   setMessages: (messages: UIMessage[]) => void;
@@ -25,20 +27,14 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
   const saveEdit = async (messageId: string) => {
     if (!editingContent.trim()) return;
 
+    let updatedMessage: UIMessage | null = null;
     const updatedMessages = messages.map((msg) => {
       if (msg.id === messageId) {
-        // Update the message content
-        if (msg.role === 'user') {
-          return {
-            ...msg,
-            parts: [{ type: 'text', text: editingContent }],
-          } as UIMessage;
-        } else if (msg.role === 'assistant') {
-          return {
-            ...msg,
-            parts: [{ type: 'text', text: editingContent }],
-          } as UIMessage;
-        }
+        updatedMessage = {
+          ...msg,
+          parts: [{ type: 'text', text: editingContent }],
+        } as UIMessage;
+        return updatedMessage;
       }
       return msg;
     });
@@ -48,8 +44,13 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
     setEditingContent('');
 
     // Save to database
-    if (sessionId) {
-      await saveMessagesToDatabase(sessionId, updatedMessages);
+    if (sessionId && updatedMessage) {
+      await updateChatMessage({
+        path: { id: messageId },
+        body: {
+          content: updatedMessage,
+        },
+      });
     }
   };
 
@@ -59,15 +60,10 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
 
     // Save to database
     if (sessionId) {
-      await saveMessagesToDatabase(sessionId, updatedMessages);
+      await deleteChatMessage({
+        path: { id: messageId },
+      });
     }
-  };
-
-  const saveMessagesToDatabase = async (sessionId: string, messages: UIMessage[]) => {
-    // For now, we'll rely on the automatic saving that happens after streaming completes
-    // The backend saves messages via the onFinish callback in the streaming response
-    // We could add a dedicated endpoint later if needed for immediate saves
-    console.log('Messages updated locally, will be saved on next interaction');
   };
 
   return {

@@ -279,6 +279,10 @@ function ChatInstanceManager({
   const prevStatusRef = useRef<string>(null);
   const prevLoadingRef = useRef<boolean>(null);
   const prevSubmittingRef = useRef<boolean>(null);
+  const prevMessagesRef = useRef<UIMessage[]>([]);
+  const prevRegeneratingIndexRef = useRef<number | null>(null);
+  const prevEditingMessageIdRef = useRef<string | null>(null);
+  const prevEditingContentRef = useRef<string>(null);
   const hasNotified = useRef(false);
 
   useEffect(() => {
@@ -286,16 +290,42 @@ function ChatInstanceManager({
     const loadingChanged = prevLoadingRef.current !== isLoading;
     const submittingChanged = prevSubmittingRef.current !== isSubmitting;
     const isFirstTime = !hasNotified.current;
+    const messagesChanged = prevMessagesRef.current !== messages;
+    const regeneratingIndexChanged = prevRegeneratingIndexRef.current !== regeneratingIndex;
+    const editingMessageIdChanged = prevEditingMessageIdRef.current !== editingMessageId;
+    const editingContentChanged = prevEditingContentRef.current !== editingContent;
 
-    if (isFirstTime || statusChanged || loadingChanged || submittingChanged) {
+    if (
+      isFirstTime ||
+      statusChanged ||
+      loadingChanged ||
+      submittingChanged ||
+      messagesChanged ||
+      regeneratingIndexChanged ||
+      editingMessageIdChanged ||
+      editingContentChanged
+    ) {
       prevStatusRef.current = status;
       prevLoadingRef.current = isLoading;
       prevSubmittingRef.current = isSubmitting;
+      prevMessagesRef.current = messages;
+      prevRegeneratingIndexRef.current = regeneratingIndex;
+      prevEditingMessageIdRef.current = editingMessageId;
+      prevEditingContentRef.current = editingContent;
       hasNotified.current = true;
 
       onInstanceCreated(instance);
     }
-  }, [status, isLoading, isSubmitting, instance, onInstanceCreated]);
+  }, [
+    status,
+    isLoading,
+    isSubmitting,
+    instance,
+    onInstanceCreated,
+    regeneratingIndex,
+    editingMessageId,
+    editingContent,
+  ]);
 
   // This component doesn't render anything
   return null;
@@ -326,7 +356,10 @@ export function MultiChatManagerProvider({ children }: { children: React.ReactNo
           existing.status !== instance.status ||
           existing.isLoading !== instance.isLoading ||
           existing.isSubmitting !== instance.isSubmitting ||
-          existing.messages.length !== instance.messages.length
+          existing.messages.length !== instance.messages.length ||
+          existing.regeneratingIndex !== instance.regeneratingIndex ||
+          existing.editingMessageId !== instance.editingMessageId ||
+          existing.editingContent !== instance.editingContent
         ) {
           const newMap = new Map(prev);
           newMap.set(instance.sessionId, instance);

@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { AlertCircle, FileText, Loader2, RefreshCw, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { deconstructToolId } from '@constants';
 import ChatTokenUsage from '@ui/components/ChatTokenUsage';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import {
@@ -23,16 +24,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/co
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
 import {
+  useChatStore,
   useCloudProvidersStore,
   useDeveloperModeStore,
   useMcpServersStore,
-  useOllamaStore,
   useToolsStore,
+  useUserSelectableModels,
 } from '@ui/stores';
 import { ChatMessageStatus } from '@ui/types/chat';
 import type { Tool } from '@ui/types/tools';
-
-import { SYSTEM_MODEL_NAMES } from '../../../../constants';
 
 import './chat-input.css';
 
@@ -41,6 +41,7 @@ interface ChatInputProps {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e?: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
+  isPreparing: boolean;
   disabled: boolean;
   rerunAgentDisabled: boolean;
   stop: () => void;
@@ -68,6 +69,7 @@ export default function ChatInput({
   handleInputChange,
   handleSubmit,
   isLoading,
+  isPreparing,
   disabled,
   rerunAgentDisabled,
   stop,
@@ -77,12 +79,9 @@ export default function ChatInput({
   isSubmitting = false,
 }: ChatInputProps) {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
-  const { installedModels, selectedModel, setSelectedModel } = useOllamaStore();
+  const { selectedModel, setSelectedModel } = useChatStore();
+  const userSelectableModels = useUserSelectableModels();
   const { availableCloudProviderModels } = useCloudProvidersStore();
-
-  // Filter out only the system models (phi3:3.8b and llama-guard3:1b)
-  // Keep the recommended Qwen model in the list
-  const userSelectableModels = installedModels.filter((model) => !SYSTEM_MODEL_NAMES.includes(model.model));
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
 
@@ -98,19 +97,17 @@ export default function ChatInput({
     return () => clearInterval(interval);
   }, []);
 
-  // Use the selected model from Ollama store
-  // Convert empty string to undefined so the placeholder shows
-  const currentModel = !selectedModel || selectedModel === '' ? undefined : selectedModel;
-  const handleModelChange = setSelectedModel;
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        handleSubmit();
+        // Only submit if a model is selected and not disabled
+        if (!disabled) {
+          handleSubmit();
+        }
       }
     },
-    [handleSubmit]
+    [handleSubmit, disabled]
   );
 
   // Helper function to find common prefix
@@ -154,12 +151,6 @@ export default function ChatInput({
     return '';
   };
 
-  // Helper function to extract server ID from tool ID (format: serverId__toolName)
-  const extractServerIdFromToolId = (toolId: string): string => {
-    const parts = toolId.split('__');
-    return parts[0] || '';
-  };
-
   // Helper function to check if server is still initializing
   const isServerInitializing = (serverId: string): boolean => {
     const mcpServer = installedMcpServers.find((s) => s.id === serverId);
@@ -197,7 +188,7 @@ export default function ChatInput({
       const tool = availableTools.find((t) => t.id === toolId);
       if (tool) {
         const serverName = tool.mcpServerName || 'Unknown';
-        const serverId = extractServerIdFromToolId(tool.id);
+        const serverId = deconstructToolId(tool.id).serverName;
         if (!groups[serverName]) {
           groups[serverName] = {
             tools: [],
@@ -571,13 +562,13 @@ export default function ChatInput({
         </div>
         <AIInputToolbar>
           <AIInputTools>
-            <AIInputModelSelect value={currentModel} onValueChange={handleModelChange} disabled={false}>
+            <AIInputModelSelect value={selectedModel} onValueChange={setSelectedModel} disabled={false}>
               <AIInputModelSelectTrigger
-                className={!currentModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
+                className={!selectedModel ? 'green-shimmer-with-pulse border border-green-500' : ''}
               >
                 <AIInputModelSelectValue
                   placeholder="No model selected, choose one!"
-                  className={!currentModel ? 'text-green-600 font-medium' : ''}
+                  className={!selectedModel ? 'text-green-600 font-medium' : ''}
                 />
               </AIInputModelSelectTrigger>
               <AIInputModelSelectContent>
@@ -636,6 +627,20 @@ export default function ChatInput({
           </AIInputTools>
 
           <div className="flex items-center gap-2">
+            {isLoading && (
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-green-500/10 rounded-full border border-green-500/20 group">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-xs font-medium text-green-600 dark:text-green-400">Streaming</span>
+              </div>
+            )}
+
+            {isPreparing && (
+              <div className="flex items-center gap-2 px-2.5 py-1 bg-blue-500/10 rounded-full border border-blue-500/20 group">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Preparing</span>
+              </div>
+            )}
+
             {hasMessages && onRerunAgent && (
               <Tooltip>
                 <TooltipTrigger asChild>

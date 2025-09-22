@@ -1,11 +1,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 
+import ollamaClient from '@backend/clients/ollama';
 import db from '@backend/database';
 import { Tool, ToolAnalysisResult, ToolSchema, toolsTable } from '@backend/database/schema/tool';
-import { OllamaClient } from '@backend/ollama';
-import { McpTools } from '@backend/sandbox/sandboxedMcp';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
+import { constructToolId } from '@constants';
 
 export class ToolModel {
   /**
@@ -136,7 +137,7 @@ export class ToolModel {
 
       // Prepare tools for saving
       const toolsToSave = Object.entries(tools).map(([name, tool]) => ({
-        id: `${mcpServerId}__${name}`,
+        id: constructToolId(mcpServerId, name),
         mcp_server_id: mcpServerId,
         name,
         description: tool.description || '',
@@ -172,7 +173,7 @@ export class ToolModel {
 
       // Prepare tools for analysis, filtering out already analyzed ones
       const allToolsForAnalysis = Object.entries(tools).map(([name, tool]) => ({
-        id: `${mcpServerId}__${name}`,
+        id: constructToolId(mcpServerId, name),
         name,
         description: tool.description || '',
         inputSchema: tool.inputSchema,
@@ -223,7 +224,7 @@ export class ToolModel {
           });
 
           // Analyze single tool - this will wait for the model if it's not available yet
-          const analysisResults = await OllamaClient.analyzeTools([toolData]);
+          const analysisResults = await ollamaClient.analyzeTools([toolData]);
 
           // Update tool with analysis results
           const analysis = analysisResults[toolData.name];
@@ -281,3 +282,5 @@ export class ToolModel {
     }
   }
 }
+
+export type { Tool };

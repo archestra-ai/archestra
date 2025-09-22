@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { DEFAULT_SYSTEM_PROMPT } from '../../constants';
+import { DEFAULT_SYSTEM_PROMPT } from '@constants';
 
 interface DeveloperModeState {
   isDeveloperMode: boolean;
@@ -16,8 +16,6 @@ interface DeveloperModeActions {
 
 type DeveloperModeStore = DeveloperModeState & DeveloperModeActions;
 
-const STORAGE_KEY = 'archestra-developer-mode';
-
 export const useDeveloperModeStore = create<DeveloperModeStore>()(
   persist(
     (set, get) => ({
@@ -31,7 +29,7 @@ export const useDeveloperModeStore = create<DeveloperModeStore>()(
       getSystemPrompt: () => get().customSystemPrompt || DEFAULT_SYSTEM_PROMPT,
     }),
     {
-      name: STORAGE_KEY,
+      name: 'archestra-developer-mode',
     }
   )
 );

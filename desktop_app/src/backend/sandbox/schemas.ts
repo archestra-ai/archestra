@@ -2,10 +2,11 @@ import { z } from 'zod';
 
 import { PodmanContainerStatusSummarySchema } from '@backend/sandbox/podman/container';
 import { PodmanRuntimeStatusSummarySchema } from '@backend/sandbox/podman/runtime';
+import { constructToolId } from '@constants';
 
 // AvailableToolSchema and related schemas
 export const AvailableToolSchema = z.object({
-  id: z.string().describe('Tool ID in format sanitizedServerId__sanitizedToolName'),
+  id: z.string().describe(`Tool ID in format ${constructToolId('sanitizedServerId', 'sanitizedToolName')}`),
   name: z.string().describe('Tool name'),
   description: z.string().optional().describe('Tool description'),
   inputSchema: z.any().optional().describe('Tool input schema'),

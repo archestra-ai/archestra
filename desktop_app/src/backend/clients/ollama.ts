@@ -284,6 +284,35 @@ class OllamaClient {
   }
 
   /**
+   * Remove/uninstall a model
+   */
+  async remove(modelName: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: modelName,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama remove failed: ${response.status} ${response.statusText}`);
+      }
+
+      // Update model availability after successful removal
+      this.modelAvailability[modelName] = false;
+
+      log.info(`Successfully removed model: ${modelName}`);
+    } catch (error) {
+      log.error(`Failed to remove model ${modelName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the context window size for a specific model
    * Uses the /api/show endpoint to get model details
    * Results are cached to avoid repeated API calls

@@ -2,9 +2,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 
 import config from '@backend/config';
-import toolAggregator from '@backend/llms/toolAggregator';
 import McpServerSandboxManager from '@backend/sandbox/manager';
 import { SandboxStatusSummarySchema } from '@backend/sandbox/schemas';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 
 const OllamaModelDownloadProgressWebsocketPayloadSchema = z.object({
@@ -62,6 +62,23 @@ const ChatTokenUsageUpdatedPayloadSchema = z.object({
   contextUsagePercent: z.number(),
 });
 
+const ToolApprovalRequestPayloadSchema = z.object({
+  requestId: z.string(),
+  toolId: z.string(),
+  toolName: z.string(),
+  toolDescription: z.string().optional(),
+  args: z.record(z.string(), z.any()),
+  isWrite: z.boolean(),
+  sessionId: z.string(),
+  chatId: z.number(),
+});
+
+const ToolApprovalResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  decision: z.enum(['approve', 'approve_always', 'decline']),
+  sessionId: z.string(),
+});
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
   z.object({ type: z.literal('chat-tools-updated'), payload: ChatToolsUpdatedPayloadSchema }),
@@ -74,6 +91,8 @@ export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tools-updated'), payload: ToolsUpdatedPayloadSchema }),
   z.object({ type: z.literal('tool-analysis-progress'), payload: ToolAnalysisProgressPayloadSchema }),
   z.object({ type: z.literal('chat-token-usage-updated'), payload: ChatTokenUsageUpdatedPayloadSchema }),
+  z.object({ type: z.literal('tool-approval-request'), payload: ToolApprovalRequestPayloadSchema }),
+  z.object({ type: z.literal('tool-approval-response'), payload: ToolApprovalResponsePayloadSchema }),
 ]);
 
 // type ChatTitleUpdatedPayload = z.infer<typeof ChatTitleUpdatedPayloadSchema>;
@@ -85,6 +104,12 @@ type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
  */
 z.globalRegistry.add(OllamaModelDownloadProgressWebsocketPayloadSchema, {
   id: 'OllamaModelDownloadProgress',
+});
+z.globalRegistry.add(ToolApprovalRequestPayloadSchema, {
+  id: 'ToolApprovalRequest',
+});
+z.globalRegistry.add(ToolApprovalResponsePayloadSchema, {
+  id: 'ToolApprovalResponse',
 });
 
 class WebSocketService {
@@ -101,10 +126,22 @@ class WebSocketService {
     this.wss.on('connection', (ws: WebSocket) => {
       log.info(`WebSocket client connected. Total connections: ${this.wss?.clients.size}`);
 
-      ws.on('message', (data) => {
+      ws.on('message', async (data) => {
         try {
           const message = JSON.parse(data.toString());
           log.info('Received WebSocket message:', message);
+
+          // Handle tool approval responses
+          if (message.type === 'tool-approval-response') {
+            log.info('Handling tool approval response:', message.payload);
+            toolService.handleApprovalResponse(
+              message.payload.requestId,
+              message.payload.decision,
+              message.payload.sessionId
+            );
+          } else {
+            log.info('Unknown WebSocket message type:', message.type);
+          }
         } catch (error) {
           log.error('Failed to parse WebSocket message:', error);
         }
@@ -181,7 +218,7 @@ class WebSocketService {
           // Get the base status summary from sandbox manager
           ...McpServerSandboxManager.statusSummary,
           // Get all aggregated tools (includes both sandboxed and Archestra tools) -- add as a separate field
-          allAvailableTools: toolAggregator.getAllAvailableTools(),
+          allAvailableTools: toolService.getAllAvailableTools(),
         },
       });
     }, 1000);

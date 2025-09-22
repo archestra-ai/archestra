@@ -25,31 +25,7 @@ jobs:
           fetch-depth: 0 # Need full history to compare with base branch
           persist-credentials: true # credentials are needed here as Claude will use them to read stuffs
 
-      - name: Check PR diff size
-        id: check_diff
-        env:
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # Fetch the base branch to ensure we have it locally
-          git fetch origin "$PR_BASE_REF"
-
-          # Get the diff stats between the base and head
-          LINES_CHANGED=$(git diff --shortstat "origin/$PR_BASE_REF...$PR_HEAD_SHA" | awk '{print $4 + $6}' || echo "0")
-
-          echo "Lines changed: $LINES_CHANGED"
-          echo "lines_changed=$LINES_CHANGED" >> $GITHUB_OUTPUT
-
-          if [ "$LINES_CHANGED" -lt 500 ]; then
-            echo "skip_claude=true" >> $GITHUB_OUTPUT
-            echo "Skipping Claude review - PR has less than 500 lines changed"
-          else
-            echo "skip_claude=false" >> $GITHUB_OUTPUT
-            echo "Running Claude review - PR has $LINES_CHANGED lines changed"
-          fi
-
       - name: Run Claude Code
-        if: steps.check_diff.outputs.skip_claude != 'true'
         uses: anthropics/claude-code-action@28f83620103c48a57093dcc2837eec89e036bb9f # v0.0.63
         with:
           # Dynamically set the secret based on the user who triggered the workflow
@@ -77,6 +53,6 @@ jobs:
             Be concise. Keep comments short and clear. Only elaborate if critical issues found.
 
             Tasks:
-            1. Add PR description if missing
-            2. Update CLAUDE.md if needed
+            1. Add PR description if the description is currently blank (actually add it, don't just say "add PR description")
+            2. Update CLAUDE.md if needed (push a commit to the branch with the changes you are proposing)
             3. Quick review: bugs, security, performance (skip if none found)

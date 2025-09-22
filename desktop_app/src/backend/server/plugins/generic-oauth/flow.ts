@@ -8,9 +8,9 @@
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 
+import OAuthProxyClient from '@backend/clients/oauthProxy';
 import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
-import OAuthProxyClient from '@backend/services/oauth-proxy-client';
 import log from '@backend/utils/logger';
 
 // Import authorization code storage from MCP OAuth provider
@@ -284,9 +284,25 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   log.info('📡 Using OAuth proxy - will wait for deep link callback');
 
   // Wait for authorization code to be stored via deep link callback
-  const authorizationCode = await waitForAuthorizationCode(state);
+  let authorizationCode: string;
+  try {
+    authorizationCode = await waitForAuthorizationCode(state);
+    log.info('✅ Authorization code received via deep link callback');
+  } catch (error) {
+    // OAuth flow timed out or failed - clean up the server record
+    log.warn(`OAuth flow timed out for server ${serverId}, cleaning up...`);
 
-  log.info('✅ Authorization code received via deep link callback');
+    try {
+      await McpServerModel.update(serverId, {
+        status: 'failed',
+        oauthClientInfo: null,
+      });
+    } catch (cleanupError) {
+      log.error('Failed to cleanup server after OAuth timeout:', cleanupError);
+    }
+
+    throw error;
+  }
 
   // Exchange authorization code for tokens
   log.info('🔄 Exchanging authorization code for tokens...');

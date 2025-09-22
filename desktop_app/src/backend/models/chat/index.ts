@@ -2,18 +2,17 @@ import { type UIMessage } from 'ai';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import ollamaClient from '@backend/clients/ollama';
 import db from '@backend/database';
 import { SelectChatSchema, chatsTable } from '@backend/database/schema/chat';
 import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
-import toolAggregator from '@backend/llms/toolAggregator';
-import ollamaClient from '@backend/ollama/client';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
-
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
+import { DEFAULT_ARCHESTRA_TOOLS } from '@constants';
 
 const TransformedMessageSchema = DatabaseMessageRepresentationSchema.extend({
   /**
@@ -92,7 +91,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list
       // Get all available tools and ensure the new ones are included
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Make sure all tools including the new ones are in the list
@@ -121,7 +120,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list first
       // then remove the specified tools
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Remove specified tools from the full list
@@ -397,6 +396,45 @@ export default class ChatModel {
         },
       });
     }
+  }
+
+  static async resetTokenUsage(sessionId: string): Promise<void> {
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Resetting token usage for chat ${chat.id}`);
+
+    // Reset all token usage fields to 0/null
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage reset
+    WebSocketService.broadcast({
+      type: 'chat-token-usage-updated',
+      payload: {
+        chatId: chat.id,
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        contextUsagePercent: 0,
+      },
+    });
   }
 
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {

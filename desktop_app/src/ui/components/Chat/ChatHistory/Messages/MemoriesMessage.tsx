@@ -21,7 +21,34 @@ export default function MemoriesMessage({ message }: MemoriesMessageProps) {
   // Parse memories from the text content
   const lines = textContent.split('\n');
   const headerText = lines[0] || 'Memories loaded';
-  const memories = lines.slice(1).filter((line) => line.trim());
+
+  // Parse memories more carefully to handle multi-line values
+  const memories: Array<{ key: string; value: string }> = [];
+  let currentKey = '';
+  let currentValue: string[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    // Check if this line starts a new memory (contains a colon and looks like a key)
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0 && colonIndex < 50 && !line.substring(0, colonIndex).includes(' ')) {
+      // Save previous memory if exists
+      if (currentKey) {
+        memories.push({ key: currentKey, value: currentValue.join('\n') });
+      }
+      // Start new memory
+      currentKey = line.substring(0, colonIndex);
+      currentValue = [line.substring(colonIndex + 1).trim()];
+    } else if (currentKey && line.trim()) {
+      // This is a continuation of the current memory value
+      currentValue.push(line);
+    }
+  }
+
+  // Don't forget the last memory
+  if (currentKey) {
+    memories.push({ key: currentKey, value: currentValue.join('\n') });
+  }
 
   return (
     <div className="bg-green-500/10 border border-green-500/20 rounded-lg overflow-hidden">
@@ -41,18 +68,15 @@ export default function MemoriesMessage({ message }: MemoriesMessageProps) {
       </button>
 
       {isExpanded && memories.length > 0 && (
-        <div className="px-3 py-2 border-t border-green-500/20 space-y-1">
-          {memories.map((memory, index) => {
-            const [key, ...valueParts] = memory.split(':');
-            const value = valueParts.join(':').trim();
-
-            return (
-              <div key={index} className="text-sm">
-                <span className="font-medium text-green-700 dark:text-green-300">{key}:</span>
-                <span className="text-green-600 dark:text-green-400 ml-2">{value}</span>
-              </div>
-            );
-          })}
+        <div className="px-3 py-2 border-t border-green-500/20 space-y-2">
+          {memories.map((memory, index) => (
+            <div key={index} className="text-sm">
+              <span className="font-medium text-green-700 dark:text-green-300">{memory.key}:</span>
+              <pre className="text-green-600 dark:text-green-400 ml-2 inline whitespace-pre-wrap font-sans">
+                {memory.value}
+              </pre>
+            </div>
+          ))}
         </div>
       )}
     </div>

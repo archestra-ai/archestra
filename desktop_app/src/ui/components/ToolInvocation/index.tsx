@@ -1,34 +1,43 @@
+import { type DynamicToolUIPart } from 'ai';
 import { ChevronDown, ChevronRight, Clock, Wrench } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 import { ScrollArea, ScrollBar } from '@ui/components/ui/scroll-area';
 import { cn } from '@ui/lib/utils/tailwind';
+import { useToolsStore } from '@ui/stores/tools-store';
 import { ToolCallStatus } from '@ui/types';
 
 interface ToolInvocationProps {
-  toolName: string;
-  args: any;
-  result?: any;
-  state?: ToolCallStatus;
-  startTime?: number;
-  endTime?: number;
+  tool: DynamicToolUIPart;
 }
 
-export default function ToolInvocation({
-  toolName,
-  args,
-  result,
-  state = ToolCallStatus.Completed,
-  startTime,
-  endTime,
-}: ToolInvocationProps) {
+export default function ToolInvocation({ tool }: ToolInvocationProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const availableTools = useToolsStore((state) => state.availableTools);
 
+  // Extract properties from tool
+  const toolName = tool.toolName;
+  const args = 'input' in tool ? tool.input : {};
+  const result = 'output' in tool ? tool.output : undefined;
+  const state =
+    tool.state === 'output-available'
+      ? ToolCallStatus.Completed
+      : tool.state === 'output-error'
+        ? ToolCallStatus.Error
+        : ToolCallStatus.Pending;
+
+  // Find the tool metadata to get pretty names
+  const toolMetadata = availableTools.find((t) => t.id === toolName);
+  const mcpServerName = toolMetadata?.mcpServerName;
+  const prettyToolName = toolMetadata?.name;
+
+  const startTime = undefined;
+  const endTime = undefined;
   const duration = startTime && endTime ? endTime - startTime : null;
 
   // Parse result content if it's from MCP
   let displayResult = result;
-  if (result?.content && Array.isArray(result.content)) {
+  if (result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)) {
     // Extract text content from MCP response
     const textContent = result.content
       .filter((item: any) => item.type === 'text')
@@ -49,9 +58,9 @@ export default function ToolInvocation({
     <div
       className={cn(
         'border rounded-lg overflow-hidden transition-all',
-        state === 'pending' && 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20',
-        state === 'completed' && 'border-green-500 bg-green-50/50 dark:bg-green-950/20',
-        state === 'error' && 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
+        state === ToolCallStatus.Pending && 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20',
+        state === ToolCallStatus.Completed && 'border-green-500 bg-green-50/50 dark:bg-green-950/20',
+        state === ToolCallStatus.Error && 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
       )}
     >
       <button
@@ -64,45 +73,58 @@ export default function ToolInvocation({
         <Wrench
           className={cn(
             'h-4 w-4 flex-shrink-0',
-            state === 'pending' && 'text-blue-600 animate-pulse',
-            state === 'completed' && 'text-green-600',
-            state === 'error' && 'text-red-600'
+            state === ToolCallStatus.Pending && 'text-blue-600 animate-pulse',
+            state === ToolCallStatus.Completed && 'text-green-600',
+            state === ToolCallStatus.Error && 'text-red-600'
           )}
         />
-        <span className="font-medium text-sm flex-1 text-left">{toolName}</span>
+        <span className="font-medium text-sm flex-1 text-left">
+          {mcpServerName && prettyToolName ? `${mcpServerName} - ${prettyToolName}` : toolName}
+        </span>
         {duration !== null && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span>{duration}ms</span>
           </div>
         )}
-        {state === 'pending' && <span className="text-xs text-blue-600 animate-pulse">Running...</span>}
+        {state === ToolCallStatus.Pending && <span className="text-xs text-blue-600 animate-pulse">Running...</span>}
       </button>
 
       {isExpanded && (
         <div className="border-t px-3 py-2 space-y-2">
-          {Object.keys(args).length > 0 && (
+          {args && typeof args === 'object' && Object.keys(args).length > 0 ? (
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-1">Arguments:</div>
               <ScrollArea className="rounded overflow-x-auto">
-                <pre className="text-xs bg-black/5 dark:bg-white/5 p-2  rounded">{formatJson(args)}</pre>
+                <pre className="text-xs bg-black/5 dark:bg-white/5 p-2  rounded">
+                  {args && typeof args === 'object' ? formatJson(args) : String(args)}
+                </pre>
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
             </div>
-          )}
+          ) : null}
 
-          {result && (
+          {result ? (
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-1">Result:</div>
               <pre className="text-xs bg-black/5 dark:bg-white/5 p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
-                {typeof displayResult === 'string' ? displayResult : formatJson(displayResult)}
+                {typeof displayResult === 'string'
+                  ? displayResult
+                  : displayResult !== null && displayResult !== undefined
+                    ? formatJson(displayResult)
+                    : ''}
               </pre>
             </div>
-          )}
+          ) : null}
 
-          {state === 'error' && result && (
-            <div className="text-xs text-red-600 dark:text-red-400">Error: {result.message || String(result)}</div>
-          )}
+          {state === ToolCallStatus.Error && result ? (
+            <div className="text-xs text-red-600 dark:text-red-400">
+              Error:{' '}
+              {typeof result === 'object' && result !== null && 'message' in result
+                ? String((result as any).message)
+                : String(result)}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

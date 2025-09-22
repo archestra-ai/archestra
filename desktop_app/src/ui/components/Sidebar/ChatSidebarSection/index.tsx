@@ -4,20 +4,16 @@ import { useState } from 'react';
 
 import { DeleteChatConfirmation } from '@ui/components/DeleteChatConfirmation';
 import { EditableTitle } from '@ui/components/EditableTitle';
-import {
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from '@ui/components/ui/sidebar';
+import { SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from '@ui/components/ui/sidebar';
 import config from '@ui/config';
+import { useMultiChatManager } from '@ui/contexts/multi-chat-manager';
 import { useChatStore } from '@ui/stores';
 
 interface ChatSidebarProps {}
 
 export default function ChatSidebarSection(_props: ChatSidebarProps) {
   const { chats, getCurrentChat, isLoadingChats, selectChat, deleteCurrentChat, updateChatTitle } = useChatStore();
+  const { getChatInstance } = useMultiChatManager();
   const currentChatId = getCurrentChat()?.id;
   const [showAllChats, setShowAllChats] = useState(false);
   const navigate = useNavigate();
@@ -43,8 +39,11 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
       ) : (
         <>
           {visibleChats.map((chat) => {
-            const { id, title } = chat;
+            const { id, title, sessionId } = chat;
             const isCurrentChat = currentChatId === id && location.pathname.startsWith('/chat');
+            const chatInstance = getChatInstance(sessionId);
+            const isStreaming = chatInstance?.status === 'streaming';
+            const isPreparing = chatInstance?.isSubmitting;
 
             return (
               <SidebarMenuSubItem key={id} className="group/chat-item">
@@ -57,6 +56,11 @@ export default function ChatSidebarSection(_props: ChatSidebarProps) {
                     isActive={isCurrentChat}
                     className="cursor-pointer flex-1 pr-1"
                   >
+                    {isStreaming && <span className="size-2 shrink-0 bg-green-500 rounded-full animate-pulse" />}
+                    {isPreparing && !isStreaming && (
+                      <span className="size-2 shrink-0 bg-blue-500 rounded-full animate-pulse" />
+                    )}
+
                     <EditableTitle
                       className="truncate"
                       title={title || config.chat.defaultTitle}

@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@ui/components/ui/input';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
 import { Textarea } from '@ui/components/ui/textarea';
-import { type MemoryEntry, useMemoryStore } from '@ui/stores/memory-store';
+import { type MemoryEntry } from '@ui/lib/clients/archestra/api/gen';
+import { useMemoryStore } from '@ui/stores/memory-store';
 
 interface MemoryDialogProps {
   open: boolean;

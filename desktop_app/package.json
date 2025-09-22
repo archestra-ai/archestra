@@ -1,7 +1,7 @@
 {
   "name": "Archestra",
   "productName": "Archestra",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "description": "Enterprise MCP platform for AI Agents",
   "license": "MIT",
   "repository": {
@@ -72,6 +72,7 @@
     "chokidar": "^4.0.3",
     "drizzle-kit": "^0.31.4",
     "electron": "37.3.1",
+    "electron-devtools-installer": "^4.0.0",
     "husky": "^9.1.7",
     "jsdom": "^27.0.0",
     "lint-staged": "^16.1.6",
@@ -117,6 +118,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/electron": "^6.11.0",
     "@shikijs/transformers": "^3.12.2",
+    "@socotra/modelcontextprotocol-sdk": "^1.18.0",
     "@tanstack/react-router": "^1.131.44",
     "@tanstack/react-router-devtools": "^1.131.44",
     "@vitejs/plugin-react": "^5.0.2",

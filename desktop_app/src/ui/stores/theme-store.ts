@@ -13,8 +13,6 @@ interface ThemeActions {
 
 type ThemeStore = ThemeState & ThemeActions;
 
-const STORAGE_KEY = 'vite-ui-theme';
-
 export const useThemeStore = create<ThemeStore>()(
   persist(
     (set) => ({
@@ -22,7 +20,7 @@ export const useThemeStore = create<ThemeStore>()(
       setTheme: (theme) => set({ theme }),
     }),
     {
-      name: STORAGE_KEY,
+      name: 'vite-ui-theme',
     }
   )
 );

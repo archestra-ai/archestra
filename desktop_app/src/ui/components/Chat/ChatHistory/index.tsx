@@ -1,13 +1,19 @@
 import { UIMessage } from 'ai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import RunningInBackgroundMessage from '@ui/components/Chat/ChatHistory/Messages/RunningInBackgroundMessage';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
 import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
+import { useToolsStore } from '@ui/stores';
 
-import { AssistantMessage, ErrorMessage, MemoriesMessage, OtherMessage, UserMessage } from './Messages';
-import SubmissionLoadingMessage from './Messages/SubmissionLoadingMessage';
+import {
+  AssistantMessage,
+  ErrorMessage,
+  MemoriesMessage,
+  OtherMessage,
+  ToolApprovalMessage,
+  UserMessage,
+} from './Messages';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
 const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-area-viewport]`;
@@ -17,7 +23,6 @@ const { systemMemoriesMessageId } = config.chat;
 interface ChatHistoryProps {
   messages: UIMessage[];
   chatId: number;
-  pendingPrompt: string | undefined;
   sessionId: string;
   editingMessageId: string | null;
   editingContent: string;
@@ -30,7 +35,6 @@ interface ChatHistoryProps {
   isRegenerating?: boolean;
   regeneratingIndex?: number | null;
   isSubmitting?: boolean;
-  submissionStartTime?: number;
 }
 
 interface MessageProps {
@@ -127,8 +131,8 @@ const getMessageClassName = (role: string) => {
 
 export default function ChatHistory({
   messages,
-  pendingPrompt,
   chatId,
+  sessionId,
   editingMessageId,
   editingContent,
   onEditStart,
@@ -140,12 +144,14 @@ export default function ChatHistory({
   isRegenerating,
   regeneratingIndex,
   isSubmitting,
-  submissionStartTime,
 }: ChatHistoryProps) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollAreaRef = useRef<HTMLElement | null>(null);
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get pending approvals from the tools store
+  const { pendingApprovals } = useToolsStore();
 
   // Filter out system messages except for special ones like system-memories
   const visibleMessages = messages.filter((message) => {
@@ -213,9 +219,8 @@ export default function ChatHistory({
     return () => clearTimeout(timeoutId);
   }, [messages, isSubmitting, scrollToBottom]);
 
-  const hasSamePromptInMessages = messages.some(
-    (message) => message.parts?.[0]?.type === 'text' && message.parts?.[0]?.text === pendingPrompt
-  );
+  // Filter pending approvals for this chat
+  const chatPendingApprovals = Array.from(pendingApprovals.values()).filter((approval) => approval.chatId === chatId);
 
   return (
     <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
@@ -252,42 +257,21 @@ export default function ChatHistory({
           </div>
         ))}
 
-        {pendingPrompt && !hasSamePromptInMessages && (
-          <div className={cn('p-3 rounded-lg overflow-hidden min-w-0', getMessageClassName('user'))}>
-            <div className="text-xs font-medium mb-1 opacity-70 capitalize">user</div>
-            <div className="overflow-hidden min-w-0">
-              <UserMessage
-                message={
-                  { id: 'pending-prompt', role: 'user', parts: [{ type: 'text', text: pendingPrompt }] } as UIMessage
-                }
-              />
-            </div>
+        {/* Render pending tool approvals for this chat */}
+        {chatPendingApprovals.map((approval) => (
+          <div key={approval.requestId} className="animate-in fade-in-0 slide-in-from-bottom-2">
+            <ToolApprovalMessage
+              requestId={approval.requestId}
+              toolId={approval.toolId}
+              toolName={approval.toolName}
+              toolDescription={approval.toolDescription}
+              args={approval.args}
+              isWrite={approval.isWrite}
+              sessionId={approval.sessionId}
+              chatId={approval.chatId}
+            />
           </div>
-        )}
-
-        {pendingPrompt && !hasSamePromptInMessages && (
-          <div className="p-3 rounded-lg overflow-hidden min-w-0 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800/30 mr-8">
-            <div className="text-xs font-medium mb-1 opacity-70 capitalize text-orange-600 dark:text-orange-400">
-              system
-            </div>
-
-            <div className="overflow-hidden min-w-0">
-              <RunningInBackgroundMessage chatId={chatId} />
-            </div>
-          </div>
-        )}
-
-        {isSubmitting && !isRegenerating && (
-          <div className="p-3 rounded-lg overflow-hidden min-w-0 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/30 mr-8">
-            <div className="text-xs font-medium mb-1 opacity-70 capitalize text-blue-600 dark:text-blue-400">
-              system
-            </div>
-
-            <div className="overflow-hidden min-w-0">
-              <SubmissionLoadingMessage startTime={submissionStartTime} />
-            </div>
-          </div>
-        )}
+        ))}
       </div>
     </ScrollArea>
   );

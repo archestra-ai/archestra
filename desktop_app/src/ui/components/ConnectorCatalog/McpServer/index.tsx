@@ -57,15 +57,6 @@ export default function McpServer({
   const isUninstalling = uninstallingMcpServerId === name;
   const installFailed = installedServer && installedServer.status === 'failed';
 
-  console.log({
-    name,
-    installedServer,
-    isInstalled,
-    isOAuthPending,
-    isInstalling,
-    isUninstalling,
-  });
-
   const getCategoryIcon = (category?: string | null) => {
     if (!category) return <Package className="h-4 w-4" />;
 

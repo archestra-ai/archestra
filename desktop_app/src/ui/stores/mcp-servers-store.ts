@@ -401,7 +401,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         status: 'completed',
         description: 'Installation cancelled',
       });
-      setTimeout(() => removeTask(`cancel-${mcpServerId}`), 2000);
+      removeTask(`cancel-${mcpServerId}`);
     } catch (error) {
       set({ errorUninstallingMcpServer: error as string });
 
@@ -411,7 +411,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
         description: 'Cancellation failed',
         error: error instanceof Error ? error.message : String(error),
       });
-      setTimeout(() => removeTask(`cancel-${mcpServerId}`), 10000);
+      removeTask(`cancel-${mcpServerId}`);
     } finally {
       set({ uninstallingMcpServerId: null });
     }

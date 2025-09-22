@@ -1,7 +1,6 @@
 import { Agent, fetch } from 'undici';
 import { z } from 'zod';
 
-import { imageInspectLibpod } from '@backend/clients/libpod/gen';
 import config from '@backend/config';
 import log from '@backend/utils/logger';
 
@@ -30,20 +29,39 @@ export default class PodmanImage {
   private pullError: string | null = null;
 
   // Checks if the base image already exists locally
-  async checkBaseImageExists(): Promise<boolean> {
+  async checkBaseImageExists(machineSocketPath: string): Promise<boolean> {
     try {
-      const response = await imageInspectLibpod({
-        path: {
-          name: this.BASE_IMAGE_NAME,
+      // Use the same socket-based approach as pullBaseImage for consistency
+      const url = `http://localhost/v5.0.0/libpod/images/${encodeURIComponent(this.BASE_IMAGE_NAME)}/json`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        dispatcher: new Agent({
+          connect: {
+            socketPath: machineSocketPath,
+          },
+        }),
       });
 
-      if (response.error) {
+      // If image exists, we get a 200 response
+      if (response.ok) {
+        log.info(`Base image ${this.BASE_IMAGE_NAME} already exists locally - skipping pull`);
+        return true;
+      }
+
+      // If image doesn't exist, we typically get a 404
+      if (response.status === 404) {
         return false;
       }
 
-      return !!response.data;
-    } catch {
+      // For other errors, we'll assume the image doesn't exist
+      log.warn(`Unexpected response when checking image existence: ${response.status} ${response.statusText}`);
+      return false;
+    } catch (error) {
+      log.debug(`Error checking if image exists (assuming it doesn't): ${error instanceof Error ? error.message : error}`);
       return false;
     }
   }
@@ -55,7 +73,7 @@ export default class PodmanImage {
     this.pullError = null;
 
     try {
-      const imageExists = await this.checkBaseImageExists();
+      const imageExists = await this.checkBaseImageExists(machineSocketPath);
 
       if (imageExists) {
         this.pullPercentage = 100;

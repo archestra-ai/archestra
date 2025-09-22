@@ -6,10 +6,9 @@ import { LOGS_DIRECTORY } from '@backend/utils/paths';
 
 const logLevel = config.logLevel as typeof log.transports.file.level;
 
-log.transports.file.level = logLevel;
 log.transports.console.level = logLevel;
 
-// Always write to the logs directory, regardless of debug mode
+log.transports.file.level = logLevel;
 log.transports.file.resolvePathFn = () => path.join(LOGS_DIRECTORY, 'main.log');
 
 // log.transports.console.format = '{level} [{time}] {text}';

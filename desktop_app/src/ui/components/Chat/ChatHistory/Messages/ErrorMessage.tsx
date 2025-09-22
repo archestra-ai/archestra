@@ -136,7 +136,7 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
   }, [message]);
 
   const handleReportIssue = useCallback(() => {
-    const issueTitle = encodeURIComponent(`Error: ${userFriendlyMessage.substring(0, 100)}`);
+    const issueTitle = encodeURIComponent(`Chat Error: ${userFriendlyMessage.substring(0, 100)}`);
     const issueBody = encodeURIComponent(
       `## Error Details\n\n\`\`\`json\n${errorData}\n\`\`\`\n\n## User-facing error message\n${userFriendlyMessage}\n\n## Steps to reproduce\n[Please describe the steps that led to this error]\n\n## Expected behavior\n[What did you expect to happen?]\n\n## Additional context\n[Any other context about the problem]`
     );

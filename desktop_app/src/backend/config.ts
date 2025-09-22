@@ -66,7 +66,7 @@ export default {
   sandbox: {
     baseDockerImage:
       process.env.MCP_BASE_DOCKER_IMAGE ||
-      'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest',
+      'europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.2',
     podman: {
       baseUrl: 'http://d/v5.0.0',
     },

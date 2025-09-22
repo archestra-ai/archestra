@@ -280,6 +280,7 @@ function ChatInstanceManager({
   const prevLoadingRef = useRef<boolean>(null);
   const prevSubmittingRef = useRef<boolean>(null);
   const prevMessagesRef = useRef<UIMessage[]>([]);
+  const prevRegeneratingIndexRef = useRef<number | null>(null);
   const hasNotified = useRef(false);
 
   useEffect(() => {
@@ -288,17 +289,26 @@ function ChatInstanceManager({
     const submittingChanged = prevSubmittingRef.current !== isSubmitting;
     const isFirstTime = !hasNotified.current;
     const messagesChanged = prevMessagesRef.current !== messages;
+    const regeneratingIndexChanged = prevRegeneratingIndexRef.current !== regeneratingIndex;
 
-    if (isFirstTime || statusChanged || loadingChanged || submittingChanged || messagesChanged) {
+    if (
+      isFirstTime ||
+      statusChanged ||
+      loadingChanged ||
+      submittingChanged ||
+      messagesChanged ||
+      regeneratingIndexChanged
+    ) {
       prevStatusRef.current = status;
       prevLoadingRef.current = isLoading;
       prevSubmittingRef.current = isSubmitting;
       prevMessagesRef.current = messages;
+      prevRegeneratingIndexRef.current = regeneratingIndex;
       hasNotified.current = true;
 
       onInstanceCreated(instance);
     }
-  }, [status, isLoading, isSubmitting, instance, onInstanceCreated]);
+  }, [status, isLoading, isSubmitting, instance, onInstanceCreated, regeneratingIndex]);
 
   // This component doesn't render anything
   return null;
@@ -329,7 +339,8 @@ export function MultiChatManagerProvider({ children }: { children: React.ReactNo
           existing.status !== instance.status ||
           existing.isLoading !== instance.isLoading ||
           existing.isSubmitting !== instance.isSubmitting ||
-          existing.messages.length !== instance.messages.length
+          existing.messages.length !== instance.messages.length ||
+          existing.regeneratingIndex !== instance.regeneratingIndex
         ) {
           const newMap = new Map(prev);
           newMap.set(instance.sessionId, instance);

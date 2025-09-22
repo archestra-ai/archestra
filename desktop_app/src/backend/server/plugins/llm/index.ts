@@ -139,26 +139,17 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             ollama: {},
           },
           onFinish: async ({ response, usage, text: _text, finishReason: _finishReason }) => {
-            // Save chat token usage
             if (usage && sessionId) {
-              let contextWindow: number;
-
-              // Get context window dynamically for Ollama, use hardcoded for others
-              if (isOllama) {
-                contextWindow = await ollamaClient.getModelContextWindow(model);
-              } else {
-                contextWindow = getModelContextWindow(model);
-              }
-
               const tokenUsage = {
                 promptTokens: usage.inputTokens,
                 completionTokens: usage.outputTokens,
                 totalTokens: usage.totalTokens,
                 model: model,
-                contextWindow: contextWindow,
+                contextWindow: isOllama
+                  ? await ollamaClient.getModelContextWindow(model)
+                  : getModelContextWindow(model),
               };
 
-              // Save token usage directly to the chat
               await Chat.updateTokenUsage(sessionId, tokenUsage);
 
               fastify.log.info(`Token usage saved for chat: ${JSON.stringify(tokenUsage)}`);

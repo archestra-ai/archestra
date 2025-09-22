@@ -1,5 +1,5 @@
 import { type UIMessage } from 'ai';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import ollamaClient from '@backend/clients/ollama';
@@ -339,6 +339,9 @@ export default class ChatModel {
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
   }
 
+  /**
+   * NOTE: the values in `tokenUsage` should represent the cumulative token usage for the chat
+   */
   static async updateTokenUsage(
     sessionId: string,
     tokenUsage: {
@@ -353,6 +356,8 @@ export default class ChatModel {
       return;
     }
 
+    const { promptTokens, completionTokens, totalTokens, model, contextWindow } = tokenUsage;
+
     // Find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
 
@@ -363,15 +368,15 @@ export default class ChatModel {
 
     log.info(`Updating token usage for chat ${chat.id}: ${JSON.stringify(tokenUsage)}`);
 
-    // Update the chat with cumulative token usage
+    // Update the chat with new token usage values
     await db
       .update(chatsTable)
       .set({
-        totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
-        totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
-        totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
-        lastModel: tokenUsage.model,
-        lastContextWindow: tokenUsage.contextWindow,
+        totalPromptTokens: promptTokens || 0,
+        totalCompletionTokens: completionTokens || 0,
+        totalTokens: totalTokens || 0,
+        lastModel: model,
+        lastContextWindow: contextWindow,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(chatsTable.id, chat.id));
@@ -380,19 +385,18 @@ export default class ChatModel {
     const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
 
     if (updatedChat) {
+      const { totalPromptTokens, totalCompletionTokens, totalTokens, lastModel, lastContextWindow } = updatedChat;
+
       WebSocketService.broadcast({
         type: 'chat-token-usage-updated',
         payload: {
           chatId: chat.id,
-          totalPromptTokens: updatedChat.totalPromptTokens,
-          totalCompletionTokens: updatedChat.totalCompletionTokens,
-          totalTokens: updatedChat.totalTokens,
-          lastModel: updatedChat.lastModel,
-          lastContextWindow: updatedChat.lastContextWindow,
-          contextUsagePercent:
-            updatedChat.lastContextWindow && updatedChat.totalTokens
-              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
-              : 0,
+          totalPromptTokens,
+          totalCompletionTokens,
+          totalTokens,
+          lastModel,
+          lastContextWindow,
+          contextUsagePercent: lastContextWindow && totalTokens ? (totalTokens / lastContextWindow) * 100 : 0,
         },
       });
     }

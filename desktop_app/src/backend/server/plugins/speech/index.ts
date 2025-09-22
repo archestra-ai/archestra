@@ -1,12 +1,15 @@
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import fastifyMultipart from '@fastify/multipart';
 
 import CloudProviderModel from '@backend/models/cloudProvider';
 import log from '@backend/utils/logger';
 
+const SPEECH_MODEL = 'gpt-4o';
+
 const speechPlugin: FastifyPluginAsync = async (fastify) => {
   // Register multipart support for file uploads
-  await fastify.register(require('@fastify/multipart'));
+  await fastify.register(fastifyMultipart);
 
   fastify.post(
     '/api/speech/transcribe',
@@ -39,7 +42,7 @@ const speechPlugin: FastifyPluginAsync = async (fastify) => {
         log.info(`Received audio file: ${data.filename}, mimetype: ${data.mimetype}`);
 
         // Use GPT-4o for speech transcription (Whisper API)
-        const speechModel = 'gpt-4o';
+        const speechModel = SPEECH_MODEL;
         const providerConfig = await CloudProviderModel.getProviderConfigForModel(speechModel);
 
         if (!providerConfig) {

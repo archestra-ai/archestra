@@ -23,6 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
+import config from '@ui/config';
 import {
   useChatStore,
   useCloudProvidersStore,
@@ -164,7 +165,7 @@ export default function ChatInput({
             const formData = new FormData();
             formData.append('audio', audioBlob, 'recording.webm');
 
-            const response = await fetch('http://localhost:54587/api/speech/transcribe', {
+            const response = await fetch(`${config.archestra.apiUrl}/api/speech/transcribe`, {
               method: 'POST',
               body: formData,
             });

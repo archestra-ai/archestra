@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@ui/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@ui/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ui/components/ui/tabs';
-import config from '@ui/config';
+import { getSystemBackendLogs } from '@ui/lib/clients/archestra/api/gen';
 import logCapture from '@ui/utils/logCapture';
 
 interface BugReportDialogProps {
@@ -34,11 +34,17 @@ export default function BugReportDialog({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${config.archestra.apiUrl}/api/system/backend-logs?lines=1000`);
-      const data = await response.json();
-      if (data) {
+      const { data, error } = await getSystemBackendLogs({
+        query: {
+          lines: '1000',
+        },
+      });
+      if (error) {
+        setError(error.error || 'Failed to fetch logs');
+        setBackendLogs('');
+      } else if (data) {
         setBackendLogs(data.logs || 'No logs available');
-        setError(data.error || null);
+        setError(data.error);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch logs');

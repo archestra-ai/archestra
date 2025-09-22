@@ -16,6 +16,7 @@ import memoryRoutes from '@backend/server/plugins/memory';
 import ollamaRoutes from '@backend/server/plugins/ollama';
 import ollamaProxyRoutes from '@backend/server/plugins/ollama/proxy';
 import sandboxRoutes from '@backend/server/plugins/sandbox';
+import speechRoutes from '@backend/server/plugins/speech';
 import systemRoutes from '@backend/server/plugins/system';
 import userRoutes from '@backend/server/plugins/user';
 import { electronLogStream } from '@backend/utils/fastify-logger-stream';
@@ -63,6 +64,7 @@ export const startFastifyServer = async () => {
   await app.register(ollamaRoutes);
   await app.register(ollamaProxyRoutes);
   await app.register(sandboxRoutes);
+  await app.register(speechRoutes);
   await app.register(systemRoutes);
   await app.register(userRoutes);
 

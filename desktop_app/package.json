@@ -95,6 +95,7 @@
     "@fastify/autoload": "^6.3.1",
     "@fastify/cors": "^11.1.0",
     "@fastify/http-proxy": "^11.3.0",
+    "@fastify/multipart": "^9.2.1",
     "@fastify/swagger": "^9.5.1",
     "@hookform/resolvers": "^5.2.2",
     "@icons-pack/react-simple-icons": "^13.7.0",

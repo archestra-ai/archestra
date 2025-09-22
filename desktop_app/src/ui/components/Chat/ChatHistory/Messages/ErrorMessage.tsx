@@ -1,10 +1,9 @@
 import { UIMessage } from 'ai';
-import { AlertCircle, ChevronDown, ChevronUp, Clock, RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertCircle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
-import { cn } from '@ui/lib/utils/tailwind';
 
 interface ErrorMessageProps {
   message: UIMessage;
@@ -27,7 +26,7 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Extract and parse error data
-  const { errorData, parsedError, userFriendlyMessage, retryInfo, isRateLimit, isToolsNotSupported } = useMemo(() => {
+  const { errorData, userFriendlyMessage, retryInfo, isRateLimit, isToolsNotSupported } = useMemo(() => {
     let rawErrorText = 'An error occurred';
     let parsedError: ParsedError | null = null;
 
@@ -129,13 +128,26 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
 
     return {
       errorData: parsedError ? JSON.stringify(parsedError, null, 2) : rawErrorText,
-      parsedError,
       userFriendlyMessage,
       retryInfo,
       isRateLimit,
       isToolsNotSupported,
     };
   }, [message]);
+
+  const handleReportIssue = useCallback(() => {
+    const issueTitle = encodeURIComponent(`Error: ${userFriendlyMessage.substring(0, 100)}`);
+    const issueBody = encodeURIComponent(
+      `## Error Details\n\n\`\`\`json\n${errorData}\n\`\`\`\n\n## User-facing error message\n${userFriendlyMessage}\n\n## Steps to reproduce\n[Please describe the steps that led to this error]\n\n## Expected behavior\n[What did you expect to happen?]\n\n## Additional context\n[Any other context about the problem]`
+    );
+    const url = `https://github.com/archestra-ai/archestra/issues/new?title=${issueTitle}&body=${issueBody}`;
+
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  }, [errorData, userFriendlyMessage]);
 
   return (
     <div className="space-y-3">
@@ -188,14 +200,12 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
       {/* Report issue hint */}
       <div className="text-xs text-muted-foreground">
         If this error persists, please{' '}
-        <a
-          href="https://github.com/archestra-ai/archestra/issues/new"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary underline hover:no-underline"
+        <button
+          onClick={handleReportIssue}
+          className="text-primary underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer"
         >
           report an issue
-        </a>{' '}
+        </button>{' '}
         with the error details above.
       </div>
     </div>

@@ -22,7 +22,7 @@ export const chatsTable = sqliteTable(
     /**
      * OpenAI Responses API: ID of the previous response for conversation state
      * This allows us to continue conversations without resending the entire history
-     * 
+     *
      * See https://ai-sdk.dev/providers/ai-sdk-providers/openai#responses-models:~:text=with%20the%20generation.-,previousResponseId,-string%20The%20ID
      * for more details
      */

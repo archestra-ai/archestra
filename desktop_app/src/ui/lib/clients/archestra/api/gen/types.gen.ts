@@ -232,6 +232,7 @@ export type ChatWithMessagesInput = {
         | Array<unknown>
       )
     | null;
+  previousResponseId: string | null;
   totalPromptTokens: number | null;
   totalCompletionTokens: number | null;
   totalTokens: number | null;
@@ -734,6 +735,7 @@ export type ChatWithMessages = {
         | Array<unknown>
       )
     | null;
+  previousResponseId: string | null;
   totalPromptTokens: number | null;
   totalCompletionTokens: number | null;
   totalTokens: number | null;

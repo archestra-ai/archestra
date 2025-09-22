@@ -891,6 +891,17 @@
               }
             ]
           },
+          "previousResponseId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "totalPromptTokens": {
             "anyOf": [
               {
@@ -991,6 +1002,7 @@
           "sessionId",
           "title",
           "selectedTools",
+          "previousResponseId",
           "totalPromptTokens",
           "totalCompletionTokens",
           "totalTokens",
@@ -2712,6 +2724,17 @@
               }
             ]
           },
+          "previousResponseId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          },
           "totalPromptTokens": {
             "anyOf": [
               {
@@ -2813,6 +2836,7 @@
           "sessionId",
           "title",
           "selectedTools",
+          "previousResponseId",
           "totalPromptTokens",
           "totalCompletionTokens",
           "totalTokens",

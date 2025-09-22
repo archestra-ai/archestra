@@ -196,7 +196,10 @@ export default class ChatModel {
    * @param allMessages All messages in the conversation
    * @returns Messages to send and the previousResponseId
    */
-  static async getMessagesToSend(sessionId: string, allMessages: UIMessage[]): Promise<{
+  static async getMessagesToSend(
+    sessionId: string,
+    allMessages: UIMessage[]
+  ): Promise<{
     messages: UIMessage[];
     previousResponseId: string | null;
   }> {
@@ -218,9 +221,9 @@ export default class ChatModel {
 
     if (lastAssistantIndex >= 0 && lastAssistantIndex < allMessages.length - 1) {
       // Send only messages after the last assistant message
-      return { 
-        messages: allMessages.slice(lastAssistantIndex + 1), 
-        previousResponseId 
+      return {
+        messages: allMessages.slice(lastAssistantIndex + 1),
+        previousResponseId,
       };
     }
 

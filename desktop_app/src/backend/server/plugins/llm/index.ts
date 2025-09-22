@@ -166,9 +166,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             if (isOpenAI && sessionId && providerMetadata?.openai?.responseId) {
               const responseId = providerMetadata.openai.responseId as string;
               await Chat.updatePreviousResponseId(sessionId, responseId);
-              fastify.log.info(
-                `Stored OpenAI response ID: ${responseId} for session: ${sessionId}`
-              );
+              fastify.log.info(`Stored OpenAI response ID: ${responseId} for session: ${sessionId}`);
             }
             // Save chat token usage
             if (usage && sessionId) {

@@ -74,6 +74,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: FastifyRequest<{ Body: StreamRequestBody }>, reply: FastifyReply) => {
       const { messages, sessionId, model = 'gpt-4o', provider, requestedTools, toolChoice, chatId } = request.body;
       const isOllama = provider === 'ollama';
+      const isOpenAI = provider === 'openai';
 
       try {
         // Set the chat context for Archestra MCP tools
@@ -110,10 +111,26 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           wrappedTools[toolId] = toolService.wrapToolWithApproval(tool, toolId, sessionId || '', chatId || 0);
         }
 
+        // For OpenAI, check if we should use previousResponseId and only send new messages
+        let messagesToSend = messages;
+        let previousResponseId: string | null = null;
+
+        if (isOpenAI && sessionId) {
+          const result = await Chat.getMessagesToSend(sessionId, messages);
+          messagesToSend = result.messages;
+          previousResponseId = result.previousResponseId;
+
+          if (previousResponseId) {
+            fastify.log.info(
+              `Using previousResponseId: ${previousResponseId}, sending ${messagesToSend.length} messages instead of ${messages.length}`
+            );
+          }
+        }
+
         // Create the stream with the appropriate model
         const streamConfig: Parameters<typeof streamText>[0] = {
           model: await createModelInstance(model, provider),
-          messages: convertToModelMessages(messages),
+          messages: convertToModelMessages(messagesToSend),
           stopWhen: stepCountIs(vercelSdkConfig.maxToolCalls),
           providerOptions: {
             /**
@@ -121,6 +138,10 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
              * https://ai-sdk.dev/providers/ai-sdk-providers/openai#responses-models
              */
             openai: {
+              /**
+               * Use previousResponseId for OpenAI Responses API to maintain conversation state
+               */
+              ...(previousResponseId ? { previousResponseId } : {}),
               /**
                * A cache key for manual prompt caching control.
                * Used by OpenAI to cache responses for similar requests to optimize your cache hit rates.
@@ -138,8 +159,17 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             },
             ollama: {},
           },
-          onFinish: async ({ response, usage, text: _text, finishReason: _finishReason }) => {
+          onFinish: async ({ response, usage, text: _text, finishReason: _finishReason, providerMetadata }) => {
             console.log(JSON.stringify(response.messages));
+
+            // Store the OpenAI response ID from providerMetadata for Responses API
+            if (isOpenAI && sessionId && providerMetadata?.openai?.responseId) {
+              const responseId = providerMetadata.openai.responseId as string;
+              await Chat.updatePreviousResponseId(sessionId, responseId);
+              fastify.log.info(
+                `Stored OpenAI response ID: ${responseId} for session: ${sessionId}`
+              );
+            }
             // Save chat token usage
             if (usage && sessionId) {
               let contextWindow: number;

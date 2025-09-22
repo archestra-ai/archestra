@@ -20,6 +20,14 @@ export const chatsTable = sqliteTable(
      */
     selectedTools: text({ mode: 'json' }).$type<string[] | null>(),
     /**
+     * OpenAI Responses API: ID of the previous response for conversation state
+     * This allows us to continue conversations without resending the entire history
+     * 
+     * See https://ai-sdk.dev/providers/ai-sdk-providers/openai#responses-models:~:text=with%20the%20generation.-,previousResponseId,-string%20The%20ID
+     * for more details
+     */
+    previousResponseId: text('previous_response_id'),
+    /**
      * Token usage tracking for the entire chat session
      */
     totalPromptTokens: int('total_prompt_tokens').default(0),

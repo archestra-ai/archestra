@@ -158,6 +158,76 @@ export default class ChatModel {
     await this.updateSelectedTools(chatId, []);
   }
 
+  /**
+   * Update the previousResponseId for a chat (OpenAI Responses API)
+   * @param sessionId The chat session ID
+   * @param responseId The response ID from OpenAI
+   */
+  static async updatePreviousResponseId(sessionId: string, responseId: string): Promise<void> {
+    await db
+      .update(chatsTable)
+      .set({
+        previousResponseId: responseId,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.sessionId, sessionId));
+
+    log.info(`Updated previousResponseId for session ${sessionId}: ${responseId}`);
+  }
+
+  /**
+   * Get the previousResponseId for a chat
+   * @param sessionId The chat session ID
+   * @returns The previous response ID or null
+   */
+  static async getPreviousResponseId(sessionId: string): Promise<string | null> {
+    const [chat] = await db
+      .select({ previousResponseId: chatsTable.previousResponseId })
+      .from(chatsTable)
+      .where(eq(chatsTable.sessionId, sessionId))
+      .limit(1);
+
+    return chat?.previousResponseId || null;
+  }
+
+  /**
+   * Get only new messages since the last response (for OpenAI Responses API)
+   * @param sessionId The chat session ID
+   * @param allMessages All messages in the conversation
+   * @returns Messages to send and the previousResponseId
+   */
+  static async getMessagesToSend(sessionId: string, allMessages: UIMessage[]): Promise<{
+    messages: UIMessage[];
+    previousResponseId: string | null;
+  }> {
+    const previousResponseId = await this.getPreviousResponseId(sessionId);
+
+    if (!previousResponseId) {
+      // No previous response, send all messages
+      return { messages: allMessages, previousResponseId: null };
+    }
+
+    // Find the last assistant message and send only messages after it
+    let lastAssistantIndex = -1;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (allMessages[i].role === 'assistant') {
+        lastAssistantIndex = i;
+        break;
+      }
+    }
+
+    if (lastAssistantIndex >= 0 && lastAssistantIndex < allMessages.length - 1) {
+      // Send only messages after the last assistant message
+      return { 
+        messages: allMessages.slice(lastAssistantIndex + 1), 
+        previousResponseId 
+      };
+    }
+
+    // If no assistant messages or something unexpected, send all messages for safety
+    return { messages: allMessages, previousResponseId: null };
+  }
+
   static async conditionallyGenerateAndUpdateChatTitle(
     chatId: number,
     currentTitle: string | null,

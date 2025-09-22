@@ -1,0 +1,1 @@
+ALTER TABLE `chats` ADD `previous_response_id` text;

@@ -157,6 +157,7 @@ Key tables:
   - Proxies requests to Google Gemini (gemini-2.5-flash) via local proxy
   - Requires external proxy service at http://localhost:3000/api/llm-proxy/gemini
   - No API key configuration needed in Archestra (handled by proxy)
+  - Authentication: Session token sent as Bearer token in Authorization header
 
 ### Directory Structure
 

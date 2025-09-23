@@ -50,7 +50,12 @@ const createModelInstance = async (model: string, provider?: string) => {
     openai: () => createOpenAI({ apiKey, baseURL: baseUrl, headers }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),
     gemini: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
-    archestra: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
+    archestra: () =>
+      createGoogleGenerativeAI({
+        apiKey: 'populated_by_proxy',
+        baseURL: baseUrl,
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }),
     ollama: () => createOllama({ baseURL: baseUrl }),
   };
 

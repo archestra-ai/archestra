@@ -79,10 +79,8 @@ const ToolApprovalResponsePayloadSchema = z.object({
   sessionId: z.string(),
 });
 
-const UserAuthenticatedPayloadSchema = z.object({
-  userId: z.string().nullable(),
-  hasToken: z.boolean(),
-});
+// NOTE: empty for now as we don't need a payload for this event at the moment
+const UserAuthenticatedPayloadSchema = z.object();
 
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),

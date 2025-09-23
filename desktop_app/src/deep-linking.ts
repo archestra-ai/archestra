@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 
-import UserModel from '@backend/models/user';
+import CloudProviderModel from '@backend/models/cloudProvider';
 import log from '@backend/utils/logger';
 import webSocketService from '@backend/websocket';
 
@@ -82,20 +82,15 @@ export async function handleAuthSuccess(params: URLSearchParams, mainWindow: Bro
   log.info('🔐 Received auth-success deep link with token');
 
   try {
-    // Update the current user's auth token
-    const user = await UserModel.patchUser({
-      authToken: token,
-    });
+    // Upsert the auth token for the Archestra cloud inference provider
+    await CloudProviderModel.upsert('archestra', token);
 
     log.info('✅ Successfully saved auth token to database');
 
     // Emit WebSocket message that user has authenticated
     webSocketService.broadcast({
       type: 'user-authenticated',
-      payload: {
-        userId: user.uniqueId,
-        hasToken: true,
-      },
+      payload: {},
     });
 
     log.info('📤 Broadcasted user-authenticated message via WebSocket');

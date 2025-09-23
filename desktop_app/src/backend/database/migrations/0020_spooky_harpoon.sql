@@ -1,1 +1,0 @@
-ALTER TABLE `user` ADD `auth_token` text;

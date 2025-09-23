@@ -19,6 +19,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 pnpm start              # Start development app (Electron with hot reload)
+
+# For free LLM access via archestra-llm:
+cd llm-proxy && pnpm install && pnpm start  # Start LLM proxy (requires GOOGLE_API_TOKEN env var)
 ```
 
 ### Testing
@@ -149,6 +152,10 @@ Key tables:
   - Auto-downloads required models: `llama-guard3:1b`, `phi3:3.8b`
   - Tool analysis using local models
   - Configurable port (default: 54589)
+- **Free LLM Option**: "archestra-llm" model
+  - Proxies requests to Google Gemini (gemini-1.5-flash) via local proxy
+  - Requires llm-proxy service running on port 8888
+  - No API key configuration needed by users
 
 ### Directory Structure
 
@@ -173,6 +180,10 @@ desktop_app/
 ├── resources/
 │   └── bin/               # Platform-specific binaries (Podman, Ollama)
 └── openapi/               # OpenAPI specs and generated clients
+llm-proxy/                 # Google Gemini proxy for free LLM access
+├── src/
+│   └── index.js          # Proxy server implementation
+└── package.json
 ```
 
 ### Development Best Practices

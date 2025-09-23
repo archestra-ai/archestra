@@ -167,7 +167,7 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
     ]);
 
     expect(result.content[0].text).toContain(
-      'Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Don\'t proceed, stop immediately.'
+      "Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Don't proceed, stop immediately."
     );
 
     // Step 3: List tools again - should show updated status

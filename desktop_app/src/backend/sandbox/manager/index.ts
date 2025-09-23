@@ -208,7 +208,7 @@ class McpServerSandboxManager {
     }
 
     try {
-      await sandboxedMcpServer.stop();
+      await sandboxedMcpServer.delete();
       log.info(`Successfully removed MCP server ${mcpServerId}`);
     } catch (error) {
       log.error(`Failed to remove MCP server ${mcpServerId}:`, error);

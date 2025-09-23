@@ -458,6 +458,12 @@ export default class SandboxedMcpServer {
     }
   }
 
+  async disconnectMcpClient() {
+    if (this.mcpClient) {
+      await this.mcpClient.close();
+    }
+  }
+
   async stop() {
     this.stopPeriodicAnalysisUpdates();
 
@@ -470,9 +476,14 @@ export default class SandboxedMcpServer {
       await this.podmanContainer!.stopContainer();
     }
 
-    if (this.mcpClient) {
-      await this.mcpClient.close();
+    await this.disconnectMcpClient();
+  }
+
+  async delete() {
+    if (!this.isRemoteServer) {
+      await this.podmanContainer!.removeContainer();
     }
+    await this.disconnectMcpClient();
   }
 
   /**

@@ -31,6 +31,13 @@ const DEBUG = !app?.isPackaged;
 export default {
   debug: DEBUG,
   logLevel: process.env.LOG_LEVEL || (DEBUG ? 'debug' : 'info'),
+  archestra: {
+    /**
+     * TODO: update this to use import.meta.env.VITE_ARCHESTRA_WEBSITE_BASE_URL
+     * aka the same environment variable that the frontend consumes...
+     */
+    websiteUrl: process.env.ARCHESTRA_WEBSITE_BASE_URL || 'https://www.archestra.ai',
+  },
   server: {
     http: {
       port: parseInt(process.env.ARCHESTRA_API_SERVER_PORT || '54587', 10),

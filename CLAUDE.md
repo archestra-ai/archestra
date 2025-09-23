@@ -19,6 +19,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 pnpm start              # Start development app (Electron with hot reload)
+
+# For free LLM access via archestra-llm:
+# The archestra-llm model is available by default and routes to http://localhost:3000/api/llm-proxy/gemini
+# You'll need to set up a separate proxy service that handles Google AI Studio API authentication
 ```
 
 ### Testing
@@ -149,6 +153,10 @@ Key tables:
   - Auto-downloads required models: `llama-guard3:1b`, `phi3:3.8b`
   - Tool analysis using local models
   - Configurable port (default: 54589)
+- **Free LLM Option**: "archestra-llm" model
+  - Proxies requests to Google Gemini (gemini-2.5-flash) via local proxy
+  - Requires external proxy service at http://localhost:3000/api/llm-proxy/gemini
+  - No API key configuration needed in Archestra (handled by proxy)
 
 ### Directory Structure
 
@@ -198,3 +206,22 @@ For production builds, these environment variables are required:
 - `APPLE_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Team ID from developer account
 - `APPLE_CERTIFICATE_PASSWORD`: Certificate password
+
+### Deep Linking
+
+Archestra supports deep linking for OAuth authentication flows:
+
+- **OAuth Callback**: `archestra-ai://oauth-callback?code=<auth_code>&state=<state>`
+  - Handles OAuth authorization codes from external providers
+  - Forwards the code to backend server for token exchange via `/api/oauth/store-code` endpoint
+  - Sends to backend on port 54587 (configurable via `ARCHESTRA_API_SERVER_PORT`)
+  
+- **Auth Success**: `archestra-ai://auth-success?token=<auth_token>`
+  - Stores authentication tokens in the CloudProvider model for 'archestra' provider
+  - Broadcasts `user-authenticated` events via WebSocket
+  - Automatically focuses the application window
+
+**Implementation Notes**:
+- Deep link handler is in `src/deep-linking.ts`
+- Auth tokens are stored in the `cloud_providers` table (not user table)
+- WebSocket broadcasts notify UI of authentication status changes

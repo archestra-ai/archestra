@@ -3,7 +3,7 @@ import { int, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { createSelectSchema } from 'drizzle-zod';
 import { z } from 'zod';
 
-export const SupportedCloudProviderSchema = z.enum(['anthropic', 'openai', 'deepseek', 'gemini']);
+export const SupportedCloudProviderSchema = z.enum(['anthropic', 'openai', 'deepseek', 'gemini', 'archestra']);
 
 export const cloudProvidersTable = sqliteTable('cloud_providers', {
   id: int().primaryKey({ autoIncrement: true }),

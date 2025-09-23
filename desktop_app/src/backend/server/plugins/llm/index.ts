@@ -50,13 +50,17 @@ const createModelInstance = async (model: string, provider?: string) => {
     openai: () => createOpenAI({ apiKey, baseURL: baseUrl, headers }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),
     gemini: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
+    archestra: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
     ollama: () => createOllama({ baseURL: baseUrl }),
   };
 
   const createClient = clientFactories[type] || (() => createOpenAI({ apiKey, baseURL: baseUrl, headers }));
   const client = createClient();
 
-  return client(model);
+  // For archestra models, extract the actual model name after the slash
+  const actualModel = model.startsWith('archestra/') ? model.substring('archestra/'.length) : model;
+
+  return client(actualModel);
 };
 
 const llmRoutes: FastifyPluginAsync = async (fastify) => {

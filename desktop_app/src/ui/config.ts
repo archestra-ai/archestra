@@ -3,6 +3,11 @@ const IS_DEV = import.meta.env.DEV;
 const HOST = import.meta.env.VITE_HOST || 'localhost';
 
 /**
+ * website base URL defaults to production, can be overridden for local development
+ */
+const ARCHESTRA_WEBSITE_BASE_URL = import.meta.env.VITE_ARCHESTRA_WEBSITE_BASE_URL || 'https://www.archestra.ai';
+
+/**
  * In development, use Vite's dev server port (5173) which proxies to the backend
  * In production, connect directly to the backend server port
  */
@@ -20,10 +25,8 @@ export default {
     chatStreamBaseUrl: `${BASE_URL}/api/llm`,
     ollamaProxyUrl: `${BASE_URL}/llm/ollama`,
     websocketUrl: `ws://${HOST}:${WEBSOCKET_PORT}/ws`,
-    /**
-     * catalog URL defaults to production, can be overridden for local development
-     */
-    catalogUrl: import.meta.env.VITE_ARCHESTRA_CATALOG_URL || 'https://www.archestra.ai/mcp-catalog/api',
+    websiteUrl: ARCHESTRA_WEBSITE_BASE_URL,
+    catalogUrl: `${ARCHESTRA_WEBSITE_BASE_URL}/mcp-catalog/api`,
   },
   chat: {
     defaultTitle: 'New Agent',

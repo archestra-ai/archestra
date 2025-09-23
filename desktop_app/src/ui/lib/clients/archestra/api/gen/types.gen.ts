@@ -217,6 +217,12 @@ export type WebSocketMessageInput =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponseInput;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        [key: string]: unknown;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -263,7 +269,7 @@ export type CloudProviderWithConfigInput = {
   validatedAt: string | null;
 };
 
-export type SupportedCloudProvidersInput = 'anthropic' | 'openai' | 'deepseek' | 'gemini';
+export type SupportedCloudProvidersInput = 'anthropic' | 'openai' | 'deepseek' | 'gemini' | 'archestra';
 
 export type SupportedCloudProviderModelInput = {
   id: string;
@@ -719,6 +725,12 @@ export type WebSocketMessage =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponse;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        [key: string]: never;
+      };
     };
 
 export type ChatWithMessages = {
@@ -765,7 +777,7 @@ export type CloudProviderWithConfig = {
   validatedAt: string | null;
 };
 
-export type SupportedCloudProviders = 'anthropic' | 'openai' | 'deepseek' | 'gemini';
+export type SupportedCloudProviders = 'anthropic' | 'openai' | 'deepseek' | 'gemini' | 'archestra';
 
 export type SupportedCloudProviderModel = {
   id: string;

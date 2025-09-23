@@ -1,14 +1,18 @@
 import { ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Label } from '@ui/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@ui/components/ui/popover';
 import { Switch } from '@ui/components/ui/switch';
+import config from '@ui/config';
 import { useUserStore } from '@ui/stores';
 
 import getStartedImage from '/images/a-group-of-people-building-a-vessel-in-the-distanc.png';
-import welcomeImage from '/images/a-group-of-people-connecting-mechanisms-with-wires.png';
+import {
+  default as cloudInferenceImage,
+  default as welcomeImage,
+} from '/images/a-group-of-people-connecting-mechanisms-with-wires.png';
 import privacyImage from '/images/a-group-of-people-next-to-the-open-door--green-lan.png';
 import featuresImage from '/images/a-group-of-people-surrounded-by-a-massive-wooden-f.png';
 
@@ -16,7 +20,8 @@ enum OnboardingStep {
   Welcome = 0,
   Features = 1,
   Privacy = 2,
-  GetStarted = 3,
+  CloudInference = 3,
+  GetStarted = 4,
 }
 
 interface OnboardingWizardProps {
@@ -32,8 +37,13 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const { user, markOnboardingCompleted, toggleTelemetryCollectionStatus, toggleAnalyticsCollectionStatus } =
-    useUserStore();
+  const {
+    user,
+    markOnboardingCompleted,
+    toggleTelemetryCollectionStatus,
+    toggleAnalyticsCollectionStatus,
+    subscribeToUserAuthenticatedEvent,
+  } = useUserStore();
 
   useEffect(() => {
     if (user && !user.hasCompletedOnboarding) {
@@ -50,14 +60,14 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
     onOpenChange?.(isOpen);
   }, [isOpen, onOpenChange]);
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = useCallback(async () => {
     try {
       await markOnboardingCompleted();
       setIsOpen(false);
     } catch (error) {
       console.error('Failed to complete onboarding:', error);
     }
-  };
+  }, [markOnboardingCompleted]);
 
   const handleNext = () => {
     if (currentStep < OnboardingStep.GetStarted) {
@@ -73,7 +83,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
     }
   };
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (currentStep > OnboardingStep.Welcome) {
       setPreviousStep(currentStep);
       setIsTransitioning(true);
@@ -83,17 +93,35 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
         setPreviousStep(null);
       }, 500); // Animation duration
     }
-  };
+  }, [currentStep]);
 
-  const handleTelemetryToggle = async (checked: boolean) => {
-    setTelemetryEnabled(checked);
-    await toggleTelemetryCollectionStatus(checked);
-  };
+  const handleTelemetryToggle = useCallback(
+    async (checked: boolean) => {
+      setTelemetryEnabled(checked);
+      await toggleTelemetryCollectionStatus(checked);
+    },
+    [toggleTelemetryCollectionStatus]
+  );
 
-  const handleAnalyticsToggle = async (checked: boolean) => {
-    setAnalyticsEnabled(checked);
-    await toggleAnalyticsCollectionStatus(checked);
-  };
+  const handleAnalyticsToggle = useCallback(
+    async (checked: boolean) => {
+      setAnalyticsEnabled(checked);
+      await toggleAnalyticsCollectionStatus(checked);
+    },
+    [toggleAnalyticsCollectionStatus]
+  );
+
+  const handleGoogleSignIn = useCallback(async () => {
+    const callbackUrl = encodeURIComponent('archestra-ai://auth-success');
+    const authUrl = `${config.archestra.websiteUrl}/signin?callbackURL=${callbackUrl}`;
+    await window.electronAPI.openExternal(authUrl);
+
+    // Subscribe to authentication success event and move to next step
+    subscribeToUserAuthenticatedEvent('onboarding', () => {
+      console.log('User authenticated successfully!');
+      handleNext();
+    });
+  }, [handleNext, subscribeToUserAuthenticatedEvent]);
 
   const renderStepContent = (step: OnboardingStep) => {
     switch (step) {
@@ -229,6 +257,44 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           </div>
         );
 
+      case OnboardingStep.CloudInference:
+        return (
+          <div className="relative w-full h-full">
+            <img
+              src={cloudInferenceImage}
+              alt="Cloud Inference"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
+                <h2 className="text-2xl font-bold">Free Cloud Inference for Early Access</h2>
+                <p className="text-lg text-muted-foreground mt-4">
+                  As an Early Access user, we're providing you with a limited number of free tokens to use our cloud
+                  inference service powered by Google's Gemini models.
+                </p>
+                <p className="text-base text-muted-foreground mt-3">
+                  Sign in with Google to activate your free tokens, or skip this step to configure your own AI models
+                  locally.
+                </p>
+                <div className="flex space-x-2 mt-8">
+                  {currentStep > OnboardingStep.Welcome && (
+                    <Button variant="outline" onClick={handlePrevious}>
+                      Previous
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={handleNext} className="min-w-[100px]">
+                    Skip
+                  </Button>
+                  <Button onClick={handleGoogleSignIn} className="min-w-[120px] relative">
+                    <span className="flex items-center">Sign In with Google</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       case OnboardingStep.GetStarted:
         return (
           <div className="relative w-full h-full">
@@ -293,7 +359,10 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                     </Button>
                   )}
                   <Button onClick={handleNext} className="min-w-[120px] relative">
-                    <span className="flex items-center">Get Started</span>
+                    <span className="flex items-center">
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </span>
                   </Button>
                 </div>
               </div>

@@ -104,6 +104,14 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           tools = toolService.getAllTools();
         }
 
+        // Log enabled tools for this request
+        const enabledToolIds = Object.keys(tools);
+        fastify.log.info(`LLM Stream - Enabled tools for chat ${chatId || 'no-chat'}: ${enabledToolIds.length} tools`, {
+          chatId,
+          toolCount: enabledToolIds.length,
+          toolIds: enabledToolIds
+        });
+
         // Wrap tools with approval logic
         const wrappedTools: any = {};
         for (const [toolId, tool] of Object.entries(tools)) {

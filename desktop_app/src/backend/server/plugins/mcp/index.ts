@@ -287,12 +287,8 @@ export const createArchestraMcpServer = () => {
         const enabledCount = serverTools.filter((t) => t.selected).length;
         const toolList = serverTools
           .map((t) => {
-            const status = t.selected ? '✓' : '✗';
-            const analysisInfo =
-              t.analysis?.is_read !== null
-                ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
-                : '';
-            return `  ${status} ${t.id}${analysisInfo}`;
+            const statusSuffix = t.selected ? ' (enabled)' : '';
+            return `  ${t.id}${statusSuffix}`;
           })
           .join('\n');
 
@@ -405,13 +401,30 @@ export const createArchestraMcpServer = () => {
           };
         }
 
-        const updatedTools = await ChatModel.addSelectedTools(chatId, validToolsToEnable);
+        // Enable the requested tools
+        await ChatModel.addSelectedTools(chatId, validToolsToEnable);
+
+        // Automatically disable all Archestra tools as the last step
+        const archestraToolIds = Object.values(FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS);
+        const archestraToolsToDisable = archestraToolIds.filter(toolId => {
+          // Get the updated enabled set after adding new tools
+          const updatedEnabledSet = new Set([
+            ...(currentSelectedTools === null ? Array.from(availableToolIds) : currentSelectedTools),
+            ...validToolsToEnable
+          ]);
+          return updatedEnabledSet.has(toolId);
+        });
+
+        if (archestraToolsToDisable.length > 0) {
+          await ChatModel.removeSelectedTools(chatId, archestraToolsToDisable);
+          log.info(`Automatically disabled ${archestraToolsToDisable.length} Archestra tools after enabling requested tools`);
+        }
 
         return {
           content: [
             {
               type: 'text',
-              text: `Successfully enabled ${validToolsToEnable.length} tool(s). No need to enable again.`,
+              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Archestra tools have been automatically disabled. Proceed with the task.`,
             },
           ],
         };

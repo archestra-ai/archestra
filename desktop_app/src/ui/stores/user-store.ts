@@ -68,6 +68,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
   },
 
   subscribeToUserAuthenticatedEvent: (successCallback: () => void) => {
+    console.log('Subscribing to user authenticated event');
+
     webSocketService.subscribe('user-authenticated', ({ payload }) => {
       const { toggleUserAuthenticated } = useUserStore.getState();
       console.log('🔐 User authenticated via WebSocket:', payload);

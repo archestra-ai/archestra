@@ -198,3 +198,15 @@ For production builds, these environment variables are required:
 - `APPLE_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Team ID from developer account
 - `APPLE_CERTIFICATE_PASSWORD`: Certificate password
+
+### Deep Linking
+
+Archestra supports deep linking for OAuth authentication flows:
+
+- **OAuth Callback**: `archestra-ai://oauth-callback?code=<auth_code>&state=<state>`
+  - Handles OAuth authorization codes from external providers
+  - Forwards the code to backend server for token exchange
+  
+- **Auth Success**: `archestra-ai://auth-success?token=<auth_token>`
+  - Stores authentication tokens in the user database
+  - Broadcasts authentication events via WebSocket

@@ -217,6 +217,12 @@ export type WebSocketMessageInput =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponseInput;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        [key: string]: unknown;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -719,6 +725,12 @@ export type WebSocketMessage =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponse;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        [key: string]: never;
+      };
     };
 
 export type ChatWithMessages = {

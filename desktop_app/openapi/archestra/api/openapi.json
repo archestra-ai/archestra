@@ -829,6 +829,20 @@
               }
             },
             "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user-authenticated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {}
+              }
+            },
+            "required": ["type", "payload"]
           }
         ]
       },
@@ -2646,6 +2660,22 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/ToolApprovalResponse"
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user-authenticated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
               }
             },
             "required": ["type", "payload"],

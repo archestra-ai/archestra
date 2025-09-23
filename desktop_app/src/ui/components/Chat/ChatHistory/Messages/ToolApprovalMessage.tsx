@@ -1,11 +1,9 @@
-import { AlertTriangle, Check, Shield, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Check, Shield, X } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@ui/components/ui/alert';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
 import { Checkbox } from '@ui/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import { useToolsStore } from '@ui/stores';
 
 interface ToolApprovalMessageProps {
@@ -28,12 +26,10 @@ export default function ToolApprovalMessage({
 }: ToolApprovalMessageProps) {
   const { approveRequest, declineRequest, pendingApprovals } = useToolsStore();
   const [rememberChoice, setRememberChoice] = useState(false);
-  const [showArgs, setShowArgs] = useState(false);
 
   // Check if this request is still pending
   const isPending = pendingApprovals.has(requestId);
 
-  // Format arguments for display
   const formattedArgs = useMemo(() => {
     if (!args) return null;
     try {
@@ -43,15 +39,43 @@ export default function ToolApprovalMessage({
     }
   }, [args]);
 
-  const handleApprove = () => {
+  const handleApprove = useCallback(() => {
     approveRequest(requestId, rememberChoice);
     setRememberChoice(false);
-  };
+  }, [requestId, rememberChoice, approveRequest]);
 
-  const handleDecline = () => {
+  const handleDecline = useCallback(() => {
     declineRequest(requestId, rememberChoice);
     setRememberChoice(false);
-  };
+  }, [requestId, rememberChoice, declineRequest]);
+
+  // TODO: move this out to a global keyboard shortcut listener
+  // Set up keyboard shortcuts
+  // useEffect(() => {
+  //   if (!isPending) return;
+
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     // Only respond to shortcuts when no input/textarea is focused
+  //     const target = e.target as HTMLElement;
+  //     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+  //       return;
+  //     }
+
+  //     // Cmd/Ctrl + Enter to approve
+  //     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  //       e.preventDefault();
+  //       handleApprove();
+  //     }
+  //     // Escape to decline
+  //     else if (e.key === 'Escape') {
+  //       e.preventDefault();
+  //       handleDecline();
+  //     }
+  //   };
+
+  //   window.addEventListener('keydown', handleKeyDown);
+  //   return () => window.removeEventListener('keydown', handleKeyDown);
+  // }, [isPending, handleApprove, handleDecline]);
 
   // If not pending, don't show anything (request was already handled)
   if (!isPending) {
@@ -79,28 +103,10 @@ export default function ToolApprovalMessage({
             {toolDescription && <p className="text-xs text-muted-foreground mt-1">{toolDescription}</p>}
           </div>
 
-          {isWrite && (
-            <Alert className="border-yellow-600/50 bg-yellow-100/50 dark:bg-yellow-900/30">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                This tool can modify files, execute commands, or make changes to your system.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {formattedArgs && (
-            <Collapsible open={showArgs} onOpenChange={setShowArgs}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 text-xs p-1">
-                  {showArgs ? 'Hide' : 'Show'} arguments
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
-                <div className="bg-muted/50 rounded p-2 max-h-32 overflow-auto">
-                  <pre className="text-xs font-mono">{formattedArgs}</pre>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <div className="bg-muted/50 rounded p-2 max-h-32 overflow-auto">
+              <pre className="text-xs font-mono">{formattedArgs}</pre>
+            </div>
           )}
 
           <div className="flex items-center space-x-2">
@@ -119,13 +125,29 @@ export default function ToolApprovalMessage({
           </div>
 
           <div className="flex gap-2">
-            <Button size="sm" variant="default" onClick={handleApprove} className="h-7 text-xs cursor-pointer">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleApprove}
+              className="h-7 text-xs cursor-pointer"
+              // TODO: uncomment out when we have a keyboard shortcut for approving
+              // title="Approve (⌘ + Enter / Ctrl + Enter)"
+            >
               <Check className="h-3 w-3 mr-1" />
               Approve
+              {/* <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">⌘ ⏎</kbd> */}
             </Button>
-            <Button size="sm" variant="destructive" onClick={handleDecline} className="h-7 text-xs cursor-pointer">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleDecline}
+              className="h-7 text-xs cursor-pointer"
+              // TODO: uncomment out when we have a keyboard shortcut for declining
+              // title="Decline (Escape)"
+            >
               <X className="h-3 w-3 mr-1" />
               Decline
+              {/* <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">Esc</kbd> */}
             </Button>
           </div>
         </div>

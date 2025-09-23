@@ -15,6 +15,7 @@ interface UserStore {
   toggleTelemetryCollectionStatus: (collectTelemetryData: boolean) => Promise<void>;
   toggleAnalyticsCollectionStatus: (collectAnalyticsData: boolean) => Promise<void>;
   toggleUserAuthenticated: (isAuthenticated: boolean) => void;
+  subscribeToUserAuthenticatedEvent: (successCallback: () => void) => void;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -65,24 +66,27 @@ export const useUserStore = create<UserStore>((set, get) => ({
   toggleUserAuthenticated: (isAuthenticated: boolean) => {
     set({ isAuthenticated });
   },
+
+  subscribeToUserAuthenticatedEvent: (successCallback: () => void) => {
+    webSocketService.subscribe('user-authenticated', ({ payload }) => {
+      const { toggleUserAuthenticated } = useUserStore.getState();
+      console.log('🔐 User authenticated via WebSocket:', payload);
+
+      // Update authentication state
+      toggleUserAuthenticated(true);
+
+      // Log the authentication event
+      console.log('✅ User authentication successful!');
+      console.log('User ID:', payload.userId);
+      console.log('Has Token:', payload.hasToken);
+
+      // Track authentication in PostHog
+      posthogClient.capture('user_authenticated', {
+        userId: payload.userId,
+        method: 'oauth',
+      });
+
+      successCallback();
+    });
+  },
 }));
-
-// Subscribe to user authentication events
-webSocketService.subscribe('user-authenticated', ({ payload }) => {
-  const { toggleUserAuthenticated } = useUserStore.getState();
-  console.log('🔐 User authenticated via WebSocket:', payload);
-
-  // Update authentication state
-  toggleUserAuthenticated(true);
-
-  // Log the authentication event
-  console.log('✅ User authentication successful!');
-  console.log('User ID:', payload.userId);
-  console.log('Has Token:', payload.hasToken);
-
-  // Track authentication in PostHog
-  posthogClient.capture('user_authenticated', {
-    userId: payload.userId,
-    method: 'oauth',
-  });
-});

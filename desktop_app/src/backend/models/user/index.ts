@@ -12,6 +12,7 @@ export const PatchUserSchema = z
     hasCompletedOnboarding: z.boolean(),
     collectTelemetryData: z.boolean(),
     collectAnalyticsData: z.boolean(),
+    authToken: z.string(),
   })
   .partial();
 

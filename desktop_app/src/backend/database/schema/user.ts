@@ -8,6 +8,7 @@ export const userTable = sqliteTable('user', {
   hasCompletedOnboarding: int({ mode: 'boolean' }).notNull().default(false),
   collectTelemetryData: int({ mode: 'boolean' }).notNull().default(true),
   collectAnalyticsData: int({ mode: 'boolean' }).notNull().default(true),
+  authToken: text(),
   createdAt: text()
     .notNull()
     .default(sql`(current_timestamp)`),

@@ -217,6 +217,13 @@ export type WebSocketMessageInput =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponseInput;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        userId: string | null;
+        hasToken: boolean;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -498,6 +505,7 @@ export type UserInput = {
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
   collectAnalyticsData: boolean;
+  authToken: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -719,6 +727,13 @@ export type WebSocketMessage =
   | {
       type: 'tool-approval-response';
       payload: ToolApprovalResponse;
+    }
+  | {
+      type: 'user-authenticated';
+      payload: {
+        userId: string | null;
+        hasToken: boolean;
+      };
     };
 
 export type ChatWithMessages = {
@@ -1000,6 +1015,7 @@ export type User = {
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
   collectAnalyticsData: boolean;
+  authToken: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -2235,6 +2251,7 @@ export type UpdateUserData = {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
     collectAnalyticsData?: boolean;
+    authToken?: string;
   };
   path?: never;
   query?: never;

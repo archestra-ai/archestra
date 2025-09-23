@@ -3,20 +3,24 @@ import { create } from 'zustand';
 import { type User, getUser, updateUser } from '@ui/lib/clients/archestra/api/gen';
 import posthogClient from '@ui/lib/posthog';
 import sentryClient from '@ui/lib/sentry';
+import webSocketService from '@ui/lib/websocket';
 
 interface UserStore {
   user: User | null;
   loading: boolean;
+  isAuthenticated: boolean;
 
   fetchUser: () => Promise<void>;
   markOnboardingCompleted: () => Promise<void>;
   toggleTelemetryCollectionStatus: (collectTelemetryData: boolean) => Promise<void>;
   toggleAnalyticsCollectionStatus: (collectAnalyticsData: boolean) => Promise<void>;
+  toggleUserAuthenticated: (isAuthenticated: boolean) => void;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
   user: null,
   loading: false,
+  isAuthenticated: false,
 
   fetchUser: async () => {
     set({ loading: true });
@@ -57,4 +61,28 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // Update PostHog analytics status
     posthogClient.updateAnalyticsStatus(collectAnalyticsData, data);
   },
+
+  toggleUserAuthenticated: (isAuthenticated: boolean) => {
+    set({ isAuthenticated });
+  },
 }));
+
+// Subscribe to user authentication events
+webSocketService.subscribe('user-authenticated', ({ payload }) => {
+  const { toggleUserAuthenticated } = useUserStore.getState();
+  console.log('🔐 User authenticated via WebSocket:', payload);
+
+  // Update authentication state
+  toggleUserAuthenticated(true);
+
+  // Log the authentication event
+  console.log('✅ User authentication successful!');
+  console.log('User ID:', payload.userId);
+  console.log('Has Token:', payload.hasToken);
+
+  // Track authentication in PostHog
+  posthogClient.capture('user_authenticated', {
+    userId: payload.userId,
+    method: 'oauth',
+  });
+});

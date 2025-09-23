@@ -419,7 +419,11 @@ export default class SandboxedMcpServer {
         throw new Error(`OAuth MCP server ${this.mcpServer.name} is missing access_token - cannot start container`);
       }
 
-      this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
+      // Use the existing podmanContainer if it exists, otherwise create a new one
+      // This ensures we don't lose the assignedHttpPort discovered for existing containers
+      if (!this.podmanContainer) {
+        this.podmanContainer = new PodmanContainer(this.mcpServer, this.podmanSocketPath!);
+      }
 
       try {
         await this.podmanContainer.startOrCreateContainer();

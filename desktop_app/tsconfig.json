@@ -26,6 +26,7 @@
     "baseUrl": ".",
     "paths": {
       "@backend/*": ["src/backend/*"],
+      "@constants": ["src/constants.ts"],
       "@ui/*": ["src/ui/*"],
       // https://github.com/langchain-ai/langchainjs/issues/6462#issuecomment-2275810913
       "ollama/browser": ["./node_modules/ollama/dist"]

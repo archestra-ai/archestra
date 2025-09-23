@@ -20,6 +20,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@backend': path.resolve(__dirname, './src/backend'),
+      '@constants': path.resolve(__dirname, './src/constants.ts'),
       '@ui': path.resolve(__dirname, './src/ui'),
     },
   },

@@ -236,18 +236,18 @@ export default function AuthConfirmationDialog({
               <Shield className="h-5 w-5 text-blue-500" />
               MCP authentication magic happening!
             </DialogTitle>
-            <DialogDescription className="pt-4 space-y-3">
+            <DialogDescription className="pt-4 space-y-3 text-sm">
               {isBrowserAuth ? (
-                <p className="text-sm">
+                <>
                   Archestra will show the browser window and ask you to authenticate. Once you are in, Archestra will
                   extract your API key and use it to interact with the third-party system. Your keys will be stored only
                   in your app!
-                </p>
+                </>
               ) : (
-                <p className="text-sm">
+                <>
                   Archestra cloud will generate the private secrets for you, but it <b>won't store them</b>. All further
                   communication with the third party will happen through your local app!
-                </p>
+                </>
               )}
             </DialogDescription>
           </DialogHeader>

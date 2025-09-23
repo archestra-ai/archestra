@@ -31,11 +31,6 @@ const DeleteResponseSchema = z.object({
   count: z.number().optional(),
 });
 
-// Legacy schema for backward compatibility
-const WriteMemorySchema = z.object({
-  content: z.string().describe('Markdown content to store as memory'),
-});
-
 // Register schemas in global registry for OpenAPI spec
 z.globalRegistry.add(MemoryEntrySchema, { id: 'MemoryEntry' });
 z.globalRegistry.add(MemoryListResponseSchema, { id: 'MemoryListResponse' });
@@ -43,7 +38,6 @@ z.globalRegistry.add(MemoryResponseSchema, { id: 'MemoryResponse' });
 z.globalRegistry.add(LegacyMemoryResponseSchema, { id: 'LegacyMemoryResponse' });
 z.globalRegistry.add(CreateMemorySchema, { id: 'CreateMemory' });
 z.globalRegistry.add(DeleteResponseSchema, { id: 'DeleteResponse' });
-z.globalRegistry.add(WriteMemorySchema, { id: 'WriteMemory' });
 
 const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get all memories (new endpoint)
@@ -190,64 +184,6 @@ const memoryRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return { success: true, count };
-    }
-  );
-
-  // Legacy endpoints for backward compatibility
-  fastify.get(
-    '/api/memory',
-    {
-      schema: {
-        operationId: 'getMemory',
-        description: 'Get the current user memory (legacy format)',
-        tags: ['Memory'],
-        response: {
-          200: LegacyMemoryResponseSchema,
-        },
-      },
-    },
-    async (_request, _reply) => {
-      const content = await MemoryModel.getMemories();
-      return { content };
-    }
-  );
-
-  fastify.put(
-    '/api/memory',
-    {
-      schema: {
-        operationId: 'updateMemory',
-        description: 'Update the current user memory (legacy format)',
-        tags: ['Memory'],
-        body: WriteMemorySchema,
-        response: {
-          200: z.object({ success: z.boolean() }),
-          400: z.object({
-            error: z.string(),
-            message: z.string(),
-          }),
-        },
-      },
-    },
-    async ({ body }, reply) => {
-      // Validate that content is not empty
-      if (!body.content || body.content.trim() === '') {
-        return reply.code(400).send({
-          error: 'Invalid memory content',
-          message: 'Memory content cannot be empty',
-        });
-      }
-
-      await MemoryModel.writeMemories(body.content.trim());
-
-      // Emit WebSocket event for memory update
-      const memories = await MemoryModel.getAllMemories();
-      websocketService.broadcast({
-        type: 'memory-updated',
-        payload: { memories },
-      });
-
-      return { success: true };
     }
   );
 };

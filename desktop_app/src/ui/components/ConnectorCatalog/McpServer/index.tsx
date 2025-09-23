@@ -1,5 +1,6 @@
 import {
   CheckCircle,
+  Clock,
   Code,
   Database,
   FileText,
@@ -27,6 +28,7 @@ interface McpServerProps {
   onOAuthInstallClick?: (server: ArchestraMcpServerManifest) => void;
   onBrowserInstallClick?: (server: ArchestraMcpServerManifest) => void;
   onUninstallClick: (serverId: string) => void;
+  onCancelInstallClick?: (serverId: string) => void;
 }
 
 export default function McpServer({
@@ -35,6 +37,7 @@ export default function McpServer({
   onOAuthInstallClick,
   onBrowserInstallClick,
   onUninstallClick,
+  onCancelInstallClick,
 }: McpServerProps) {
   const { installedMcpServers, installingMcpServerId, uninstallingMcpServerId } = useMcpServersStore();
   const { isRunning: sandboxIsRunning } = useSandboxStore();
@@ -47,9 +50,12 @@ export default function McpServer({
   const isRemoteMcp = server.server.type === 'remote';
 
   // Determine installation state
-  const isInstalled = installedMcpServers.some((s) => s.id === name);
+  const installedServer = installedMcpServers.find((s) => s.id === name);
+  const isInstalled = installedServer && installedServer.status === 'installed';
+  const isOAuthPending = installedServer && installedServer.status === 'oauth_pending';
   const isInstalling = installingMcpServerId === name;
   const isUninstalling = uninstallingMcpServerId === name;
+  const installFailed = installedServer && installedServer.status === 'failed';
 
   const getCategoryIcon = (category?: string | null) => {
     if (!category) return <Package className="h-4 w-4" />;
@@ -167,7 +173,7 @@ export default function McpServer({
                 <Loader2 className="h-3 w-3 animate-spin mr-1" />
                 Initializing...
               </Button>
-            ) : isInstalled ? (
+            ) : isInstalled || installFailed ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -184,11 +190,36 @@ export default function McpServer({
                   'Uninstall'
                 )}
               </Button>
+            ) : isOAuthPending ? (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-center text-xs text-muted-foreground mb-1">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Waiting for OAuth...
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onCancelInstallClick?.(installedServer?.id || name)}
+                  className="w-full h-7 text-xs text-destructive hover:text-destructive cursor-pointer"
+                >
+                  Cancel installation
+                </Button>
+              </div>
             ) : isInstalling ? (
-              <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
-                <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
-                Installing...
-              </Button>
+              <>
+                <Button size="sm" variant="outline" disabled className="w-full h-7 text-xs">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent mr-1" />
+                  Installing...
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onCancelInstallClick?.(installedServer?.id || name)}
+                  className="w-full h-7 mt-2 text-xs text-destructive hover:text-destructive cursor-pointer"
+                >
+                  Cancel
+                </Button>
+              </>
             ) : (
               <div className="flex flex-col gap-1">
                 {/* For Remote MCP, only show Install (OAuth) button */}

@@ -23,8 +23,7 @@ import type { McpServer, McpServerConfig, McpServerUserConfigValues } from '@bac
 import log from '@backend/utils/logger';
 import { parseBoolean } from '@backend/utils/parse';
 import { LOGS_DIRECTORY } from '@backend/utils/paths';
-
-import { FILE_SYSTEM_BASE_MOUNT_PATH } from '../../../../constants';
+import { FILE_SYSTEM_BASE_MOUNT_PATH } from '@constants';
 
 export const PodmanContainerStateSchema = z.enum([
   'not_created',
@@ -112,8 +111,8 @@ export default class PodmanContainer {
     );
 
     // Check if this is a Docker-style configuration
-    if (command === 'docker' || command === 'podman') {
-      // Parse Docker/Podman run command to extract image and real args
+    if (command === 'docker') {
+      // Parse Docker run command to extract image and real args
       const dockerConfig = PodmanContainer.parseDockerCommand(args || []);
       this.customImage = dockerConfig.image;
       this.command = dockerConfig.command;

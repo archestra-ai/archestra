@@ -107,9 +107,3 @@ ENTRYPOINT ["/sbin/tini", "--"]
 
 # Default command (override when running specific MCP server)
 CMD ["sh", "-c", "echo 'MCP base container ready. Override CMD to run your MCP server.'"]
-
-# Labels for container metadata
-LABEL org.opencontainers.image.title="MCP Server Base Image"
-LABEL org.opencontainers.image.description="Minimal base image for running Model Context Protocol servers"
-LABEL org.opencontainers.image.version="1.0.0"
-LABEL org.opencontainers.image.licenses="Apache-2.0"

@@ -1,19 +1,18 @@
 import { type UIMessage } from 'ai';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
+import ollamaClient from '@backend/clients/ollama';
 import db from '@backend/database';
 import { SelectChatSchema, chatsTable } from '@backend/database/schema/chat';
 import {
   SelectMessagesSchema as DatabaseMessageRepresentationSchema,
   messagesTable,
 } from '@backend/database/schema/messages';
-import toolAggregator from '@backend/llms/toolAggregator';
-import ollamaClient from '@backend/ollama/client';
+import toolService from '@backend/services/tool';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
-
-import { DEFAULT_ARCHESTRA_TOOLS } from '../../../constants';
+import { DEFAULT_ARCHESTRA_TOOLS } from '@constants';
 
 const TransformedMessageSchema = DatabaseMessageRepresentationSchema.extend({
   /**
@@ -92,7 +91,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list
       // Get all available tools and ensure the new ones are included
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Make sure all tools including the new ones are in the list
@@ -121,7 +120,7 @@ export default class ChatModel {
     if (currentTools === null) {
       // When null (all tools selected), we need to convert to explicit list first
       // then remove the specified tools
-      const allAvailableTools = toolAggregator.getAllAvailableTools();
+      const allAvailableTools = toolService.getAllAvailableTools();
       const allToolIds = allAvailableTools.map((tool) => tool.id);
 
       // Remove specified tools from the full list
@@ -159,12 +158,27 @@ export default class ChatModel {
     await this.updateSelectedTools(chatId, []);
   }
 
-  static async generateAndUpdateChatTitle(chatId: number, messages: UIMessage[]): Promise<void> {
+  static async conditionallyGenerateAndUpdateChatTitle(
+    chatId: number,
+    currentTitle: string | null,
+    messages: UIMessage[]
+  ): Promise<void> {
+    const messagesToConsiderForTitle = messages.filter((msg) => msg.role === 'user' || msg.role === 'assistant');
+
+    /**
+     * Only generate a title if the chat has no title yet and has 4 messages
+     *
+     * NOTE: we only consider messages between the user and the LLM (ignore system messages)
+     */
+    if (currentTitle || messagesToConsiderForTitle.length < 4) {
+      return;
+    }
+
     try {
       // Extract text content from the first few messages for title generation
       const messageTexts: string[] = [];
 
-      for (const msg of messages.slice(0, 4)) {
+      for (const msg of messagesToConsiderForTitle.slice(0, 4)) {
         // UIMessage has a parts array, extract text from text parts
         let textContent = '';
 
@@ -325,6 +339,9 @@ export default class ChatModel {
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
   }
 
+  /**
+   * NOTE: the values in `tokenUsage` should represent the cumulative token usage for the chat
+   */
   static async updateTokenUsage(
     sessionId: string,
     tokenUsage: {
@@ -339,6 +356,8 @@ export default class ChatModel {
       return;
     }
 
+    const { promptTokens, completionTokens, totalTokens, model, contextWindow } = tokenUsage;
+
     // Find the chat by session ID
     const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
 
@@ -349,15 +368,15 @@ export default class ChatModel {
 
     log.info(`Updating token usage for chat ${chat.id}: ${JSON.stringify(tokenUsage)}`);
 
-    // Update the chat with cumulative token usage
+    // Update the chat with new token usage values
     await db
       .update(chatsTable)
       .set({
-        totalPromptTokens: sql`COALESCE(total_prompt_tokens, 0) + ${tokenUsage.promptTokens || 0}`,
-        totalCompletionTokens: sql`COALESCE(total_completion_tokens, 0) + ${tokenUsage.completionTokens || 0}`,
-        totalTokens: sql`COALESCE(total_tokens, 0) + ${tokenUsage.totalTokens || 0}`,
-        lastModel: tokenUsage.model,
-        lastContextWindow: tokenUsage.contextWindow,
+        totalPromptTokens: promptTokens || 0,
+        totalCompletionTokens: completionTokens || 0,
+        totalTokens: totalTokens || 0,
+        lastModel: model,
+        lastContextWindow: contextWindow,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(chatsTable.id, chat.id));
@@ -366,22 +385,60 @@ export default class ChatModel {
     const [updatedChat] = await db.select().from(chatsTable).where(eq(chatsTable.id, chat.id)).limit(1);
 
     if (updatedChat) {
+      const { totalPromptTokens, totalCompletionTokens, totalTokens, lastModel, lastContextWindow } = updatedChat;
+
       WebSocketService.broadcast({
         type: 'chat-token-usage-updated',
         payload: {
           chatId: chat.id,
-          totalPromptTokens: updatedChat.totalPromptTokens,
-          totalCompletionTokens: updatedChat.totalCompletionTokens,
-          totalTokens: updatedChat.totalTokens,
-          lastModel: updatedChat.lastModel,
-          lastContextWindow: updatedChat.lastContextWindow,
-          contextUsagePercent:
-            updatedChat.lastContextWindow && updatedChat.totalTokens
-              ? (updatedChat.totalTokens / updatedChat.lastContextWindow) * 100
-              : 0,
+          totalPromptTokens,
+          totalCompletionTokens,
+          totalTokens,
+          lastModel,
+          lastContextWindow,
+          contextUsagePercent: lastContextWindow && totalTokens ? (totalTokens / lastContextWindow) * 100 : 0,
         },
       });
     }
+  }
+
+  static async resetTokenUsage(sessionId: string): Promise<void> {
+    // Find the chat by session ID
+    const [chat] = await db.select().from(chatsTable).where(eq(chatsTable.sessionId, sessionId)).limit(1);
+
+    if (!chat) {
+      log.error(`Chat not found for session ID: ${sessionId}`);
+      return;
+    }
+
+    log.info(`Resetting token usage for chat ${chat.id}`);
+
+    // Reset all token usage fields to 0/null
+    await db
+      .update(chatsTable)
+      .set({
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatsTable.id, chat.id));
+
+    // Broadcast token usage reset
+    WebSocketService.broadcast({
+      type: 'chat-token-usage-updated',
+      payload: {
+        chatId: chat.id,
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        lastModel: null,
+        lastContextWindow: null,
+        contextUsagePercent: 0,
+      },
+    });
   }
 
   static async saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
@@ -411,9 +468,6 @@ export default class ChatModel {
       });
     }
 
-    // Generate a title if the chat has 4+ messages and no title yet
-    if (messages.length >= 4 && !chat.title) {
-      await this.generateAndUpdateChatTitle(chat.id, messages);
-    }
+    await this.conditionallyGenerateAndUpdateChatTitle(chat.id, chat.title, messages);
   }
 }

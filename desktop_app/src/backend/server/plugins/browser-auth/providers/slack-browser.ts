@@ -16,17 +16,26 @@ export const slackBrowserProvider: BrowserAuthProviderDefinition = {
       secondary: 'SLACK_MCP_XOXD_TOKEN',
     },
 
+    /**
+     * Allow navigation to official Slack domains and Google + AppleSSO providers
+     */
     navigationRules: (url: string) => {
-      // Only allow navigation to official Slack domains
+      //
       try {
         const parsedUrl = new URL(url);
-        // Allow "slack.com", "app.slack.com", and "*.slack.com"
         const hostname = parsedUrl.hostname;
-        return (
+
+        const isSlackDomain =
           hostname === 'slack.com' ||
           hostname === 'app.slack.com' ||
-          (hostname.endsWith('.slack.com') && hostname.length > '.slack.com'.length)
-        );
+          (hostname.endsWith('.slack.com') && hostname.length > '.slack.com'.length);
+
+        const isGoogleOAuth =
+          hostname === 'accounts.google.com' || hostname === 'apis.google.com' || hostname.endsWith('.google.com');
+
+        const isAppleOAuth = hostname === 'appleid.apple.com' || hostname.endsWith('.apple.com');
+
+        return isSlackDomain || isGoogleOAuth || isAppleOAuth;
       } catch (e) {
         // If URL parsing fails, deny navigation
         return false;

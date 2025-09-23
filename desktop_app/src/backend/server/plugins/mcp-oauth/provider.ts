@@ -1,7 +1,6 @@
 /**
  * MCP OAuth Provider Implementation
  *
- * Based on GenericMcpOAuthProvider from linear-mcp-oauth-minimal.ts
  * Implements OAuthClientProvider interface from @modelcontextprotocol/sdk/client/auth.js
  */
 import {
@@ -287,9 +286,25 @@ export class McpOAuthProvider implements OAuthClientProvider {
       log.info('✅ Browser opened - waiting for OAuth proxy callback via deep link');
 
       // Wait for authorization code to be stored via deep link callback
-      this.authorizationCode = await this.waitForAuthorizationCode(state);
-      log.info('✅ Authorization code received via proxy callback');
-      return;
+      try {
+        this.authorizationCode = await this.waitForAuthorizationCode(state);
+        log.info('✅ Authorization code received via proxy callback');
+        return;
+      } catch (error) {
+        // OAuth flow timed out or failed - clean up the server record
+        log.warn(`OAuth flow timed out for server ${this.serverId}, cleaning up...`);
+
+        try {
+          await McpServerModel.update(this.serverId, {
+            status: 'failed',
+            oauthClientInfo: null,
+          });
+        } catch (cleanupError) {
+          log.error('Failed to cleanup server after OAuth timeout:', cleanupError);
+        }
+
+        throw error;
+      }
     }
 
     // Original flow for non-proxy OAuth
@@ -313,8 +328,24 @@ export class McpOAuthProvider implements OAuthClientProvider {
     log.info('⏳ Waiting for callback...');
 
     // Wait for callback and store the authorization code
-    this.authorizationCode = await serverPromise;
-    log.info('✅ Authorization code captured');
+    try {
+      this.authorizationCode = await serverPromise;
+      log.info('✅ Authorization code captured');
+    } catch (error) {
+      // OAuth flow timed out or failed - clean up the server record
+      log.warn(`OAuth callback server timed out for server ${this.serverId}, cleaning up...`);
+
+      try {
+        await McpServerModel.update(this.serverId, {
+          status: 'failed',
+          oauthClientInfo: null,
+        });
+      } catch (cleanupError) {
+        log.error('Failed to cleanup server after OAuth timeout:', cleanupError);
+      }
+
+      throw error;
+    }
   }
 
   private startCallbackServer(): Promise<string> {

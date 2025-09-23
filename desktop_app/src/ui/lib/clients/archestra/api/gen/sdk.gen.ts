@@ -17,6 +17,9 @@ import type {
   DeleteAllMemoriesResponses,
   DeleteChatData,
   DeleteChatErrors,
+  DeleteChatMessageData,
+  DeleteChatMessageErrors,
+  DeleteChatMessageResponses,
   DeleteChatResponses,
   DeleteCloudProviderData,
   DeleteCloudProviderResponses,
@@ -32,8 +35,6 @@ import type {
   DisconnectExternalMcpClientResponses,
   GetAllMemoriesData,
   GetAllMemoriesResponses,
-  GetApiSystemBackendLogsData,
-  GetApiSystemBackendLogsResponses,
   GetAvailableCloudProvidersData,
   GetAvailableCloudProvidersResponses,
   GetAvailableToolsData,
@@ -66,12 +67,13 @@ import type {
   GetMcpServersResponses,
   GetMemoryByNameData,
   GetMemoryByNameResponses,
-  GetMemoryData,
-  GetMemoryResponses,
   GetOllamaRequiredModelsStatusData,
   GetOllamaRequiredModelsStatusResponses,
   GetSupportedExternalMcpClientsData,
   GetSupportedExternalMcpClientsResponses,
+  GetSystemBackendLogsData,
+  GetSystemBackendLogsErrors,
+  GetSystemBackendLogsResponses,
   GetUserData,
   GetUserResponses,
   InstallMcpServerData,
@@ -80,9 +82,15 @@ import type {
   InstallMcpServerWithOauthData,
   InstallMcpServerWithOauthErrors,
   InstallMcpServerWithOauthResponses,
-  PostApiOllamaPullData,
-  PostApiOllamaPullErrors,
-  PostApiOllamaPullResponses,
+  PullOllamaModelData,
+  PullOllamaModelErrors,
+  PullOllamaModelResponses,
+  RemoveOllamaModelData,
+  RemoveOllamaModelErrors,
+  RemoveOllamaModelResponses,
+  ResetChatTokenUsageData,
+  ResetChatTokenUsageErrors,
+  ResetChatTokenUsageResponses,
   ResetSandboxData,
   ResetSandboxErrors,
   ResetSandboxResponses,
@@ -108,10 +116,10 @@ import type {
   UninstallMcpServerResponses,
   UpdateChatData,
   UpdateChatErrors,
+  UpdateChatMessageData,
+  UpdateChatMessageErrors,
+  UpdateChatMessageResponses,
   UpdateChatResponses,
-  UpdateMemoryData,
-  UpdateMemoryErrors,
-  UpdateMemoryResponses,
   UpdateUserData,
   UpdateUserResponses,
 } from './types.gen';
@@ -289,6 +297,46 @@ export const getChatAvailableTools = <ThrowOnError extends boolean = false>(
 ) => {
   return (options.client ?? _heyApiClient).get<GetChatAvailableToolsResponses, unknown, ThrowOnError>({
     url: '/api/chat/{id}/tools/available',
+    ...options,
+  });
+};
+
+/**
+ * Delete a specific message
+ */
+export const deleteChatMessage = <ThrowOnError extends boolean = false>(
+  options: Options<DeleteChatMessageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<DeleteChatMessageResponses, DeleteChatMessageErrors, ThrowOnError>({
+    url: '/api/message/{id}',
+    ...options,
+  });
+};
+
+/**
+ * Update a specific message
+ */
+export const updateChatMessage = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateChatMessageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).put<UpdateChatMessageResponses, UpdateChatMessageErrors, ThrowOnError>({
+    url: '/api/message/{id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
+/**
+ * Reset token usage counters for a chat session
+ */
+export const resetChatTokenUsage = <ThrowOnError extends boolean = false>(
+  options: Options<ResetChatTokenUsageData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<ResetChatTokenUsageResponses, ResetChatTokenUsageErrors, ThrowOnError>({
+    url: '/api/chat/{sessionId}/reset-token-usage',
     ...options,
   });
 };
@@ -634,45 +682,6 @@ export const setMemory = <ThrowOnError extends boolean = false>(options: Options
 };
 
 /**
- * Get the current user memory (legacy format)
- */
-export const getMemory = <ThrowOnError extends boolean = false>(options?: Options<GetMemoryData, ThrowOnError>) => {
-  return (options?.client ?? _heyApiClient).get<GetMemoryResponses, unknown, ThrowOnError>({
-    url: '/api/memory',
-    ...options,
-  });
-};
-
-/**
- * Update the current user memory (legacy format)
- */
-export const updateMemory = <ThrowOnError extends boolean = false>(
-  options?: Options<UpdateMemoryData, ThrowOnError>
-) => {
-  return (options?.client ?? _heyApiClient).put<UpdateMemoryResponses, UpdateMemoryErrors, ThrowOnError>({
-    url: '/api/memory',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-};
-
-export const postApiOllamaPull = <ThrowOnError extends boolean = false>(
-  options: Options<PostApiOllamaPullData, ThrowOnError>
-) => {
-  return (options.client ?? _heyApiClient).post<PostApiOllamaPullResponses, PostApiOllamaPullErrors, ThrowOnError>({
-    url: '/api/ollama/pull',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-};
-
-/**
  * Get the status of all Ollama required models
  */
 export const getOllamaRequiredModelsStatus = <ThrowOnError extends boolean = false>(
@@ -681,6 +690,34 @@ export const getOllamaRequiredModelsStatus = <ThrowOnError extends boolean = fal
   return (options?.client ?? _heyApiClient).get<GetOllamaRequiredModelsStatusResponses, unknown, ThrowOnError>({
     url: '/api/ollama/required-models',
     ...options,
+  });
+};
+
+/**
+ * Remove/uninstall an Ollama model
+ */
+export const removeOllamaModel = <ThrowOnError extends boolean = false>(
+  options: Options<RemoveOllamaModelData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).delete<RemoveOllamaModelResponses, RemoveOllamaModelErrors, ThrowOnError>({
+    url: '/api/ollama/models/{modelName}',
+    ...options,
+  });
+};
+
+/**
+ * Pull an Ollama model
+ */
+export const pullOllamaModel = <ThrowOnError extends boolean = false>(
+  options: Options<PullOllamaModelData, ThrowOnError>
+) => {
+  return (options.client ?? _heyApiClient).post<PullOllamaModelResponses, PullOllamaModelErrors, ThrowOnError>({
+    url: '/api/ollama/pull',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 };
 
@@ -708,10 +745,17 @@ export const resetSandbox = <ThrowOnError extends boolean = false>(
   });
 };
 
-export const getApiSystemBackendLogs = <ThrowOnError extends boolean = false>(
-  options?: Options<GetApiSystemBackendLogsData, ThrowOnError>
+/**
+ * Get backend log file content
+ */
+export const getSystemBackendLogs = <ThrowOnError extends boolean = false>(
+  options?: Options<GetSystemBackendLogsData, ThrowOnError>
 ) => {
-  return (options?.client ?? _heyApiClient).get<GetApiSystemBackendLogsResponses, unknown, ThrowOnError>({
+  return (options?.client ?? _heyApiClient).get<
+    GetSystemBackendLogsResponses,
+    GetSystemBackendLogsErrors,
+    ThrowOnError
+  >({
     url: '/api/system/backend-logs',
     ...options,
   });

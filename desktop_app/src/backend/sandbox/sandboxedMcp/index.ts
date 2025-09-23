@@ -4,31 +4,16 @@ import type { RawReplyDefaultExpression } from 'fastify';
 
 import config from '@backend/config';
 import { type McpServer } from '@backend/models/mcpServer';
-import { ToolModel } from '@backend/models/tools';
+import { type Tool, ToolModel } from '@backend/models/tools';
 import PodmanContainer from '@backend/sandbox/podman/container';
 import { type AvailableTool, type SandboxedMcpServerStatusSummary } from '@backend/sandbox/schemas';
 import { areTokensExpired } from '@backend/server/plugins/mcp-oauth';
+import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
+import { constructToolId, deconstructToolId } from '@constants';
 
 const { host: proxyMcpServerHost, port: proxyMcpServerPort } = config.server.http;
-
-/**
- * We use a double underscore to separate the MCP server ID from the tool name.
- *
- * this is for LLM compatability..
- */
-const TOOL_ID_SEPARATOR = '__';
-
-// Re-export schemas for backward compatibility
-export {
-  AvailableToolSchema,
-  McpServerContainerLogsSchema,
-  SandboxedMcpServerStatusSummarySchema,
-} from '@backend/sandbox/schemas';
-export type { AvailableTool } from '@backend/sandbox/schemas';
-
-export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;
 
 /**
  * SandboxedMcpServer represents an MCP server connection - either running in a local podman container
@@ -147,6 +132,17 @@ export default class SandboxedMcpServer {
   }
 
   /**
+   * Cache the tool with whatever analysis data it has (nulls are fine)
+   */
+  private updateToolInCache(tool: Tool) {
+    this.cachedToolAnalysis.set(constructToolId(this.mcpServerId, tool.name), {
+      is_read: tool.is_read,
+      is_write: tool.is_write,
+      analyzed_at: tool.analyzed_at,
+    });
+  }
+
+  /**
    * Try to fetch cached tool analysis results from the database
    */
   private async fetchCachedTools() {
@@ -159,39 +155,9 @@ export default class SandboxedMcpServer {
         // Count how many tools actually have analysis results
         let analyzedCount = 0;
 
-        // Log Google tools for debugging
-        const googleTools = cachedTools.filter(
-          (t) => t.name.includes('gmail') || t.name.includes('drive') || t.name.includes('google')
-        );
-        if (googleTools.length > 0) {
-          log.info(
-            `[fetchCachedTools] Found ${googleTools.length} Google tools in database:`,
-            googleTools.map((t) => ({
-              name: t.name,
-              analyzed_at: t.analyzed_at,
-              is_read: t.is_read,
-              is_write: t.is_write,
-            }))
-          );
-        }
-
         // Cache all tools from the database, regardless of analysis status
         for (const cachedTool of cachedTools) {
-          // Cache the tool with whatever analysis data it has (nulls are fine)
-          this.cachedToolAnalysis.set(cachedTool.name, {
-            is_read: cachedTool.is_read,
-            is_write: cachedTool.is_write,
-            analyzed_at: cachedTool.analyzed_at,
-          });
-
-          // Log caching for Google tools
-          if (cachedTool.name.includes('gmail') || cachedTool.name.includes('drive')) {
-            log.info(`[fetchCachedTools] Caching Google tool: ${cachedTool.name}`, {
-              is_read: cachedTool.is_read,
-              is_write: cachedTool.is_write,
-              analyzed_at: cachedTool.analyzed_at,
-            });
-          }
+          this.updateToolInCache(cachedTool);
 
           // Count tools that have been analyzed
           if (cachedTool.analyzed_at) {
@@ -236,14 +202,8 @@ export default class SandboxedMcpServer {
           cachedAnalysis.is_write !== tool.is_write ||
           cachedAnalysis.analyzed_at !== tool.analyzed_at
         ) {
-          // Update cache with whatever data we have (nulls are fine)
-          this.cachedToolAnalysis.set(tool.name, {
-            is_read: tool.is_read,
-            is_write: tool.is_write,
-            analyzed_at: tool.analyzed_at,
-          });
+          this.updateToolInCache(tool);
           hasUpdates = true;
-          log.info(`Updated cached analysis for tool ${tool.name} in ${this.mcpServerId}`);
         }
       }
 
@@ -262,8 +222,6 @@ export default class SandboxedMcpServer {
     this.analysisUpdateInterval = setInterval(async () => {
       const hasUpdates = await this.updateCachedAnalysis();
       if (hasUpdates) {
-        log.info(`Analysis cache updated for MCP server ${this.mcpServerId}`);
-
         // Broadcast that tools have been updated
         WebSocketService.broadcast({
           type: 'tools-updated',
@@ -300,7 +258,7 @@ export default class SandboxedMcpServer {
     this.tools = {};
 
     for (const [toolName, tool] of Object.entries(tools)) {
-      const toolId = `${this.mcpServerId}${TOOL_ID_SEPARATOR}${toolName}`;
+      const toolId = constructToolId(this.mcpServerId, toolName);
       this.tools[toolId] = tool;
     }
 
@@ -550,9 +508,7 @@ export default class SandboxedMcpServer {
   /**
    * Helper function to make schema JSON-serializable by removing symbols
    */
-  private cleanToolInputSchema = (
-    schema: Awaited<ReturnType<experimental_MCPClient['tools']>>[string]['inputSchema']
-  ): any => {
+  private cleanToolInputSchema = (schema: McpTools[string]['inputSchema']): any => {
     if (!schema) return undefined;
 
     try {
@@ -569,26 +525,8 @@ export default class SandboxedMcpServer {
    */
   get availableToolsList(): AvailableTool[] {
     return Object.entries(this.tools).map(([id, tool]) => {
-      const separatorIndex = id.indexOf(TOOL_ID_SEPARATOR);
-      const toolName = separatorIndex !== -1 ? id.substring(separatorIndex + TOOL_ID_SEPARATOR.length) : id;
-
-      /**
-       * For some mcp servers, their id looks like:
-       *  servers__src__filesystem__list_allowed_directorie
-       *
-       * so we need to get just the actual tool name for cache lookup
-       */
-      let cacheKey = toolName;
-
-      // Find the last occurrence of '__' which should be before the actual tool name
-      const lastDoubleUnderscore = toolName.lastIndexOf('__');
-      if (lastDoubleUnderscore !== -1) {
-        // Get everything after the last '__'
-        cacheKey = toolName.substring(lastDoubleUnderscore + 2);
-      }
-
       // Get analysis results from cache if available
-      const cachedAnalysis = this.cachedToolAnalysis.get(cacheKey);
+      const cachedAnalysis = this.cachedToolAnalysis.get(id);
 
       // Check if the tool has actually been analyzed (has analyzed_at timestamp)
       const hasAnalysis =
@@ -596,7 +534,7 @@ export default class SandboxedMcpServer {
 
       return {
         id,
-        name: toolName,
+        name: deconstructToolId(id).toolName,
         description: tool.description,
         inputSchema: this.cleanToolInputSchema(tool.inputSchema),
         mcpServerId: this.mcpServerId,
@@ -640,3 +578,5 @@ export default class SandboxedMcpServer {
     }
   }
 }
+
+export { AvailableToolSchema, McpServerContainerLogsSchema } from '@backend/sandbox/schemas';

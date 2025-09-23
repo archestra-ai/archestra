@@ -8,6 +8,7 @@
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 
+import OAuthProxyClient from '@backend/clients/oauthProxy';
 import McpServerModel from '@backend/models/mcpServer';
 import { type OAuthServerConfig } from '@backend/schemas/oauth-config';
 import log from '@backend/utils/logger';
@@ -210,10 +211,7 @@ async function exchangeCodeForTokens(
   // Check if this provider requires oauth-proxy
   if (config.requires_proxy && serverId) {
     log.info(`Using oauth-proxy for token exchange for ${config.name}`);
-    const { OAuthProxyClient } = await import('@backend/services/oauth-proxy-client');
-    const proxyClient = new OAuthProxyClient();
-
-    return proxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
+    return OAuthProxyClient.exchangeGenericOAuthTokens(serverId, tokenEndpoint, {
       grant_type: 'authorization_code',
       code,
       redirect_uri: config.redirect_uris[0],
@@ -286,9 +284,25 @@ export async function startGenericOAuthFlow(config: OAuthServerConfig, serverId:
   log.info('📡 Using OAuth proxy - will wait for deep link callback');
 
   // Wait for authorization code to be stored via deep link callback
-  const authorizationCode = await waitForAuthorizationCode(state);
+  let authorizationCode: string;
+  try {
+    authorizationCode = await waitForAuthorizationCode(state);
+    log.info('✅ Authorization code received via deep link callback');
+  } catch (error) {
+    // OAuth flow timed out or failed - clean up the server record
+    log.warn(`OAuth flow timed out for server ${serverId}, cleaning up...`);
 
-  log.info('✅ Authorization code received via deep link callback');
+    try {
+      await McpServerModel.update(serverId, {
+        status: 'failed',
+        oauthClientInfo: null,
+      });
+    } catch (cleanupError) {
+      log.error('Failed to cleanup server after OAuth timeout:', cleanupError);
+    }
+
+    throw error;
+  }
 
   // Exchange authorization code for tokens
   log.info('🔄 Exchanging authorization code for tokens...');

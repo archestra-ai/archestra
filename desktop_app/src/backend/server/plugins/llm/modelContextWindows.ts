@@ -79,26 +79,3 @@ export function getModelContextWindow(model: string): number {
   // Return default if no match found
   return MODEL_CONTEXT_WINDOWS.default;
 }
-
-/**
- * Calculate the percentage of context window used
- * @param tokensUsed The number of tokens used
- * @param contextWindow The size of the context window
- * @returns The percentage of context used (0-100)
- */
-export function calculateContextUsagePercent(tokensUsed: number, contextWindow: number): number {
-  if (contextWindow === 0) return 0;
-  return Math.min(100, (tokensUsed / contextWindow) * 100);
-}
-
-/**
- * Get a color indicator based on context usage percentage
- * @param percent The percentage of context used
- * @returns A color class name for the usage level
- */
-export function getContextUsageColor(percent: number): 'green' | 'yellow' | 'orange' | 'red' {
-  if (percent < 50) return 'green';
-  if (percent < 70) return 'yellow';
-  if (percent < 90) return 'orange';
-  return 'red';
-}

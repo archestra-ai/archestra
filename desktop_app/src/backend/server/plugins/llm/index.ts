@@ -6,16 +6,16 @@ import { convertToModelMessages, stepCountIs, streamText } from 'ai';
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { createOllama } from 'ollama-ai-provider-v2';
 
-import { type McpTools } from '@backend/archestraMcp';
-import ArchestraMcpContext from '@backend/archestraMcp/context';
+import ollamaClient from '@backend/clients/ollama';
 import config from '@backend/config';
-import { getModelContextWindow } from '@backend/llms/modelContextWindows';
-import toolAggregator from '@backend/llms/toolAggregator';
 import Chat from '@backend/models/chat';
 import CloudProviderModel from '@backend/models/cloudProvider';
-import ollamaClient from '@backend/ollama/client';
+import { archestraMcpContext } from '@backend/server/plugins/mcp';
+import toolService from '@backend/services/tool';
+import { type McpTools } from '@backend/types';
 
 import sharedConfig from '../../../../config';
+import { getModelContextWindow } from './modelContextWindows';
 
 interface StreamRequestBody {
   model: string;
@@ -88,7 +88,7 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         // Set the chat context for Archestra MCP tools
         if (chatId) {
-          ArchestraMcpContext.setCurrentChatId(chatId);
+          archestraMcpContext.setCurrentChatId(chatId);
         }
 
         // Get tools based on chat selection or requested tools
@@ -100,18 +100,24 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (chatSelectedTools === null) {
             // null means all tools are selected
-            tools = toolAggregator.getAllTools();
+            tools = toolService.getAllTools();
           } else if (chatSelectedTools.length > 0) {
             // Use only the selected tools for this chat
-            tools = toolAggregator.getToolsById(chatSelectedTools);
+            tools = toolService.getToolsById(chatSelectedTools);
           }
           // If chatSelectedTools is empty array, tools remains empty (no tools enabled)
         } else if (requestedTools && requestedTools.length > 0) {
           // Fallback to requested tools if no chatId
-          tools = toolAggregator.getToolsById(requestedTools);
+          tools = toolService.getToolsById(requestedTools);
         } else {
           // Default to all tools if no specific selection
-          tools = toolAggregator.getAllTools();
+          tools = toolService.getAllTools();
+        }
+
+        // Wrap tools with approval logic
+        const wrappedTools: any = {};
+        for (const [toolId, tool] of Object.entries(tools)) {
+          wrappedTools[toolId] = toolService.wrapToolWithApproval(tool, toolId, sessionId || '', chatId || 0);
         }
 
         // Create the stream with the appropriate model
@@ -142,27 +148,18 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
             },
             ollama: {},
           },
-          onFinish: async ({ usage, text: _text, finishReason: _finishReason }) => {
-            // Save token usage directly to the chat
+          onFinish: async ({ response, usage, text: _text, finishReason: _finishReason }) => {
             if (usage && sessionId) {
-              let contextWindow: number;
-
-              // Get context window dynamically for Ollama, use hardcoded for others
-              if (isOllama) {
-                contextWindow = await ollamaClient.getModelContextWindow(model);
-              } else {
-                contextWindow = getModelContextWindow(model);
-              }
-
               const tokenUsage = {
                 promptTokens: usage.inputTokens,
                 completionTokens: usage.outputTokens,
                 totalTokens: usage.totalTokens,
                 model: model,
-                contextWindow: contextWindow,
+                contextWindow: isOllama
+                  ? await ollamaClient.getModelContextWindow(model)
+                  : getModelContextWindow(model),
               };
 
-              // Save token usage directly to the chat
               await Chat.updateTokenUsage(sessionId, tokenUsage);
 
               fastify.log.info(`Token usage saved for chat: ${JSON.stringify(tokenUsage)}`);
@@ -171,8 +168,8 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         };
 
         // Only add tools and toolChoice if tools are available
-        if (tools && Object.keys(tools).length > 0) {
-          streamConfig.tools = tools;
+        if (wrappedTools && Object.keys(wrappedTools).length > 0) {
+          streamConfig.tools = wrappedTools;
           streamConfig.toolChoice = toolChoice || 'auto';
         }
 
@@ -182,30 +179,18 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           result.toUIMessageStreamResponse({
             originalMessages: messages,
             onError: (error) => {
-              if (error == null) {
-                return 'unknown error';
-              }
-              if (typeof error === 'string') {
-                return error;
-              }
-              if (error instanceof Error) {
-                if ('responseBody' in error && error.responseBody) {
-                  if (typeof error.responseBody === 'string') {
-                    try {
-                      const parsed = JSON.parse(error.responseBody);
-                      return parsed.error || error.message;
-                    } catch {
-                      return error.message;
-                    }
-                  }
-                }
-                return error.message;
-              }
-              return 'An unexpected error occurred';
+              return JSON.stringify(error);
             },
-            onFinish: (result) => {
+            onFinish: ({ messages }) => {
               if (sessionId) {
-                Chat.saveMessages(sessionId, result.messages);
+                // Check if last message has empty parts and strip it if so
+                if (messages.length > 0 && messages[messages.length - 1].parts.length === 0) {
+                  messages = messages.slice(0, -1);
+                }
+                // Only save if there are messages remaining
+                if (messages.length > 0) {
+                  Chat.saveMessages(sessionId, messages);
+                }
               }
             },
           })

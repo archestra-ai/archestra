@@ -2,14 +2,6 @@ import { type UIMessage } from 'ai';
 
 import type { ChatWithMessages as ServerChatWithMessagesRepresentation } from '@ui/lib/clients/archestra/api/gen';
 
-type ServerChatMessageRepresentation = ServerChatWithMessagesRepresentation['messages'][number];
-
-export type ParsedContent = {
-  thinking: string;
-  response: string;
-  isThinkingStreaming: boolean;
-};
-
 export enum ChatMessageStatus {
   Submitted = 'submitted',
   Streaming = 'streaming',
@@ -37,4 +29,4 @@ export interface ChatWithMessages {
   lastContextWindow?: number | null;
 }
 
-export { type ServerChatMessageRepresentation, type ServerChatWithMessagesRepresentation };
+export { type ServerChatWithMessagesRepresentation };

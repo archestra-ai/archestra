@@ -11,8 +11,6 @@ interface SecurityTestActions {
 
 type SecurityTestStore = SecurityTestState & SecurityTestActions;
 
-const STORAGE_KEY = 'archestra-security-test';
-
 export const useSecurityTestStore = create<SecurityTestStore>()(
   persist(
     (set) => ({
@@ -20,7 +18,7 @@ export const useSecurityTestStore = create<SecurityTestStore>()(
       setDangerMode: (enabled) => set({ dangerMode: enabled }),
     }),
     {
-      name: STORAGE_KEY,
+      name: 'archestra-security-test',
     }
   )
 );

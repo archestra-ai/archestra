@@ -124,6 +124,25 @@ export type OllamaModelDownloadProgressInput = {
   message: string;
 };
 
+export type ToolApprovalRequestInput = {
+  requestId: string;
+  toolId: string;
+  toolName: string;
+  toolDescription?: string;
+  args: {
+    [key: string]: unknown;
+  };
+  isWrite: boolean;
+  sessionId: string;
+  chatId: number;
+};
+
+export type ToolApprovalResponseInput = {
+  requestId: string;
+  decision: 'approve' | 'approve_always' | 'decline';
+  sessionId: string;
+};
+
 export type WebSocketMessageInput =
   | {
       type: 'chat-title-updated';
@@ -190,6 +209,14 @@ export type WebSocketMessageInput =
         lastContextWindow: number | null;
         contextUsagePercent: number;
       };
+    }
+  | {
+      type: 'tool-approval-request';
+      payload: ToolApprovalRequestInput;
+    }
+  | {
+      type: 'tool-approval-response';
+      payload: ToolApprovalResponseInput;
     };
 
 export type ChatWithMessagesInput = {
@@ -360,7 +387,7 @@ export type McpServerContainerLogsInput = {
 
 export type AvailableToolInput = {
   /**
-   * Tool ID in format sanitizedServerId__sanitizedToolName
+   * Tool ID in format sanitizedS__sanitizedToolName
    */
   id: string;
   /**
@@ -443,13 +470,6 @@ export type DeleteResponseInput = {
   count?: number;
 };
 
-export type WriteMemoryInput = {
-  /**
-   * Markdown content to store as memory
-   */
-  content: string;
-};
-
 export type OllamaRequiredModelStatusInput = {
   model: string;
   reason: string;
@@ -459,6 +479,17 @@ export type OllamaRequiredModelStatusInput = {
 export type SandboxActionResponseInput = {
   success: boolean;
   message: string;
+};
+
+export type BackendLogsResponseInput = {
+  /**
+   * The log content or error message
+   */
+  logs: string;
+  /**
+   * Error message if failed to read logs
+   */
+  error: string | null;
 };
 
 export type UserInput = {
@@ -595,6 +626,25 @@ export type OllamaModelDownloadProgress = {
   message: string;
 };
 
+export type ToolApprovalRequest = {
+  requestId: string;
+  toolId: string;
+  toolName: string;
+  toolDescription?: string;
+  args: {
+    [key: string]: unknown;
+  };
+  isWrite: boolean;
+  sessionId: string;
+  chatId: number;
+};
+
+export type ToolApprovalResponse = {
+  requestId: string;
+  decision: 'approve' | 'approve_always' | 'decline';
+  sessionId: string;
+};
+
 export type WebSocketMessage =
   | {
       type: 'chat-title-updated';
@@ -661,6 +711,14 @@ export type WebSocketMessage =
         lastContextWindow: number | null;
         contextUsagePercent: number;
       };
+    }
+  | {
+      type: 'tool-approval-request';
+      payload: ToolApprovalRequest;
+    }
+  | {
+      type: 'tool-approval-response';
+      payload: ToolApprovalResponse;
     };
 
 export type ChatWithMessages = {
@@ -831,7 +889,7 @@ export type McpServerContainerLogs = {
 
 export type AvailableTool = {
   /**
-   * Tool ID in format sanitizedServerId__sanitizedToolName
+   * Tool ID in format sanitizedS__sanitizedToolName
    */
   id: string;
   /**
@@ -914,13 +972,6 @@ export type DeleteResponse = {
   count?: number;
 };
 
-export type WriteMemory = {
-  /**
-   * Markdown content to store as memory
-   */
-  content: string;
-};
-
 export type OllamaRequiredModelStatus = {
   model: string;
   reason: string;
@@ -930,6 +981,17 @@ export type OllamaRequiredModelStatus = {
 export type SandboxActionResponse = {
   success: boolean;
   message: string;
+};
+
+export type BackendLogsResponse = {
+  /**
+   * The log content or error message
+   */
+  logs: string;
+  /**
+   * Error message if failed to read logs
+   */
+  error: string | null;
 };
 
 export type User = {
@@ -1287,6 +1349,108 @@ export type GetChatAvailableToolsResponses = {
 };
 
 export type GetChatAvailableToolsResponse = GetChatAvailableToolsResponses[keyof GetChatAvailableToolsResponses];
+
+export type DeleteChatMessageData = {
+  body?: never;
+  path: {
+    /**
+     * The content ID (from the ai SDK) of the message to update (not the database pk ID)
+     */
+    id: string;
+  };
+  query?: never;
+  url: '/api/message/{id}';
+};
+
+export type DeleteChatMessageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type DeleteChatMessageError = DeleteChatMessageErrors[keyof DeleteChatMessageErrors];
+
+export type DeleteChatMessageResponses = {
+  /**
+   * Default Response
+   */
+  204: void;
+};
+
+export type DeleteChatMessageResponse = DeleteChatMessageResponses[keyof DeleteChatMessageResponses];
+
+export type UpdateChatMessageData = {
+  body: {
+    content: unknown;
+  };
+  path: {
+    /**
+     * The content ID (from the ai SDK) of the message to update (not the database pk ID)
+     */
+    id: string;
+  };
+  query?: never;
+  url: '/api/message/{id}';
+};
+
+export type UpdateChatMessageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type UpdateChatMessageError = UpdateChatMessageErrors[keyof UpdateChatMessageErrors];
+
+export type UpdateChatMessageResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+  };
+};
+
+export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
+
+export type ResetChatTokenUsageData = {
+  body?: never;
+  path: {
+    /**
+     * The session ID of the chat
+     */
+    sessionId: string;
+  };
+  query?: never;
+  url: '/api/chat/{sessionId}/reset-token-usage';
+};
+
+export type ResetChatTokenUsageErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+};
+
+export type ResetChatTokenUsageError = ResetChatTokenUsageErrors[keyof ResetChatTokenUsageErrors];
+
+export type ResetChatTokenUsageResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    message: string;
+  };
+};
+
+export type ResetChatTokenUsageResponse = ResetChatTokenUsageResponses[keyof ResetChatTokenUsageResponses];
 
 export type GetAvailableCloudProvidersData = {
   body?: never;
@@ -1874,87 +2038,6 @@ export type SetMemoryResponses = {
 
 export type SetMemoryResponse = SetMemoryResponses[keyof SetMemoryResponses];
 
-export type GetMemoryData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type GetMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: LegacyMemoryResponse;
-};
-
-export type GetMemoryResponse = GetMemoryResponses[keyof GetMemoryResponses];
-
-export type UpdateMemoryData = {
-  body?: WriteMemoryInput;
-  path?: never;
-  query?: never;
-  url: '/api/memory';
-};
-
-export type UpdateMemoryErrors = {
-  /**
-   * Default Response
-   */
-  400: {
-    error: string;
-    message: string;
-  };
-};
-
-export type UpdateMemoryError = UpdateMemoryErrors[keyof UpdateMemoryErrors];
-
-export type UpdateMemoryResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-  };
-};
-
-export type UpdateMemoryResponse = UpdateMemoryResponses[keyof UpdateMemoryResponses];
-
-export type PostApiOllamaPullData = {
-  body: {
-    /**
-     * The model name to pull
-     */
-    model: string;
-  };
-  path?: never;
-  query?: never;
-  url: '/api/ollama/pull';
-};
-
-export type PostApiOllamaPullErrors = {
-  /**
-   * Default Response
-   */
-  500: {
-    error: string;
-  };
-};
-
-export type PostApiOllamaPullError = PostApiOllamaPullErrors[keyof PostApiOllamaPullErrors];
-
-export type PostApiOllamaPullResponses = {
-  /**
-   * Default Response
-   */
-  200: {
-    success: boolean;
-    message: string;
-  };
-};
-
-export type PostApiOllamaPullResponse = PostApiOllamaPullResponses[keyof PostApiOllamaPullResponses];
-
 export type GetOllamaRequiredModelsStatusData = {
   body?: never;
   path?: never;
@@ -1973,6 +2056,79 @@ export type GetOllamaRequiredModelsStatusResponses = {
 
 export type GetOllamaRequiredModelsStatusResponse =
   GetOllamaRequiredModelsStatusResponses[keyof GetOllamaRequiredModelsStatusResponses];
+
+export type RemoveOllamaModelData = {
+  body?: never;
+  path: {
+    modelName: string;
+  };
+  query?: never;
+  url: '/api/ollama/models/{modelName}';
+};
+
+export type RemoveOllamaModelErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type RemoveOllamaModelError = RemoveOllamaModelErrors[keyof RemoveOllamaModelErrors];
+
+export type RemoveOllamaModelResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type RemoveOllamaModelResponse = RemoveOllamaModelResponses[keyof RemoveOllamaModelResponses];
+
+export type PullOllamaModelData = {
+  body: {
+    /**
+     * The model name to pull
+     */
+    model: string;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/ollama/pull';
+};
+
+export type PullOllamaModelErrors = {
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type PullOllamaModelError = PullOllamaModelErrors[keyof PullOllamaModelErrors];
+
+export type PullOllamaModelResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type PullOllamaModelResponse = PullOllamaModelResponses[keyof PullOllamaModelResponses];
 
 export type RestartSandboxData = {
   body?: never;
@@ -2028,19 +2184,35 @@ export type ResetSandboxResponses = {
 
 export type ResetSandboxResponse = ResetSandboxResponses[keyof ResetSandboxResponses];
 
-export type GetApiSystemBackendLogsData = {
+export type GetSystemBackendLogsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    /**
+     * Number of lines to return from the end of the log file
+     */
+    lines?: string;
+  };
   url: '/api/system/backend-logs';
 };
 
-export type GetApiSystemBackendLogsResponses = {
+export type GetSystemBackendLogsErrors = {
   /**
    * Default Response
    */
-  200: unknown;
+  500: BackendLogsResponse;
 };
+
+export type GetSystemBackendLogsError = GetSystemBackendLogsErrors[keyof GetSystemBackendLogsErrors];
+
+export type GetSystemBackendLogsResponses = {
+  /**
+   * Default Response
+   */
+  200: BackendLogsResponse;
+};
+
+export type GetSystemBackendLogsResponse = GetSystemBackendLogsResponses[keyof GetSystemBackendLogsResponses];
 
 export type GetUserData = {
   body?: never;

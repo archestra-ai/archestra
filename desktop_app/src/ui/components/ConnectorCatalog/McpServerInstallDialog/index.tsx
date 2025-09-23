@@ -184,7 +184,7 @@ export default function McpServerInstallDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Configure {mcpServer.name}</DialogTitle>
+          <DialogTitle>Configure {mcpServer.display_name}</DialogTitle>
           <DialogDescription>
             {hasUserConfig
               ? 'This MCP server requires configuration before installation. Please provide the required values below.'

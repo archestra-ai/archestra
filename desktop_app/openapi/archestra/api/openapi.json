@@ -484,6 +484,53 @@
         },
         "required": ["model", "status", "progress", "message"]
       },
+      "ToolApprovalRequestInput": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolDescription": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "isWrite": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "number"
+          }
+        },
+        "required": ["requestId", "toolId", "toolName", "args", "isWrite", "sessionId", "chatId"]
+      },
+      "ToolApprovalResponseInput": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "approve_always", "decline"]
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": ["requestId", "decision", "sessionId"]
+      },
       "WebSocketMessageInput": {
         "anyOf": [
           {
@@ -753,6 +800,32 @@
                   "lastContextWindow",
                   "contextUsagePercent"
                 ]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-request"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalRequestInput"
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-response"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalResponseInput"
               }
             },
             "required": ["type", "payload"]
@@ -1471,7 +1544,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Tool ID in format sanitizedServerId__sanitizedToolName",
+            "description": "Tool ID in format sanitizedS__sanitizedToolName",
             "type": "string"
           },
           "name": {
@@ -1633,16 +1706,6 @@
         },
         "required": ["success"]
       },
-      "WriteMemoryInput": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"]
-      },
       "OllamaRequiredModelStatusInput": {
         "type": "object",
         "properties": {
@@ -1669,6 +1732,28 @@
           }
         },
         "required": ["success", "message"]
+      },
+      "BackendLogsResponseInput": {
+        "type": "object",
+        "properties": {
+          "logs": {
+            "description": "The log content or error message",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error message if failed to read logs",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["logs", "error"]
       },
       "UserInput": {
         "type": "object",
@@ -2201,6 +2286,55 @@
         "required": ["model", "status", "progress", "message"],
         "additionalProperties": false
       },
+      "ToolApprovalRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolDescription": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "isWrite": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "number"
+          }
+        },
+        "required": ["requestId", "toolId", "toolName", "args", "isWrite", "sessionId", "chatId"],
+        "additionalProperties": false
+      },
+      "ToolApprovalResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "approve_always", "decline"]
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": ["requestId", "decision", "sessionId"],
+        "additionalProperties": false
+      },
       "WebSocketMessage": {
         "anyOf": [
           {
@@ -2484,6 +2618,34 @@
                   "contextUsagePercent"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-request"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalRequest"
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["tool-approval-response"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/ToolApprovalResponse"
               }
             },
             "required": ["type", "payload"],
@@ -3214,7 +3376,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Tool ID in format sanitizedServerId__sanitizedToolName",
+            "description": "Tool ID in format sanitizedS__sanitizedToolName",
             "type": "string"
           },
           "name": {
@@ -3384,17 +3546,6 @@
         "required": ["success"],
         "additionalProperties": false
       },
-      "WriteMemory": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Markdown content to store as memory",
-            "type": "string"
-          }
-        },
-        "required": ["content"],
-        "additionalProperties": false
-      },
       "OllamaRequiredModelStatus": {
         "type": "object",
         "properties": {
@@ -3422,6 +3573,29 @@
           }
         },
         "required": ["success", "message"],
+        "additionalProperties": false
+      },
+      "BackendLogsResponse": {
+        "type": "object",
+        "properties": {
+          "logs": {
+            "description": "The log content or error message",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error message if failed to read logs",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "nullable": true,
+                "enum": [null]
+              }
+            ]
+          }
+        },
+        "required": ["logs", "error"],
         "additionalProperties": false
       },
       "User": {
@@ -4123,6 +4297,166 @@
                   "items": {
                     "$ref": "#/components/schemas/AvailableTool"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/message/{id}": {
+      "put": {
+        "operationId": "updateChatMessage",
+        "tags": ["Chat"],
+        "description": "Update a specific message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {}
+                },
+                "required": ["content"]
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The content ID (from the ai SDK) of the message to update (not the database pk ID)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["success"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteChatMessage",
+        "tags": ["Chat"],
+        "description": "Delete a specific message",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "The content ID (from the ai SDK) of the message to update (not the database pk ID)"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/{sessionId}/reset-token-usage": {
+      "post": {
+        "operationId": "resetChatTokenUsage",
+        "tags": ["Chat"],
+        "description": "Reset token usage counters for a chat session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "description": "The session ID of the chat"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -5250,37 +5584,50 @@
         }
       }
     },
-    "/api/memory": {
+    "/api/ollama/required-models": {
       "get": {
-        "operationId": "getMemory",
-        "tags": ["Memory"],
-        "description": "Get the current user memory (legacy format)",
+        "operationId": "getOllamaRequiredModelsStatus",
+        "tags": ["Ollama"],
+        "description": "Get the status of all Ollama required models",
         "responses": {
           "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LegacyMemoryResponse"
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OllamaRequiredModelStatus"
+                      }
+                    }
+                  },
+                  "required": ["models"],
+                  "additionalProperties": false
                 }
               }
             }
           }
         }
-      },
-      "put": {
-        "operationId": "updateMemory",
-        "tags": ["Memory"],
-        "description": "Update the current user memory (legacy format)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WriteMemoryInput"
-              }
-            }
+      }
+    },
+    "/api/ollama/models/{modelName}": {
+      "delete": {
+        "operationId": "removeOllamaModel",
+        "tags": ["Ollama"],
+        "description": "Remove/uninstall an Ollama model",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "modelName",
+            "required": true
           }
-        },
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -5291,9 +5638,12 @@
                   "properties": {
                     "success": {
                       "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
                     }
                   },
-                  "required": ["success"],
+                  "required": ["success", "message"],
                   "additionalProperties": false
                 }
               }
@@ -5308,12 +5658,26 @@
                   "properties": {
                     "error": {
                       "type": "string"
-                    },
-                    "message": {
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
                       "type": "string"
                     }
                   },
-                  "required": ["error", "message"],
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }
@@ -5324,6 +5688,9 @@
     },
     "/api/ollama/pull": {
       "post": {
+        "operationId": "pullOllamaModel",
+        "tags": ["Ollama"],
+        "description": "Pull an Ollama model",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5374,35 +5741,6 @@
                     }
                   },
                   "required": ["error"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ollama/required-models": {
-      "get": {
-        "operationId": "getOllamaRequiredModelsStatus",
-        "tags": ["MCP Server"],
-        "description": "Get the status of all Ollama required models",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "models": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/OllamaRequiredModelStatus"
-                      }
-                    }
-                  },
-                  "required": ["models"],
                   "additionalProperties": false
                 }
               }
@@ -5485,9 +5823,41 @@
     },
     "/api/system/backend-logs": {
       "get": {
+        "operationId": "getSystemBackendLogs",
+        "tags": ["System"],
+        "description": "Get backend log file content",
+        "parameters": [
+          {
+            "schema": {
+              "default": "1000",
+              "type": "string"
+            },
+            "in": "query",
+            "name": "lines",
+            "required": false,
+            "description": "Number of lines to return from the end of the log file"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackendLogsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackendLogsResponse"
+                }
+              }
+            }
           }
         }
       }

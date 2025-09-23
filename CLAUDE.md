@@ -213,8 +213,15 @@ Archestra supports deep linking for OAuth authentication flows:
 
 - **OAuth Callback**: `archestra-ai://oauth-callback?code=<auth_code>&state=<state>`
   - Handles OAuth authorization codes from external providers
-  - Forwards the code to backend server for token exchange
+  - Forwards the code to backend server for token exchange via `/api/oauth/store-code` endpoint
+  - Sends to backend on port 54587 (configurable via `ARCHESTRA_API_SERVER_PORT`)
   
 - **Auth Success**: `archestra-ai://auth-success?token=<auth_token>`
-  - Stores authentication tokens in the user database
-  - Broadcasts authentication events via WebSocket
+  - Stores authentication tokens in the CloudProvider model for 'archestra' provider
+  - Broadcasts `user-authenticated` events via WebSocket
+  - Automatically focuses the application window
+
+**Implementation Notes**:
+- Deep link handler is in `src/deep-linking.ts`
+- Auth tokens are stored in the `cloud_providers` table (not user table)
+- WebSocket broadcasts notify UI of authentication status changes

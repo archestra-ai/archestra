@@ -59,60 +59,91 @@ fastify.post(
         }
       });
 
+      // Only support streaming responses
+      if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+        console.log("Non-streaming response received, but only streaming is supported");
+        return reply.code(400).send({
+          error: "Only streaming responses are supported",
+          details: "The proxy only handles SSE streaming responses"
+        });
+      }
+
       // Handle streaming response
-      if (response.headers.get("content-type")?.includes("text/event-stream")) {
-        reply.type("text/event-stream");
-        reply.header("cache-control", "no-cache");
-        reply.header("connection", "keep-alive");
+      reply.type("text/event-stream");
+      reply.header("cache-control", "no-cache");
+      reply.header("connection", "keep-alive");
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let totalTokenUsage = null;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let totalTokenUsage = null;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
 
-          // Parse SSE data format
-          if (chunk.startsWith("data: ")) {
-            try {
-              const jsonStr = chunk.substring(6); // Remove "data: " prefix
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.usageMetadata) {
-                console.log(
-                  "Chunk Reported Usage Metadata:",
-                  parsed.usageMetadata,
-                );
-                // Keep updating with latest usage metadata (usually comes in final chunk)
-                totalTokenUsage = parsed.usageMetadata;
-              }
-            } catch (e) {
-              // Not all chunks are valid JSON
+        // Parse SSE data format and filter response
+        if (chunk.startsWith("data: ")) {
+          try {
+            const jsonStr = chunk.substring(6); // Remove "data: " prefix
+            const parsed = JSON.parse(jsonStr);
+
+            // Filter the response to only include safe fields
+            const filteredResponse = {};
+
+            if (parsed.candidates) {
+              filteredResponse.candidates = parsed.candidates.map(candidate => ({
+                content: candidate.content,
+                finishReason: candidate.finishReason,
+                index: candidate.index
+              }));
             }
+
+            if (parsed.usageMetadata) {
+              filteredResponse.usageMetadata = parsed.usageMetadata;
+              totalTokenUsage = parsed.usageMetadata;
+              console.log(
+                "Chunk Reported Usage Metadata:",
+                parsed.usageMetadata,
+              );
+            }
+
+            if (parsed.modelVersion) {
+              filteredResponse.modelVersion = parsed.modelVersion;
+            }
+
+            if (parsed.responseId) {
+              filteredResponse.responseId = parsed.responseId;
+            }
+
+            // Send filtered chunk
+            const filteredChunk = `data: ${JSON.stringify(filteredResponse)}\n\n`;
+            reply.raw.write(filteredChunk);
+            console.log("Filtered Chunk: ", filteredChunk);
+          } catch (e) {
+            // Not all chunks are valid JSON, pass through as-is
+            reply.raw.write(chunk);
+            console.log("Chunk: ", chunk);
           }
-          console.log("Chunk: ", chunk);
+        } else {
+          // Non-data chunks (like newlines), pass through
           reply.raw.write(chunk);
         }
+      }
 
-        reply.raw.end();
+      reply.raw.end();
 
-        // Log total token usage at the end
-        if (totalTokenUsage) {
-          console.log("\n=== TOTAL TOKEN USAGE ===");
-          console.log("Prompt Tokens:", totalTokenUsage.promptTokenCount);
-          console.log(
-            "Completion Tokens:",
-            totalTokenUsage.candidatesTokenCount || 0,
-          );
-          console.log("Total Tokens:", totalTokenUsage.totalTokenCount);
-          console.log("========================\n");
-        }
-      } else {
-        // Non-streaming response
-        const data = await response.text();
-        reply.send(data);
+      // Log total token usage at the end
+      if (totalTokenUsage) {
+        console.log("\n=== TOTAL TOKEN USAGE ===");
+        console.log("Prompt Tokens:", totalTokenUsage.promptTokenCount);
+        console.log(
+          "Completion Tokens:",
+          totalTokenUsage.candidatesTokenCount || 0,
+        );
+        console.log("Total Tokens:", totalTokenUsage.totalTokenCount);
+        console.log("========================\n");
       }
     } catch (error) {
       fastify.log.error("Proxy error:", error);

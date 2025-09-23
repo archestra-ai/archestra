@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { type Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChatModel from '@backend/models/chat';
 import toolService from '@backend/services/tool';
@@ -16,7 +16,7 @@ vi.mock('@backend/models/chat', () => ({
     getSelectedTools: vi.fn(),
     addSelectedTools: vi.fn(),
     removeSelectedTools: vi.fn(),
-  }
+  },
 }));
 vi.mock('@backend/models/memory');
 vi.mock('@backend/services/tool');
@@ -40,13 +40,13 @@ vi.mock('@socotra/modelcontextprotocol-sdk/server/mcp.js', () => ({
     registerTool: vi.fn((name: string, schema: any, handler: any) => {
       registeredHandlers[name] = handler;
     }),
-    server: {}
-  }))
+    server: {},
+  })),
 }));
 
 describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
   const chatId = 123;
-  
+
   // Mock tools - including one with a long server ID to test truncation and some Archestra tools
   const mockTools = [
     {
@@ -97,14 +97,14 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Clear handlers from previous tests
-    Object.keys(registeredHandlers).forEach(key => delete registeredHandlers[key]);
-    
+    Object.keys(registeredHandlers).forEach((key) => delete registeredHandlers[key]);
+
     archestraMcpContext.clear();
     archestraMcpContext.setCurrentChatId(chatId);
-    
+
     // Create the server which will register the handlers
     createArchestraMcpServer();
-    
+
     // Setup default mock for available tools
     (toolService.getAllAvailableTools as Mock).mockReturnValue(mockTools);
   });
@@ -115,10 +115,10 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
 
     const listHandler = registeredHandlers[ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS];
     let result = await listHandler({ mcp_server: 'filesystem' });
-    
+
     expect(result.content[0].type).toBe('text');
     let text = result.content[0].text;
-    
+
     // All tools should be disabled
     expect(text).toContain('**filesystem** (0/3 tools enabled)');
     expect(text).toContain('very-long-__read_file'); // Truncated ID, no (enabled) suffix
@@ -130,49 +130,45 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
     // Mock that some Archestra tools are currently enabled
     (ChatModel.getSelectedTools as Mock).mockResolvedValue([
       'archestra__list_memories',
-      'archestra__list_available_tools'
-    ]); 
-    
+      'archestra__list_available_tools',
+    ]);
+
     (ChatModel.addSelectedTools as Mock).mockResolvedValue([
       'archestra__list_memories',
       'archestra__list_available_tools',
       'very-long-__read_file',
-      'filesystem__write_file'
+      'filesystem__write_file',
     ]);
-    
+
     // Mock removeSelectedTools to simulate removing Archestra tools
-    (ChatModel.removeSelectedTools as Mock).mockResolvedValue([
-      'very-long-__read_file',
-      'filesystem__write_file'
-    ]);
-    
+    (ChatModel.removeSelectedTools as Mock).mockResolvedValue(['very-long-__read_file', 'filesystem__write_file']);
+
     const enableHandler = registeredHandlers[ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS];
-    result = await enableHandler({ 
-      toolIds: ['very-long-__read_file', 'filesystem__write_file'] 
+    result = await enableHandler({
+      toolIds: ['very-long-__read_file', 'filesystem__write_file'],
     });
-    
+
     expect(ChatModel.addSelectedTools).toHaveBeenCalledWith(chatId, [
       'very-long-__read_file',
-      'filesystem__write_file'
+      'filesystem__write_file',
     ]);
-    
+
     // Should have automatically disabled Archestra tools
     expect(ChatModel.removeSelectedTools).toHaveBeenCalledWith(chatId, [
       'archestra__list_memories',
-      'archestra__list_available_tools'
+      'archestra__list_available_tools',
     ]);
-    
-    expect(result.content[0].text).toContain('Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Proceed with the task.');
+
+    expect(result.content[0].text).toContain(
+      'Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Proceed with the task.'
+    );
 
     // Step 3: List tools again - should show updated status
-    (ChatModel.getSelectedTools as Mock).mockResolvedValue([
-      'very-long-__read_file',
-      'filesystem__write_file'
-    ]);
-    
+    (ChatModel.getSelectedTools as Mock).mockResolvedValue(['very-long-__read_file', 'filesystem__write_file']);
+
     result = await listHandler({ mcp_server: 'filesystem' });
     text = result.content[0].text;
-    
+
     // Now 2 tools should be enabled
     expect(text).toContain('**filesystem** (2/3 tools enabled)');
     expect(text).toContain('very-long-__read_file (enabled)'); // Enabled with truncated ID

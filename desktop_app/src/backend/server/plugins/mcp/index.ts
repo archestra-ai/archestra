@@ -316,7 +316,7 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS,
     {
-      title: 'Enable tools',
+      title: 'Enable tools and finish tool selection',
       description: `Enable specific tools for use in the current chat. If you don't have tool ID, use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS}. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
       inputSchema: {
         toolIds: z
@@ -406,25 +406,41 @@ export const createArchestraMcpServer = () => {
 
         // Automatically disable all Archestra tools as the last step
         const archestraToolIds = Object.values(FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS);
-        const archestraToolsToDisable = archestraToolIds.filter(toolId => {
+        const archestraToolsToDisable = archestraToolIds.filter((toolId) => {
           // Get the updated enabled set after adding new tools
           const updatedEnabledSet = new Set([
             ...(currentSelectedTools === null ? Array.from(availableToolIds) : currentSelectedTools),
-            ...validToolsToEnable
+            ...validToolsToEnable,
           ]);
           return updatedEnabledSet.has(toolId);
         });
 
         if (archestraToolsToDisable.length > 0) {
           await ChatModel.removeSelectedTools(chatId, archestraToolsToDisable);
-          log.info(`Automatically disabled ${archestraToolsToDisable.length} Archestra tools after enabling requested tools`);
+          log.info(
+            `Automatically disabled ${archestraToolsToDisable.length} Archestra tools after enabling requested tools`
+          );
         }
+
+        // Get the chat to get the sessionId
+        const chat = await ChatModel.getChatById(chatId);
+        const sessionId = chat?.sessionId || '';
+
+        // Broadcast a special event to signal that enable_tools was called and stream should stop
+        websocketService.broadcast({
+          type: 'enable-tools-called',
+          payload: {
+            chatId,
+            sessionId,
+            enabledTools: validToolsToEnable,
+          },
+        });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Archestra tools have been automatically disabled. Proceed with the task.`,
+              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Archestra tools have been automatically disabled. Don't proceed, stop immediately. Don't use any tools yet. Wait for user confirmation.`,
             },
           ],
         };

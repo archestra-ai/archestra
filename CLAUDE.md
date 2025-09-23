@@ -121,6 +121,7 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
   - Dynamic socket path resolution (avoids conflicts)
   - Multi-platform binary distribution
   - Real-time progress tracking with percentages
+  - HTTP port preservation for streamable containers across app restarts
 
 - **ToolService**: Unified tool management and approval system
   - Aggregates tools from all MCP servers (sandboxed + Archestra)

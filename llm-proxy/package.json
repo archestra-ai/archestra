@@ -7,8 +7,9 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
-    "fastify": "^5.2.2",
     "@fastify/http-proxy": "^11.0.0",
-    "dotenv": "^16.4.7"
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.2"
   }
 }

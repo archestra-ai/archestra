@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import dotenv from "dotenv";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -9,77 +10,49 @@ const fastify = Fastify({
   logger: true,
 });
 
-// Google AI Studio API base URL for Gemini models
-const GOOGLE_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+// Initialize Google Generative AI with API key from environment
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN || "");
 
 /**
  * Proxy endpoint for Gemini 2.5 Flash streaming API
  * This endpoint:
  * 1. Receives requests from the Archestra app
- * 2. Adds the Google API key from environment variables
- * 3. Forwards the request to Google's Gemini API
- * 4. Filters the response to remove sensitive information
- * 5. Streams the filtered response back to the client
+ * 2. Uses the Google Generative AI SDK to make secure API calls
+ * 3. Streams the response back to the client
+ * 4. Filters sensitive information from the response
  */
 fastify.post(
   "/models/gemini-2.5-flash:streamGenerateContent",
   async (request, reply) => {
-    // Get API key from environment variable
-    const apiKey = process.env.GOOGLE_API_TOKEN;
-
-    console.log("Request body", request.body);
-
     // Validate that API key is configured
-    if (!apiKey) {
+    if (!process.env.GOOGLE_API_TOKEN) {
       return reply.code(500).send({ error: "GOOGLE_API_TOKEN not configured" });
     }
 
-    // Construct the full Google API URL with API key
-    // alt=sse enables Server-Sent Events streaming format
-    const targetUrl = `${GOOGLE_API_BASE}/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`;
-
-    fastify.log.info(`Proxying to: ${targetUrl}`);
+    console.log("Request body", request.body);
 
     try {
-      // Forward the request to Google's API
-      const response = await fetch(targetUrl, {
-        method: request.method,
-        headers: {
-          ...request.headers,
-          host: new URL(GOOGLE_API_BASE).host, // Override host header
-        },
-        body:
-          request.method !== "GET" && request.method !== "HEAD"
-            ? JSON.stringify(request.body)
-            : undefined,
-      });
+      // Initialize the Gemini 2.5 Flash model
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-      console.log("Response: ", response);
+      // Extract request parameters from the body
+      const { contents, generationConfig, tools, toolConfig, systemInstruction } = request.body;
 
-      // Pass through the response status code
-      reply.code(response.status);
+      // Prepare the request configuration
+      const requestConfig = {
+        contents,
+        generationConfig,
+      };
 
-      // Only forward specific headers to avoid leaking sensitive information
-      const headersToForward = [
-        "content-type",
-        "content-length",
-        "cache-control",
-      ];
-      headersToForward.forEach((header) => {
-        const value = response.headers.get(header);
-        if (value) {
-          reply.header(header, value);
-        }
-      });
-
-      // Verify that the response is a streaming response (SSE)
-      // We only support streaming to ensure consistent handling
-      if (!response.headers.get("content-type")?.includes("text/event-stream")) {
-        console.log("Non-streaming response received, but only streaming is supported");
-        return reply.code(400).send({
-          error: "Only streaming responses are supported",
-          details: "The proxy only handles SSE streaming responses"
-        });
+      // Add optional parameters if they exist
+      if (tools) {
+        requestConfig.tools = tools;
+      }
+      if (toolConfig) {
+        requestConfig.toolConfig = toolConfig;
+      }
+      if (systemInstruction) {
+        requestConfig.systemInstruction = systemInstruction;
       }
 
       // Set up SSE response headers for streaming
@@ -87,92 +60,110 @@ fastify.post(
       reply.header("cache-control", "no-cache");
       reply.header("connection", "keep-alive");
 
-      // Initialize streaming reader and decoder
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      console.log("Starting stream generation with config:", requestConfig);
+
+      // Generate streaming content
+      const result = await model.generateContentStream(requestConfig);
+
       let totalTokenUsage = null;
+      let responseId = null;
+      let modelVersion = null;
 
-      // Process the stream chunk by chunk
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Process the stream
+      for await (const chunk of result.stream) {
+        // Get the chunk data
+        const chunkData = chunk;
 
-        const chunk = decoder.decode(value, { stream: true });
+        // Build filtered response matching the expected format
+        const filteredResponse = {};
 
-        // SSE format: each data chunk starts with "data: "
-        if (chunk.startsWith("data: ")) {
-          try {
-            // Extract and parse the JSON payload
-            const jsonStr = chunk.substring(6); // Remove "data: " prefix
-            const parsed = JSON.parse(jsonStr);
-
-            // Create filtered response with only safe fields
-            // This prevents leaking any sensitive information from the API
-            const filteredResponse = {};
-
-            // Include candidate responses (the actual generated content)
-            if (parsed.candidates) {
-              filteredResponse.candidates = parsed.candidates.map(candidate => ({
-                content: candidate.content,         // The generated text/content
-                finishReason: candidate.finishReason, // Why generation stopped
-                index: candidate.index               // Candidate index
-              }));
-            }
-
-            // Include token usage statistics
-            if (parsed.usageMetadata) {
-              filteredResponse.usageMetadata = parsed.usageMetadata;
-              totalTokenUsage = parsed.usageMetadata; // Store for final logging
-              console.log(
-                "Chunk Reported Usage Metadata:",
-                parsed.usageMetadata,
-              );
-            }
-
-            // Include model version information
-            if (parsed.modelVersion) {
-              filteredResponse.modelVersion = parsed.modelVersion;
-            }
-
-            // Include response ID for tracking
-            if (parsed.responseId) {
-              filteredResponse.responseId = parsed.responseId;
-            }
-
-            // Reconstruct the SSE data chunk with filtered content
-            const filteredChunk = `data: ${JSON.stringify(filteredResponse)}\n\n`;
-            reply.raw.write(filteredChunk);
-            console.log("Filtered Chunk: ", filteredChunk);
-          } catch (e) {
-            // If parsing fails, pass through the original chunk
-            // This handles special SSE messages like [DONE]
-            reply.raw.write(chunk);
-            console.log("Chunk: ", chunk);
-          }
-        } else {
-          // Non-data chunks (like newlines between events), pass through as-is
-          reply.raw.write(chunk);
+        // Add candidates if present
+        if (chunkData.candidates) {
+          filteredResponse.candidates = chunkData.candidates.map(candidate => ({
+            content: candidate.content,
+            finishReason: candidate.finishReason,
+            index: candidate.index || 0,
+          }));
         }
+
+        // Add usage metadata if present
+        if (chunkData.usageMetadata) {
+          filteredResponse.usageMetadata = chunkData.usageMetadata;
+          totalTokenUsage = chunkData.usageMetadata;
+        }
+
+        // Add other metadata
+        if (chunkData.modelVersion) {
+          filteredResponse.modelVersion = chunkData.modelVersion;
+          modelVersion = chunkData.modelVersion;
+        }
+
+        if (chunkData.responseId) {
+          filteredResponse.responseId = chunkData.responseId;
+          responseId = chunkData.responseId;
+        }
+
+        // Send the chunk in SSE format
+        const sseChunk = `data: ${JSON.stringify(filteredResponse)}\n\n`;
+        reply.raw.write(sseChunk);
+
+        console.log("Sent chunk:", sseChunk);
       }
+
+      // Get the final response for complete metadata
+      const finalResponse = await result.response;
+
+      // Send final chunk with complete metadata
+      const finalChunk = {
+        candidates: finalResponse.candidates?.map((candidate, index) => ({
+          content: candidate.content,
+          finishReason: candidate.finishReason,
+          index: index,
+        })),
+        usageMetadata: finalResponse.usageMetadata,
+        modelVersion: modelVersion || "gemini-2.5-flash",
+        responseId: responseId,
+      };
+
+      const sseFinalChunk = `data: ${JSON.stringify(finalChunk)}\n\n`;
+      reply.raw.write(sseFinalChunk);
+
+      // Send the [DONE] marker
+      reply.raw.write("data: [DONE]\n\n");
 
       // End the streaming response
       reply.raw.end();
 
       // Log final token usage statistics
-      if (totalTokenUsage) {
+      if (finalResponse.usageMetadata) {
         console.log("\n=== TOTAL TOKEN USAGE ===");
-        console.log("Prompt Tokens:", totalTokenUsage.promptTokenCount);
+        console.log("Prompt Tokens:", finalResponse.usageMetadata.promptTokenCount);
         console.log(
           "Completion Tokens:",
-          totalTokenUsage.candidatesTokenCount || 0,
+          finalResponse.usageMetadata.candidatesTokenCount || 0,
         );
-        console.log("Total Tokens:", totalTokenUsage.totalTokenCount);
+        console.log("Total Tokens:", finalResponse.usageMetadata.totalTokenCount);
         console.log("========================\n");
       }
     } catch (error) {
-      // Handle any errors that occur during proxying
-      fastify.log.error("Proxy error:", error);
-      reply.code(500).send({ error: "Proxy failed", details: error.message });
+      // Handle any errors that occur during generation
+      fastify.log.error("Generation error:", error);
+
+      // Check if we've already started streaming
+      if (!reply.sent) {
+        reply.code(500).send({
+          error: "Generation failed",
+          details: error.message
+        });
+      } else {
+        // If streaming has started, send error in SSE format
+        const errorChunk = `data: ${JSON.stringify({
+          error: true,
+          message: error.message
+        })}\n\n`;
+        reply.raw.write(errorChunk);
+        reply.raw.end();
+      }
     }
   },
 );
@@ -187,6 +178,7 @@ const start = async () => {
     const port = process.env.PORT || 8888;
     await fastify.listen({ port, host: "0.0.0.0" });
     console.log(`LLM proxy server running on http://localhost:${port}`);
+    console.log(`Using Google Generative AI SDK for secure API calls`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

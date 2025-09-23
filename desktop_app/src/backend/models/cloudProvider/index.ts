@@ -75,6 +75,14 @@ const PROVIDER_REGISTRY: Record<SupportedCloudProvider, CloudProvider> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro'],
   },
+  archestra: {
+    type: 'archestra',
+    name: 'Archestra LLM',
+    apiKeyUrl: 'https://archestra.ai/signin',
+    apiKeyPlaceholder: '1234',
+    baseUrl: 'http://localhost:3000/api/llm-proxy/gemini',
+    models: ['archestra/gemini-2.5-flash'],
+  },
 };
 
 // Helper function to get provider for a model
@@ -154,9 +162,6 @@ export default class CloudProviderModel {
   static async getAvailableModels(): Promise<SupportedCloudProviderModel[]> {
     const configs = await CloudProviderModel.getAll();
     const models: SupportedCloudProviderModel[] = [];
-
-    // Always add Archestra LLM as an available model
-    models.push({ id: 'archestra-llm', provider: 'gemini' });
 
     for (const config of configs) {
       if (!config.enabled) continue;

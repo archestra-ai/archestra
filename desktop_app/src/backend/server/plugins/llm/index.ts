@@ -36,16 +36,6 @@ const createModelInstance = async (model: string, provider?: string) => {
     return ollamaClient(model);
   }
 
-  // Check if this is the Archestra LLM model
-  if (model === 'archestra-llm') {
-    const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
-    const google = createGoogleGenerativeAI({
-      baseURL: 'http://localhost:3000/api/llm-proxy/gemini',
-      apiKey: 'will_be_added_on_proxy',
-    });
-    return google('gemini-2.5-flash');
-  }
-
   const providerConfig = await CloudProviderModel.getProviderConfigForModel(model);
 
   if (!providerConfig) {
@@ -60,13 +50,17 @@ const createModelInstance = async (model: string, provider?: string) => {
     openai: () => createOpenAI({ apiKey, baseURL: baseUrl, headers }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),
     gemini: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
+    archestra: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
     ollama: () => createOllama({ baseURL: baseUrl }),
   };
 
   const createClient = clientFactories[type] || (() => createOpenAI({ apiKey, baseURL: baseUrl, headers }));
   const client = createClient();
 
-  return client(model);
+  // For archestra models, extract the actual model name after the slash
+  const actualModel = model.startsWith('archestra/') ? model.substring('archestra/'.length) : model;
+
+  return client(actualModel);
 };
 
 const llmRoutes: FastifyPluginAsync = async (fastify) => {

@@ -52,7 +52,7 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'deepseek-reasoner': 128000,
 
   // Archestra LLM (uses Gemini Flash)
-  'archestra-llm': 1048576, // 1M context (same as gemini-1.5-flash)
+  'archestra-llm': 1048576, // 1M context (same as gemini-2.5-flash)
 
   // Default fallback for unknown models
   default: 128000,

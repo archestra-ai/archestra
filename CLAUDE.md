@@ -21,9 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm start              # Start development app (Electron with hot reload)
 
 # For free LLM access via archestra-llm:
-# First set up your Google AI Studio API key (get one free at https://aistudio.google.com/apikey)
-export GOOGLE_API_TOKEN=your_api_key_here
-cd ../llm-proxy && pnpm install && pnpm start  # Start LLM proxy on port 8888
+# The archestra-llm model is available by default and routes to http://localhost:3000/api/llm-proxy/gemini
+# You'll need to set up a separate proxy service that handles Google AI Studio API authentication
 ```
 
 ### Testing
@@ -155,9 +154,9 @@ Key tables:
   - Tool analysis using local models
   - Configurable port (default: 54589)
 - **Free LLM Option**: "archestra-llm" model
-  - Proxies requests to Google Gemini (gemini-1.5-flash) via local proxy
-  - Requires llm-proxy service running on port 8888
-  - No API key configuration needed by users
+  - Proxies requests to Google Gemini (gemini-2.5-flash) via local proxy
+  - Requires external proxy service at http://localhost:3000/api/llm-proxy/gemini
+  - No API key configuration needed in Archestra (handled by proxy)
 
 ### Directory Structure
 
@@ -182,10 +181,6 @@ desktop_app/
 ├── resources/
 │   └── bin/               # Platform-specific binaries (Podman, Ollama)
 └── openapi/               # OpenAPI specs and generated clients
-llm-proxy/                 # Google Gemini proxy for free LLM access
-├── src/
-│   └── index.js          # Proxy server implementation
-└── package.json
 ```
 
 ### Development Best Practices

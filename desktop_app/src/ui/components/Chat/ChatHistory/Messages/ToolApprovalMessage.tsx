@@ -1,5 +1,5 @@
 import { Check, Shield, X } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
@@ -49,33 +49,23 @@ export default function ToolApprovalMessage({
     setRememberChoice(false);
   }, [requestId, rememberChoice, declineRequest]);
 
-  // TODO: move this out to a global keyboard shortcut listener
-  // Set up keyboard shortcuts
-  // useEffect(() => {
-  //   if (!isPending) return;
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + Enter to approve
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleApprove();
+      }
+      // Escape to decline
+      else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDecline();
+      }
+    };
 
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     // Only respond to shortcuts when no input/textarea is focused
-  //     const target = e.target as HTMLElement;
-  //     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-  //       return;
-  //     }
-
-  //     // Cmd/Ctrl + Enter to approve
-  //     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-  //       e.preventDefault();
-  //       handleApprove();
-  //     }
-  //     // Escape to decline
-  //     else if (e.key === 'Escape') {
-  //       e.preventDefault();
-  //       handleDecline();
-  //     }
-  //   };
-
-  //   window.addEventListener('keydown', handleKeyDown);
-  //   return () => window.removeEventListener('keydown', handleKeyDown);
-  // }, [isPending, handleApprove, handleDecline]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // If not pending, don't show anything (request was already handled)
   if (!isPending) {
@@ -130,24 +120,22 @@ export default function ToolApprovalMessage({
               variant="default"
               onClick={handleApprove}
               className="h-7 text-xs cursor-pointer"
-              // TODO: uncomment out when we have a keyboard shortcut for approving
-              // title="Approve (⌘ + Enter / Ctrl + Enter)"
+              title="Approve (⌘ + Enter / Ctrl + Enter)"
             >
               <Check className="h-3 w-3 mr-1" />
               Approve
-              {/* <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">⌘ ⏎</kbd> */}
+              <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">Cmd + Enter</kbd>
             </Button>
             <Button
               size="sm"
               variant="destructive"
               onClick={handleDecline}
               className="h-7 text-xs cursor-pointer"
-              // TODO: uncomment out when we have a keyboard shortcut for declining
-              // title="Decline (Escape)"
+              title="Decline (Escape)"
             >
               <X className="h-3 w-3 mr-1" />
               Decline
-              {/* <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">Esc</kbd> */}
+              <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-semibold bg-white/20 rounded">Esc</kbd>
             </Button>
           </div>
         </div>

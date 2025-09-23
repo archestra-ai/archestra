@@ -21,7 +21,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm start              # Start development app (Electron with hot reload)
 
 # For free LLM access via archestra-llm:
-cd llm-proxy && pnpm install && pnpm start  # Start LLM proxy (requires GOOGLE_API_TOKEN env var)
+# First set up your Google AI Studio API key (get one free at https://aistudio.google.com/apikey)
+export GOOGLE_API_TOKEN=your_api_key_here
+cd ../llm-proxy && pnpm install && pnpm start  # Start LLM proxy on port 8888
 ```
 
 ### Testing

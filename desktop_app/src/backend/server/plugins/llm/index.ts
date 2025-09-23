@@ -40,7 +40,7 @@ const createModelInstance = async (model: string, provider?: string) => {
   if (model === 'archestra-llm') {
     const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
     const google = createGoogleGenerativeAI({
-      baseURL: 'http://localhost:3000/api/llm-proxy/gemini',
+      baseURL: 'http://localhost:8888/',
       apiKey: 'will_be_added_on_proxy',
     });
     return google('gemini-2.5-flash');

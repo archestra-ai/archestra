@@ -199,7 +199,7 @@ export const createArchestraMcpServer = () => {
     {
       title: 'List available tools',
       description:
-        'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
+        'List available MCP servers or tools for a specific server. At first, call the tool without parameters to see all MCP servers. Then, call it with {"mcp_server": "server_name"} to see tools for that server. No need to call again after.',
       inputSchema: {
         mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
       },
@@ -321,7 +321,7 @@ export const createArchestraMcpServer = () => {
     ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS,
     {
       title: 'Enable tools',
-      description: `Enable specific tools for use in the current chat. Use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} to see tool IDs if you don\'t have them. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
+      description: `Enable specific tools for use in the current chat. If you don't have tool ID, use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS}. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
       inputSchema: {
         toolIds: z
           .array(z.string())
@@ -411,7 +411,7 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Total enabled: ${updatedTools.length}`,
+              text: `Successfully enabled ${validToolsToEnable.length} tool(s). No need to enable again.`,
             },
           ],
         };

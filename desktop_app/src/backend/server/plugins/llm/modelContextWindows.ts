@@ -41,6 +41,7 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'gemini-1.5-pro': 2097152, // 2M context
   'gemini-1.5-pro-latest': 2097152,
   'gemini-1.5-flash': 1048576, // 1M context
+  'gemini-2.5-flash': 1048576, // 1M context
   'gemini-1.5-flash-latest': 1048576,
   'gemini-pro': 32768,
   'gemini-pro-vision': 32768,

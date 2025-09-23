@@ -16,6 +16,7 @@ vi.mock('@backend/models/chat', () => ({
     getSelectedTools: vi.fn(),
     addSelectedTools: vi.fn(),
     removeSelectedTools: vi.fn(),
+    getChatById: vi.fn(),
   },
 }));
 vi.mock('@backend/models/memory');
@@ -133,6 +134,12 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
       'archestra__list_available_tools',
     ]);
 
+    // Mock getChatById to return a chat with sessionId
+    (ChatModel.getChatById as Mock).mockResolvedValue({
+      id: chatId,
+      sessionId: 'test-session-123',
+    });
+
     (ChatModel.addSelectedTools as Mock).mockResolvedValue([
       'archestra__list_memories',
       'archestra__list_available_tools',
@@ -160,7 +167,7 @@ describe('ArchestraMcpServer - Tool Enable/Disable Flow', () => {
     ]);
 
     expect(result.content[0].text).toContain(
-      'Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Proceed with the task.'
+      'Successfully enabled 2 tool(s). Archestra tools have been automatically disabled. Don\'t proceed, stop immediately.'
     );
 
     // Step 3: List tools again - should show updated status

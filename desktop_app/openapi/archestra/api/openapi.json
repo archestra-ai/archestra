@@ -839,23 +839,7 @@
               },
               "payload": {
                 "type": "object",
-                "properties": {
-                  "userId": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "nullable": true,
-                        "enum": [null]
-                      }
-                    ]
-                  },
-                  "hasToken": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["userId", "hasToken"]
+                "properties": {}
               }
             },
             "required": ["type", "payload"]
@@ -1813,17 +1797,6 @@
           "collectAnalyticsData": {
             "type": "boolean"
           },
-          "authToken": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "createdAt": {
             "type": "string"
           },
@@ -1837,7 +1810,6 @@
           "hasCompletedOnboarding",
           "collectTelemetryData",
           "collectAnalyticsData",
-          "authToken",
           "createdAt",
           "updatedAt"
         ]
@@ -2702,23 +2674,7 @@
               },
               "payload": {
                 "type": "object",
-                "properties": {
-                  "userId": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "nullable": true,
-                        "enum": [null]
-                      }
-                    ]
-                  },
-                  "hasToken": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["userId", "hasToken"],
+                "properties": {},
                 "additionalProperties": false
               }
             },
@@ -3700,17 +3656,6 @@
           "collectAnalyticsData": {
             "type": "boolean"
           },
-          "authToken": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "nullable": true,
-                "enum": [null]
-              }
-            ]
-          },
           "createdAt": {
             "type": "string"
           },
@@ -3724,7 +3669,6 @@
           "hasCompletedOnboarding",
           "collectTelemetryData",
           "collectAnalyticsData",
-          "authToken",
           "createdAt",
           "updatedAt"
         ],
@@ -5984,9 +5928,6 @@
                   },
                   "collectAnalyticsData": {
                     "type": "boolean"
-                  },
-                  "authToken": {
-                    "type": "string"
                   }
                 }
               }

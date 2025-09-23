@@ -221,8 +221,7 @@ export type WebSocketMessageInput =
   | {
       type: 'user-authenticated';
       payload: {
-        userId: string | null;
-        hasToken: boolean;
+        [key: string]: unknown;
       };
     };
 
@@ -505,7 +504,6 @@ export type UserInput = {
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
   collectAnalyticsData: boolean;
-  authToken: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -731,8 +729,7 @@ export type WebSocketMessage =
   | {
       type: 'user-authenticated';
       payload: {
-        userId: string | null;
-        hasToken: boolean;
+        [key: string]: never;
       };
     };
 
@@ -1015,7 +1012,6 @@ export type User = {
   hasCompletedOnboarding: boolean;
   collectTelemetryData: boolean;
   collectAnalyticsData: boolean;
-  authToken: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -2251,7 +2247,6 @@ export type UpdateUserData = {
     hasCompletedOnboarding?: boolean;
     collectTelemetryData?: boolean;
     collectAnalyticsData?: boolean;
-    authToken?: string;
   };
   path?: never;
   query?: never;

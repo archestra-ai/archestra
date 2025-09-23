@@ -29,7 +29,7 @@ interface OnboardingWizardProps {
 }
 
 export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(OnboardingStep.Welcome);
   const [previousStep, setPreviousStep] = useState<OnboardingStep | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -117,7 +117,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
     await window.electronAPI.openExternal(authUrl);
 
     // Subscribe to authentication success event and move to next step
-    subscribeToUserAuthenticatedEvent(() => {
+    subscribeToUserAuthenticatedEvent('onboarding', () => {
       console.log('User authenticated successfully!');
       handleNext();
     });
@@ -257,6 +257,44 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
           </div>
         );
 
+      case OnboardingStep.CloudInference:
+        return (
+          <div className="relative w-full h-full">
+            <img
+              src={cloudInferenceImage}
+              alt="Cloud Inference"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8">
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
+                <h2 className="text-2xl font-bold">Free Cloud Inference for Early Access</h2>
+                <p className="text-lg text-muted-foreground mt-4">
+                  As an Early Access user, we're providing you with a limited number of free tokens to use our cloud
+                  inference service powered by Google's Gemini models.
+                </p>
+                <p className="text-base text-muted-foreground mt-3">
+                  Sign in with Google to activate your free tokens, or skip this step to configure your own AI models
+                  locally.
+                </p>
+                <div className="flex space-x-2 mt-8">
+                  {currentStep > OnboardingStep.Welcome && (
+                    <Button variant="outline" onClick={handlePrevious}>
+                      Previous
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={handleNext} className="min-w-[100px]">
+                    Skip
+                  </Button>
+                  <Button onClick={handleGoogleSignIn} className="min-w-[120px] relative">
+                    <span className="flex items-center">Sign In with Google</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       case OnboardingStep.GetStarted:
         return (
           <div className="relative w-full h-full">
@@ -325,71 +363,6 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
                       Next
                       <ChevronRight className="w-4 h-4 ml-1" />
                     </span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      case OnboardingStep.CloudInference:
-        return (
-          <div className="relative w-full h-full">
-            <img
-              src={cloudInferenceImage}
-              alt="Cloud Inference"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            <div className="absolute bottom-8 left-8 right-8">
-              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
-                <h2 className="text-2xl font-bold">Free Cloud Inference for Early Access</h2>
-                <p className="text-lg text-muted-foreground mt-4">
-                  As an Early Access user, we're providing you with a limited number of free tokens to use our cloud
-                  inference service powered by Google's Gemini models.
-                </p>
-                <p className="text-base text-muted-foreground mt-3">
-                  Sign in with Google to activate your free tokens, or skip this step to configure your own AI models
-                  locally.
-                </p>
-                <div className="flex space-x-2 mt-8">
-                  {currentStep > OnboardingStep.Welcome && (
-                    <Button variant="outline" onClick={handlePrevious}>
-                      Previous
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={handleNext} className="min-w-[100px]">
-                    Skip
-                  </Button>
-                  <Button onClick={handleGoogleSignIn} className="min-w-[120px] relative">
-                    <span className="flex items-center">Sign In with Google</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      case OnboardingStep.GetStarted:
-        return (
-          <div className="relative w-full h-full">
-            <img src={getStartedImage} alt="Get Started" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            <div className="absolute bottom-8 left-8 right-8">
-              <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-2xl max-w-2xl">
-                <h2 className="text-2xl font-bold">You're All Set!</h2>
-                <p className="text-lg text-muted-foreground mt-4">
-                  You're ready to start using Archestra. Explore the MCP catalog, connect your tools, and begin building
-                  powerful AI-driven workflows.
-                </p>
-                <div className="flex space-x-2 mt-8">
-                  {currentStep > OnboardingStep.Welcome && (
-                    <Button variant="outline" onClick={handlePrevious}>
-                      Previous
-                    </Button>
-                  )}
-                  <Button onClick={handleNext} className="min-w-[120px] relative">
-                    <span className="flex items-center">Get Started</span>
                   </Button>
                 </div>
               </div>

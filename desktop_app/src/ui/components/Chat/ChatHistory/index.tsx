@@ -8,6 +8,7 @@ import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
 import { useToolsStore } from '@ui/stores';
 
+import { useIsAtBottom, useLastScrollDirection } from './ChatHistory.hooks';
 import {
   AssistantMessage,
   ErrorMessage,
@@ -147,6 +148,7 @@ export default function ChatHistory({
   isSubmitting,
 }: ChatHistoryProps) {
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isAutoScrollingEnabled, setIsAutoScrollingEnabled] = useState(true);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   // Get pending approvals from the tools store
@@ -170,29 +172,43 @@ export default function ChatHistory({
     });
   };
 
+  const lastScrollDirection = useLastScrollDirection(scrollAreaRef);
+  const isAtBottom = useIsAtBottom(scrollAreaRef, 300);
+
+  useEffect(() => {
+    if (lastScrollDirection === 'down') {
+      setIsAutoScrollingEnabled(false);
+    }
+    if (isAtBottom) {
+      setIsAutoScrollingEnabled(true);
+    }
+  }, [lastScrollDirection, isAtBottom]);
+
   // scrollToBottom on mount and every 700ms if at bottom
   useEffect(() => {
-    scrollToBottom();
     let ticks = 0;
 
     const interval = setInterval(() => {
       ticks++;
-      // wait for 2 ticks to ensure first scroll is completed
-      if (ticks < 2) return;
-      const el = scrollAreaRef.current;
-      if (!el) return;
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 200;
 
-      if (scrollHeight && isAtBottom) {
+      if (lastScrollDirection === 'down' && isAtBottom) {
         scrollToBottom();
       }
 
-      setShowScrollButton(!isAtBottom);
-    }, 500);
+      // wait for 2 ticks to ensure first scroll is completed
+      if (ticks > 2) {
+        setShowScrollButton(!isAtBottom);
+      }
+    }, 400);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isAtBottom, lastScrollDirection]);
+
+  useEffect(() => {
+    if (isAutoScrollingEnabled) {
+      scrollToBottom();
+    }
+  }, [isAutoScrollingEnabled, messages]);
 
   // additionally scroll when submitting
   useEffect(() => {

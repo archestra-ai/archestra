@@ -176,7 +176,7 @@ export default function ChatHistory({
   const isAtBottom = useIsAtBottom(scrollAreaRef, 300);
 
   useEffect(() => {
-    if (lastScrollDirection === 'down') {
+    if (lastScrollDirection === 'up') {
       setIsAutoScrollingEnabled(false);
     }
     if (isAtBottom) {

@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.0.10](https://github.com/archestra-ai/archestra/compare/v0.0.9...v0.0.10) (2025-09-24)
+
+
+### Features
+
+* add cloud auth token deep-linking support ([#544](https://github.com/archestra-ai/archestra/issues/544)) ([f43d8ca](https://github.com/archestra-ai/archestra/commit/f43d8ca87a73a85641ae856faeef386ba84cdab1))
+* backend-code hot reloading ([#478](https://github.com/archestra-ai/archestra/issues/478)) ([34baf78](https://github.com/archestra-ai/archestra/commit/34baf7832a8d7795e6cd095f8fc0d44ab6735019))
+* bump ollama to `v0.12.1` ([#555](https://github.com/archestra-ai/archestra/issues/555)) ([72d62d7](https://github.com/archestra-ai/archestra/commit/72d62d7d16f7a3e02d1ff4229a8543e3b86d5ab2))
+* cloud archestra llm ([#540](https://github.com/archestra-ai/archestra/issues/540)) ([2eba7d1](https://github.com/archestra-ai/archestra/commit/2eba7d1345a6d0ec6f5fe271c22c0d46d7354158))
+* improve error message display with user-friendly messages and collapsible details ([#527](https://github.com/archestra-ai/archestra/issues/527)) ([31de107](https://github.com/archestra-ai/archestra/commit/31de107f48c82804af5ebb2d5442a15a18bcd5d2))
+* support mcp installation cancel ([#511](https://github.com/archestra-ai/archestra/issues/511)) ([e52f97f](https://github.com/archestra-ai/archestra/commit/e52f97f7d905e7f2666dc1c24cdc241edf2663e1))
+
+
+### Bug Fixes
+
+* add more visible border to scroll btn ([#563](https://github.com/archestra-ai/archestra/issues/563)) ([95cb901](https://github.com/archestra-ai/archestra/commit/95cb901f045c9ea22d299232e6a83e0078509ce6))
+* backend logs not found in bug report modal ([#512](https://github.com/archestra-ai/archestra/issues/512)) ([59db5cc](https://github.com/archestra-ai/archestra/commit/59db5cc8d4abecbe82b82098960186bcbcf4f7a4))
+* disable Archestra MCP after enable_tools ([#546](https://github.com/archestra-ai/archestra/issues/546)) ([a00fac2](https://github.com/archestra-ai/archestra/commit/a00fac2a7d8af149f1db949c3b665bc4068b845a))
+* enhanced ui unused tools ([#565](https://github.com/archestra-ai/archestra/issues/565)) ([7db89f1](https://github.com/archestra-ai/archestra/commit/7db89f1f784e7680c33b930874376af35bbabed6))
+* fix chat scrolling ([#562](https://github.com/archestra-ai/archestra/issues/562)) ([c2ba6be](https://github.com/archestra-ai/archestra/commit/c2ba6bee442ce47e3259128813281d67962f496f))
+* fix jumping cursor in edited messages ([#560](https://github.com/archestra-ai/archestra/issues/560)) ([bac155b](https://github.com/archestra-ai/archestra/commit/bac155b06d9c5d68c1e76fe41aa98a4d02c01ad9))
+* fix loading tools label ([#564](https://github.com/archestra-ai/archestra/issues/564)) ([fa1d5d0](https://github.com/archestra-ai/archestra/commit/fa1d5d0910781215f5defaa4d99e796b5a2eff05))
+* fix message buttons ([#517](https://github.com/archestra-ai/archestra/issues/517)) ([3483179](https://github.com/archestra-ai/archestra/commit/3483179e3e181961b5fb9fe4f70982af45e5dfcd))
+* for archestra cloud inference `baseUrl` ([#552](https://github.com/archestra-ai/archestra/issues/552)) ([9d10795](https://github.com/archestra-ai/archestra/commit/9d1079549ec8e53dc5c4da346015e638737f88fe))
+* improve scrolling ([#568](https://github.com/archestra-ai/archestra/issues/568)) ([0972397](https://github.com/archestra-ai/archestra/commit/09723971f44443b127ebb1d0af2c316c345e7fed))
+* improve scrolling2 ([#569](https://github.com/archestra-ai/archestra/issues/569)) ([7bd9e9c](https://github.com/archestra-ai/archestra/commit/7bd9e9c2b34bb09684f16648f5fd419282d89ce7))
+* increase max tool calls from 10 to 30 ([#523](https://github.com/archestra-ai/archestra/issues/523)) ([34cb041](https://github.com/archestra-ai/archestra/commit/34cb041f8d89613977026ab3a80ba0c74ab00c14))
+* preserve assigned HTTP port for streamable containers after app … ([#551](https://github.com/archestra-ai/archestra/issues/551)) ([f0b83f1](https://github.com/archestra-ai/archestra/commit/f0b83f17a34f2fe38dcfb0eaad5f6fd4393eff85))
+* quick fix slack browser auth ([#557](https://github.com/archestra-ai/archestra/issues/557)) ([a32755d](https://github.com/archestra-ai/archestra/commit/a32755db6a484327a145fc3cbbd74da1b44cbd3a))
+* refresh llm-proxy models immediately after auth success ([#556](https://github.com/archestra-ai/archestra/issues/556)) ([cded953](https://github.com/archestra-ai/archestra/commit/cded953a99cbd19218e6ae370498b5ac2bc3ab86)), closes [#549](https://github.com/archestra-ai/archestra/issues/549)
+* reset token usage on agent restart ([#489](https://github.com/archestra-ai/archestra/issues/489)) ([271f4f4](https://github.com/archestra-ai/archestra/commit/271f4f4cbe2124bfc01dd199f3bea7775d897f2a))
+* return stop button ([#518](https://github.com/archestra-ai/archestra/issues/518)) ([9d48aeb](https://github.com/archestra-ai/archestra/commit/9d48aebdd647fa603a0425d02eeda9e339971b02))
+* send session token as Authorization: Bearer token to llm proxy ([#545](https://github.com/archestra-ai/archestra/issues/545)) ([e1c40a2](https://github.com/archestra-ai/archestra/commit/e1c40a2d8dee6da62df44e6b687582d29b3d6689))
+* shorten tool id ([#521](https://github.com/archestra-ai/archestra/issues/521)) ([e2f29cf](https://github.com/archestra-ai/archestra/commit/e2f29cf2dd5d17de02dfeedd053409ba1c49e63c))
+* update cumulative token stats logic ([#536](https://github.com/archestra-ai/archestra/issues/536)) ([c09e370](https://github.com/archestra-ai/archestra/commit/c09e370b3d1ba10322903ba852b4e650f8df3b50))
+* use latest base image ([#519](https://github.com/archestra-ai/archestra/issues/519)) ([ffe8be6](https://github.com/archestra-ai/archestra/commit/ffe8be65786682a197adc2ad9dc75877021a667e))
+* when uninstalling mcp server, properly remove container ([#542](https://github.com/archestra-ai/archestra/issues/542)) ([60a09b3](https://github.com/archestra-ai/archestra/commit/60a09b3688a3d222c301e5abd4ae28521f8e508f))
+
 ## [0.0.9](https://github.com/archestra-ai/archestra/compare/v0.0.8...v0.0.9) (2025-09-20)
 
 

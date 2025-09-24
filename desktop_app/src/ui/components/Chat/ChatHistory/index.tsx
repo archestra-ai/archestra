@@ -1,6 +1,6 @@
 import { UIMessage } from 'ai';
 import { ArrowDown } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
@@ -8,6 +8,7 @@ import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
 import { useToolsStore } from '@ui/stores';
 
+import { useChatScrolling } from './ChatHistory.hooks';
 import {
   AssistantMessage,
   ErrorMessage,
@@ -146,11 +147,11 @@ export default function ChatHistory({
   regeneratingIndex,
   isSubmitting,
 }: ChatHistoryProps) {
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-
   // Get pending approvals from the tools store
   const { pendingApprovals } = useToolsStore();
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+
+  const { showScrollButton, scrollToBottom } = useChatScrolling({ isSubmitting, messages, scrollAreaRef });
 
   // Filter out system messages except for special ones like system-memories
   const visibleMessages = messages.filter((message) => {
@@ -160,46 +161,6 @@ export default function ChatHistory({
     }
     return true;
   });
-
-  const scrollToBottom = () => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: 'smooth',
-    });
-  };
-
-  // scrollToBottom on mount and every 700ms if at bottom
-  useEffect(() => {
-    scrollToBottom();
-    let ticks = 0;
-
-    const interval = setInterval(() => {
-      ticks++;
-      // wait for 2 ticks to ensure first scroll is completed
-      if (ticks < 2) return;
-      const el = scrollAreaRef.current;
-      if (!el) return;
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 200;
-
-      if (scrollHeight && isAtBottom) {
-        scrollToBottom();
-      }
-
-      setShowScrollButton(!isAtBottom);
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // additionally scroll when submitting
-  useEffect(() => {
-    if (isSubmitting) {
-      scrollToBottom();
-    }
-  }, [isSubmitting]);
 
   // Filter pending approvals for this chat
   const chatPendingApprovals = Array.from(pendingApprovals.values()).filter((approval) => approval.chatId === chatId);

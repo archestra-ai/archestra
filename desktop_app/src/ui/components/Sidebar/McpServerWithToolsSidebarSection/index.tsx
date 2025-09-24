@@ -346,15 +346,15 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       >
                         <PlusCircle className="h-4 w-4 cursor-pointer" />
                       </button>
-                      <CollapsibleTrigger
-                        className={` ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-                      ><div className="flex items-center gap-1 flex-shrink-0">
-                        {isExpanded ? (
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                        )}
-                      </div></CollapsibleTrigger>
+                      <CollapsibleTrigger className={` ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
                     </SidebarMenuItem>
 
                     <CollapsibleContent>

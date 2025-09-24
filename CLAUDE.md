@@ -154,7 +154,7 @@ Key tables:
   - Tool analysis using local models
   - Configurable port (default: 54589)
 - **Free LLM Option**: "archestra-llm" model
-  - Proxies requests to Google Gemini (gemini-2.5-flash) via configurable proxy
+  - Proxies requests to Google Gemini (gemini-2.5-pro) via configurable proxy
   - Requires external proxy service at {archestra.websiteUrl}/api/llm-proxy/gemini
   - No API key configuration needed in Archestra (handled by proxy)
   - Authentication: Session token sent as Bearer token in Authorization header

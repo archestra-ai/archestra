@@ -30,7 +30,7 @@ function CloudProviders() {
               {provider.configured ? '✓ Configured' : 'Not configured'}
             </div>
             <div className="mt-4 flex gap-2">
-              {provider.type === 'openai' || provider.type === 'archestra' ? (
+              {provider.type === 'openai' || provider.type === 'archestra' || provider.type === 'gemini' ? (
                 <>
                   <Button
                     onClick={() => setSelectedProvider(provider)}

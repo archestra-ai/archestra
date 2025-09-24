@@ -95,7 +95,7 @@ export default function ToolApprovalMessage({
 
           {formattedArgs && (
             <div className="bg-muted/50 rounded p-2 max-h-32 overflow-auto">
-              <pre className="text-xs font-mono">{formattedArgs}</pre>
+              <pre className="text-xs font-mono whitespace-pre-wrap break-words">{formattedArgs}</pre>
             </div>
           )}
 

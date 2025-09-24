@@ -63,7 +63,7 @@
       "section": "Other",
       "type": "*",
       "hidden": true
-    },
+    }
   ],
   "packages": {
     "desktop_app": {

@@ -1,9 +1,9 @@
 import { type TextUIPart, UIMessage } from 'ai';
 import { Edit2, Trash2 } from 'lucide-react';
+import { memo, useRef } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
-import { memo, useRef } from 'react';
 
 interface UserMessageProps {
   message: UIMessage;
@@ -38,12 +38,7 @@ function UserMessage({
   if (isEditing) {
     return (
       <div className="space-y-2">
-        <Textarea
-          ref={textAreaRef}
-          defaultValue={defaultValue}
-          className="min-h-[100px] resize-none"
-          autoFocus
-        />
+        <Textarea ref={textAreaRef} defaultValue={defaultValue} className="min-h-[100px] resize-none" autoFocus />
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onSave(textAreaRef.current?.value)}>
             Save

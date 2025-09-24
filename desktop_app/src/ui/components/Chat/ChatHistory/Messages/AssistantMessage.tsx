@@ -53,12 +53,7 @@ export default function AssistantMessage({
   if (isEditing) {
     return (
       <div className="space-y-2">
-        <Textarea
-          ref={textAreaRef}
-          defaultValue={defaultValue}
-          className="min-h-[100px] resize-none"
-          autoFocus
-        />
+        <Textarea ref={textAreaRef} defaultValue={defaultValue} className="min-h-[100px] resize-none" autoFocus />
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onSave(textAreaRef.current?.value)}>
             Save

@@ -266,7 +266,7 @@ export default function ChatHistory({
       {showScrollButton && (
         <Button
           onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 z-10 h-6 w-6 rounded-full p-0 shadow-lg cursor-pointer"
+          className="absolute bottom-4 right-4 z-10 h-6 w-6 rounded-full p-0 shadow-lg cursor-pointer border border-border/40"
           size="sm"
         >
           <ArrowDown className="h-4 w-4" />

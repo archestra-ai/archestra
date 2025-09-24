@@ -149,7 +149,7 @@ Key tables:
 #### LLM Integration
 
 - **Cloud Providers**: Anthropic, OpenAI, Google Gemini, DeepSeek
-- **Local Provider**: Ollama with bundled server (v0.11.4)
+- **Local Provider**: Ollama with bundled server (v0.12.1)
   - Auto-downloads required models: `llama-guard3:1b`, `phi3:3.8b`
   - Tool analysis using local models
   - Configurable port (default: 54589)

@@ -190,7 +190,7 @@ describe('binaries utilities', () => {
 
         const { getBinaryExecPath } = await import('./');
         const binaryPath = getBinaryExecPath('ollama-v0.12.1');
-        expect(binaryPath).toMatch(/ollama-v0\.11\.4\.exe$/);
+        expect(binaryPath).toMatch(/ollama-v0\.12\.1\.exe$/);
       });
 
       it('should not add .exe extension on non-Windows platforms', async () => {
@@ -212,7 +212,7 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64', fileExists: false });
 
         const { getBinaryExecPath } = await import('./');
-        expect(() => getBinaryExecPath('ollama-v0.12.1')).toThrow(/Binary ollama-v0\.11\.4 not found at/);
+        expect(() => getBinaryExecPath('ollama-v0.12.1')).toThrow(/Binary ollama-v0\.12\.1 not found at/);
       });
 
       it('should include full path in error message', async () => {

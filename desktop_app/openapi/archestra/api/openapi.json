@@ -843,6 +843,34 @@
               }
             },
             "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["enable-tools-called"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "enabledTools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["chatId", "sessionId", "enabledTools"]
+              }
+            },
+            "required": ["type", "payload"]
           }
         ]
       },
@@ -2675,6 +2703,36 @@
               "payload": {
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["enable-tools-called"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "enabledTools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["chatId", "sessionId", "enabledTools"],
                 "additionalProperties": false
               }
             },

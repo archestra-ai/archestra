@@ -58,7 +58,12 @@
       "section": "Miscellaneous Chores",
       "type": "chore",
       "hidden": true
-    }
+    },
+    {
+      "section": "Other",
+      "type": "*",
+      "hidden": true
+    },
   ],
   "packages": {
     "desktop_app": {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.11](https://github.com/archestra-ai/archestra/compare/v0.0.10...v0.0.11) (2025-09-24)
+
+
+### Bug Fixes
+
+* Switch to gemini-2.5-pro ([#571](https://github.com/archestra-ai/archestra/issues/571)) ([516bdee](https://github.com/archestra-ai/archestra/commit/516bdee7445858db2ea8d63b75848e25a203c2b7))
+
 ## [0.0.10](https://github.com/archestra-ai/archestra/compare/v0.0.9...v0.0.10) (2025-09-24)
 
 

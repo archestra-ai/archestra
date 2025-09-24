@@ -356,10 +356,10 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                     </SidebarMenuItem>
 
                     <CollapsibleContent>
-                      {!hasTools ? (
+                      {!hasTools && isError ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                            {isError ? 'Server error - check Settings' : 'Loading tools...'}
+                            Server error - check Settings
                           </div>
                         </SidebarMenuItem>
                       ) : (

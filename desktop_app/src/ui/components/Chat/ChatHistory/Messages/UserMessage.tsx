@@ -3,28 +3,28 @@ import { Edit2, Trash2 } from 'lucide-react';
 
 import { Button } from '@ui/components/ui/button';
 import { Textarea } from '@ui/components/ui/textarea';
+import { memo, useRef } from 'react';
 
 interface UserMessageProps {
   message: UIMessage;
   isEditing?: boolean;
-  editingContent?: string;
+  defaultValue?: string;
   onEditStart?: () => void;
   onEditCancel?: () => void;
-  onEditSave?: () => Promise<void>;
-  onEditChange?: (content: string) => void;
+  onSave: (content?: string) => Promise<void>;
   onDelete?: () => Promise<void>;
 }
 
-export default function UserMessage({
+function UserMessage({
   message,
   isEditing,
-  editingContent,
+  defaultValue,
   onEditStart,
   onEditCancel,
-  onEditSave,
-  onEditChange,
+  onSave,
   onDelete,
 }: UserMessageProps) {
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
   // Extract text content from parts array (UIMessage in ai SDK v5 uses parts)
   let textContent = '';
 
@@ -39,13 +39,13 @@ export default function UserMessage({
     return (
       <div className="space-y-2">
         <Textarea
-          value={editingContent}
-          onChange={(e) => onEditChange?.(e.target.value)}
+          ref={textAreaRef}
+          defaultValue={defaultValue}
           className="min-h-[100px] resize-none"
           autoFocus
         />
         <div className="flex gap-2">
-          <Button size="sm" onClick={onEditSave}>
+          <Button size="sm" onClick={() => onSave(textAreaRef.current?.value)}>
             Save
           </Button>
           <Button size="sm" variant="outline" onClick={onEditCancel}>
@@ -72,3 +72,7 @@ export default function UserMessage({
     </div>
   );
 }
+
+const MemoizedUserMessage = memo(UserMessage);
+
+export default MemoizedUserMessage;

@@ -24,15 +24,15 @@ export function useMessageActions({ messages, setMessages, sendMessage, sessionI
     setEditingContent('');
   };
 
-  const saveEdit = async (messageId: string) => {
-    if (!editingContent.trim()) return;
+  const saveEdit = async (messageId: string, newText: string) => {
+    if (!newText.trim()) return;
 
     let updatedMessage: UIMessage | null = null;
     const updatedMessages = messages.map((msg) => {
       if (msg.id === messageId) {
         updatedMessage = {
           ...msg,
-          parts: [{ type: 'text', text: editingContent }],
+          parts: [{ type: 'text', text: newText }],
         } as UIMessage;
         return updatedMessage;
       }

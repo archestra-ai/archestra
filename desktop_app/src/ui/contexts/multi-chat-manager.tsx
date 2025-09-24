@@ -36,7 +36,7 @@ interface ChatInstanceActions {
   setEditingContent: (c: string) => void;
   startEdit: (id: string, content: string) => void;
   cancelEdit: () => void;
-  saveEdit: (id: string) => Promise<void>;
+  saveEdit: (id: string, newText: string) => Promise<void>;
   deleteMessage: (id: string) => Promise<void>;
   handleRegenerateMessage: (idx: number) => Promise<void>;
   setHasTooManyTools: (b: boolean) => void;

@@ -8,7 +8,7 @@ class OllamaServer {
   private serverProcess: ChildProcess | null = null;
   private port = config.ollama.server.port;
   private isRunning: boolean = false;
-  private binaryPath = getBinaryExecPath('ollama-v0.11.4');
+  private binaryPath = getBinaryExecPath('ollama-v0.12.1');
 
   /**
    * Start the Ollama server

@@ -223,6 +223,14 @@ export type WebSocketMessageInput =
       payload: {
         [key: string]: unknown;
       };
+    }
+  | {
+      type: 'enable-tools-called';
+      payload: {
+        chatId: number;
+        sessionId: string;
+        enabledTools: Array<string>;
+      };
     };
 
 export type ChatWithMessagesInput = {
@@ -730,6 +738,14 @@ export type WebSocketMessage =
       type: 'user-authenticated';
       payload: {
         [key: string]: never;
+      };
+    }
+  | {
+      type: 'enable-tools-called';
+      payload: {
+        chatId: number;
+        sessionId: string;
+        enabledTools: Array<string>;
       };
     };
 

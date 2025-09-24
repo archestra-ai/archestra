@@ -78,8 +78,8 @@ const PROVIDER_REGISTRY: Record<SupportedCloudProvider, CloudProvider> = {
   archestra: {
     type: 'archestra',
     name: 'Archestra LLM',
-    apiKeyUrl: `${config.archestra.websiteUrl}/signin`,
-    apiKeyPlaceholder: '1234',
+    apiKeyUrl: config.archestra.cloudLlmProxyAuthUrl,
+    apiKeyPlaceholder: 'Click Get API Key → to start the OAuth flow',
     baseUrl: `${config.archestra.websiteUrl}/api/llm-proxy/gemini`,
     models: ['archestra/gemini-2.5-flash'],
   },

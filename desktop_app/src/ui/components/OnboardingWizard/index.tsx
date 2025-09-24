@@ -112,9 +112,7 @@ export default function OnboardingWizard({ onOpenChange }: OnboardingWizardProps
   );
 
   const handleGoogleSignIn = useCallback(async () => {
-    const callbackUrl = encodeURIComponent('archestra-ai://auth-success');
-    const authUrl = `${config.archestra.websiteUrl}/signin?callbackURL=${callbackUrl}`;
-    await window.electronAPI.openExternal(authUrl);
+    await window.electronAPI.openExternal(config.archestra.cloudLlmProxyAuthUrl);
 
     // Subscribe to authentication success event and move to next step
     subscribeToUserAuthenticatedEvent('onboarding', () => {

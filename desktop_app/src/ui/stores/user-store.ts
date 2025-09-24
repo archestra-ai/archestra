@@ -5,6 +5,10 @@ import posthogClient from '@ui/lib/posthog';
 import sentryClient from '@ui/lib/sentry';
 import webSocketService from '@ui/lib/websocket';
 
+import { useCloudProvidersStore } from './cloud-providers-store';
+
+type UserAuthenticatedLocation = 'onboarding' | 'cloud-provider-config';
+
 interface UserStore {
   user: User | null;
   loading: boolean;
@@ -15,7 +19,7 @@ interface UserStore {
   toggleTelemetryCollectionStatus: (collectTelemetryData: boolean) => Promise<void>;
   toggleAnalyticsCollectionStatus: (collectAnalyticsData: boolean) => Promise<void>;
   toggleUserAuthenticated: (isAuthenticated: boolean) => void;
-  subscribeToUserAuthenticatedEvent: (method: 'onboarding', successCallback: () => void) => void;
+  subscribeToUserAuthenticatedEvent: (method: UserAuthenticatedLocation, successCallback: () => void) => void;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -67,15 +71,21 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ isAuthenticated });
   },
 
-  subscribeToUserAuthenticatedEvent: (method: 'onboarding', successCallback: () => void) => {
+  subscribeToUserAuthenticatedEvent: (authLocation: UserAuthenticatedLocation, successCallback: () => void) => {
     console.log('Subscribing to user authenticated event');
 
     webSocketService.subscribe('user-authenticated', ({ payload }) => {
       const { toggleUserAuthenticated, user } = useUserStore.getState();
+      const { loadCloudProviders, getAvailableCloudProviderModels } = useCloudProvidersStore.getState();
+
       console.log('🔐 User authenticated via WebSocket:', payload);
 
       // Update authentication state
       toggleUserAuthenticated(true);
+
+      // Refresh both cloud providers and models when user authenticates
+      loadCloudProviders();
+      getAvailableCloudProviderModels();
 
       // Log the authentication event
       console.log('✅ User authentication successful!');
@@ -83,7 +93,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // Track authentication in PostHog
       posthogClient.capture('user_authenticated', {
         userId: user?.uniqueId,
-        method,
+        authLocation,
       });
 
       successCallback();

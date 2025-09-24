@@ -25,7 +25,7 @@ export default {
     chatStreamBaseUrl: `${BASE_URL}/api/llm`,
     ollamaProxyUrl: `${BASE_URL}/llm/ollama`,
     websocketUrl: `ws://${HOST}:${WEBSOCKET_PORT}/ws`,
-    websiteUrl: ARCHESTRA_WEBSITE_BASE_URL,
+    cloudLlmProxyAuthUrl: `${ARCHESTRA_WEBSITE_BASE_URL}/signin?callbackURL=${encodeURIComponent('archestra-ai://auth-success')}`,
     catalogUrl: `${ARCHESTRA_WEBSITE_BASE_URL}/mcp-catalog/api`,
   },
   chat: {

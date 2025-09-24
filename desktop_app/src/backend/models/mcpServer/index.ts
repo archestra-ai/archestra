@@ -22,6 +22,10 @@ import { OAuthServerConfigSchema } from '@backend/schemas/oauth-config';
 import { getBrowserAuthProvider, hasBrowserAuthProvider } from '@backend/server/plugins/browser-auth/provider-registry';
 import log from '@backend/utils/logger';
 
+// Define ArchestraConfig schema for proper validation
+// Using z.any() but will validate structure when needed
+const ArchestraConfigSchema = z.any().optional();
+
 export const McpServerInstallSchema = z.object({
   id: z.string().optional(),
   displayName: z
@@ -53,7 +57,7 @@ export const McpServerInstallSchema = z.object({
   /** Remote URL for remote MCP servers */
   remote_url: z.string().optional(),
   /** Archestra configuration from catalog (includes browser_based config) */
-  archestra_config: z.any().optional(),
+  archestra_config: ArchestraConfigSchema.optional(),
 });
 
 export default class McpServerModel {

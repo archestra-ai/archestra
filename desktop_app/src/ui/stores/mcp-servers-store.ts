@@ -169,10 +169,26 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
           // Open browser authentication window and get tokens
           const tokens = await window.electronAPI.providerBrowserAuth(provider);
 
+          // Remove internal-only fields before sending to API
+          const { useBrowserAuth: _, oauthProvider: __, ...cleanInstallData } = installData as any;
+
+          // Ensure archestra_config has the correct browser_based provider
+          // The provider for browser auth should match what we're using (e.g., 'slack-browser')
+          if (cleanInstallData.archestra_config && cleanInstallData.archestra_config.browser_based) {
+            // Make sure the provider is set correctly
+            cleanInstallData.archestra_config = {
+              ...cleanInstallData.archestra_config,
+              browser_based: {
+                ...cleanInstallData.archestra_config.browser_based,
+                provider: provider, // Use the actual provider being used for browser auth
+              },
+            };
+          }
+
           // Send tokens as OAuth fields for consistent handling
           const { data } = await installMcpServer({
             body: {
-              ...installData!,
+              ...cleanInstallData,
               oauthTokens: {
                 access_token: tokens.access_token,
                 refresh_token: tokens.refresh_token ?? undefined,

@@ -1538,7 +1538,42 @@
           "remote_url": {
             "type": "string"
           },
-          "archestra_config": {}
+          "archestra_config": {
+            "type": "object",
+            "properties": {
+              "client_config_permutations": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "oauth": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["provider", "required"]
+              },
+              "browser_based": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["provider", "required"]
+              },
+              "works_in_archestra": {
+                "type": "boolean"
+              }
+            }
+          }
         },
         "required": ["displayName", "serverConfig"]
       },
@@ -3384,7 +3419,45 @@
           "remote_url": {
             "type": "string"
           },
-          "archestra_config": {}
+          "archestra_config": {
+            "type": "object",
+            "properties": {
+              "client_config_permutations": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "oauth": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["provider", "required"],
+                "additionalProperties": false
+              },
+              "browser_based": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["provider", "required"],
+                "additionalProperties": false
+              },
+              "works_in_archestra": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
         },
         "required": ["displayName", "serverConfig"],
         "additionalProperties": false

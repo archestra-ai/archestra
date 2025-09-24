@@ -383,7 +383,20 @@ export type McpServerInstallInput = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
-  archestra_config?: unknown;
+  archestra_config?: {
+    client_config_permutations?: {
+      [key: string]: unknown;
+    };
+    oauth?: {
+      provider: string;
+      required: boolean;
+    };
+    browser_based?: {
+      provider: string;
+      required: boolean;
+    };
+    works_in_archestra?: boolean;
+  };
 };
 
 export type McpServerContainerLogsInput = {
@@ -891,7 +904,20 @@ export type McpServerInstall = {
   status?: 'installing' | 'oauth_pending' | 'installed' | 'failed';
   serverType?: 'local' | 'remote';
   remote_url?: string;
-  archestra_config?: unknown;
+  archestra_config?: {
+    client_config_permutations?: {
+      [key: string]: unknown;
+    };
+    oauth?: {
+      provider: string;
+      required: boolean;
+    };
+    browser_based?: {
+      provider: string;
+      required: boolean;
+    };
+    works_in_archestra?: boolean;
+  };
 };
 
 export type McpServerContainerLogs = {

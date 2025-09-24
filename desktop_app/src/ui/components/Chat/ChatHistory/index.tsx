@@ -1,6 +1,8 @@
 import { UIMessage } from 'ai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDown } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
+import { Button } from '@ui/components/ui/button';
 import { ScrollArea } from '@ui/components/ui/scroll-area';
 import config from '@ui/config';
 import { cn } from '@ui/lib/utils/tailwind';
@@ -16,7 +18,6 @@ import {
 } from './Messages';
 
 const CHAT_SCROLL_AREA_ID = 'chat-scroll-area';
-const CHAT_SCROLL_AREA_SELECTOR = `#${CHAT_SCROLL_AREA_ID} [data-radix-scroll-area-viewport]`;
 
 const { systemMemoriesMessageId } = config.chat;
 
@@ -145,10 +146,8 @@ export default function ChatHistory({
   regeneratingIndex,
   isSubmitting,
 }: ChatHistoryProps) {
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-  const scrollAreaRef = useRef<HTMLElement | null>(null);
-  const isScrollingRef = useRef(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   // Get pending approvals from the tools store
   const { pendingApprovals } = useToolsStore();
@@ -162,117 +161,117 @@ export default function ChatHistory({
     return true;
   });
 
-  // Scroll to bottom when new messages are added or content changes
-  const scrollToBottom = useCallback(() => {
-    if (scrollAreaRef.current && shouldAutoScroll && !isScrollingRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
-  }, [shouldAutoScroll]);
+  const scrollToBottom = () => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: 'smooth',
+    });
+  };
 
-  const checkIfAtBottom = useCallback(() => {
-    if (!scrollAreaRef.current) {
-      return false;
-    }
-    const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
+  // scrollToBottom on mount and every 700ms if at bottom
+  useEffect(() => {
+    scrollToBottom();
+    let ticks = 0;
 
-    // Consider "at bottom" to be within 10px of the bottom
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
-    return isAtBottom;
+    const interval = setInterval(() => {
+      ticks++;
+      // wait for 2 ticks to ensure first scroll is completed
+      if (ticks < 2) return;
+      const el = scrollAreaRef.current;
+      if (!el) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 200;
+
+      if (scrollHeight && isAtBottom) {
+        scrollToBottom();
+      }
+
+      setShowScrollButton(!isAtBottom);
+    }, 500);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const handleScroll = useCallback(() => {
-    // Mark that user is scrolling
-    isScrollingRef.current = true;
-
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Debounce the scroll end detection
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingRef.current = false;
-      const isAtBottom = checkIfAtBottom();
-      setShouldAutoScroll(isAtBottom);
-    }, 150); // 150ms debounce
-  }, [checkIfAtBottom]);
-
-  // Set up scroll area ref and scroll listener
+  // additionally scroll when submitting
   useEffect(() => {
-    const scrollArea = document.querySelector(CHAT_SCROLL_AREA_SELECTOR) as HTMLElement;
-    if (scrollArea) {
-      scrollAreaRef.current = scrollArea;
-      scrollArea.addEventListener('scroll', handleScroll, { passive: true });
-
-      return () => {
-        scrollArea.removeEventListener('scroll', handleScroll);
-      };
+    if (isSubmitting) {
+      scrollToBottom();
     }
-  }, [handleScroll]);
-
-  // Trigger scroll when messages change or submission state changes (only if shouldAutoScroll is true)
-  useEffect(() => {
-    const timeoutId = setTimeout(scrollToBottom, 50);
-    return () => clearTimeout(timeoutId);
-  }, [messages, isSubmitting, scrollToBottom]);
+  }, [isSubmitting]);
 
   // Filter pending approvals for this chat
   const chatPendingApprovals = Array.from(pendingApprovals.values()).filter((approval) => approval.chatId === chatId);
 
   return (
-    <ScrollArea id={CHAT_SCROLL_AREA_ID} className="h-full w-full border rounded-lg overflow-hidden">
-      <div className="p-4 space-y-4 max-w-full overflow-hidden">
-        {visibleMessages.map((message, index) => (
-          <div
-            key={message.id || `message-${index}`}
-            className={cn(
-              'rounded-lg overflow-hidden min-w-0',
-              // Special handling for memories message
-              message.id === systemMemoriesMessageId ? '' : 'p-3',
-              message.id === systemMemoriesMessageId ? '' : getMessageClassName(message.role)
-            )}
-          >
-            {message.id !== systemMemoriesMessageId && (
-              <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
-            )}
-            <div className="overflow-hidden min-w-0">
-              <Message
-                message={message}
-                messageIndex={index}
-                editingMessageId={editingMessageId}
-                editingContent={editingContent}
-                onEditStart={onEditStart}
-                onEditCancel={onEditCancel}
-                onEditSave={onEditSave}
-                onEditChange={onEditChange}
-                onDeleteMessage={onDeleteMessage}
-                onRegenerateMessage={onRegenerateMessage}
-                isRegenerating={isRegenerating}
-                regeneratingIndex={regeneratingIndex}
+    <div className="relative h-full w-full">
+      <ScrollArea
+        id={CHAT_SCROLL_AREA_ID}
+        className="h-full w-full border rounded-lg overflow-hidden"
+        viewportRef={scrollAreaRef}
+      >
+        <div className="p-4 space-y-4 max-w-full overflow-hidden">
+          {visibleMessages.map((message, index) => (
+            <div
+              key={message.id || `message-${index}`}
+              className={cn(
+                'rounded-lg overflow-hidden min-w-0',
+                // Special handling for memories message
+                message.id === systemMemoriesMessageId ? '' : 'p-3',
+                message.id === systemMemoriesMessageId ? '' : getMessageClassName(message.role)
+              )}
+            >
+              {message.id !== systemMemoriesMessageId && (
+                <div className="text-xs font-medium mb-1 opacity-70 capitalize">{message.role}</div>
+              )}
+              <div className="overflow-hidden min-w-0">
+                <Message
+                  message={message}
+                  messageIndex={index}
+                  editingMessageId={editingMessageId}
+                  editingContent={editingContent}
+                  onEditStart={onEditStart}
+                  onEditCancel={onEditCancel}
+                  onEditSave={onEditSave}
+                  onEditChange={onEditChange}
+                  onDeleteMessage={onDeleteMessage}
+                  onRegenerateMessage={onRegenerateMessage}
+                  isRegenerating={isRegenerating}
+                  regeneratingIndex={regeneratingIndex}
+                />
+              </div>
+            </div>
+          ))}
+
+          {/* Render pending tool approvals for this chat */}
+          {chatPendingApprovals.map((approval) => (
+            <div key={approval.requestId} className="animate-in fade-in-0 slide-in-from-bottom-2">
+              <ToolApprovalMessage
+                requestId={approval.requestId}
+                toolId={approval.toolId}
+                toolName={approval.toolName}
+                toolDescription={approval.toolDescription}
+                args={approval.args}
+                isWrite={approval.isWrite}
+                sessionId={approval.sessionId}
+                chatId={approval.chatId}
               />
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      </ScrollArea>
 
-        {/* Render pending tool approvals for this chat */}
-        {chatPendingApprovals.map((approval) => (
-          <div key={approval.requestId} className="animate-in fade-in-0 slide-in-from-bottom-2">
-            <ToolApprovalMessage
-              requestId={approval.requestId}
-              toolId={approval.toolId}
-              toolName={approval.toolName}
-              toolDescription={approval.toolDescription}
-              args={approval.args}
-              isWrite={approval.isWrite}
-              sessionId={approval.sessionId}
-              chatId={approval.chatId}
-            />
-          </div>
-        ))}
-      </div>
-    </ScrollArea>
+      {/* Scroll to bottom button */}
+      {showScrollButton && (
+        <Button
+          onClick={scrollToBottom}
+          className="absolute bottom-4 right-4 z-10 h-6 w-6 rounded-full p-0 shadow-lg cursor-pointer"
+          size="sm"
+        >
+          <ArrowDown className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
   );
 }

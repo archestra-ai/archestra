@@ -25,6 +25,7 @@
     "node": ">=16.0.0"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.20",
     "@types/node": "^20.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.0"
@@ -35,6 +36,7 @@
     "@ai-sdk/provider": "^2.0.0",
     "ai": "5.1.0-beta.12",
     "dotenv": "^17.2.2",
+    "lodash": "^4.17.21",
     "zod": "^4.1.11"
   }
 }

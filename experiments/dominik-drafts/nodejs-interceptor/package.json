@@ -1,0 +1,26 @@
+{
+	"name": "@archestra/nodejs-interceptor",
+	"version": "0.0.1",
+	"description": "Record all your interactions with Claude Code as you develop your projects",
+	"main": "dist/index.js",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch --preserveWatchOutput",
+		"typecheck": "tsc --noEmit"
+	},
+	"files": [
+		"dist/**/*",
+		"README.md"
+	],
+	"keywords": ["archestra", "nodejs", "interceptor"],
+	"author": "Archestra",
+	"license": "MIT",
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"typescript": "^5.9.0"
+	},
+	"types": "./dist/index.d.ts"
+}

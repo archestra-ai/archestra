@@ -1,26 +1,39 @@
 {
-	"name": "archestra",
-	"version": "0.0.1",
-	"description": "Record all your interactions with Claude Code as you develop your projects",
-	"main": "dist/index.js",
+  "name": "archestra",
+  "version": "0.0.1",
+  "description": "Record all your interactions with Claude Code as you develop your projects",
+  "main": "dist/index.js",
   "types": "dist/index.d.ts",
-	"scripts": {
-		"build": "tsc",
-		"dev": "tsc --watch --preserveWatchOutput",
-		"typecheck": "tsc --noEmit"
-	},
-	"files": [
-		"dist/**/*",
-		"README.md"
-	],
-	"keywords": ["archestra", "nodejs", "interceptor"],
-	"author": "Archestra",
-	"license": "MIT",
-	"engines": {
-		"node": ">=16.0.0"
-	},
-	"devDependencies": {
-		"@types/node": "^20.0.0",
-		"typescript": "^5.9.0"
-	}
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "guardrails": "tsx src/guardrails.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "keywords": [
+    "archestra",
+    "nodejs",
+    "interceptor"
+  ],
+  "author": "Archestra",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^2.0.17",
+    "@ai-sdk/openai": "2.1.0-beta.5",
+    "ai": "5.1.0-beta.12",
+    "dotenv": "^17.2.2",
+    "zod": "^4.1.11"
+  }
 }

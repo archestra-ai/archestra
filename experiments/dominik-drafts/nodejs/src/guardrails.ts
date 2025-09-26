@@ -60,16 +60,16 @@ const STATIC_AUTONOMY_POLICIES: StaticAutonomyPolicy[] = [
 
 class StaticAutonomyPolicyEvaluator {
   private context: ModelMessage[];
-  private policies: AutonomyPolicy[];
+  private policies: StaticAutonomyPolicy[];
 
-  constructor(context: ModelMessage[], policies: AutonomyPolicy[]) {
+  constructor(context: ModelMessage[], policies: StaticAutonomyPolicy[]) {
     this.context = context;
     this.policies = policies;
   }
 
   private endsWithEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = message.content.endsWith(policy.value);
     return {
@@ -80,7 +80,7 @@ class StaticAutonomyPolicyEvaluator {
 
   private startsWithEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = message.content.startsWith(policy.value);
     return {
@@ -91,7 +91,7 @@ class StaticAutonomyPolicyEvaluator {
 
   private containsEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = message.content.includes(policy.value);
     return {
@@ -102,7 +102,7 @@ class StaticAutonomyPolicyEvaluator {
 
   private notContainsEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = !message.content.includes(policy.value);
     return {
@@ -113,7 +113,7 @@ class StaticAutonomyPolicyEvaluator {
 
   private equalEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = message.content === policy.value;
     return {
@@ -124,7 +124,7 @@ class StaticAutonomyPolicyEvaluator {
 
   private notEqualEvaluator(
     message: ModelMessage,
-    policy: AutonomyPolicy
+    policy: StaticAutonomyPolicy
   ): StaticAutonomyPolicyEvaluatorResult {
     const isAllowed = message.content !== policy.value;
     return {
@@ -275,7 +275,7 @@ function getDummyTools() {
 }
 
 async function chatWithModel() {
-  const contextIsCredible = true;
+  let contextIsCredible = true;
 
   const terminal = readline.createInterface({
     input: process.stdin,
@@ -299,8 +299,14 @@ async function chatWithModel() {
 
     process.stdout.write('\nAssistant: ');
     for (const message of response.messages) {
+      // NOTE: right now we're just passing in the latest messages received here
+      const contextCredibilityEvaluator = new ContextCredibilityEvaluator(
+        response.messages,
+        STATIC_AUTONOMY_POLICIES
+      );
+
       if (message.role === 'tool') {
-        const toolCallResult = message.content[0];
+        contextIsCredible = contextCredibilityEvaluator.evaluate().isAllowed;
 
         // TODO:
       }
@@ -309,15 +315,6 @@ async function chatWithModel() {
       messages.push(message);
     }
     process.stdout.write('\n\n');
-
-    // let fullResponse = '';
-    // process.stdout.write('\nAssistant: ');
-    // for await (const delta of response.messages) {
-    //   fullResponse += delta;
-    //   process.stdout.write(delta);
-    // }
-
-    // messages.push({ role: 'assistant', content: fullResponse });
   }
 }
 

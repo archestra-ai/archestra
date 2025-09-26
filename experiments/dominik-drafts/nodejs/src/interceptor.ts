@@ -3,12 +3,12 @@
 import { IncomingHttpHeaders, IncomingMessage, request } from 'http';
 import { logger } from './logger';
 
-export interface InterceptorConfig {
-  text: string;
+export interface ArchestraConfig {
+  text2: string;
 }
 
-export class ArchestraNodejsInterceptor {
-  constructor(private readonly config: InterceptorConfig) {}
+export class Archestra {
+  constructor(private readonly config: ArchestraConfig) {}
 
   public instrumentAll(): void {
     this.instrumentFetch();

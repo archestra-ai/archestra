@@ -1,8 +1,9 @@
 {
-	"name": "@archestra/nodejs-interceptor",
+	"name": "archestra",
 	"version": "0.0.1",
 	"description": "Record all your interactions with Claude Code as you develop your projects",
 	"main": "dist/index.js",
+  "types": "dist/index.d.ts",
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch --preserveWatchOutput",
@@ -21,6 +22,5 @@
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"typescript": "^5.9.0"
-	},
-	"types": "./dist/index.d.ts"
+	}
 }

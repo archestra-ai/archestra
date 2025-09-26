@@ -10,15 +10,6 @@ import {
   ToolStaticAutonomyPolicy,
 } from './security/types';
 
-interface AutonomyPolicyMiddlewareConfig {
-  staticPolicies: ToolStaticAutonomyPolicy[];
-  dynamicEvaluatorType?: SupportedDynamicAutonomyPolicyEvaluators;
-  onPolicyViolation?: (
-    reason: string,
-    phase: 'invocation' | 'response' | 'dynamic'
-  ) => void;
-}
-
 /**
  * Creates a language model middleware that enforces autonomy policies
  *
@@ -26,14 +17,17 @@ interface AutonomyPolicyMiddlewareConfig {
  * 1. Tool invocation that the model has made
  * 2. Tool responses from the tool invocations that the model has made
  * 3. Dynamic evaluation of the entire conversation context thus far
+ *
+ * TODO: this isn't entirely correct atm.. Ideally for the tool invocation validation, we would
+ * do these checks BEFORE the call to doGenerate.. but I don't see how we can do that at the moment?
  */
 export const autonomyPolicyGuardrailsMiddleware = ({
   staticPolicies,
   dynamicEvaluatorType = 'dual-llm',
-  onPolicyViolation = (reason, phase) => {
-    console.warn(`⚠️ Policy violation (${phase}): ${reason}`);
-  },
-}: AutonomyPolicyMiddlewareConfig): LanguageModelV2Middleware => ({
+}: {
+  staticPolicies: ToolStaticAutonomyPolicy[];
+  dynamicEvaluatorType?: SupportedDynamicAutonomyPolicyEvaluators;
+}): LanguageModelV2Middleware => ({
   wrapGenerate: async ({ doGenerate, model }) => {
     // Generate the response
     const response = await doGenerate();
@@ -56,17 +50,13 @@ export const autonomyPolicyGuardrailsMiddleware = ({
     );
 
     const invocationResult = invocationEvaluator.evaluate();
-
     if (!invocationResult.isAllowed) {
-      onPolicyViolation(invocationResult.denyReason, 'invocation');
-
-      // Block the tool execution by replacing the response
       return {
         ...response,
         content: [
           {
             type: 'text',
-            text: `Tool execution blocked: ${invocationResult.denyReason}`,
+            text: `⚠️ Tool execution blocked - Autonomy Policy violation (invocation): ${invocationResult.denyReason}`,
           },
         ],
         finishReason: 'error',
@@ -80,18 +70,16 @@ export const autonomyPolicyGuardrailsMiddleware = ({
     );
 
     const staticResponseResult = staticResponseEvaluator.evaluate();
-
     if (!staticResponseResult.isAllowed) {
-      onPolicyViolation(staticResponseResult.denyReason, 'response');
       return {
         ...response,
         content: [
-          ...response.content,
           {
             type: 'text',
-            text: `Tool execution blocked: ${staticResponseResult.denyReason}`,
+            text: `⚠️ Tool execution blocked - Autonomy Policy violation (response): ${staticResponseResult.denyReason}`,
           },
         ],
+        finishReason: 'error',
       };
     }
 
@@ -102,18 +90,13 @@ export const autonomyPolicyGuardrailsMiddleware = ({
     );
 
     const dynamicResult = await dynamicEvaluator.evaluate();
-
     if (!dynamicResult.isAllowed) {
-      onPolicyViolation(dynamicResult.denyReason, 'dynamic');
-
-      // Block execution based on dynamic evaluation
       return {
         ...response,
         content: [
-          ...response.content,
           {
             type: 'text',
-            text: `Tool execution blocked by security analysis: ${dynamicResult.denyReason}`,
+            text: `⚠️ Tool execution blocked - Autonomy Policy violation (Archestra.ai): ${dynamicResult.denyReason}`,
           },
         ],
         finishReason: 'error',

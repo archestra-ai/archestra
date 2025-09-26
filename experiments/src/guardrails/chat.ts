@@ -59,6 +59,49 @@ const TOOL_AUTONOMY_POLICIES: ToolStaticAutonomyPolicy[] = [
   },
 ];
 
+const printAssistantResponseMessages = (messages: ModelMessage[]) => {
+  process.stdout.write('\nAssistant: ');
+
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      if (typeof message.content === 'string') {
+        process.stdout.write(message.content);
+      } else if (Array.isArray(message.content)) {
+        // Handle structured content from assistant
+        for (const content of message.content) {
+          if (content.type === 'text') {
+            process.stdout.write(content.text);
+          } else if (content.type === 'tool-call') {
+            process.stdout.write(`\n📞 Calling tool: ${content.toolName}\n`);
+            process.stdout.write(
+              `   Input: ${JSON.stringify(content.input, null, 2)}\n`
+            );
+          }
+        }
+      }
+    } else if (message.role === 'tool') {
+      // Show tool results in a more readable format
+      if (Array.isArray(message.content)) {
+        for (const content of message.content) {
+          if (content.type === 'tool-result') {
+            const toolResult = content as ToolResultPart;
+            process.stdout.write(
+              `\n📦 Tool Result (${toolResult.toolName}):\n`
+            );
+            const output = toolResult.output?.value || toolResult.output;
+            if (output) {
+              process.stdout.write(JSON.stringify(output, null, 2));
+            }
+          }
+        }
+      }
+    } else {
+      // Fallback for other message types
+      process.stdout.write(JSON.stringify(message));
+    }
+  }
+};
+
 const cliChatWithGuardrails = async () => {
   const {
     dynamicAutonomyPolicyEvaluatorType,
@@ -85,15 +128,14 @@ const cliChatWithGuardrails = async () => {
 
     messages.push({ role: 'user', content: userInput });
 
-    const { response } = await generateText({
+    const {
+      response: { messages: newMessages },
+    } = await generateText({
       model: wrapLanguageModel({
         model: MODEL,
         middleware: autonomyPolicyGuardrailsMiddleware({
           staticPolicies: TOOL_AUTONOMY_POLICIES,
           dynamicEvaluatorType: dynamicAutonomyPolicyEvaluatorType,
-          onPolicyViolation: (reason, phase) => {
-            console.warn(`⚠️ Policy violation (${phase}): ${reason}`);
-          },
         }),
       }),
       messages,
@@ -105,49 +147,9 @@ const cliChatWithGuardrails = async () => {
       },
     });
 
-    process.stdout.write('\nAssistant: ');
+    printAssistantResponseMessages(newMessages);
+    messages.push(...newMessages);
 
-    // Process and display messages
-    for (const message of response.messages) {
-      if (message.role === 'assistant') {
-        // Handle assistant messages with proper formatting
-        if (typeof message.content === 'string') {
-          process.stdout.write(message.content);
-        } else if (Array.isArray(message.content)) {
-          // Handle structured content from assistant
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              process.stdout.write(content.text);
-            } else if (content.type === 'tool-call') {
-              process.stdout.write(`\n📞 Calling tool: ${content.toolName}\n`);
-              process.stdout.write(
-                `   Input: ${JSON.stringify(content.input, null, 2)}\n`
-              );
-            }
-          }
-        }
-      } else if (message.role === 'tool') {
-        // Show tool results in a more readable format
-        if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'tool-result') {
-              const toolResult = content as ToolResultPart;
-              process.stdout.write(
-                `\n📦 Tool Result (${toolResult.toolName}):\n`
-              );
-              const output = toolResult.output?.value || toolResult.output;
-              if (output) {
-                process.stdout.write(JSON.stringify(output, null, 2));
-              }
-            }
-          }
-        }
-      } else {
-        // Fallback for other message types
-        process.stdout.write(JSON.stringify(message));
-      }
-      messages.push(message);
-    }
     process.stdout.write('\n\n');
   }
 };

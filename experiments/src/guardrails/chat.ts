@@ -1,27 +1,61 @@
 import { openai } from '@ai-sdk/openai';
-import { ModelMessage, ToolResultPart, generateText, stepCountIs } from 'ai';
+import {
+  ModelMessage,
+  ToolResultPart,
+  generateText,
+  stepCountIs,
+  wrapLanguageModel,
+} from 'ai';
 
 import 'dotenv/config';
 import * as readline from 'node:readline/promises';
 
 import parseArgs from './cli';
-import {
-  type StaticAutonomyPolicy,
-  ContextCredibilityEvaluator,
-} from './security';
+import { autonomyPolicyGuardrailsMiddleware } from './middleware';
+import { type ToolStaticAutonomyPolicy } from './security';
 import { getTools } from './tools';
 
 const MODEL = openai('gpt-4o');
 const MAX_TOOL_CALLS = 5;
-const STATIC_AUTONOMY_POLICIES: StaticAutonomyPolicy[] = [
+const TOOL_AUTONOMY_POLICIES: ToolStaticAutonomyPolicy[] = [
+  // Response policy: Only allow emails from @archestra.ai domains
   {
     mcpServerName: 'gmail',
     toolName: 'getEmails',
     description: 'E-mails from @archestra.ai domains are safe',
-    attribute: 'emails[*].from',
+    attributePath: 'emails[*].from',
     operator: 'endsWith',
     value: '@archestra.ai',
     allow: true,
+  },
+  // Invocation policy: Cannot send emails to @grafana.com domain
+  {
+    mcpServerName: 'gmail',
+    toolName: 'sendEmail',
+    description: 'Cannot send emails to @grafana.com domain',
+    argumentName: 'to',
+    operator: 'endsWith',
+    value: '@grafana.com',
+    allow: false,
+  },
+  // Invocation policy: Block reading sensitive files
+  {
+    mcpServerName: 'file',
+    toolName: 'readFile',
+    description: 'Cannot read SSH keys',
+    argumentName: 'path',
+    operator: 'contains',
+    value: '.ssh',
+    allow: false,
+  },
+  {
+    mcpServerName: 'file',
+    toolName: 'readFile',
+    description: 'Cannot read environment files',
+    argumentName: 'path',
+    operator: 'contains',
+    value: '.env',
+    allow: false,
   },
 ];
 
@@ -52,7 +86,16 @@ const cliChatWithGuardrails = async () => {
     messages.push({ role: 'user', content: userInput });
 
     const { response } = await generateText({
-      model: MODEL,
+      model: wrapLanguageModel({
+        model: MODEL,
+        middleware: autonomyPolicyGuardrailsMiddleware({
+          staticPolicies: TOOL_AUTONOMY_POLICIES,
+          dynamicEvaluatorType: dynamicAutonomyPolicyEvaluatorType,
+          onPolicyViolation: (reason, phase) => {
+            console.warn(`⚠️ Policy violation (${phase}): ${reason}`);
+          },
+        }),
+      }),
       messages,
       tools: getTools(includeExternalEmail, includeMaliciousEmail),
       toolChoice: 'auto',
@@ -63,39 +106,6 @@ const cliChatWithGuardrails = async () => {
     });
 
     process.stdout.write('\nAssistant: ');
-
-    // Check if any tool calls were made
-    const hasToolCalls = response.messages.some((msg) => msg.role === 'tool');
-
-    if (hasToolCalls) {
-      // Evaluate the credibility with the full context including new messages
-      const fullContext = [...messages, ...response.messages];
-      const contextCredibilityEvaluator = new ContextCredibilityEvaluator(
-        fullContext,
-        STATIC_AUTONOMY_POLICIES,
-        MODEL,
-        dynamicAutonomyPolicyEvaluatorType
-      );
-
-      const evaluation = await contextCredibilityEvaluator.evaluate();
-
-      if (!evaluation.isAllowed) {
-        // Block the tool execution
-        console.log('\n\n⚠️  TOOL EXECUTION BLOCKED');
-        console.log(`Reason: ${evaluation.denyReason}`);
-        console.log(
-          "\nThe assistant's request was denied due to policy violations.\n"
-        );
-
-        // Add a system message indicating the tool was blocked
-        messages.push({
-          role: 'assistant',
-          content:
-            'I attempted to use a tool, but it was blocked by security policies.',
-        });
-        continue;
-      }
-    }
 
     // Process and display messages
     for (const message of response.messages) {

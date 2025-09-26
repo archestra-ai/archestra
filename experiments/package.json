@@ -10,6 +10,7 @@
     "proxy:dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
     "dev": "tsc --watch --preserveWatchOutput",
     "cli-chat-with-guardrails": "tsx src/guardrails/chat.ts",
+    "cli-chat-with-middleware": "tsx src/guardrails/chat-with-middleware.ts",
     "typecheck": "tsc --noEmit"
   },
   "files": [

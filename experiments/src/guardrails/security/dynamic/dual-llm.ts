@@ -1,15 +1,16 @@
-import { LanguageModel, ModelMessage, generateText } from 'ai';
+import { LanguageModel, generateText } from 'ai';
 
+import { LanguageModelV2Content } from '@ai-sdk/provider';
 import {
   AutonomyPolicyEvaluator,
   AutonomyPolicyEvaluatorResult,
 } from '../types';
 
 class DualLLMEvaluator implements AutonomyPolicyEvaluator {
-  private context: ModelMessage[];
+  private context: LanguageModelV2Content[];
   private model: LanguageModel;
 
-  constructor(context: ModelMessage[], model: LanguageModel) {
+  constructor(context: LanguageModelV2Content[], model: LanguageModel) {
     this.context = context;
     this.model = model;
   }

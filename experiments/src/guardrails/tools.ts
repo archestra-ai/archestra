@@ -71,7 +71,6 @@ export const getTools = (
       success: z.boolean(),
     }),
     execute: async (args) => {
-      console.log('Sending email...', args);
       return { success: true };
     },
   }),

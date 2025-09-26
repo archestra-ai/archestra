@@ -5,8 +5,8 @@ import StaticAutonomyPolicyEvaluator from './static';
 import {
   AutonomyPolicyEvaluator,
   AutonomyPolicyEvaluatorResult,
-  StaticAutonomyPolicy,
   SupportedDynamicAutonomyPolicyEvaluators,
+  ToolStaticAutonomyPolicy,
   isSupportedDynamicAutonomyPolicyEvaluator,
 } from './types';
 
@@ -16,7 +16,7 @@ export class ContextCredibilityEvaluator implements AutonomyPolicyEvaluator {
 
   constructor(
     context: ModelMessage[],
-    staticAutonomyPolicies: StaticAutonomyPolicy[],
+    staticAutonomyPolicies: ToolStaticAutonomyPolicy[],
     dynamicAutonomyPolicyModel: LanguageModel,
     dynamicAutonomyPolicyEvaluator: SupportedDynamicAutonomyPolicyEvaluators
   ) {
@@ -56,6 +56,6 @@ export class ContextCredibilityEvaluator implements AutonomyPolicyEvaluator {
 
 export {
   isSupportedDynamicAutonomyPolicyEvaluator,
-  type StaticAutonomyPolicy,
   type SupportedDynamicAutonomyPolicyEvaluators,
+  type ToolStaticAutonomyPolicy,
 };

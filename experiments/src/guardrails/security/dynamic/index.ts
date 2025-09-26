@@ -1,4 +1,5 @@
-import { LanguageModel, ModelMessage } from 'ai';
+import { LanguageModelV2Content } from '@ai-sdk/provider';
+import { LanguageModel } from 'ai';
 import {
   AutonomyPolicyEvaluator,
   AutonomyPolicyEvaluatorResult,
@@ -10,7 +11,7 @@ class DynamicAutonomyPolicyEvaluatorFactory implements AutonomyPolicyEvaluator {
   private evaluator: AutonomyPolicyEvaluator;
 
   constructor(
-    context: ModelMessage[],
+    context: LanguageModelV2Content[],
     model: LanguageModel,
     evaluator: SupportedDynamicAutonomyPolicyEvaluators
   ) {

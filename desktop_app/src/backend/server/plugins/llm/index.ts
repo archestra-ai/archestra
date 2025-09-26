@@ -51,7 +51,9 @@ const createModelInstance = async (model: string, provider?: string) => {
     openai: () =>
       createOpenAI({
         apiKey,
-        baseURL: baseUrl, // 'http://localhost:9000/v1', // Use proxy server
+        baseURL: baseUrl,
+        // uncomment out the following line if you want to use the proxy server
+        // baseURL: 'http://localhost:9000/v1',
         headers,
       }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),

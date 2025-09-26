@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
+    "proxy:dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "guardrails": "tsx src/guardrails.ts",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -31,9 +33,17 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.17",
+    "@ai-sdk/openai": "2.1.0-beta.5",
+    "@ai-sdk/provider": "^2.0.0",
+    "ai": "5.1.0-beta.12",
+    "dotenv": "^17.2.2",
+    "zod": "^4.1.11",
     "@fastify/http-proxy": "^11.3.0",
     "@types/http-proxy": "^1.17.16",
     "fastify": "^5.6.1",
-    "openai": "^5.23.0"
+    "openai": "^5.23.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.0"
   }
 }

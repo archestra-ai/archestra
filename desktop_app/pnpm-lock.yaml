@@ -65,6 +65,9 @@ importers:
       ai:
         specifier: ^5.0.44
         version: 5.0.44(zod@4.1.8)
+      archestra:
+        specifier: link:../experiments/dominik-drafts/nodejs
+        version: link:../experiments/dominik-drafts/nodejs
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.2.0

@@ -1,6 +1,6 @@
 // inspired by https://github.com/badlogic/lemmy/blob/main/apps/claude-trace/src/interceptor.ts
 
-import { IncomingHttpHeaders, IncomingMessage, request } from 'http';
+import { IncomingMessage, request } from 'http';
 import { logger } from './logger';
 
 export interface ArchestraConfig {
@@ -8,7 +8,9 @@ export interface ArchestraConfig {
 }
 
 export class Archestra {
-  constructor(private readonly config: ArchestraConfig) {}
+  constructor(private readonly config: ArchestraConfig) {
+    this.instrumentAll();
+  }
 
   public instrumentAll(): void {
     this.instrumentFetch();
@@ -39,25 +41,15 @@ export class Archestra {
           : input instanceof URL
           ? input.toString()
           : input.url;
-      const requestTimestamp = Date.now();
 
-      // Capture request details
-      const requestData = {
-        timestamp: requestTimestamp / 1000, // Convert to seconds (like Python version)
-        method: init.method || 'GET',
-        url: url,
-        headers: redactSensitiveHeaders(
-          Object.fromEntries(new Headers(init.headers || {}).entries())
-        ),
-        body: await parseRequestBody(init.body),
-      };
-
-      logger.info(`Request: ${JSON.stringify(requestData)}`);
+      logger.info(
+        `Request Fetch - ${init.method} ${url} - ${init.body}`,
+        'blue'
+      );
 
       try {
         // Make the actual request
         const response = await originalFetch(input, init);
-        const responseTimestamp = Date.now();
 
         // Clone response to avoid consuming the body
         const clonedResponse = await response.clone();
@@ -65,15 +57,12 @@ export class Archestra {
         // Parse response body
         const responseBodyData = await parseResponseBody(clonedResponse);
 
-        // Create response data
-        const responseData = {
-          timestamp: responseTimestamp / 1000,
-          status_code: response.status,
-          headers: redactSensitiveHeaders(
-            Object.fromEntries(response.headers.entries())
-          ),
-          ...responseBodyData,
-        };
+        logger.info(
+          `Response Fetch - ${init.method} ${url} - ${response.status} ${
+            response.statusText
+          } - ${JSON.stringify(responseBodyData.body)}`,
+          'yellow'
+        );
 
         return response;
       } catch (error) {
@@ -154,44 +143,6 @@ export class Archestra {
       // Silent error handling
     }
   }
-}
-
-// utils
-function redactSensitiveHeaders(
-  headers: IncomingHttpHeaders
-): IncomingHttpHeaders {
-  const redactedHeaders = { ...headers };
-  const sensitiveKeys = [
-    'authorization',
-    'x-api-key',
-    'x-auth-token',
-    'cookie',
-    'set-cookie',
-    'x-session-token',
-    'x-access-token',
-    'bearer',
-    'proxy-authorization',
-  ];
-
-  for (const key of Object.keys(redactedHeaders)) {
-    const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some((sensitive) => lowerKey.includes(sensitive))) {
-      // Keep first 10 chars and last 4 chars, redact middle
-      const value =
-        typeof redactedHeaders[key] === 'string'
-          ? redactedHeaders[key]
-          : redactedHeaders[key]?.[0];
-      if (value && value.length > 14) {
-        redactedHeaders[key] = `${value.substring(0, 10)}...${value.slice(-4)}`;
-      } else if (value && value.length > 4) {
-        redactedHeaders[key] = `${value.substring(0, 2)}...${value.slice(-2)}`;
-      } else {
-        redactedHeaders[key] = '[REDACTED]';
-      }
-    }
-  }
-
-  return redactedHeaders;
 }
 
 async function parseRequestBody(body: any): Promise<any> {
@@ -281,40 +232,28 @@ function interceptNodeRequest(
   // Parse URL from options
   const url = parseNodeRequestURL(options, isHttps);
 
-  const requestTimestamp = Date.now();
   let requestBody = '';
 
   // Create the request
   const req = originalRequest(options, (res: IncomingMessage) => {
-    const responseTimestamp = Date.now();
     let responseBody = '';
 
     // Capture response data
     res.on('data', (chunk: any) => {
       responseBody += chunk;
+      logger.info(`Node response body: ${chunk}`, 'yellow');
     });
 
     res.on('end', async () => {
       // Process the captured request/response
-      const requestData = {
-        timestamp: requestTimestamp / 1000,
-        method: options.method || 'GET',
-        url: url,
-        headers: redactSensitiveHeaders(options.headers || {}),
-        body: requestBody ? await parseRequestBody(requestBody) : null,
-      };
-
-      const responseData = {
-        timestamp: responseTimestamp / 1000,
-        status_code: res.statusCode,
-        headers: redactSensitiveHeaders(res.headers || {}),
-        ...parseResponseBodyFromString(
-          responseBody,
-          res.headers['content-type']
-        ),
-      };
-      logger.info(`Request: ${JSON.stringify(requestData)}`);
-      logger.info(`Response: ${JSON.stringify(responseData)}`);
+      logger.info(
+        `Request Node - ${options.method} ${url} - ${requestBody}`,
+        'blue'
+      );
+      logger.info(
+        `Response Node - ${res.statusCode} ${res.statusMessage} - ${responseBody}`,
+        'yellow'
+      );
     });
 
     // Call original callback if provided

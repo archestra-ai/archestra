@@ -1,1 +1,1 @@
-export * from './interceptor';
+export { Archestra, type ArchestraConfig } from './interceptor';

@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import { Archestra } from 'archestra';
 import fastify from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 
@@ -71,6 +72,9 @@ export const startFastifyServer = async () => {
   const { http } = config.server;
 
   log.info(`Fastify server starting on port ${http.port}`);
+
+  // start Archestra interceptor
+  new Archestra({ text2: 'Hello, world!' });
 
   // Start the Fastify server
   try {

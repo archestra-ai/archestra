@@ -351,7 +351,6 @@ export class ToolService {
    * Wrap a tool with approval logic
    */
   wrapToolWithApproval(tool: any, toolId: string, sessionId: string, chatId: number): any {
-    console.log('DualLLM wrapToolWithApproval', tool);
     // If tool doesn't have an execute function, return as is
     if (!tool.execute) {
       return tool;

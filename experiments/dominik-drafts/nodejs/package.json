@@ -1,26 +1,39 @@
 {
-	"name": "archestra",
-	"version": "0.0.1",
-	"description": "Record all your interactions with Claude Code as you develop your projects",
-	"main": "dist/index.js",
+  "name": "archestra",
+  "version": "0.0.1",
+  "description": "Record all your interactions with Claude Code as you develop your projects",
+  "main": "dist/index.js",
   "types": "dist/index.d.ts",
-	"scripts": {
-		"build": "tsc",
-		"dev": "tsc --watch --preserveWatchOutput",
-		"typecheck": "tsc --noEmit"
-	},
-	"files": [
-		"dist/**/*",
-		"README.md"
-	],
-	"keywords": ["archestra", "nodejs", "interceptor"],
-	"author": "Archestra",
-	"license": "MIT",
-	"engines": {
-		"node": ">=16.0.0"
-	},
-	"devDependencies": {
-		"@types/node": "^20.0.0",
-		"typescript": "^5.9.0"
-	}
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "keywords": [
+    "archestra",
+    "nodejs",
+    "interceptor"
+  ],
+  "author": "Archestra",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "nodemon": "^3.1.10",
+    "pino-pretty": "^13.1.1",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@fastify/http-proxy": "^11.3.0",
+    "@types/http-proxy": "^1.17.16",
+    "fastify": "^5.6.1",
+    "openai": "^5.23.0"
+  }
 }

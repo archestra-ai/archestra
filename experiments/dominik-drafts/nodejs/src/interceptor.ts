@@ -51,18 +51,58 @@ export class Archestra {
         // Make the actual request
         const response = await originalFetch(input, init);
 
-        // Clone response to avoid consuming the body
-        const clonedResponse = await response.clone();
+        // Check if this is a streaming response
+        const contentType = response.headers.get('content-type') || '';
+        const isStreaming = contentType.includes('text/event-stream') || 
+                           contentType.includes('application/x-ndjson') ||
+                           contentType.includes('text/plain') ||
+                           response.headers.get('transfer-encoding') === 'chunked';
 
-        // Parse response body
-        const responseBodyData = await parseResponseBody(clonedResponse);
+        if (isStreaming && response.body) {
+          // For streaming responses, intercept the stream
+          const reader = response.body.getReader();
+          const stream = new ReadableStream({
+            start(controller) {
+              function pump(): Promise<void> {
+                return reader.read().then(({ done, value }) => {
+                  if (done) {
+                    controller.close();
+                    return;
+                  }
+                  
+                  // Log each chunk as it arrives
+                  const chunk = new TextDecoder().decode(value);
+                  logger.info(
+                    `Streaming Response Chunk - ${init.method} ${url} - ${response.status}: ${chunk}`,
+                    'yellow'
+                  );
+                  
+                  controller.enqueue(value);
+                  return pump();
+                });
+              }
+              return pump();
+            }
+          });
+          
+          // Return a new response with the intercepted stream
+          return new Response(stream, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers
+          });
+        } else {
+          // For non-streaming responses, use the original approach
+          const clonedResponse = await response.clone();
+          const responseBodyData = await parseResponseBody(clonedResponse);
 
-        logger.info(
-          `Response Fetch - ${init.method} ${url} - ${response.status} ${
-            response.statusText
-          } - ${JSON.stringify(responseBodyData.body)}`,
-          'yellow'
-        );
+          logger.info(
+            `Response Fetch - ${init.method} ${url} - ${response.status} ${
+              response.statusText
+            } - ${JSON.stringify(responseBodyData.body || responseBodyData.body_raw)}`,
+            'yellow'
+          );
+        }
 
         return response;
       } catch (error) {
@@ -237,23 +277,46 @@ function interceptNodeRequest(
   // Create the request
   const req = originalRequest(options, (res: IncomingMessage) => {
     let responseBody = '';
+    const contentType = res.headers['content-type'] || '';
+    const isStreaming = contentType.includes('text/event-stream') || 
+                       contentType.includes('application/x-ndjson') ||
+                       contentType.includes('text/plain') ||
+                       res.headers['transfer-encoding'] === 'chunked';
+
+    // Log request
+    logger.info(
+      `Request Node - ${options.method || 'GET'} ${url} - ${requestBody || '[no body]'}`,
+      'blue'
+    );
 
     // Capture response data
     res.on('data', (chunk: any) => {
       responseBody += chunk;
-      logger.info(`Node response body: ${chunk}`, 'yellow');
+      
+      if (isStreaming) {
+        // For streaming responses, log each chunk immediately
+        const chunkStr = chunk.toString();
+        logger.info(
+          `Streaming Response Chunk - ${options.method || 'GET'} ${url} - ${res.statusCode}: ${chunkStr}`,
+          'yellow'
+        );
+      }
     });
 
     res.on('end', async () => {
-      // Process the captured request/response
-      logger.info(
-        `Request Node - ${options.method} ${url} - ${requestBody}`,
-        'blue'
-      );
-      logger.info(
-        `Response Node - ${res.statusCode} ${res.statusMessage} - ${responseBody}`,
-        'yellow'
-      );
+      if (!isStreaming) {
+        // For non-streaming responses, log the complete response
+        logger.info(
+          `Response Node - ${res.statusCode} ${res.statusMessage} - ${responseBody}`,
+          'yellow'
+        );
+      } else {
+        // For streaming responses, log completion
+        logger.info(
+          `Streaming Response Complete - ${options.method || 'GET'} ${url} - ${res.statusCode} (${responseBody.length} bytes total)`,
+          'yellow'
+        );
+      }
     });
 
     // Call original callback if provided

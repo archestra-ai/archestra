@@ -53,10 +53,11 @@ export class Archestra {
 
         // Check if this is a streaming response
         const contentType = response.headers.get('content-type') || '';
-        const isStreaming = contentType.includes('text/event-stream') || 
-                           contentType.includes('application/x-ndjson') ||
-                           contentType.includes('text/plain') ||
-                           response.headers.get('transfer-encoding') === 'chunked';
+        const isStreaming =
+          contentType.includes('text/event-stream') ||
+          contentType.includes('application/x-ndjson') ||
+          contentType.includes('text/plain') ||
+          response.headers.get('transfer-encoding') === 'chunked';
 
         if (isStreaming && response.body) {
           // For streaming responses, intercept the stream
@@ -69,27 +70,27 @@ export class Archestra {
                     controller.close();
                     return;
                   }
-                  
+
                   // Log each chunk as it arrives
                   const chunk = new TextDecoder().decode(value);
                   logger.info(
                     `Streaming Response Chunk - ${init.method} ${url} - ${response.status}: ${chunk}`,
                     'yellow'
                   );
-                  
+
                   controller.enqueue(value);
                   return pump();
                 });
               }
               return pump();
-            }
+            },
           });
-          
+
           // Return a new response with the intercepted stream
           return new Response(stream, {
             status: response.status,
             statusText: response.statusText,
-            headers: response.headers
+            headers: response.headers,
           });
         } else {
           // For non-streaming responses, use the original approach
@@ -99,7 +100,9 @@ export class Archestra {
           logger.info(
             `Response Fetch - ${init.method} ${url} - ${response.status} ${
               response.statusText
-            } - ${JSON.stringify(responseBodyData.body || responseBodyData.body_raw)}`,
+            } - ${JSON.stringify(
+              responseBodyData.body || responseBodyData.body_raw
+            )}`,
             'yellow'
           );
         }
@@ -278,26 +281,31 @@ function interceptNodeRequest(
   const req = originalRequest(options, (res: IncomingMessage) => {
     let responseBody = '';
     const contentType = res.headers['content-type'] || '';
-    const isStreaming = contentType.includes('text/event-stream') || 
-                       contentType.includes('application/x-ndjson') ||
-                       contentType.includes('text/plain') ||
-                       res.headers['transfer-encoding'] === 'chunked';
+    const isStreaming =
+      contentType.includes('text/event-stream') ||
+      contentType.includes('application/x-ndjson') ||
+      contentType.includes('text/plain') ||
+      res.headers['transfer-encoding'] === 'chunked';
 
     // Log request
     logger.info(
-      `Request Node - ${options.method || 'GET'} ${url} - ${requestBody || '[no body]'}`,
+      `Request Node - ${options.method || 'GET'} ${url} - ${
+        requestBody || '[no body]'
+      }`,
       'blue'
     );
 
     // Capture response data
     res.on('data', (chunk: any) => {
       responseBody += chunk;
-      
+
       if (isStreaming) {
         // For streaming responses, log each chunk immediately
         const chunkStr = chunk.toString();
         logger.info(
-          `Streaming Response Chunk - ${options.method || 'GET'} ${url} - ${res.statusCode}: ${chunkStr}`,
+          `Streaming Response Chunk - ${options.method || 'GET'} ${url} - ${
+            res.statusCode
+          }: ${chunkStr}`,
           'yellow'
         );
       }
@@ -313,7 +321,9 @@ function interceptNodeRequest(
       } else {
         // For streaming responses, log completion
         logger.info(
-          `Streaming Response Complete - ${options.method || 'GET'} ${url} - ${res.statusCode} (${responseBody.length} bytes total)`,
+          `Streaming Response Complete - ${options.method || 'GET'} ${url} - ${
+            res.statusCode
+          } (${responseBody.length} bytes total)`,
           'yellow'
         );
       }

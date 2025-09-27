@@ -48,13 +48,13 @@ export default {
     //   operator: 'endsWith',
     //   value: '@archestra.ai',
     // },
-    // `{
-    //   mcpServerName: 'file',
-    //   toolName: 'readFile',
-    //   description: 'some-interesting-file.txt is safe',
-    //   attributePath: 'path',
-    //   operator: 'endsWith',
-    //   value: 'Desktop/some-interesting-file.txt',
-    // },`
+    {
+      mcpServerName: 'file',
+      toolName: 'readFile',
+      description: 'Reading files from the desktop is safe',
+      attributePath: 'path',
+      operator: 'regex',
+      value: '.*/Desktop.*',
+    },
   ] as TrustedDataAutonomyPolicy[],
 };

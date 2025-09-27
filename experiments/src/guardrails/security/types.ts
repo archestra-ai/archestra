@@ -4,7 +4,8 @@ type SupportedAutonomyPolicyOperators =
   | 'contains'
   | 'notContains'
   | 'startsWith'
-  | 'endsWith';
+  | 'endsWith'
+  | 'regex';
 
 export type ToolInvocationAutonomyPolicy = {
   mcpServerName: string;

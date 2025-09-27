@@ -51,6 +51,8 @@ class TrustedDataPolicyEvaluator
         return value === policyValue;
       case 'notEqual':
         return value !== policyValue;
+      case 'regex':
+        return typeof value === 'string' && new RegExp(policyValue).test(value);
       default:
         return false;
     }

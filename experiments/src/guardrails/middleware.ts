@@ -1,5 +1,5 @@
 import type { LanguageModelV2Middleware } from '@ai-sdk/provider';
-import { sessionPersistence } from './session';
+import { context } from './persistence';
 
 export const sessionPersistenceMiddleware = (
   sessionId: string
@@ -12,7 +12,7 @@ export const sessionPersistenceMiddleware = (
      * The full context history, in this case, is equivalent to the request sent to the model
      * + the response from the model
      */
-    sessionPersistence.updateSessionContext(sessionId, [
+    context.updateSessionContext(sessionId, [
       ...((doGenerateResponse.request?.body as any)?.input || []),
       ...((doGenerateResponse.response?.body as any).output || []),
     ]);

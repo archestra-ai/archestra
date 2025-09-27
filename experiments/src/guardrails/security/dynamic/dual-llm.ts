@@ -1,6 +1,5 @@
 import { LanguageModel, generateText } from 'ai';
-import { sessionPersistence } from '../../session';
-import { globalTaintContextMap } from '../../tools';
+import { context, taintedContextSource } from '../../persistence';
 import {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
@@ -197,7 +196,9 @@ class DualLLMEvaluator
   }
 
   async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
-    const taintedContexts = globalTaintContextMap.getTaintedContexts();
+    const taintedContexts = taintedContextSource.getTaintedContexts(
+      this.sessionId
+    );
 
     // If no tainted data, allow the operation
     if (taintedContexts.length === 0) {
@@ -250,10 +251,8 @@ class DualLLMEvaluator
   }
 
   private extractUserRequest(): string {
-    const context = sessionPersistence.getSessionContext(this.sessionId);
-
     // Find the most recent user message in context
-    for (const message of context) {
+    for (const message of context.getSessionContext(this.sessionId)) {
       if (message.role === 'user' && typeof message.content === 'string') {
         /**
          * NOTE: message.content in this case = `UserContent` which is equivalent to:

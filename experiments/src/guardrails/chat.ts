@@ -29,17 +29,31 @@ const cliChatWithGuardrails = async () => {
     output: process.stdout,
   });
 
-  const sessionId = uuidv4();
-  const messages: ModelMessage[] = [];
+  let sessionId = uuidv4();
+  let messages: ModelMessage[] = [];
 
-  console.log('Type exit() to exit\n');
+  console.log('Type /help to see the available commands');
+  console.log('Type /exit to exit');
+  console.log('Type /new to start a new session\n');
 
   while (true) {
     const userInput = await terminal.question('You: ');
 
-    if (userInput === 'exit()') {
+    if (userInput === '/help') {
+      console.log('Available commands:');
+      console.log('/help - Show this help message');
+      console.log('/exit - Exit the program');
+      console.log('/new - Start a new session');
+      console.log('\n');
+      continue;
+    } else if (userInput === '/exit') {
       console.log('Exiting...');
       process.exit(0);
+    } else if (userInput === '/new') {
+      console.log('Starting a new session...\n');
+      sessionId = uuidv4();
+      messages = [];
+      continue;
     }
 
     messages.push({ role: 'user', content: userInput });
@@ -47,6 +61,12 @@ const cliChatWithGuardrails = async () => {
     const {
       response: { messages: newMessages },
     } = await generateText({
+      system: `If the user asks you to read a directory, or file, it should be relative to ~.
+
+      Some examples:
+      - if the user asks you to read Desktop/file.txt, you should read ~/Desktop/file.txt.
+      - if the user asks you to read Desktop, you should read ~/Desktop.
+      `,
       model: wrapLanguageModel({
         model: model,
         middleware: sessionPersistenceMiddleware(sessionId),

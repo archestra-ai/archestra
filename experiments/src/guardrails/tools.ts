@@ -1,48 +1,17 @@
 import { LanguageModel, tool, Tool, ToolCallOptions } from 'ai';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { taintedContextSource } from './persistence';
 import DynamicAutonomyPolicyEvaluatorFactory from './security/dynamic';
 import ToolInvocationPolicyEvaluator from './security/tool-invocation';
 import TrustedDataPolicyEvaluator from './security/trusted-data';
 import {
   SupportedDynamicAutonomyPolicyEvaluators,
-  TaintedContext,
   ToolInvocationAutonomyPolicy,
   TrustedDataAutonomyPolicy,
 } from './security/types';
-
-// Context map to track tainted data throughout execution
-class TaintContextMap {
-  taintedContexts: Map<string, TaintedContext> = new Map();
-
-  addTaintedContext(context: TaintedContext): void {
-    this.taintedContexts.set(context.toolCallId, context);
-  }
-
-  getTaintedContext(toolCallId: string): TaintedContext | undefined {
-    return this.taintedContexts.get(toolCallId);
-  }
-
-  hasTaintedData(): boolean {
-    return Array.from(this.taintedContexts.values()).some(
-      (ctx) => ctx.isTainted
-    );
-  }
-
-  getTaintedContexts(): TaintedContext[] {
-    return Array.from(this.taintedContexts.values()).filter(
-      (ctx) => ctx.isTainted
-    );
-  }
-
-  clear(): void {
-    this.taintedContexts.clear();
-  }
-}
-
-export const globalTaintContextMap = new TaintContextMap();
 
 /**
  * Right now this just defines a static object of tools.
@@ -134,6 +103,24 @@ export const getTools = ({
         return { success: true };
       },
     }),
+    file__readDirectory: tool({
+      description: 'Read a directory',
+      inputSchema: z.object({
+        path: z.string().describe('The path to the directory to read'),
+      }),
+      outputSchema: z.object({
+        content: z.array(z.string()).describe('The content of the directory'),
+        path: z.string().describe('The path to the directory'),
+      }),
+      execute: async (args) => {
+        const expandedPath = args.path.replace(/^~/, homedir());
+        const resolvedPath = resolve(expandedPath);
+        return {
+          content: readdirSync(resolvedPath),
+          path: resolvedPath,
+        };
+      },
+    }),
     file__readFile: tool({
       description: 'Read a file',
       inputSchema: z.object({
@@ -183,7 +170,7 @@ export const getTools = ({
         /**
          * Check if the current context is tainted from reading in any untrusted data into the current context
          */
-        if (globalTaintContextMap.hasTaintedData()) {
+        if (taintedContextSource.hasTaintedData(sessionId)) {
           if (debug) {
             console.log(
               '[SECURITY] Tainted data detected, running dual LLM evaluation...'
@@ -234,7 +221,7 @@ export const getTools = ({
 
           // Track taint status - data is tainted if NOT trusted
           const isTainted = !isTrusted;
-          globalTaintContextMap.addTaintedContext({
+          taintedContextSource.addTaintedContext(sessionId, {
             toolCallId: options.toolCallId,
             toolName: toolName,
             isTainted: isTainted,

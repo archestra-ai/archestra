@@ -59,6 +59,10 @@ class ToolInvocationPolicyEvaluator
       case 'notEqual':
         conditionMet = value !== policyValue;
         break;
+      case 'regex':
+        conditionMet =
+          typeof value === 'string' && new RegExp(policyValue).test(value);
+        break;
     }
 
     // Apply the allow/deny logic

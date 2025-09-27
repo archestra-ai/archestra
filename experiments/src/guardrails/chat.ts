@@ -66,7 +66,7 @@ const cliChatWithGuardrails = async () => {
       stopWhen: stepCountIs(maxToolCalls),
     });
 
-    prettyPrintAssistantResponseMessages(newMessages, debug);
+    prettyPrintAssistantResponseMessages(newMessages);
     messages.push(...newMessages);
 
     process.stdout.write('\n\n');

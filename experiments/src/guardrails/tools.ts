@@ -18,6 +18,12 @@ import {
  *
  * This would be fetched from the tools of the ACTUAL MCP servers that you have configured for your Archestra
  * enterprise (and for which ones are allowed to be used by this agent (via RBAC access-control policies))
+ *
+ * NOTE: we may also want to look into experimental_createMCPClient as well
+ * https://ai-sdk.dev/docs/reference/ai-sdk-core/create-mcp-client#example
+ *
+ * With that approach, we would get the list of tools directly from the MCP servers, call client.tools() to
+ * convert them to the AI SDK format, and then we would wrap them in our guardrails.
  */
 export const getTools = ({
   toolInvocationAutonomyPolicies,

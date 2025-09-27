@@ -1,10 +1,8 @@
-import { LanguageModelV2Content } from '@ai-sdk/provider';
 import { LanguageModel } from 'ai';
 import {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
   SupportedDynamicAutonomyPolicyEvaluators,
-  TaintedContext,
 } from '../types';
 import DualLLMEvaluator from './dual-llm';
 
@@ -14,13 +12,12 @@ class DynamicAutonomyPolicyEvaluatorFactory
   private evaluator: AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>;
 
   constructor(
-    context: LanguageModelV2Content[],
-    model: LanguageModel,
     evaluator: SupportedDynamicAutonomyPolicyEvaluators,
-    taintedContexts: TaintedContext[] = []
+    sessionId: string,
+    model: LanguageModel
   ) {
     if (evaluator === 'dual-llm') {
-      this.evaluator = new DualLLMEvaluator(context, model, taintedContexts);
+      this.evaluator = new DualLLMEvaluator(sessionId, model);
     } else {
       throw new Error(`Evaluator ${evaluator} not supported`);
     }

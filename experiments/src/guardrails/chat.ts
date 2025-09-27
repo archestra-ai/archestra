@@ -1,11 +1,10 @@
 import { ModelMessage, generateText, stepCountIs, wrapLanguageModel } from 'ai';
-
 import * as readline from 'node:readline/promises';
+import { v4 as uuidv4 } from 'uuid';
 
 import { parseArgs, prettyPrintAssistantResponseMessages } from './cli';
-import { contextCredibilityMiddleware } from './middleware';
-
 import config from './config';
+import { sessionPersistenceMiddleware } from './middleware';
 import { getTools } from './tools';
 
 import 'dotenv/config';
@@ -30,6 +29,7 @@ const cliChatWithGuardrails = async () => {
     output: process.stdout,
   });
 
+  const sessionId = uuidv4();
   const messages: ModelMessage[] = [];
 
   console.log('Type exit() to exit\n');
@@ -49,18 +49,19 @@ const cliChatWithGuardrails = async () => {
     } = await generateText({
       model: wrapLanguageModel({
         model: model,
-        middleware: contextCredibilityMiddleware({
-          dynamicEvaluatorType: dynamicAutonomyPolicyEvaluatorType,
-        }),
+        middleware: sessionPersistenceMiddleware(sessionId),
       }),
       messages,
-      tools: getTools(
+      tools: getTools({
         toolInvocationAutonomyPolicies,
         trustedDataAutonomyPolicies,
         includeExternalEmail,
         includeMaliciousEmail,
-        debug
-      ),
+        sessionId,
+        model,
+        dynamicEvaluatorType: dynamicAutonomyPolicyEvaluatorType,
+        debug,
+      }),
       toolChoice: 'auto',
       stopWhen: stepCountIs(maxToolCalls),
     });

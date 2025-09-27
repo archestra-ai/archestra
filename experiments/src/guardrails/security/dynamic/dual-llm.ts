@@ -1,5 +1,6 @@
-import { LanguageModelV2Content } from '@ai-sdk/provider';
 import { LanguageModel, generateText } from 'ai';
+import { sessionPersistence } from '../../session';
+import { globalTaintContextMap } from '../../tools';
 import {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
@@ -187,30 +188,26 @@ class DualLLMController {
 class DualLLMEvaluator
   implements AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>
 {
-  private context: LanguageModelV2Content[];
-  private taintedContexts: TaintedContext[];
+  private sessionId: string;
   private controller: DualLLMController;
 
-  constructor(
-    context: LanguageModelV2Content[],
-    model: LanguageModel,
-    taintedContexts: TaintedContext[] = []
-  ) {
-    this.context = context;
-    this.taintedContexts = taintedContexts;
+  constructor(sessionId: string, model: LanguageModel) {
+    this.sessionId = sessionId;
     this.controller = new DualLLMController(model);
   }
 
   async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
+    const taintedContexts = globalTaintContextMap.getTaintedContexts();
+
     // If no tainted data, allow the operation
-    if (this.taintedContexts.length === 0) {
+    if (taintedContexts.length === 0) {
       return { isAllowed: true, denyReason: '' };
     }
 
     try {
       // Step 1: Analyze tainted content in quarantine
       const quarantineResult = await this.controller.analyzeInQuarantine(
-        this.taintedContexts
+        taintedContexts
       );
 
       // If no injection detected with high confidence, allow
@@ -253,17 +250,18 @@ class DualLLMEvaluator
   }
 
   private extractUserRequest(): string {
+    const context = sessionPersistence.getSessionContext(this.sessionId);
+
     // Find the most recent user message in context
-    for (let i = this.context.length - 1; i >= 0; i--) {
-      const message = this.context[i];
-      if (Array.isArray(message)) {
-        for (const part of message) {
-          if (part.type === 'text') {
-            return part.text;
-          }
-        }
-      } else if (typeof message === 'string') {
-        return message;
+    for (const message of context) {
+      if (message.role === 'user' && typeof message.content === 'string') {
+        /**
+         * NOTE: message.content in this case = `UserContent` which is equivalent to:
+         * string | Array<TextPart | ImagePart | FilePart>
+         *
+         * For now, we'll skip handling TextParts, ImageParts, and FileParts..
+         */
+        return message.content;
       }
     }
     return 'No user request found';

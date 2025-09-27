@@ -1,11 +1,13 @@
-import { tool, Tool, ToolCallOptions } from 'ai';
+import { LanguageModel, tool, Tool, ToolCallOptions } from 'ai';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import DynamicAutonomyPolicyEvaluatorFactory from './security/dynamic';
 import ToolInvocationPolicyEvaluator from './security/tool-invocation';
 import TrustedDataPolicyEvaluator from './security/trusted-data';
 import {
+  SupportedDynamicAutonomyPolicyEvaluators,
   TaintedContext,
   ToolInvocationAutonomyPolicy,
   TrustedDataAutonomyPolicy,
@@ -13,7 +15,7 @@ import {
 
 // Context map to track tainted data throughout execution
 class TaintContextMap {
-  private taintedContexts: Map<string, TaintedContext> = new Map();
+  taintedContexts: Map<string, TaintedContext> = new Map();
 
   addTaintedContext(context: TaintedContext): void {
     this.taintedContexts.set(context.toolCallId, context);
@@ -48,13 +50,25 @@ export const globalTaintContextMap = new TaintContextMap();
  * This would be fetched from the tools of the ACTUAL MCP servers that you have configured for your Archestra
  * enterprise (and for which ones are allowed to be used by this agent (via RBAC access-control policies))
  */
-export const getTools = (
-  toolInvocationAutonomyPolicies: ToolInvocationAutonomyPolicy[],
-  trustedDataAutonomyPolicies: TrustedDataAutonomyPolicy[],
-  includeExternalEmail: boolean,
-  includeMaliciousEmail: boolean,
-  debug: boolean
-) => {
+export const getTools = ({
+  toolInvocationAutonomyPolicies,
+  trustedDataAutonomyPolicies,
+  includeExternalEmail,
+  includeMaliciousEmail,
+  sessionId,
+  dynamicEvaluatorType,
+  model,
+  debug,
+}: {
+  toolInvocationAutonomyPolicies: ToolInvocationAutonomyPolicy[];
+  trustedDataAutonomyPolicies: TrustedDataAutonomyPolicy[];
+  includeExternalEmail: boolean;
+  includeMaliciousEmail: boolean;
+  sessionId: string;
+  dynamicEvaluatorType: SupportedDynamicAutonomyPolicyEvaluators;
+  model: LanguageModel;
+  debug: boolean;
+}) => {
   const tools: Record<string, Tool> = {
     gmail__getEmails: tool({
       description: "Get emails from the user's Gmail inbox",
@@ -164,6 +178,45 @@ export const getTools = (
         const { isAllowed, denyReason } = toolInvocationEvaluator.evaluate();
         if (!isAllowed) {
           throw new Error(denyReason);
+        }
+
+        /**
+         * Check if the current context is tainted from reading in any untrusted data into the current context
+         */
+        if (globalTaintContextMap.hasTaintedData()) {
+          if (debug) {
+            console.log(
+              '[SECURITY] Tainted data detected, running dual LLM evaluation...'
+            );
+          }
+
+          // Create the dynamic evaluator with the response content and tainted contexts
+          const dynamicEvaluator = new DynamicAutonomyPolicyEvaluatorFactory(
+            dynamicEvaluatorType,
+            sessionId,
+            model
+          );
+
+          // Evaluate using the dual LLM pattern
+          const dynamicResult = await dynamicEvaluator.evaluate();
+
+          // If the evaluation fails, block the tool execution
+          if (!dynamicResult.isAllowed) {
+            if (debug) {
+              console.error(
+                '[SECURITY] Tool execution blocked by dual LLM evaluation:',
+                dynamicResult.denyReason
+              );
+            }
+
+            throw new Error(dynamicResult.denyReason);
+          }
+
+          if (debug) {
+            console.log(
+              '[SECURITY] Dual LLM evaluation passed, proceeding with response'
+            );
+          }
         }
 
         const toolResponse = await toolDefinition.execute?.(input, options);

@@ -22,6 +22,7 @@ const cliChatWithGuardrails = async () => {
     dynamicAutonomyPolicyEvaluatorType,
     includeExternalEmail,
     includeMaliciousEmail,
+    debug,
   } = parseArgs();
 
   const terminal = readline.createInterface({
@@ -63,11 +64,14 @@ const cliChatWithGuardrails = async () => {
       stopWhen: stepCountIs(maxToolCalls),
     });
 
-    prettyPrintAssistantResponseMessages(newMessages);
+    prettyPrintAssistantResponseMessages(newMessages, debug);
     messages.push(...newMessages);
 
     process.stdout.write('\n\n');
   }
 };
 
-cliChatWithGuardrails().catch(console.error);
+cliChatWithGuardrails().catch((error) => {
+  console.log('\n\nBye!');
+  process.exit(0);
+});

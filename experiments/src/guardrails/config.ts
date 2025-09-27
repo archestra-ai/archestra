@@ -19,23 +19,14 @@ export default {
       value: '@grafana.com',
       allow: false,
     },
-    // block reading sensitive files
+    // Block a specific file
     {
       mcpServerName: 'file',
       toolName: 'readFile',
-      description: 'Cannot read SSH keys',
+      description: 'Cannot read a specific file',
       argumentName: 'path',
       operator: 'contains',
-      value: '.ssh',
-      allow: false,
-    },
-    {
-      mcpServerName: 'file',
-      toolName: 'readFile',
-      description: 'Cannot read environment files',
-      argumentName: 'path',
-      operator: 'contains',
-      value: '.env',
+      value: 'Desktop/some-interesting-file.txt',
       allow: false,
     },
   ] as ToolInvocationStaticAutonomyPolicy[],

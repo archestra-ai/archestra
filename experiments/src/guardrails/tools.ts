@@ -1,5 +1,7 @@
 import { tool, Tool, ToolCallOptions } from 'ai';
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import StaticToolInvocationPolicyEvaluator from './security/tool-invocation';
 import StaticToolResponsePolicyEvaluator from './security/tool-response';
@@ -27,11 +29,11 @@ export const getTools = (
       outputSchema: z.object({
         emails: z.array(
           z.object({
-            id: z.string(),
-            subject: z.string(),
-            from: z.string(),
-            to: z.string(),
-            body: z.string(),
+            id: z.string().describe('The ID of the email'),
+            subject: z.string().describe('The subject of the email'),
+            from: z.string().describe('The email address of the sender'),
+            to: z.string().describe('The email address of the recipient'),
+            body: z.string().describe('The body of the email'),
           })
         ),
       }),
@@ -72,12 +74,14 @@ export const getTools = (
     gmail__sendEmail: tool({
       description: 'Send an email via Gmail',
       inputSchema: z.object({
-        to: z.string(),
-        subject: z.string(),
-        body: z.string(),
+        to: z.string().describe('The email address to send the email to'),
+        subject: z.string().describe('The subject of the email'),
+        body: z.string().describe('The body of the email'),
       }),
       outputSchema: z.object({
-        success: z.boolean(),
+        success: z
+          .boolean()
+          .describe('Whether the email was sent successfully'),
       }),
       execute: async (args) => {
         return { success: true };
@@ -86,13 +90,15 @@ export const getTools = (
     file__readFile: tool({
       description: 'Read a file',
       inputSchema: z.object({
-        path: z.string(),
+        path: z.string().describe('The path to the file to read'),
       }),
       outputSchema: z.object({
-        content: z.string(),
+        content: z.string().describe('The content of the file'),
       }),
       execute: async (args) => {
-        return { content: readFileSync(args.path, 'utf-8') };
+        const expandedPath = args.path.replace(/^~/, homedir());
+        const resolvedPath = resolve(expandedPath);
+        return { content: readFileSync(resolvedPath, 'utf-8') };
       },
     }),
   };

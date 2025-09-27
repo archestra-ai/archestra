@@ -41,11 +41,13 @@ const printHelp = () => {
   console.log(
     '--include-malicious-email - Include malicious email in mock Gmail data'
   );
+  console.log('--debug - Print debug messages');
   console.log('--help - Print this help message');
 };
 
 export const prettyPrintAssistantResponseMessages = (
-  messages: ModelMessage[]
+  messages: ModelMessage[],
+  debug: boolean
 ) => {
   process.stdout.write('\nAssistant: ');
 
@@ -58,7 +60,7 @@ export const prettyPrintAssistantResponseMessages = (
         for (const content of message.content) {
           if (content.type === 'text') {
             process.stdout.write(content.text);
-          } else if (content.type === 'tool-call') {
+          } else if (content.type === 'tool-call' && debug) {
             process.stdout.write(`\n📞 Calling tool: ${content.toolName}\n`);
             process.stdout.write(
               `   Input: ${JSON.stringify(content.input, null, 2)}\n`
@@ -67,17 +69,19 @@ export const prettyPrintAssistantResponseMessages = (
         }
       }
     } else if (message.role === 'tool') {
-      // Show tool results in a more readable format
-      if (Array.isArray(message.content)) {
-        for (const content of message.content) {
-          if (content.type === 'tool-result') {
-            const toolResult = content as ToolResultPart;
-            process.stdout.write(
-              `\n📦 Tool Result (${toolResult.toolName}):\n`
-            );
-            const output = toolResult.output?.value || toolResult.output;
-            if (output) {
-              process.stdout.write(JSON.stringify(output, null, 2));
+      if (debug) {
+        // Show tool results in a more readable format
+        if (Array.isArray(message.content)) {
+          for (const content of message.content) {
+            if (content.type === 'tool-result') {
+              const toolResult = content as ToolResultPart;
+              process.stdout.write(
+                `\n📦 Tool Result (${toolResult.toolName}):\n`
+              );
+              const output = toolResult.output?.value || toolResult.output;
+              if (output) {
+                process.stdout.write(JSON.stringify(output, null, 2));
+              }
             }
           }
         }
@@ -93,6 +97,7 @@ export const parseArgs = (): {
   dynamicAutonomyPolicyEvaluatorType: SupportedDynamicAutonomyPolicyEvaluators;
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
+  debug: boolean;
 } => {
   if (process.argv.includes('--help')) {
     printHelp();
@@ -106,5 +111,6 @@ export const parseArgs = (): {
     dynamicAutonomyPolicyEvaluatorType,
     includeExternalEmail: process.argv.includes('--include-external-email'),
     includeMaliciousEmail: process.argv.includes('--include-malicious-email'),
+    debug: process.argv.includes('--debug'),
   };
 };

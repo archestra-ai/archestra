@@ -13,16 +13,8 @@
 
 ## CLI Chat w/ Guardrails
 
-Try asking the model what tools it has access to, for example ask it to read your (fake) e-mails and go from there.
-
-### Testing out static autonomous policy evaluator
+Try asking the model what tools it has access to, for example ask it to read your (fake) e-mails and go from there:
 
 ```bash
-pnpm cli-chat-with-guardrails --include-external-email
-```
-
-### Testing out the dynamic autonomous policy evaluator
-
-```bash
-pnpm cli-chat-with-guardrails --include-malicious-email
+$ pnpm cli-chat-with-guardrails --help
 ```

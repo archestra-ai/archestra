@@ -2,13 +2,15 @@ import { LanguageModelV2Content } from '@ai-sdk/provider';
 import { LanguageModel } from 'ai';
 import {
   AutonomyPolicyEvaluator,
-  AutonomyPolicyEvaluatorResult,
+  DynamicAutonomyPolicyEvaluatorResult,
   SupportedDynamicAutonomyPolicyEvaluators,
 } from '../types';
 import DualLLMEvaluator from './dual-llm';
 
-class DynamicAutonomyPolicyEvaluatorFactory implements AutonomyPolicyEvaluator {
-  private evaluator: AutonomyPolicyEvaluator;
+class DynamicAutonomyPolicyEvaluatorFactory
+  implements AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>
+{
+  private evaluator: AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>;
 
   constructor(
     context: LanguageModelV2Content[],
@@ -22,9 +24,7 @@ class DynamicAutonomyPolicyEvaluatorFactory implements AutonomyPolicyEvaluator {
     }
   }
 
-  evaluate():
-    | Promise<AutonomyPolicyEvaluatorResult>
-    | AutonomyPolicyEvaluatorResult {
+  evaluate() {
     return this.evaluator.evaluate();
   }
 }

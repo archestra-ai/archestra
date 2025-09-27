@@ -3,7 +3,7 @@ import { LanguageModel, generateText } from 'ai';
 import { LanguageModelV2Content } from '@ai-sdk/provider';
 import {
   AutonomyPolicyEvaluator,
-  AutonomyPolicyEvaluatorResult,
+  DynamicAutonomyPolicyEvaluatorResult,
 } from '../types';
 
 const LLM_GUARD_SYSTEM_PROMPT = `
@@ -26,7 +26,9 @@ Respond with a JSON object containing:
 - "reason": string (explanation if suspicious, empty if safe)
 `;
 
-class DualLLMEvaluator implements AutonomyPolicyEvaluator {
+class DualLLMEvaluator
+  implements AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>
+{
   private context: LanguageModelV2Content[];
   private model: LanguageModel;
 
@@ -35,7 +37,7 @@ class DualLLMEvaluator implements AutonomyPolicyEvaluator {
     this.model = model;
   }
 
-  async evaluate(): Promise<AutonomyPolicyEvaluatorResult> {
+  async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
     try {
       // Create a separate audit session with the LLM
       const auditResponse = await generateText({

@@ -4,6 +4,7 @@ import {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
   SupportedDynamicAutonomyPolicyEvaluators,
+  TaintedContext,
 } from '../types';
 import DualLLMEvaluator from './dual-llm';
 
@@ -15,10 +16,11 @@ class DynamicAutonomyPolicyEvaluatorFactory
   constructor(
     context: LanguageModelV2Content[],
     model: LanguageModel,
-    evaluator: SupportedDynamicAutonomyPolicyEvaluators
+    evaluator: SupportedDynamicAutonomyPolicyEvaluators,
+    taintedContexts: TaintedContext[] = []
   ) {
     if (evaluator === 'dual-llm') {
-      this.evaluator = new DualLLMEvaluator(context, model);
+      this.evaluator = new DualLLMEvaluator(context, model, taintedContexts);
     } else {
       throw new Error(`Evaluator ${evaluator} not supported`);
     }

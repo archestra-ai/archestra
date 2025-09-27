@@ -13,8 +13,8 @@ import 'dotenv/config';
 const {
   model,
   maxToolCalls,
-  toolInvocationStaticAutonomyPolicies,
-  toolResponseStaticAutonomyPolicies,
+  toolInvocationAutonomyPolicies,
+  trustedDataAutonomyPolicies,
 } = config;
 
 const cliChatWithGuardrails = async () => {
@@ -55,10 +55,11 @@ const cliChatWithGuardrails = async () => {
       }),
       messages,
       tools: getTools(
-        toolInvocationStaticAutonomyPolicies,
-        toolResponseStaticAutonomyPolicies,
+        toolInvocationAutonomyPolicies,
+        trustedDataAutonomyPolicies,
         includeExternalEmail,
-        includeMaliciousEmail
+        includeMaliciousEmail,
+        debug
       ),
       toolChoice: 'auto',
       stopWhen: stepCountIs(maxToolCalls),

@@ -2,8 +2,8 @@ import _ from 'lodash';
 
 import {
   AutonomyPolicyEvaluator,
-  ToolInvocationStaticAutonomyPolicy,
-  ToolInvocationStaticAutonomyPolicyEvaluatorResult,
+  ToolInvocationAutonomyPolicy,
+  ToolInvocationAutonomyPolicyEvaluatorResult,
 } from './types';
 
 type ToolCallInput = {
@@ -12,16 +12,16 @@ type ToolCallInput = {
   input: Record<string, any>;
 };
 
-class StaticToolInvocationPolicyEvaluator
+class ToolInvocationPolicyEvaluator
   implements
-    AutonomyPolicyEvaluator<ToolInvocationStaticAutonomyPolicyEvaluatorResult>
+    AutonomyPolicyEvaluator<ToolInvocationAutonomyPolicyEvaluatorResult>
 {
   private toolCall: ToolCallInput;
-  private policies: ToolInvocationStaticAutonomyPolicy[];
+  private policies: ToolInvocationAutonomyPolicy[];
 
   constructor(
     toolCall: ToolCallInput,
-    policies: ToolInvocationStaticAutonomyPolicy[]
+    policies: ToolInvocationAutonomyPolicy[]
   ) {
     this.toolCall = toolCall;
     this.policies = policies;
@@ -34,8 +34,8 @@ class StaticToolInvocationPolicyEvaluator
       value: policyValue,
       description,
       allow,
-    }: ToolInvocationStaticAutonomyPolicy
-  ): ToolInvocationStaticAutonomyPolicyEvaluatorResult {
+    }: ToolInvocationAutonomyPolicy
+  ): ToolInvocationAutonomyPolicyEvaluatorResult {
     let conditionMet = false;
 
     switch (operator) {
@@ -77,7 +77,7 @@ class StaticToolInvocationPolicyEvaluator
     }
   }
 
-  evaluate(): ToolInvocationStaticAutonomyPolicyEvaluatorResult {
+  evaluate(): ToolInvocationAutonomyPolicyEvaluatorResult {
     const { toolName: toolNameFromCall, input: toolCallInput } = this.toolCall;
 
     // Find applicable policies for this tool
@@ -118,4 +118,4 @@ class StaticToolInvocationPolicyEvaluator
   }
 }
 
-export default StaticToolInvocationPolicyEvaluator;
+export default ToolInvocationPolicyEvaluator;

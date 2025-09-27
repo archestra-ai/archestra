@@ -60,10 +60,7 @@ const cliChatWithGuardrails = async () => {
         includeMaliciousEmail
       ),
       toolChoice: 'auto',
-      stopWhen: ({ steps }) => {
-        // Stop if we've reached max tool calls
-        return stepCountIs(maxToolCalls)({ steps });
-      },
+      stopWhen: stepCountIs(maxToolCalls),
     });
 
     prettyPrintAssistantResponseMessages(newMessages);

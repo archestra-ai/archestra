@@ -4,6 +4,9 @@ import { SupportedDynamicAutonomyPolicyEvaluators } from './security/types';
 
 /**
  * Creates a language model middleware that checks the credibility of the context
+ *
+ * TODO: basically we need to check if any tool calls that have been made thus far have tainted the context
+ * (this is done via the wrapped tool calls)
  */
 export const contextCredibilityMiddleware = ({
   dynamicEvaluatorType = 'dual-llm',

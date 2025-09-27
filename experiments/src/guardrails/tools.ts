@@ -117,9 +117,9 @@ export const getTools = (
           },
           toolInvocationStaticAutonomyPolicies
         );
-        const toolInvocationResult = toolInvocationEvaluator.evaluate();
-        if (!toolInvocationResult.isAllowed) {
-          throw new Error(toolInvocationResult.denyReason);
+        const { isAllowed, denyReason } = toolInvocationEvaluator.evaluate();
+        if (!isAllowed) {
+          throw new Error(denyReason);
         }
 
         const toolResponse = await toolDefinition.execute?.(input, options);
@@ -133,9 +133,9 @@ export const getTools = (
             },
             toolResponseStaticAutonomyPolicies
           );
-          const toolResponseResult = toolResponseEvaluator.evaluate();
-          if (!toolResponseResult.isTainted) {
-            throw new Error(toolResponseResult.taintedReason);
+          const { isTainted, taintedReason } = toolResponseEvaluator.evaluate();
+          if (isTainted) {
+            throw new Error(taintedReason);
           }
         }
 
@@ -144,5 +144,5 @@ export const getTools = (
     });
   }
 
-  return tools;
+  return wrappedTools;
 };

@@ -69,13 +69,13 @@ class StaticToolResponsePolicyEvaluator
     if (trusted) {
       // Policy says the data is trusted when condition is met
       return {
-        isTainted: conditionMet,
+        isTainted: !conditionMet,
         taintedReason: conditionMet ? '' : `Policy violation: ${description}`,
       };
     } else {
       // Policy says the data is tainted when condition is met
       return {
-        isTainted: !conditionMet,
+        isTainted: conditionMet,
         taintedReason: conditionMet ? `Policy violation: ${description}` : '',
       };
     }
@@ -125,14 +125,14 @@ class StaticToolResponsePolicyEvaluator
         let allMeetCondition = true;
         for (const value of values) {
           const result = this.evaluateValue(value, policy);
-          if (!result.isTainted) {
+          if (result.isTainted) {
             allMeetCondition = false;
             break;
           }
         }
         if (!allMeetCondition) {
           return {
-            isTainted: false,
+            isTainted: true,
             taintedReason: `Policy violation: ${description} - not all values meet the condition`,
           };
         }
@@ -140,7 +140,7 @@ class StaticToolResponsePolicyEvaluator
         // For "tainted" policies, ANY value meeting the condition triggers tainting
         for (const value of values) {
           const result = this.evaluateValue(value, policy);
-          if (!result.isTainted) {
+          if (result.isTainted) {
             return result;
           }
         }

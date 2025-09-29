@@ -1,0 +1,18 @@
+{
+  "name": "archestra-platform",
+  "version": "0.0.1",
+  "description": "Enterprise MCP platform",
+  "author": "Archestra",
+  "scripts": {
+    "dev": "turbo dev",
+    "lint": "biome check --write",
+    "format": "biome format --write",
+    "type-check": "turbo type-check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.0",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@10.0.0-rc.0+sha512.bce495587126f9a37d64150bf80dcf9bd96f0d64cfd450c9b1a7e5bf2cfc81aef3d50178f259855351c872905a240861a55031652c81e8a11665bfa65f6a1dc2"
+}

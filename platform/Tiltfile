@@ -1,0 +1,24 @@
+# pre
+local_resource(
+    'pnpm-install',
+    cmd='pnpm install',
+    deps=['./frontend/package.json', './backend/package.json'],
+    labels=['pre']
+)
+
+# dev
+local_resource(
+    'pnpm dev',
+    serve_cmd='pnpm dev',
+    labels=['dev'],
+    resource_deps=['pnpm-install']
+)
+
+local_resource(
+    'linting',
+    cmd='pnpm type-check && pnpm lint',
+    labels=['dev'],
+    resource_deps=['pnpm-install']
+)
+
+#DB TBD

@@ -26,8 +26,6 @@
     "node": ">=16.0.0"
   },
   "devDependencies": {
-    "@types/http-proxy": "^1.17.16",
-    "@types/lodash": "^4.17.20",
     "@types/node": "^20.0.0",
     "nodemon": "^3.1.10",
     "pino-pretty": "^13.1.1",
@@ -35,16 +33,8 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.17",
-    "@ai-sdk/openai": "2.1.0-beta.5",
-    "@ai-sdk/provider": "^2.0.0",
-    "@fastify/http-proxy": "^11.3.0",
-    "ai": "5.1.0-beta.12",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.1",
-    "lodash": "^4.17.21",
-    "openai": "^5.23.0",
-    "uuid": "^13.0.0",
-    "zod": "^4.1.11"
+    "openai": "^5.23.0"
   }
 }

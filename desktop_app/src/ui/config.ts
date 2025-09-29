@@ -5,7 +5,7 @@ const HOST = import.meta.env.VITE_HOST || 'localhost';
 /**
  * website base URL defaults to production, can be overridden for local development
  */
-const ARCHESTRA_WEBSITE_BASE_URL = import.meta.env.VITE_ARCHESTRA_WEBSITE_BASE_URL || 'http://localhost:3000';
+const ARCHESTRA_WEBSITE_BASE_URL = import.meta.env.VITE_ARCHESTRA_WEBSITE_BASE_URL || 'https://www.archestra.ai';
 
 /**
  * In development, use Vite's dev server port (5173) which proxies to the backend

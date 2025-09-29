@@ -35,18 +35,11 @@ local_resource(
 )
 
 local_resource(
-  'prisma-generate',
-  cmd='cd backend && pnpm db:generate',
+  'prisma-migrate',
+  # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
+  cmd='cd backend && pnpm db:migrate',
   deps=['./backend/src/prisma/schema.prisma'],
-  resource_deps=['pnpm-install'],
-  labels=['pre']
-)
-
-local_resource(
-  'prisma-push',
-  cmd='cd backend && pnpm db:push',
-  deps=['./backend/src/prisma/schema.prisma'],
-  resource_deps=['postgresql', 'prisma-generate'],
+  resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
 )
 
@@ -59,14 +52,14 @@ local_resource(
     'DATABASE_URL': 'postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public'
   },
   labels=['dev'],
-  resource_deps=['pnpm-install', 'prisma-push']
+  resource_deps=['pnpm-install', 'prisma-migrate']
 )
 
 local_resource(
   'prisma-studio',
   serve_cmd='cd backend && pnpm db:studio',
   labels=['dev'],
-  resource_deps=['prisma-push']
+  resource_deps=['prisma-migrate']
 )
 
 local_resource(

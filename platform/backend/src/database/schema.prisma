@@ -1,9 +1,11 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// https://www.prisma.io/docs/orm/prisma-schema/overview/generators#prisma-client
 generator client {
-  provider = "prisma-client-js"
-  output   = "./generated/prisma"
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
 }
 
 datasource db {

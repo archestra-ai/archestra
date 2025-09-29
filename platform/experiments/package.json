@@ -8,7 +8,6 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "proxy:dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
-    "dev": "tsc --watch --preserveWatchOutput",
     "cli-chat-with-guardrails": "tsx src/cli-chat.ts",
     "typecheck": "tsc --noEmit"
   },

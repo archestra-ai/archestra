@@ -7,8 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "tsc",
-    "start": "node/server.js start",
-    "dev": "nodemon --exec \"tsc && node dist/server.js\" --watch src --ext ts",
+    "start": "node dist/src/server.js",
+    "dev": "nodemon --exec \"tsc && node dist/src/server.js\" --watch src --ext ts",
     "lint": "biome check --write",
     "format": "biome format --write",
     "type-check": "tsc --noEmit",

@@ -1,17 +1,80 @@
-import { LanguageModel, tool, Tool, ToolCallOptions } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import {
+  type LanguageModel,
+  type Tool,
+  type ToolCallOptions,
+  tool,
+  generateText,
+  type ModelMessage,
+  stepCountIs,
+} from 'ai';
 import { readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import * as readline from 'node:readline/promises';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { taintedContextSource } from './persistence';
-import DynamicAutonomyPolicyEvaluatorFactory from './security/dynamic';
-import ToolInvocationPolicyEvaluator from './security/tool-invocation';
-import TrustedDataPolicyEvaluator from './security/trusted-data';
-import {
-  SupportedDynamicAutonomyPolicyEvaluators,
-  ToolInvocationAutonomyPolicy,
-  TrustedDataAutonomyPolicy,
-} from './security/types';
+
+// import { taintedContextSource } from './persistence';
+// import DynamicAutonomyPolicyEvaluatorFactory from './security/dynamic';
+// import ToolInvocationPolicyEvaluator from './security/tool-invocation';
+// import TrustedDataPolicyEvaluator from './security/trusted-data';
+// import type {
+//   SupportedDynamicAutonomyPolicyEvaluators,
+//   ToolInvocationAutonomyPolicy,
+//   TrustedDataAutonomyPolicy,
+// } from './security/types';
+
+import 'dotenv/config';
+
+const printHelp = () => {
+  console.log('Usage: pnpm cli-chat-with-guardrails [options]\n');
+  console.log('Options:');
+  console.log(
+    '--include-external-email - Include external email in mock Gmail data'
+  );
+  console.log(
+    '--include-malicious-email - Include malicious email in mock Gmail data'
+  );
+  console.log('--debug - Print debug messages');
+  console.log('--help - Print this help message');
+};
+
+const prettyPrintAssistantResponseMessages = (messages: ModelMessage[]) => {
+  process.stdout.write('\nAssistant: ');
+
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      if (typeof message.content === 'string') {
+        process.stdout.write(message.content);
+      } else if (Array.isArray(message.content)) {
+        // Handle structured content from assistant
+        for (const content of message.content) {
+          if (content.type === 'text') {
+            process.stdout.write(content.text);
+          }
+        }
+      }
+    }
+  }
+};
+
+const parseArgs = (): {
+  includeExternalEmail: boolean;
+  includeMaliciousEmail: boolean;
+  debug: boolean;
+} => {
+  if (process.argv.includes('--help')) {
+    printHelp();
+    process.exit(0);
+  }
+
+  return {
+    includeExternalEmail: process.argv.includes('--include-external-email'),
+    includeMaliciousEmail: process.argv.includes('--include-malicious-email'),
+    debug: process.argv.includes('--debug'),
+  };
+};
 
 /**
  * Right now this just defines a static object of tools.
@@ -258,3 +321,77 @@ export const getTools = ({
 
   return wrappedTools;
 };
+
+const cliChatWithGuardrails = async () => {
+  const { includeExternalEmail, includeMaliciousEmail, debug } = parseArgs();
+
+  const terminal = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  let sessionId = uuidv4();
+  let messages: ModelMessage[] = [];
+
+  console.log('Type /help to see the available commands');
+  console.log('Type /exit to exit');
+  console.log('Type /new to start a new session\n');
+
+  while (true) {
+    const userInput = await terminal.question('You: ');
+
+    if (userInput === '/help') {
+      console.log('Available commands:');
+      console.log('/help - Show this help message');
+      console.log('/exit - Exit the program');
+      console.log('/new - Start a new session');
+      console.log('\n');
+      continue;
+    } else if (userInput === '/exit') {
+      console.log('Exiting...');
+      process.exit(0);
+    } else if (userInput === '/new') {
+      console.log('Starting a new session...\n');
+      sessionId = uuidv4();
+      messages = [];
+      continue;
+    }
+
+    messages.push({ role: 'user', content: userInput });
+
+    const {
+      response: { messages: newMessages },
+    } = await generateText({
+      system: `If the user asks you to read a directory, or file, it should be relative to ~.
+
+      Some examples:
+      - if the user asks you to read Desktop/file.txt, you should read ~/Desktop/file.txt.
+      - if the user asks you to read Desktop, you should read ~/Desktop.
+      `,
+      model: openai('gpt-4o'),
+      messages,
+      tools: getTools({
+        toolInvocationAutonomyPolicies,
+        trustedDataAutonomyPolicies,
+        includeExternalEmail,
+        includeMaliciousEmail,
+        sessionId,
+        model,
+        dynamicEvaluatorType: dynamicAutonomyPolicyEvaluatorType,
+        debug,
+      }),
+      toolChoice: 'auto',
+      stopWhen: stepCountIs(5),
+    });
+
+    prettyPrintAssistantResponseMessages(newMessages);
+    messages.push(...newMessages);
+
+    process.stdout.write('\n\n');
+  }
+};
+
+cliChatWithGuardrails().catch((error) => {
+  console.log('\n\nBye!');
+  process.exit(0);
+});

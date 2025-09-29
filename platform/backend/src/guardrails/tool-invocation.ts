@@ -1,10 +1,10 @@
-import _ from 'lodash';
+import _ from "lodash";
 
-import {
+import type {
   AutonomyPolicyEvaluator,
   ToolInvocationAutonomyPolicy,
   ToolInvocationAutonomyPolicyEvaluatorResult,
-} from './types';
+} from "../types";
 
 type ToolCallInput = {
   toolName: string;
@@ -21,7 +21,7 @@ class ToolInvocationPolicyEvaluator
 
   constructor(
     toolCall: ToolCallInput,
-    policies: ToolInvocationAutonomyPolicy[]
+    policies: ToolInvocationAutonomyPolicy[],
   ) {
     this.toolCall = toolCall;
     this.policies = policies;
@@ -34,34 +34,34 @@ class ToolInvocationPolicyEvaluator
       value: policyValue,
       description,
       allow,
-    }: ToolInvocationAutonomyPolicy
+    }: ToolInvocationAutonomyPolicy,
   ): ToolInvocationAutonomyPolicyEvaluatorResult {
     let conditionMet = false;
 
     switch (operator) {
-      case 'endsWith':
-        conditionMet = typeof value === 'string' && value.endsWith(policyValue);
+      case "endsWith":
+        conditionMet = typeof value === "string" && value.endsWith(policyValue);
         break;
-      case 'startsWith':
+      case "startsWith":
         conditionMet =
-          typeof value === 'string' && value.startsWith(policyValue);
+          typeof value === "string" && value.startsWith(policyValue);
         break;
-      case 'contains':
-        conditionMet = typeof value === 'string' && value.includes(policyValue);
+      case "contains":
+        conditionMet = typeof value === "string" && value.includes(policyValue);
         break;
-      case 'notContains':
+      case "notContains":
         conditionMet =
-          typeof value === 'string' && !value.includes(policyValue);
+          typeof value === "string" && !value.includes(policyValue);
         break;
-      case 'equal':
+      case "equal":
         conditionMet = value === policyValue;
         break;
-      case 'notEqual':
+      case "notEqual":
         conditionMet = value !== policyValue;
         break;
-      case 'regex':
+      case "regex":
         conditionMet =
-          typeof value === 'string' && new RegExp(policyValue).test(value);
+          typeof value === "string" && new RegExp(policyValue).test(value);
         break;
     }
 
@@ -70,13 +70,13 @@ class ToolInvocationPolicyEvaluator
       // Policy says "allow" when condition is met
       return {
         isAllowed: conditionMet,
-        denyReason: conditionMet ? '' : `Policy violation: ${description}`,
+        denyReason: conditionMet ? "" : `Policy violation: ${description}`,
       };
     } else {
       // Policy says "deny" when condition is met
       return {
         isAllowed: !conditionMet,
-        denyReason: conditionMet ? `Policy violation: ${description}` : '',
+        denyReason: conditionMet ? `Policy violation: ${description}` : "",
       };
     }
   }
@@ -87,7 +87,7 @@ class ToolInvocationPolicyEvaluator
     // Find applicable policies for this tool
     const applicablePolicies = this.policies.filter(
       ({ mcpServerName, toolName }) =>
-        toolNameFromCall === `${mcpServerName}__${toolName}`
+        toolNameFromCall === `${mcpServerName}__${toolName}`,
     );
 
     for (const policy of applicablePolicies) {
@@ -117,7 +117,7 @@ class ToolInvocationPolicyEvaluator
     // All policies passed
     return {
       isAllowed: true,
-      denyReason: '',
+      denyReason: "",
     };
   }
 }

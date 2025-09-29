@@ -1,10 +1,10 @@
-import _ from 'lodash';
+import _ from "lodash";
 
-import {
+import type {
   AutonomyPolicyEvaluator,
   TrustedDataAutonomyPolicy,
   TrustedDataAutonomyPolicyEvaluatorResult,
-} from './types';
+} from "../types";
 
 type ToolResultInput = {
   toolName: string;
@@ -28,7 +28,7 @@ class TrustedDataPolicyEvaluator
 
   constructor(
     toolResult: ToolResultInput,
-    policies: TrustedDataAutonomyPolicy[]
+    policies: TrustedDataAutonomyPolicy[],
   ) {
     this.toolResult = toolResult;
     this.policies = policies;
@@ -36,23 +36,23 @@ class TrustedDataPolicyEvaluator
 
   private evaluateValue(
     value: any,
-    { operator, value: policyValue }: TrustedDataAutonomyPolicy
+    { operator, value: policyValue }: TrustedDataAutonomyPolicy,
   ): boolean {
     switch (operator) {
-      case 'endsWith':
-        return typeof value === 'string' && value.endsWith(policyValue);
-      case 'startsWith':
-        return typeof value === 'string' && value.startsWith(policyValue);
-      case 'contains':
-        return typeof value === 'string' && value.includes(policyValue);
-      case 'notContains':
-        return typeof value === 'string' && !value.includes(policyValue);
-      case 'equal':
+      case "endsWith":
+        return typeof value === "string" && value.endsWith(policyValue);
+      case "startsWith":
+        return typeof value === "string" && value.startsWith(policyValue);
+      case "contains":
+        return typeof value === "string" && value.includes(policyValue);
+      case "notContains":
+        return typeof value === "string" && !value.includes(policyValue);
+      case "equal":
         return value === policyValue;
-      case 'notEqual':
+      case "notEqual":
         return value !== policyValue;
-      case 'regex':
-        return typeof value === 'string' && new RegExp(policyValue).test(value);
+      case "regex":
+        return typeof value === "string" && new RegExp(policyValue).test(value);
       default:
         return false;
     }
@@ -60,8 +60,8 @@ class TrustedDataPolicyEvaluator
 
   private extractValuesFromPath(obj: any, path: string): any[] {
     // Handle wildcard paths like 'emails[*].from'
-    if (path.includes('[*]')) {
-      const parts = path.split('[*].');
+    if (path.includes("[*]")) {
+      const parts = path.split("[*].");
       const arrayPath = parts[0];
       const itemPath = parts[1];
 
@@ -87,7 +87,7 @@ class TrustedDataPolicyEvaluator
     // Find applicable policies for this tool
     const applicablePolicies = this.policies.filter(
       ({ mcpServerName, toolName }) =>
-        toolNameFromResult === `${mcpServerName}__${toolName}`
+        toolNameFromResult === `${mcpServerName}__${toolName}`,
     );
 
     // If no policies exist for this tool, the data is UNTRUSTED by default
@@ -128,7 +128,7 @@ class TrustedDataPolicyEvaluator
     return {
       isTrusted: false,
       trustReason:
-        'Data does not match any trust policies - considered tainted',
+        "Data does not match any trust policies - considered tainted",
     };
   }
 }

@@ -1,12 +1,31 @@
-import { LanguageModel, generateText } from 'ai';
-import { context, taintedContextSource } from '../../persistence';
-import {
+import { generateText, type LanguageModel } from "ai";
+import { chatModel } from "../models/chat";
+import type {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
-  PrivilegedDecision,
-  QuarantineAnalysisResult,
-  TaintedContext,
-} from '../types';
+  TaintedInteractionData,
+} from "../types";
+
+// Result from quarantined LLM analysis
+interface QuarantineAnalysisResult {
+  summary: string; // Structured summary, not raw content
+  hasPromptInjection: boolean;
+  injectionType?:
+    | "direct_command"
+    | "social_engineering"
+    | "context_manipulation"
+    | "unknown";
+  confidence: number; // 0-1 confidence score
+  extractedIntent?: string; // What the injection is trying to do
+}
+
+// Final security decision from privileged LLM
+interface PrivilegedDecision {
+  isAllowed: boolean;
+  denyReason?: string;
+  requiresUserConfirmation?: boolean;
+  suggestedAction?: string;
+}
 
 // Quarantined LLM: Processes untrusted content with no tool access
 const QUARANTINE_LLM_PROMPT = `
@@ -59,7 +78,7 @@ class DualLLMController {
   }
 
   async analyzeInQuarantine(
-    taintedContent: TaintedContext[]
+    taintedContent: TaintedInteractionData[],
   ): Promise<QuarantineAnalysisResult> {
     try {
       // Create a sanitized view of the tainted content
@@ -75,11 +94,11 @@ class DualLLMController {
         system: QUARANTINE_LLM_PROMPT,
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: `Analyze this potentially tainted content for security threats:\n\n${JSON.stringify(
               sanitizedView,
               null,
-              2
+              2,
             )}\n\nProvide your security analysis.`,
           },
         ],
@@ -90,31 +109,31 @@ class DualLLMController {
       if (!jsonMatch) {
         // Default to suspicious if we can't parse
         return {
-          summary: 'Unable to analyze content',
+          summary: "Unable to analyze content",
           hasPromptInjection: true,
-          injectionType: 'unknown',
+          injectionType: "unknown",
           confidence: 0.5,
-          extractedIntent: 'Analysis failed',
+          extractedIntent: "Analysis failed",
         };
       }
 
       return JSON.parse(jsonMatch[0]) as QuarantineAnalysisResult;
     } catch (error) {
-      console.error('Quarantine analysis failed:', error);
+      console.error("Quarantine analysis failed:", error);
       // Fail closed - assume injection on error
       return {
-        summary: 'Analysis error occurred',
+        summary: "Analysis error occurred",
         hasPromptInjection: true,
-        injectionType: 'unknown',
+        injectionType: "unknown",
         confidence: 0.7,
-        extractedIntent: 'Error during analysis',
+        extractedIntent: "Error during analysis",
       };
     }
   }
 
   async makePrivilegedDecision(
     quarantineResult: QuarantineAnalysisResult,
-    originalUserRequest: string
+    originalUserRequest: string,
   ): Promise<PrivilegedDecision> {
     try {
       // Only pass structured data, never raw content
@@ -134,11 +153,11 @@ class DualLLMController {
         system: PRIVILEGED_LLM_PROMPT,
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: `Make a security decision based on:\n\n${JSON.stringify(
               decisionContext,
               null,
-              2
+              2,
             )}\n\nProvide your security decision.`,
           },
         ],
@@ -150,18 +169,18 @@ class DualLLMController {
         // Fail closed - deny on parse error
         return {
           isAllowed: false,
-          denyReason: 'Unable to make security decision',
+          denyReason: "Unable to make security decision",
           requiresUserConfirmation: false,
         };
       }
 
       return JSON.parse(jsonMatch[0]) as PrivilegedDecision;
     } catch (error) {
-      console.error('Privileged decision failed:', error);
+      console.error("Privileged decision failed:", error);
       // Fail closed
       return {
         isAllowed: false,
-        denyReason: 'Security decision error',
+        denyReason: "Security decision error",
         requiresUserConfirmation: false,
       };
     }
@@ -169,17 +188,17 @@ class DualLLMController {
 
   // Create a safe preview that can't contain injections
   private createSafePreview(content: any): string {
-    if (!content) return '[empty]';
+    if (!content) return "[empty]";
 
-    const str = typeof content === 'string' ? content : JSON.stringify(content);
+    const str = typeof content === "string" ? content : JSON.stringify(content);
     // Remove any potential injection patterns
     const sanitized = str
-      .replace(/[<>]/g, '') // Remove HTML-like tags
-      .replace(/\{\{.*?\}\}/g, '[template]') // Remove template syntax
-      .replace(/\$\{.*?\}/g, '[variable]') // Remove variable interpolation
+      .replace(/[<>]/g, "") // Remove HTML-like tags
+      .replace(/\{\{.*?\}\}/g, "[template]") // Remove template syntax
+      .replace(/\$\{.*?\}/g, "[variable]") // Remove variable interpolation
       .substring(0, 100); // Limit length
 
-    return sanitized + (str.length > 100 ? '...' : '');
+    return sanitized + (str.length > 100 ? "..." : "");
   }
 }
 
@@ -187,45 +206,52 @@ class DualLLMController {
 class DualLLMEvaluator
   implements AutonomyPolicyEvaluator<DynamicAutonomyPolicyEvaluatorResult>
 {
-  private sessionId: string;
+  private chatId: string;
   private controller: DualLLMController;
 
-  constructor(sessionId: string, model: LanguageModel) {
-    this.sessionId = sessionId;
+  constructor(chatId: string, model: LanguageModel) {
+    this.chatId = chatId;
     this.controller = new DualLLMController(model);
   }
 
   async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
-    const taintedContexts = taintedContextSource.getTaintedContexts(
-      this.sessionId
+    const taintedInteractions = await chatModel.getTaintedInteractions(
+      this.chatId,
     );
 
+    const taintedContent = taintedInteractions.map((i) => ({
+      toolCallId: (i.content as any).toolCallId || "",
+      toolName: (i.content as any).toolName || "",
+      isTainted: i.tainted,
+      taintReason: i.taintReason,
+      output: (i.content as any).output,
+    }));
+
     // If no tainted data, allow the operation
-    if (taintedContexts.length === 0) {
-      return { isAllowed: true, denyReason: '' };
+    if (taintedContent.length === 0) {
+      return { isAllowed: true, denyReason: "" };
     }
 
     try {
       // Step 1: Analyze tainted content in quarantine
-      const quarantineResult = await this.controller.analyzeInQuarantine(
-        taintedContexts
-      );
+      const quarantineResult =
+        await this.controller.analyzeInQuarantine(taintedContent);
 
       // If no injection detected with high confidence, allow
       if (
         !quarantineResult.hasPromptInjection &&
         quarantineResult.confidence < 0.3
       ) {
-        return { isAllowed: true, denyReason: '' };
+        return { isAllowed: true, denyReason: "" };
       }
 
-      // Step 2: Get the original user request from context
-      const userRequest = this.extractUserRequest();
+      // Step 2: Get the original user request from interactions
+      const userRequest = await this.extractUserRequest();
 
       // Step 3: Make privileged decision based on sanitized analysis
       const decision = await this.controller.makePrivilegedDecision(
         quarantineResult,
-        userRequest
+        userRequest,
       );
 
       // Return the final decision
@@ -240,30 +266,27 @@ class DualLLMEvaluator
           ).toFixed(0)}%)`,
       };
     } catch (error) {
-      console.error('Dual LLM evaluation failed:', error);
+      console.error("Dual LLM evaluation failed:", error);
       // Fail closed - deny on error
       return {
         isAllowed: false,
         denyReason:
-          'Security evaluation failed - blocking operation for safety',
+          "Security evaluation failed - blocking operation for safety",
       };
     }
   }
 
-  private extractUserRequest(): string {
-    // Find the most recent user message in context
-    for (const message of context.getSessionContext(this.sessionId)) {
-      if (message.role === 'user' && typeof message.content === 'string') {
-        /**
-         * NOTE: message.content in this case = `UserContent` which is equivalent to:
-         * string | Array<TextPart | ImagePart | FilePart>
-         *
-         * For now, we'll skip handling TextParts, ImageParts, and FileParts..
-         */
-        return message.content;
+  private async extractUserRequest(): Promise<string> {
+    // Find the most recent user message in interactions
+    const interactions = await chatModel.getInteractions(this.chatId);
+
+    for (const interaction of interactions.reverse()) {
+      const content = interaction.content as any;
+      if (content.role === "user" && typeof content.content === "string") {
+        return content.content;
       }
     }
-    return 'No user request found';
+    return "No user request found";
   }
 }
 

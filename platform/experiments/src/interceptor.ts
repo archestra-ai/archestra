@@ -1,7 +1,7 @@
 // inspired by https://github.com/badlogic/lemmy/blob/main/apps/claude-trace/src/interceptor.ts
 
-import { IncomingMessage, request } from 'http';
-import { logger } from './logger';
+import type { IncomingMessage, request } from "http";
+import { logger } from "./logger";
 
 export interface ArchestraConfig {
   text2: string;
@@ -30,21 +30,21 @@ export class Archestra {
 
     const originalFetch = global.fetch;
 
-    global.fetch = async function (
+    global.fetch = async (
       input: RequestInfo | URL,
-      init: RequestInit = {}
-    ): Promise<Response> {
+      init: RequestInit = {},
+    ): Promise<Response> => {
       // Convert input to URL for consistency
       const url =
-        typeof input === 'string'
+        typeof input === "string"
           ? input
           : input instanceof URL
-          ? input.toString()
-          : input.url;
+            ? input.toString()
+            : input.url;
 
       logger.info(
         `Request Fetch - ${init.method} ${url} - ${init.body}`,
-        'blue'
+        "blue",
       );
 
       try {
@@ -52,12 +52,12 @@ export class Archestra {
         const response = await originalFetch(input, init);
 
         // Check if this is a streaming response
-        const contentType = response.headers.get('content-type') || '';
+        const contentType = response.headers.get("content-type") || "";
         const isStreaming =
-          contentType.includes('text/event-stream') ||
-          contentType.includes('application/x-ndjson') ||
-          contentType.includes('text/plain') ||
-          response.headers.get('transfer-encoding') === 'chunked';
+          contentType.includes("text/event-stream") ||
+          contentType.includes("application/x-ndjson") ||
+          contentType.includes("text/plain") ||
+          response.headers.get("transfer-encoding") === "chunked";
 
         if (isStreaming && response.body) {
           // For streaming responses, intercept the stream
@@ -75,7 +75,7 @@ export class Archestra {
                   const chunk = new TextDecoder().decode(value);
                   logger.info(
                     `Streaming Response Chunk - ${init.method} ${url} - ${response.status}: ${chunk}`,
-                    'yellow'
+                    "yellow",
                   );
 
                   controller.enqueue(value);
@@ -101,9 +101,9 @@ export class Archestra {
             `Response Fetch - ${init.method} ${url} - ${response.status} ${
               response.statusText
             } - ${JSON.stringify(
-              responseBodyData.body || responseBodyData.body_raw
+              responseBodyData.body || responseBodyData.body_raw,
             )}`,
-            'yellow'
+            "yellow",
           );
         }
 
@@ -121,34 +121,22 @@ export class Archestra {
 
   public instrumentNodeHTTP(): void {
     try {
-      const http = require('http');
-      const https = require('https');
+      const http = require("http");
+      const https = require("https");
 
       // Instrument http.request
       if (http.request && !(http.request as any).__archestraTraceInstrumented) {
         const originalHttpRequest = http.request;
-        http.request = function (options: any, callback?: any) {
-          return interceptNodeRequest(
-            originalHttpRequest,
-            options,
-            callback,
-            false
-          );
-        };
+        http.request = (options: any, callback?: any) =>
+          interceptNodeRequest(originalHttpRequest, options, callback, false);
         (http.request as any).__archestraTraceInstrumented = true;
       }
 
       // Instrument http.get
       if (http.get && !(http.get as any).__archestraTraceInstrumented) {
         const originalHttpGet = http.get;
-        http.get = function (options: any, callback?: any) {
-          return interceptNodeRequest(
-            originalHttpGet,
-            options,
-            callback,
-            false
-          );
-        };
+        http.get = (options: any, callback?: any) =>
+          interceptNodeRequest(originalHttpGet, options, callback, false);
         (http.get as any).__archestraTraceInstrumented = true;
       }
 
@@ -158,28 +146,16 @@ export class Archestra {
         !(https.request as any).__archestraTraceInstrumented
       ) {
         const originalHttpsRequest = https.request;
-        https.request = function (options: any, callback?: any) {
-          return interceptNodeRequest(
-            originalHttpsRequest,
-            options,
-            callback,
-            true
-          );
-        };
+        https.request = (options: any, callback?: any) =>
+          interceptNodeRequest(originalHttpsRequest, options, callback, true);
         (https.request as any).__archestraTraceInstrumented = true;
       }
 
       // Instrument https.get
       if (https.get && !(https.get as any).__archestraTraceInstrumented) {
         const originalHttpsGet = https.get;
-        https.get = function (options: any, callback?: any) {
-          return interceptNodeRequest(
-            originalHttpsGet,
-            options,
-            callback,
-            true
-          );
-        };
+        https.get = (options: any, callback?: any) =>
+          interceptNodeRequest(originalHttpsGet, options, callback, true);
         (https.get as any).__archestraTraceInstrumented = true;
       }
     } catch (error) {
@@ -191,7 +167,7 @@ export class Archestra {
 async function parseRequestBody(body: any): Promise<any> {
   if (!body) return null;
 
-  if (typeof body === 'string') {
+  if (typeof body === "string") {
     try {
       return JSON.parse(body);
     } catch {
@@ -211,18 +187,18 @@ async function parseRequestBody(body: any): Promise<any> {
 }
 
 async function parseResponseBody(
-  response: Response
+  response: Response,
 ): Promise<{ body?: any; body_raw?: string }> {
-  const contentType = response.headers.get('content-type') || '';
+  const contentType = response.headers.get("content-type") || "";
 
   try {
-    if (contentType.includes('application/json')) {
+    if (contentType.includes("application/json")) {
       const body = await response.json();
       return { body };
-    } else if (contentType.includes('text/event-stream')) {
+    } else if (contentType.includes("text/event-stream")) {
       const body_raw = await response.text();
       return { body_raw };
-    } else if (contentType.includes('text/')) {
+    } else if (contentType.includes("text/")) {
       const body_raw = await response.text();
       return { body_raw };
     } else {
@@ -237,26 +213,26 @@ async function parseResponseBody(
 }
 
 function parseNodeRequestURL(options: any, isHttps: boolean): string {
-  if (typeof options === 'string') {
+  if (typeof options === "string") {
     return options;
   }
 
-  const protocol = isHttps ? 'https:' : 'http:';
-  const hostname = options.hostname || options.host || 'localhost';
-  const port = options.port ? `:${options.port}` : '';
-  const path = options.path || '/';
+  const protocol = isHttps ? "https:" : "http:";
+  const hostname = options.hostname || options.host || "localhost";
+  const port = options.port ? `:${options.port}` : "";
+  const path = options.path || "/";
 
   return `${protocol}//${hostname}${port}${path}`;
 }
 
 function parseResponseBodyFromString(
   body: string,
-  contentType?: string
+  contentType?: string,
 ): { body?: any; body_raw?: string } {
   try {
-    if (contentType && contentType.includes('application/json')) {
+    if (contentType && contentType.includes("application/json")) {
       return { body: JSON.parse(body) };
-    } else if (contentType && contentType.includes('text/event-stream')) {
+    } else if (contentType && contentType.includes("text/event-stream")) {
       return { body_raw: body };
     } else {
       return { body_raw: body };
@@ -270,61 +246,61 @@ function interceptNodeRequest(
   originalRequest: typeof request,
   options: any,
   callback: any,
-  isHttps: boolean
+  isHttps: boolean,
 ) {
   // Parse URL from options
   const url = parseNodeRequestURL(options, isHttps);
 
-  let requestBody = '';
+  let requestBody = "";
 
   // Create the request
   const req = originalRequest(options, (res: IncomingMessage) => {
-    let responseBody = '';
-    const contentType = res.headers['content-type'] || '';
+    let responseBody = "";
+    const contentType = res.headers["content-type"] || "";
     const isStreaming =
-      contentType.includes('text/event-stream') ||
-      contentType.includes('application/x-ndjson') ||
-      contentType.includes('text/plain') ||
-      res.headers['transfer-encoding'] === 'chunked';
+      contentType.includes("text/event-stream") ||
+      contentType.includes("application/x-ndjson") ||
+      contentType.includes("text/plain") ||
+      res.headers["transfer-encoding"] === "chunked";
 
     // Log request
     logger.info(
-      `Request Node - ${options.method || 'GET'} ${url} - ${
-        requestBody || '[no body]'
+      `Request Node - ${options.method || "GET"} ${url} - ${
+        requestBody || "[no body]"
       }`,
-      'blue'
+      "blue",
     );
 
     // Capture response data
-    res.on('data', (chunk: any) => {
+    res.on("data", (chunk: any) => {
       responseBody += chunk;
 
       if (isStreaming) {
         // For streaming responses, log each chunk immediately
         const chunkStr = chunk.toString();
         logger.info(
-          `Streaming Response Chunk - ${options.method || 'GET'} ${url} - ${
+          `Streaming Response Chunk - ${options.method || "GET"} ${url} - ${
             res.statusCode
           }: ${chunkStr}`,
-          'yellow'
+          "yellow",
         );
       }
     });
 
-    res.on('end', async () => {
+    res.on("end", async () => {
       if (!isStreaming) {
         // For non-streaming responses, log the complete response
         logger.info(
           `Response Node - ${res.statusCode} ${res.statusMessage} - ${responseBody}`,
-          'yellow'
+          "yellow",
         );
       } else {
         // For streaming responses, log completion
         logger.info(
-          `Streaming Response Complete - ${options.method || 'GET'} ${url} - ${
+          `Streaming Response Complete - ${options.method || "GET"} ${url} - ${
             res.statusCode
           } (${responseBody.length} bytes total)`,
-          'yellow'
+          "yellow",
         );
       }
     });
@@ -337,7 +313,7 @@ function interceptNodeRequest(
 
   // Capture request body
   const originalWrite = req.write;
-  req.write = function (chunk: any) {
+  req.write = (chunk: any) => {
     if (chunk) {
       requestBody += chunk;
     }

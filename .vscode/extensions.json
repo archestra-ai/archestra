@@ -4,6 +4,8 @@
     "esbenp.prettier-vscode",
     "editorconfig.editorconfig",
     "vitest.explorer",
-    "biomejs.biome"
+    "biomejs.biome",
+    "Prisma.prisma",
+    "Tchoupinax.tilt"
   ]
 }

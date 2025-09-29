@@ -829,6 +829,48 @@
               }
             },
             "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user-authenticated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {}
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["enable-tools-called"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "enabledTools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["chatId", "sessionId", "enabledTools"]
+              }
+            },
+            "required": ["type", "payload"]
           }
         ]
       },
@@ -1065,7 +1107,7 @@
       },
       "SupportedCloudProvidersInput": {
         "type": "string",
-        "enum": ["anthropic", "openai", "deepseek", "gemini"]
+        "enum": ["anthropic", "openai", "deepseek", "gemini", "archestra"]
       },
       "SupportedCloudProviderModelInput": {
         "type": "object",
@@ -2650,6 +2692,52 @@
             },
             "required": ["type", "payload"],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user-authenticated"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["enable-tools-called"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "number"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "enabledTools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["chatId", "sessionId", "enabledTools"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
           }
         ]
       },
@@ -2889,7 +2977,7 @@
       },
       "SupportedCloudProviders": {
         "type": "string",
-        "enum": ["anthropic", "openai", "deepseek", "gemini"]
+        "enum": ["anthropic", "openai", "deepseek", "gemini", "archestra"]
       },
       "SupportedCloudProviderModel": {
         "type": "object",

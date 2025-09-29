@@ -79,6 +79,15 @@ const ToolApprovalResponsePayloadSchema = z.object({
   sessionId: z.string(),
 });
 
+// NOTE: empty for now as we don't need a payload for this event at the moment
+const UserAuthenticatedPayloadSchema = z.object();
+
+const EnableToolsCalledPayloadSchema = z.object({
+  chatId: z.number(),
+  sessionId: z.string(),
+  enabledTools: z.array(z.string()),
+});
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
   z.object({ type: z.literal('chat-tools-updated'), payload: ChatToolsUpdatedPayloadSchema }),
@@ -93,6 +102,8 @@ export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-token-usage-updated'), payload: ChatTokenUsageUpdatedPayloadSchema }),
   z.object({ type: z.literal('tool-approval-request'), payload: ToolApprovalRequestPayloadSchema }),
   z.object({ type: z.literal('tool-approval-response'), payload: ToolApprovalResponsePayloadSchema }),
+  z.object({ type: z.literal('user-authenticated'), payload: UserAuthenticatedPayloadSchema }),
+  z.object({ type: z.literal('enable-tools-called'), payload: EnableToolsCalledPayloadSchema }),
 ]);
 
 // type ChatTitleUpdatedPayload = z.infer<typeof ChatTitleUpdatedPayloadSchema>;

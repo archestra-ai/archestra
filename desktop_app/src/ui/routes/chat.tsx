@@ -215,7 +215,7 @@ function ChatPage() {
             editingContent={editingContent}
             onEditStart={startEdit}
             onEditCancel={cancelEdit}
-            onEditSave={async (messageId: string) => await saveEdit(messageId)}
+            onEditSave={async (messageId: string, newText: string) => await saveEdit(messageId, newText)}
             onEditChange={setEditingContent}
             onDeleteMessage={async (messageId: string) => await deleteMessage(messageId)}
             onRegenerateMessage={handleRegenerateMessage}

@@ -9,6 +9,7 @@ import {
   getAvailableCloudProviders,
   getCloudProviderModels,
 } from '@ui/lib/clients/archestra/api/gen';
+import webSocketService from '@ui/lib/websocket';
 
 interface CloudProvidersStore {
   cloudProviders: CloudProviderWithConfig[];
@@ -66,3 +67,12 @@ export const useCloudProvidersStore = create<CloudProvidersStore>((set, get) => 
 // Initialize data on store creation
 useCloudProvidersStore.getState().loadCloudProviders();
 useCloudProvidersStore.getState().getAvailableCloudProviderModels();
+
+// Subscribe to WebSocket events for real-time updates
+// Listen for user-authenticated event to refresh models
+webSocketService.subscribe('user-authenticated', () => {
+  console.log('User authenticated - refreshing cloud provider models');
+  // Refresh both cloud providers and models when user authenticates
+  useCloudProvidersStore.getState().loadCloudProviders();
+  useCloudProvidersStore.getState().getAvailableCloudProviderModels();
+});

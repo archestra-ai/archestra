@@ -13,6 +13,7 @@ import CloudProviderModel from '@backend/models/cloudProvider';
 import { archestraMcpContext } from '@backend/server/plugins/mcp';
 import toolService from '@backend/services/tool';
 import { type McpTools } from '@backend/types';
+import { ARCHESTRA_MCP_TOOLS } from '@constants';
 
 import sharedConfig from '../../../../config';
 import { getModelContextWindow } from './modelContextWindows';
@@ -47,16 +48,39 @@ const createModelInstance = async (model: string, provider?: string) => {
 
   const clientFactories = {
     anthropic: () => createAnthropic({ apiKey, baseURL: baseUrl }),
-    openai: () => createOpenAI({ apiKey, baseURL: baseUrl, headers }),
+    openai: () =>
+      createOpenAI({
+        apiKey,
+        baseURL: baseUrl,
+        // uncomment out the following line if you want to use the proxy server
+        // baseURL: 'http://localhost:9000/v1',
+        headers,
+      }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),
     gemini: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
+    archestra: () =>
+      createGoogleGenerativeAI({
+        apiKey: 'populated_by_proxy',
+        baseURL: baseUrl,
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }),
     ollama: () => createOllama({ baseURL: baseUrl }),
   };
 
-  const createClient = clientFactories[type] || (() => createOpenAI({ apiKey, baseURL: baseUrl, headers }));
+  const createClient =
+    clientFactories[type] ||
+    (() =>
+      createOpenAI({
+        apiKey,
+        baseURL: baseUrl, // 'http://localhost:9000/v1', // Use proxy server
+        headers,
+      }));
   const client = createClient();
 
-  return client(model);
+  // For archestra models, extract the actual model name after the slash
+  const actualModel = model.startsWith('archestra/') ? model.substring('archestra/'.length) : model;
+
+  return client(actualModel);
 };
 
 const llmRoutes: FastifyPluginAsync = async (fastify) => {
@@ -104,6 +128,12 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           tools = toolService.getAllTools();
         }
 
+        // Log enabled tools for this request
+        const enabledToolIds = Object.keys(tools);
+        fastify.log.info(
+          `LLM Stream - Enabled tools for chat ${chatId || 'no-chat'}: ${enabledToolIds.length} tools (chatId: ${chatId}, toolCount: ${enabledToolIds.length})`
+        );
+
         // Wrap tools with approval logic
         const wrappedTools: any = {};
         for (const [toolId, tool] of Object.entries(tools)) {
@@ -114,7 +144,68 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
         const streamConfig: Parameters<typeof streamText>[0] = {
           model: await createModelInstance(model, provider),
           messages: convertToModelMessages(messages),
-          stopWhen: stepCountIs(vercelSdkConfig.maxToolCalls),
+          stopWhen: ({ steps }) => {
+            // Log every time stopWhen is called
+            fastify.log.info(`[STOPWHEN] Called with ${steps.length} steps`);
+
+            // Stop if we've reached max tool calls
+            if (stepCountIs(vercelSdkConfig.maxToolCalls)({ steps })) {
+              fastify.log.info('[STOPWHEN] Stopping due to max tool calls reached');
+              return true;
+            }
+
+            // Check if ANY step has called enable_tools - if so, we should stop after it
+            let foundEnableToolsAtStep = -1;
+
+            // Log the constant value we're looking for
+            fastify.log.info(
+              `[STOPWHEN] Looking for ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS = "${ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS}"`
+            );
+
+            // Log all steps and check for enable_tools
+            steps.forEach((step, index) => {
+              fastify.log.info(
+                `[STOPWHEN] Step ${index}: Has toolCalls: ${!!step.toolCalls}, toolCalls count: ${step.toolCalls?.length || 0}`
+              );
+              if (step.toolCalls && step.toolCalls.length > 0) {
+                step.toolCalls.forEach((call, callIndex) => {
+                  fastify.log.info(`[STOPWHEN] Step ${index}, Tool ${callIndex}: toolName="${call.toolName}"`);
+
+                  // Check if this is enable_tools - also check for the actual string
+                  const isEnableTools =
+                    call.toolName === ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS || call.toolName === 'archestra__enable_tools';
+
+                  if (isEnableTools && foundEnableToolsAtStep === -1) {
+                    foundEnableToolsAtStep = index;
+                    fastify.log.info(
+                      `[STOPWHEN] *** FOUND enable_tools at step ${index} (toolName="${call.toolName}") ***`
+                    );
+                  }
+                });
+              }
+            });
+
+            // If we found enable_tools in any step, check if we have any steps after it
+            if (foundEnableToolsAtStep >= 0) {
+              // Check if there are any steps with tool calls AFTER enable_tools
+              const stepsAfterEnableTools = steps.length - 1 - foundEnableToolsAtStep;
+              fastify.log.info(
+                `[STOPWHEN] Found enable_tools at step ${foundEnableToolsAtStep}, ${stepsAfterEnableTools} steps after it`
+              );
+
+              // We want to stop if there's any step after enable_tools
+              // This means enable_tools has completed and the AI is trying to continue
+              if (stepsAfterEnableTools > 0) {
+                fastify.log.info('[STOPWHEN] *** STOPPING STREAM - Steps detected after enable_tools ***');
+                return true;
+              } else {
+                fastify.log.info('[STOPWHEN] enable_tools is the last step, waiting for it to complete...');
+              }
+            }
+
+            fastify.log.info('[STOPWHEN] Not stopping - returning false');
+            return false;
+          },
           providerOptions: {
             /**
              * The following options are available for the OpenAI provider
@@ -162,6 +253,9 @@ const llmRoutes: FastifyPluginAsync = async (fastify) => {
           streamConfig.tools = wrappedTools;
           streamConfig.toolChoice = toolChoice || 'auto';
         }
+
+        console.log('streamConfig.tools: ', streamConfig.tools);
+        console.log('streamConfig.toolChoice: ', streamConfig.toolChoice);
 
         const result = streamText(streamConfig);
 

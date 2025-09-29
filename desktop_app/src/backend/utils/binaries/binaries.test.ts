@@ -61,24 +61,24 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toContain(path.join('linux', 'x86_64', 'ollama-v0.11.4'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toContain(path.join('linux', 'x86_64', 'ollama-v0.12.1'));
       });
 
       it('should handle mac platform', async () => {
         setupMocks({ platform: 'darwin', arch: 'arm64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toContain(path.join('mac', 'arm64', 'ollama-v0.11.4'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toContain(path.join('mac', 'arm64', 'ollama-v0.12.1'));
       });
 
       it('should handle windows platform', async () => {
         setupMocks({ platform: 'win32', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toContain(path.join('win', 'x86_64', 'ollama-v0.11.4.exe'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toContain(path.join('win', 'x86_64', 'ollama-v0.12.1.exe'));
       });
 
       it('should map various linux platform identifiers', async () => {
@@ -89,7 +89,7 @@ describe('binaries utilities', () => {
           setupMocks({ platform, arch: 'x64' });
 
           const { getBinaryExecPath } = await import('./');
-          const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+          const binaryPath = getBinaryExecPath('ollama-v0.12.1');
           expect(binaryPath).toContain(path.join('linux', 'x86_64'));
         }
       });
@@ -102,7 +102,7 @@ describe('binaries utilities', () => {
           setupMocks({ platform, arch: 'x64' });
 
           const { getBinaryExecPath } = await import('./');
-          const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+          const binaryPath = getBinaryExecPath('ollama-v0.12.1');
           expect(binaryPath).toContain(path.join('mac', 'x86_64'));
         }
       });
@@ -119,7 +119,7 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'darwin', arch: 'arm64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
         expect(binaryPath).toContain(path.join('mac', 'arm64'));
       });
 
@@ -127,7 +127,7 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
         expect(binaryPath).toContain(path.join('linux', 'x86_64'));
       });
 
@@ -152,8 +152,8 @@ describe('binaries utilities', () => {
         });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toBe(path.resolve('/packaged/resources/ollama-v0.11.4'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toBe(path.resolve('/packaged/resources/ollama-v0.12.1'));
 
         // Restore original value
         Object.defineProperty(process, 'resourcesPath', {
@@ -178,8 +178,8 @@ describe('binaries utilities', () => {
         });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toBe(path.resolve('/dev/app/path/resources/bin/mac/arm64/ollama-v0.11.4'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toBe(path.resolve('/dev/app/path/resources/bin/mac/arm64/ollama-v0.12.1'));
 
         // Restore original cwd
         process.cwd = originalCwd;
@@ -189,8 +189,8 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'win32', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toMatch(/ollama-v0\.11\.4\.exe$/);
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toMatch(/ollama-v0\.12\.1\.exe$/);
       });
 
       it('should not add .exe extension on non-Windows platforms', async () => {
@@ -201,7 +201,7 @@ describe('binaries utilities', () => {
           setupMocks({ platform, arch: 'x64' });
 
           const { getBinaryExecPath } = await import('./');
-          const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+          const binaryPath = getBinaryExecPath('ollama-v0.12.1');
           expect(binaryPath).not.toMatch(/\.exe$/);
         }
       });
@@ -212,7 +212,7 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64', fileExists: false });
 
         const { getBinaryExecPath } = await import('./');
-        expect(() => getBinaryExecPath('ollama-v0.11.4')).toThrow(/Binary ollama-v0\.11\.4 not found at/);
+        expect(() => getBinaryExecPath('ollama-v0.12.1')).toThrow(/Binary ollama-v0\.12\.1 not found at/);
       });
 
       it('should include full path in error message', async () => {
@@ -231,8 +231,8 @@ describe('binaries utilities', () => {
         });
 
         const { getBinaryExecPath } = await import('./');
-        expect(() => getBinaryExecPath('ollama-v0.11.4')).toThrow(
-          'Binary ollama-v0.11.4 not found at /test/app/resources/bin/mac/arm64/ollama-v0.11.4'
+        expect(() => getBinaryExecPath('ollama-v0.12.1')).toThrow(
+          'Binary ollama-v0.12.1 not found at /test/app/resources/bin/mac/arm64/ollama-v0.12.1'
         );
 
         // Restore original cwd
@@ -245,8 +245,8 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const path1 = getBinaryExecPath('ollama-v0.11.4');
-        const path2 = getBinaryExecPath('ollama-v0.11.4');
+        const path1 = getBinaryExecPath('ollama-v0.12.1');
+        const path2 = getBinaryExecPath('ollama-v0.12.1');
 
         expect(path1).toBe(path2);
         expect(fs.existsSync).toHaveBeenCalledTimes(2);
@@ -256,7 +256,7 @@ describe('binaries utilities', () => {
         setupMocks({ platform: 'linux', arch: 'x64' });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
         expect(path.isAbsolute(binaryPath)).toBe(true);
       });
 
@@ -275,8 +275,8 @@ describe('binaries utilities', () => {
         });
 
         const { getBinaryExecPath } = await import('./');
-        const binaryPath = getBinaryExecPath('ollama-v0.11.4');
-        expect(binaryPath).toBe(path.resolve('/path with spaces/app/resources/bin/mac/arm64/ollama-v0.11.4'));
+        const binaryPath = getBinaryExecPath('ollama-v0.12.1');
+        expect(binaryPath).toBe(path.resolve('/path with spaces/app/resources/bin/mac/arm64/ollama-v0.12.1'));
 
         // Restore original cwd
         process.cwd = originalCwd;

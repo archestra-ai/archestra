@@ -1,6 +1,6 @@
 import { type DynamicToolUIPart, ReasoningUIPart, type TextUIPart, UIMessage } from 'ai';
 import { Edit2, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import ThinkBlock from '@ui/components/ThinkBlock';
 import ToolInvocation from '@ui/components/ToolInvocation';
@@ -13,10 +13,10 @@ import RegenerationSkeleton from './RegenerationSkeleton';
 interface AssistantMessageProps {
   message: UIMessage;
   isEditing: boolean;
-  editingContent: string;
+  defaultValue: string;
   onEditStart: () => void;
   onEditCancel: () => void;
-  onEditSave: () => void;
+  onSave: (content?: string) => Promise<void>;
   onEditChange: (content: string) => void;
   onDelete: () => void;
   onRegenerate: () => void;
@@ -26,15 +26,15 @@ interface AssistantMessageProps {
 export default function AssistantMessage({
   message,
   isEditing,
-  editingContent,
+  defaultValue,
   onEditStart,
   onEditCancel,
-  onEditSave,
-  onEditChange,
+  onSave,
   onDelete,
   onRegenerate,
   isRegenerating = false,
 }: AssistantMessageProps) {
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [isHovered, setIsHovered] = useState(false);
 
   if (!message.parts) {
@@ -53,14 +53,9 @@ export default function AssistantMessage({
   if (isEditing) {
     return (
       <div className="space-y-2">
-        <Textarea
-          value={editingContent}
-          onChange={(e) => onEditChange(e.target.value)}
-          className="min-h-[100px] resize-none"
-          autoFocus
-        />
+        <Textarea ref={textAreaRef} defaultValue={defaultValue} className="min-h-[100px] resize-none" autoFocus />
         <div className="flex gap-2">
-          <Button size="sm" onClick={onEditSave}>
+          <Button size="sm" onClick={() => onSave(textAreaRef.current?.value)}>
             Save
           </Button>
           <Button size="sm" variant="outline" onClick={onEditCancel}>

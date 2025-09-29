@@ -3,6 +3,12 @@ import * as os from 'os';
 
 import { SYSTEM_MODELS } from '@constants';
 
+/**
+ * TODO: update this to use import.meta.env.VITE_ARCHESTRA_WEBSITE_BASE_URL
+ * aka the same environment variable that the frontend consumes...
+ */
+const ARCHESTRA_WEBSITE_BASE_URL = process.env.ARCHESTRA_WEBSITE_BASE_URL || 'https://www.archestra.ai';
+
 const OLLAMA_SERVER_PORT = parseInt(process.env.ARCHESTRA_OLLAMA_SERVER_PORT || '54589', 10);
 const OLLAMA_GUARD_MODEL = SYSTEM_MODELS.GUARD;
 const OLLAMA_GENERAL_MODEL = SYSTEM_MODELS.GENERAL;
@@ -31,6 +37,10 @@ const DEBUG = !app?.isPackaged;
 export default {
   debug: DEBUG,
   logLevel: process.env.LOG_LEVEL || (DEBUG ? 'debug' : 'info'),
+  archestra: {
+    websiteUrl: ARCHESTRA_WEBSITE_BASE_URL,
+    cloudLlmProxyAuthUrl: `${ARCHESTRA_WEBSITE_BASE_URL}/signin?callbackURL=${encodeURIComponent('archestra-ai://auth-success')}`,
+  },
   server: {
     http: {
       port: parseInt(process.env.ARCHESTRA_API_SERVER_PORT || '54587', 10),

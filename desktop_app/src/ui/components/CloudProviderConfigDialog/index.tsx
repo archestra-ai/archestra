@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@ui/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@ui/components/ui/dialog';
 import { Input } from '@ui/components/ui/input';
 import { Label } from '@ui/components/ui/label';
 import { CloudProviderWithConfig } from '@ui/lib/clients/archestra/api/gen/types.gen';
-import { useCloudProvidersStore } from '@ui/stores';
+import { useCloudProvidersStore, useUserStore } from '@ui/stores';
 
 interface CloudProviderConfigDialogProps {
   provider: CloudProviderWithConfig;
@@ -16,8 +16,17 @@ export default function CloudProviderConfigDialog({ provider, onClose }: CloudPr
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const { configureCloudProvider } = useCloudProvidersStore();
+  const { subscribeToUserAuthenticatedEvent } = useUserStore();
 
-  const handleSave = async () => {
+  const isArchestraProvider = provider.type === 'archestra';
+
+  useEffect(() => {
+    if (isArchestraProvider) {
+      subscribeToUserAuthenticatedEvent('cloud-provider-config', onClose);
+    }
+  }, [isArchestraProvider]);
+
+  const handleSave = useCallback(async () => {
     setLoading(true);
     try {
       await configureCloudProvider(provider.type, apiKey);
@@ -25,7 +34,7 @@ export default function CloudProviderConfigDialog({ provider, onClose }: CloudPr
     } finally {
       setLoading(false);
     }
-  };
+  }, [configureCloudProvider, onClose, apiKey]);
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -42,6 +51,7 @@ export default function CloudProviderConfigDialog({ provider, onClose }: CloudPr
               type="password"
               placeholder={provider.apiKeyPlaceholder}
               value={apiKey}
+              disabled={isArchestraProvider}
               onChange={(e) => setApiKey(e.target.value)}
               className="mt-1"
             />

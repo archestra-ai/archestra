@@ -232,7 +232,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Unused tools: {unusedToolsCount}</SidebarGroupLabel>
+      <SidebarGroupLabel>Unused tools ({unusedToolsCount})</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {loadingAvailableTools ? (
@@ -346,20 +346,22 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       >
                         <PlusCircle className="h-4 w-4 cursor-pointer" />
                       </button>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {isExpanded ? (
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                        )}
-                      </div>
+                      <CollapsibleTrigger className={` ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
                     </SidebarMenuItem>
 
                     <CollapsibleContent>
-                      {!hasTools ? (
+                      {!hasTools && isError ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                            {isError ? 'Server error - check Settings' : 'Loading tools...'}
+                            Server error - check Settings
                           </div>
                         </SidebarMenuItem>
                       ) : (

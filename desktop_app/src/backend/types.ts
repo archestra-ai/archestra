@@ -4,11 +4,13 @@ export type SupportedPlatform = 'linux' | 'mac' | 'win';
 export type SupportedArchitecture = 'arm64' | 'x86_64';
 
 /**
+ * Ollama binaries were downloaded from https://github.com/ollama/ollama/releases/tag/v0.12.1
+ *
  * NOTE: `gvproxy` and `vfkit` MUST be named explicitly `gvproxy` and `vfkit` respectively.
  *
  * For more details (and on which versions these correspond to) see comments in
  * `PodmanRuntime` (in `src/backend/sandbox/podman/runtime/index.ts`)
  */
-export type SupportedBinary = 'ollama-v0.11.4' | 'podman-remote-static-v5.5.2' | 'gvproxy' | 'vfkit';
+export type SupportedBinary = 'ollama-v0.12.1' | 'podman-remote-static-v5.5.2' | 'gvproxy' | 'vfkit';
 
 export type McpTools = Awaited<ReturnType<experimental_MCPClient['tools']>>;

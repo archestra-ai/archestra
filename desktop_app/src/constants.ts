@@ -13,21 +13,17 @@ export const SYSTEM_MODELS = {
 // Array of system model names for easy filtering
 export const SYSTEM_MODEL_NAMES = [SYSTEM_MODELS.GUARD, SYSTEM_MODELS.GENERAL];
 
-export const DEFAULT_SYSTEM_PROMPT = `Executing the task
-Before working on a task, provide a step-by-step plan of what you would do.
-Later, proceed following the plan. At each step, repeat what step you're working on.
-Check if you have all needed tools. If not, list available tools and enable missing.
-Don't stop until the task will be fully finished.
-At first step, always check if you have all tools needed for it. If not, list available tools and enable missing.
+export const DEFAULT_SYSTEM_PROMPT = `# Tool selection
+If you don't have tools needed for the project:
+1) List MCP servers using archestra__list_available_tools without arguments.
+2) List tools from the reasonable MCP servers using archestra__list_available_tools with mcp_server argument.
+3) Once you know everything about the tools you could enable, use archestra__enable_tools to enable tools required for the task only one time.
+4) Proceed to the initial task.
 
-Filesystem access
-If you are considering using any Filesystem access tools, any paths that you are considering using should be relative to ${FILE_SYSTEM_BASE_MOUNT_PATH}. Example, if you want to use Desktop/file.txt, it would be ${FILE_SYSTEM_BASE_MOUNT_PATH}/Desktop/file.txt.
+# Filesystem access
+If you are considering using any Filesystem access tools, any paths that you are considering using should be relative to /home/mcp. Example, if you want to use Desktop/file.txt, it would be /home/mcp/Desktop/file.txt.
 
-Using tools
-Before pushing any data to 3rd party systems, ask user for the explicit permission.
-Be extra careful with writing data, make sure you don't overwrite important information.
-
-Memory
+# Memory
 You have access to the long-lasting memory. Don't save to memories intermediate steps and per-task knowledge. Don't update memories that are already there. Save to this memory only very important information about the user. If you think that some information should be saved, ask user.`;
 
 /**

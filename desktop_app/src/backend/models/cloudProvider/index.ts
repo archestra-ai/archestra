@@ -75,6 +75,14 @@ const PROVIDER_REGISTRY: Record<SupportedCloudProvider, CloudProvider> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro'],
   },
+  archestra: {
+    type: 'archestra',
+    name: 'Archestra LLM',
+    apiKeyUrl: config.archestra.cloudLlmProxyAuthUrl,
+    apiKeyPlaceholder: 'Click Get API Key → to start the OAuth flow',
+    baseUrl: `${config.archestra.websiteUrl}/api/llm-proxy/gemini`,
+    models: ['archestra/gemini-2.5-pro'],
+  },
 };
 
 // Helper function to get provider for a model

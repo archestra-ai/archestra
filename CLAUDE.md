@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ALWAYS run all commands from the `desktop_app/` directory unless specifically instructed otherwise.**
 
+**Exception: When working on experiments, run commands from the `platform/experiments/` directory.**
+
 ## Important Rules
 
 1. **NEVER modify files in `src/ui/components/ui/`** - These are shadcn/ui components and should remain unchanged
@@ -19,6 +21,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 pnpm start              # Start development app (Electron with hot reload)
+
+# For free LLM access via archestra-llm:
+# The archestra-llm model is available by default and routes to the configured archestra.websiteUrl/api/llm-proxy/gemini
+# You'll need to set up a separate proxy service that handles Google AI Studio API authentication
 ```
 
 ### Testing
@@ -145,10 +151,15 @@ Key tables:
 #### LLM Integration
 
 - **Cloud Providers**: Anthropic, OpenAI, Google Gemini, DeepSeek
-- **Local Provider**: Ollama with bundled server (v0.11.4)
+- **Local Provider**: Ollama with bundled server (v0.12.1)
   - Auto-downloads required models: `llama-guard3:1b`, `phi3:3.8b`
   - Tool analysis using local models
   - Configurable port (default: 54589)
+- **Free LLM Option**: "archestra-llm" model
+  - Proxies requests to Google Gemini (gemini-2.5-pro) via configurable proxy
+  - Requires external proxy service at {archestra.websiteUrl}/api/llm-proxy/gemini
+  - No API key configuration needed in Archestra (handled by proxy)
+  - Authentication: Session token sent as Bearer token in Authorization header
 
 ### Directory Structure
 
@@ -173,6 +184,13 @@ desktop_app/
 ├── resources/
 │   └── bin/               # Platform-specific binaries (Podman, Ollama)
 └── openapi/               # OpenAPI specs and generated clients
+
+platform/
+└── experiments/           # Experimental features and prototypes
+    ├── src/
+    │   ├── guardrails/    # Security guardrails implementation
+    │   └── main.ts        # OpenAI proxy server
+    └── README.md          # Experiments documentation
 ```
 
 ### Development Best Practices
@@ -198,3 +216,48 @@ For production builds, these environment variables are required:
 - `APPLE_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Team ID from developer account
 - `APPLE_CERTIFICATE_PASSWORD`: Certificate password
+
+### Deep Linking
+
+Archestra supports deep linking for OAuth authentication flows:
+
+- **OAuth Callback**: `archestra-ai://oauth-callback?code=<auth_code>&state=<state>`
+  - Handles OAuth authorization codes from external providers
+  - Forwards the code to backend server for token exchange via `/api/oauth/store-code` endpoint
+  - Sends to backend on port 54587 (configurable via `ARCHESTRA_API_SERVER_PORT`)
+  
+- **Auth Success**: `archestra-ai://auth-success?token=<auth_token>`
+  - Stores authentication tokens in the CloudProvider model for 'archestra' provider
+  - Broadcasts `user-authenticated` events via WebSocket
+  - Automatically focuses the application window
+
+**Implementation Notes**:
+- Deep link handler is in `src/deep-linking.ts`
+- Auth tokens are stored in the `cloud_providers` table (not user table)
+- WebSocket broadcasts notify UI of authentication status changes
+
+### Experiments Platform
+
+The `platform/experiments/` directory contains experimental features and prototypes:
+
+#### OpenAI Proxy Server
+- Development proxy server for intercepting and logging LLM API calls
+- Located in `src/main.ts`
+- Runs on port 9000 by default
+- To use in desktop app, uncomment line 56 in `desktop_app/src/backend/server/plugins/llm/index.ts`
+
+#### Security Guardrails
+- Advanced security features in `src/guardrails/`:
+  - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
+  - **Tool Invocation Policies**: Fine-grained control over tool usage
+  - **Taint Analysis**: Tracks untrusted data through the system
+- CLI testing interface: `pnpm cli-chat-with-guardrails`
+
+#### Running Experiments
+```bash
+cd platform/experiments
+pnpm install
+cp .env.example .env      # Configure OPENAI_API_KEY
+pnpm proxy:dev           # Start proxy server (port 9000)
+pnpm cli-chat-with-guardrails  # Test guardrails CLI
+```

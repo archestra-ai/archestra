@@ -199,7 +199,7 @@ export const createArchestraMcpServer = () => {
     {
       title: 'List available tools',
       description:
-        'List available MCP servers or tools for a specific server. Without mcp_server parameter, lists all servers. With mcp_server, lists tools for that server.',
+        'List available MCP servers or tools for a specific server. At first, call the tool without parameters to see all MCP servers. Then, call it with {"mcp_server": "server_name"} to see tools for that server. No need to call again after.',
       inputSchema: {
         mcp_server: z.string().optional().describe('Optional: Name of the MCP server to list tools for'),
       },
@@ -287,12 +287,8 @@ export const createArchestraMcpServer = () => {
         const enabledCount = serverTools.filter((t) => t.selected).length;
         const toolList = serverTools
           .map((t) => {
-            const status = t.selected ? '✓' : '✗';
-            const analysisInfo =
-              t.analysis?.is_read !== null
-                ? ` [${t.analysis.is_read ? 'R' : ''}${t.analysis.is_write ? 'W' : ''}]`
-                : '';
-            return `  ${status} ${t.id}${analysisInfo}`;
+            const statusSuffix = t.selected ? ' (enabled)' : '';
+            return `  ${t.id}${statusSuffix}`;
           })
           .join('\n');
 
@@ -320,8 +316,8 @@ export const createArchestraMcpServer = () => {
   archestraMcpServer.registerTool(
     ARCHESTRA_MCP_TOOLS.ENABLE_TOOLS,
     {
-      title: 'Enable tools',
-      description: `Enable specific tools for use in the current chat. Use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS} to see tool IDs if you don\'t have them. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
+      title: 'Enable tools and finish tool selection',
+      description: `Enable specific tools for use in the current chat. If you don't have tool ID, use ${ARCHESTRA_MCP_TOOLS.LIST_AVAILABLE_TOOLS}. Example: {"toolIds": ["${constructToolId('filesystem', 'read_file')}", "${constructToolId('filesystem', 'write_file')}", "${constructToolId('remote-mcp', 'search_repositories')}"]}`,
       inputSchema: {
         toolIds: z
           .array(z.string())
@@ -405,13 +401,46 @@ export const createArchestraMcpServer = () => {
           };
         }
 
-        const updatedTools = await ChatModel.addSelectedTools(chatId, validToolsToEnable);
+        // Enable the requested tools
+        await ChatModel.addSelectedTools(chatId, validToolsToEnable);
+
+        // Automatically disable all Archestra tools as the last step
+        const archestraToolIds = Object.values(FULLY_QUALIFED_ARCHESTRA_MCP_TOOL_IDS);
+        const archestraToolsToDisable = archestraToolIds.filter((toolId) => {
+          // Get the updated enabled set after adding new tools
+          const updatedEnabledSet = new Set([
+            ...(currentSelectedTools === null ? Array.from(availableToolIds) : currentSelectedTools),
+            ...validToolsToEnable,
+          ]);
+          return updatedEnabledSet.has(toolId);
+        });
+
+        if (archestraToolsToDisable.length > 0) {
+          await ChatModel.removeSelectedTools(chatId, archestraToolsToDisable);
+          log.info(
+            `Automatically disabled ${archestraToolsToDisable.length} Archestra tools after enabling requested tools`
+          );
+        }
+
+        // Get the chat to get the sessionId
+        const chat = await ChatModel.getChatById(chatId);
+        const sessionId = chat?.sessionId || '';
+
+        // Broadcast a special event to signal that enable_tools was called and stream should stop
+        websocketService.broadcast({
+          type: 'enable-tools-called',
+          payload: {
+            chatId,
+            sessionId,
+            enabledTools: validToolsToEnable,
+          },
+        });
 
         return {
           content: [
             {
               type: 'text',
-              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Total enabled: ${updatedTools.length}`,
+              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Archestra tools have been automatically disabled. Don't proceed, stop immediately. Don't use any tools yet. Wait for user confirmation.`,
             },
           ],
         };

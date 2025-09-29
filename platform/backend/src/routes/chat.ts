@@ -2,7 +2,12 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import { chatModel } from "../models/chat";
-import { LLMProviderFactory } from "../providers/factory";
+import { createProvider, SupportedProvidersSchema } from "../providers/factory";
+import config from "../config";
+import ToolInvocationPolicyEvaluator from "../guardrails/tool-invocation";
+import TrustedDataPolicyEvaluator from "../guardrails/trusted-data";
+
+const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies, openAi: { apiKey: openAiApiKey } } = config;
 
 // Register Zod schemas for OpenAPI
 const ChatIdResponseSchema = z.object({
@@ -53,6 +58,33 @@ z.globalRegistry.add(ChatCompletionResponseSchema, {
   id: "ChatCompletionResponse",
 });
 z.globalRegistry.add(ModelsResponseSchema, { id: "ModelsResponse" });
+
+/**
+ * Extract tool name from conversation history by finding the assistant message
+ * that contains the tool_call_id
+ */
+async function extractToolNameFromHistory(
+  chatId: string,
+  toolCallId: string
+): Promise<string | null> {
+  const interactions = await chatModel.getInteractions(chatId);
+
+  // Find the most recent assistant message with tool_calls
+  for (let i = interactions.length - 1; i >= 0; i--) {
+    const interaction = interactions[i];
+    const content = interaction.content as any;
+
+    if (content.role === "assistant" && content.tool_calls) {
+      for (const toolCall of content.tool_calls) {
+        if (toolCall.id === toolCallId) {
+          return toolCall.function.name;
+        }
+      }
+    }
+  }
+
+  return null;
+}
 
 export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Create a new chat session
@@ -111,29 +143,19 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a chat completion with the specified LLM provider",
         tags: ["LLM"],
         params: z.object({
-          provider: z.string(),
+          provider: SupportedProvidersSchema,
         }),
         body: ChatCompletionRequestSchema,
         response: {
           200: ChatCompletionResponseSchema,
           400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { provider }, body }, reply) => {
-      const { chatId, ...requestBody } = body;
-
-      // Validate provider
-      if (!LLMProviderFactory.isSupportedProvider(provider)) {
-        return reply.status(400).send({
-          error: {
-            message: `Unsupported provider: ${provider}`,
-            type: "invalid_request_error",
-          },
-        });
-      }
+    async ({ params: { provider }, body: { chatId, ...requestBody } }, reply) => {
 
       // Validate chat exists
       const chat = await chatModel.findById(chatId);
@@ -147,24 +169,41 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       try {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          return reply.status(500).send({
-            error: {
-              message: "OPENAI_API_KEY not configured",
-              type: "configuration_error",
-            },
-          });
+        const llmProvider = createProvider(provider, openAiApiKey);
+
+        // Process incoming tool result messages and evaluate trusted data policies
+        for (const message of requestBody.messages) {
+          if ((message as any).role === "tool") {
+            const toolMessage = message as any;
+            const toolResult = JSON.parse(toolMessage.content);
+
+            // Extract tool name from conversation history
+            const toolName = await extractToolNameFromHistory(chatId, toolMessage.tool_call_id);
+
+            if (toolName) {
+              // Evaluate trusted data policy
+              const evaluator = new TrustedDataPolicyEvaluator(
+                {
+                  toolName,
+                  toolCallId: toolMessage.tool_call_id,
+                  output: toolResult,
+                },
+                trustedDataAutonomyPolicies
+              );
+
+              const { isTrusted, trustReason } = evaluator.evaluate();
+
+              // Store tool result as interaction (tainted if not trusted)
+              await chatModel.addInteraction(chatId, toolMessage, !isTrusted, trustReason);
+            }
+          }
         }
 
-        const llmProvider = LLMProviderFactory.createProvider(provider, apiKey);
-
         // Store the user message
-        await chatModel.addInteraction(chatId, {
-          role: "user",
-          content:
-            requestBody.messages[requestBody.messages.length - 1].content,
-        });
+        const lastMessage = requestBody.messages[requestBody.messages.length - 1];
+        if ((lastMessage as any).role === "user") {
+          await chatModel.addInteraction(chatId, lastMessage);
+        }
 
         // Handle streaming response
         if (requestBody.stream) {
@@ -186,11 +225,45 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Handle non-streaming response
         const response = await llmProvider.chatCompletion(requestBody);
 
+        const assistantMessage = response.choices[0].message;
+
+        // Intercept and evaluate tool calls
+        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+          for (const toolCall of assistantMessage.tool_calls) {
+            // Only process function tool calls (not custom tool calls)
+            if (toolCall.type === 'function' && 'function' in toolCall) {
+              const toolInput = JSON.parse(toolCall.function.arguments);
+
+              fastify.log.info(`Evaluating tool call: ${toolCall.function.name} with input: ${JSON.stringify(toolInput)}`);
+
+              const evaluator = new ToolInvocationPolicyEvaluator(
+                {
+                  toolName: toolCall.function.name,
+                  toolCallId: toolCall.id,
+                  input: toolInput,
+                },
+                toolInvocationAutonomyPolicies
+              );
+
+              const { isAllowed, denyReason } = evaluator.evaluate();
+
+              fastify.log.info(`Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`);
+
+              if (!isAllowed) {
+                // Block this tool call
+                return reply.status(403).send({
+                  error: {
+                    message: denyReason,
+                    type: "tool_invocation_blocked",
+                  },
+                });
+              }
+            }
+          }
+        }
+
         // Store the assistant response
-        await chatModel.addInteraction(chatId, {
-          role: "assistant",
-          content: response.choices[0].message,
-        });
+        await chatModel.addInteraction(chatId, assistantMessage);
 
         return reply.send(response);
       } catch (error) {
@@ -221,7 +294,7 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List available models for the specified provider",
         tags: ["LLM"],
         params: z.object({
-          provider: z.string(),
+          provider: SupportedProvidersSchema,
         }),
         response: {
           200: ModelsResponseSchema,
@@ -231,27 +304,8 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { provider } }, reply) => {
-      if (!LLMProviderFactory.isSupportedProvider(provider)) {
-        return reply.status(400).send({
-          error: {
-            message: `Unsupported provider: ${provider}`,
-            type: "invalid_request_error",
-          },
-        });
-      }
-
       try {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          return reply.status(500).send({
-            error: {
-              message: "OPENAI_API_KEY not configured",
-              type: "configuration_error",
-            },
-          });
-        }
-
-        const llmProvider = LLMProviderFactory.createProvider(provider, apiKey);
+        const llmProvider = createProvider(provider, openAiApiKey);
         const models = await llmProvider.listModels();
 
         return reply.send({ data: models });

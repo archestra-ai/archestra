@@ -1,5 +1,5 @@
-import "dotenv/config";
 import Fastify from "fastify";
+
 import {
   serializerCompiler,
   validatorCompiler,

@@ -5,10 +5,17 @@ import type {
 } from 'openai/resources/chat/completions';
 import { readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import path, { resolve } from 'node:path';
 import * as readline from 'node:readline/promises';
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+/**
+ * Load .env from platform root
+ *
+ * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
+ */
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const BACKEND_URL = 'http://localhost:9000';
 
@@ -26,6 +33,7 @@ const createNewChat = async (): Promise<string> => {
     headers: {
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({}),
   });
 
   if (!response.ok) {
@@ -220,8 +228,15 @@ const cliChatWithGuardrails = async () => {
 
   // Create initial chat session
   console.log('Creating new chat session...');
-  let chatId = await createNewChat();
-  console.log(`Chat session created: ${chatId}\n`);
+  let chatId: string;
+  try {
+    chatId = await createNewChat();
+    console.log(`Chat session created: ${chatId}\n`);
+  } catch (error) {
+    console.error('Failed to create chat session:', error);
+    console.error('Make sure the backend is running at', BACKEND_URL);
+    process.exit(1);
+  }
 
   const systemPromptMessage: ChatCompletionMessageParam = {
     role: 'system',
@@ -254,10 +269,13 @@ Some examples:
     } else if (userInput === '/new') {
       console.log('Starting a new session...');
 
-      chatId = await createNewChat();
-      console.log(`Chat session created: ${chatId}\n`);
-
-      messages = [systemPromptMessage];
+      try {
+        chatId = await createNewChat();
+        console.log(`Chat session created: ${chatId}\n`);
+        messages = [systemPromptMessage];
+      } catch (error) {
+        console.error('Failed to create chat session:', error);
+      }
       continue;
     }
 
@@ -271,14 +289,47 @@ Some examples:
     while (continueLoop && stepCount < maxSteps) {
       stepCount++;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        tools: getToolDefinitions(),
-        tool_choice: 'auto',
-        // @ts-ignore - chatId is a custom field for our backend
-        chatId,
-      });
+      let response;
+      try {
+        response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages,
+          tools: getToolDefinitions(),
+          tool_choice: 'auto',
+          // @ts-ignore - chatId is a custom field for our backend
+          chatId,
+        });
+      } catch (error: any) {
+        // Handle backend guardrails errors (403, etc.)
+        if (error.status === 403) {
+          const errorMessage =
+            error.error?.message ||
+            error.message ||
+            'Tool invocation blocked by security policy';
+
+          if (debug) {
+            console.error(
+              '\n[DEBUG] 403 Error details:',
+              JSON.stringify(error, null, 2)
+            );
+          }
+
+          process.stdout.write(`\n[SECURITY POLICY BLOCKED] ${errorMessage}`);
+
+          /**
+           * Remove the last user message to prevent the LLM from retrying the same blocked request
+           * The LLM doesn't see that the request was blocked, so it will keep trying
+           *
+           * In a real agentic app, the application would need to handle this case gracefully..
+           */
+          messages.pop();
+
+          continueLoop = false;
+          break;
+        }
+        // Re-throw other errors
+        throw error;
+      }
 
       const assistantMessage = response.choices[0].message;
       messages.push(assistantMessage);
@@ -332,7 +383,7 @@ Some examples:
           }
         }
       } else {
-        process.stdout.write(`\nAssistant: ${assistantMessage.content}\n\n`);
+        process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
         continueLoop = false;
       }
     }

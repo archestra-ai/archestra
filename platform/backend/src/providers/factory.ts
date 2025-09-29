@@ -1,22 +1,19 @@
-import { OpenAIProvider } from "./openai";
-import type { LLMProvider } from "./types";
+import { z } from 'zod';
 
-export type SupportedProviders = "openai";
+import { OpenAIProvider } from './openai';
+import type { LLMProvider } from './types';
 
-export class LLMProviderFactory {
-  static createProvider(
-    provider: SupportedProviders,
-    apiKey: string,
-  ): LLMProvider {
-    switch (provider) {
-      case "openai":
-        return new OpenAIProvider(apiKey);
-      default:
-        throw new Error(`Unsupported provider: ${provider}`);
-    }
+export const SupportedProvidersSchema = z.enum(['openai']);
+export type SupportedProviders = z.infer<typeof SupportedProvidersSchema>;
+
+export const createProvider = (
+  provider: SupportedProviders,
+  apiKey: string
+): LLMProvider => {
+  switch (provider) {
+    case 'openai':
+      return new OpenAIProvider(apiKey);
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
   }
-
-  static isSupportedProvider(provider: string): provider is SupportedProviders {
-    return ["openai"].includes(provider);
-  }
-}
+};

@@ -1,9 +1,6 @@
 allow_k8s_contexts(['orbstack', 'docker-desktop'])
 
 load('ext://helm_remote', 'helm_remote')
-load('ext://dotenv', 'dotenv')
-
-dotenv()
 
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
@@ -47,10 +44,6 @@ local_resource(
 local_resource(
   'pnpm dev',
   serve_cmd='pnpm dev',
-  serve_env={
-    'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY', ''),
-    'DATABASE_URL': 'postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public'
-  },
   labels=['dev'],
   resource_deps=['pnpm-install', 'prisma-migrate']
 )

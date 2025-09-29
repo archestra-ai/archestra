@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
+    "ai": "^5.0.57",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.1",
     "fastify-type-provider-zod": "^6.0.0",

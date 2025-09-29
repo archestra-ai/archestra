@@ -23,6 +23,9 @@ importers:
       '@prisma/client':
         specifier: ^6.16.2
         version: 6.16.2(prisma@6.16.2(typescript@5.9.2))(typescript@5.9.2)
+      ai:
+        specifier: ^5.0.57
+        version: 5.0.57(zod@4.1.11)
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
@@ -72,46 +75,16 @@ importers:
 
   experiments:
     dependencies:
-      '@ai-sdk/google':
-        specifier: ^2.0.17
-        version: 2.0.17(zod@4.1.11)
-      '@ai-sdk/openai':
-        specifier: 2.1.0-beta.5
-        version: 2.1.0-beta.5(zod@4.1.11)
-      '@ai-sdk/provider':
-        specifier: ^2.0.0
-        version: 2.0.0
-      '@fastify/http-proxy':
-        specifier: ^11.3.0
-        version: 11.3.0
-      ai:
-        specifier: 5.1.0-beta.12
-        version: 5.1.0-beta.12(zod@4.1.11)
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
       fastify:
         specifier: ^5.6.1
         version: 5.6.1
-      lodash:
-        specifier: ^4.17.21
-        version: 4.17.21
       openai:
         specifier: ^5.23.0
         version: 5.23.1(ws@8.18.3)(zod@4.1.11)
-      uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
-      zod:
-        specifier: ^4.1.11
-        version: 4.1.11
     devDependencies:
-      '@types/http-proxy':
-        specifier: ^1.17.16
-        version: 1.17.16
-      '@types/lodash':
-        specifier: ^4.17.20
-        version: 4.17.20
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.17
@@ -161,20 +134,8 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@1.1.0-beta.8':
-    resolution: {integrity: sha512-Ij9SWVmGFF0619RSQHA5hctXquvYl4zCZcbfXhKPi0SdnMb7IhM6jAQuBH5O+1tWew+gKQk7EChnfftzt/cqTQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/google@2.0.17':
-    resolution: {integrity: sha512-6LyuUrCZuiULg0rUV+kT4T2jG19oUntudorI4ttv1ARkSbwl8A39ue3rA487aDDy6fUScdbGFiV5Yv/o4gidVA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@2.1.0-beta.5':
-    resolution: {integrity: sha512-iaRRGXXTM9eISf6R/tDBG5KTbHs3A7uu92tLDVrNV5os6a9xE9kYMuj+qp3yrdTfDzUcB9IxV35UllbFZSvF+Q==}
+  '@ai-sdk/gateway@1.0.30':
+    resolution: {integrity: sha512-QdrSUryr/CLcsCISokLHOImcHj1adGXk1yy4B3qipqLhcNc33Kj/O/3crI790Qp85oDx7sc4vm7R4raf9RA/kg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -185,22 +146,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@3.1.0-beta.4':
-    resolution: {integrity: sha512-RcKouN8ERFdmVm2dapDDcEaGeAi6qMbaPNl6ZLBbCFcdQIAma2kGpSn+Ero7FHFsIAJ0SMZHes8cKz+unHT+qg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/provider@2.0.0':
     resolution: {integrity: sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==}
-    engines: {node: '>=18'}
-
-  '@ai-sdk/provider@2.1.0-beta.2':
-    resolution: {integrity: sha512-5+50OlxSOGiwhUBgq1WUXHaN5VUDjUKGXKtde7E9aaOm0AJKIS5UgM/x5yXedBtyGmi4m2IdgaxX0ObcwqJ5QA==}
-    engines: {node: '>=18'}
-
-  '@ai-sdk/test-server@1.0.0-beta.0':
-    resolution: {integrity: sha512-p2F6XivJrFysDdQLKwSNBFJ1pnHcFTz4XMr8xHQ4gpR55Vajvi21RUh70vH1vahpyTMNJcZXkwHD9EAanjOjdQ==}
     engines: {node: '>=18'}
 
   '@alloc/quick-lru@5.2.0':
@@ -431,17 +378,11 @@ packages:
   '@fastify/forwarded@3.0.1':
     resolution: {integrity: sha512-JqDochHFqXs3C3Ml3gOY58zM7OqO9ENqPo0UqAjAjH8L01fRZqwX9iLeX34//kiJubF7r2ZQHtBRU36vONbLlw==}
 
-  '@fastify/http-proxy@11.3.0':
-    resolution: {integrity: sha512-FXFxkdTlXqVI11fqlxmHqOPzIo0elBA60o3bfdh2seD44KWOBBzelzCVgs1OelrxuADCyWUQp2ZxA2wp3mqQMg==}
-
   '@fastify/merge-json-schemas@0.2.1':
     resolution: {integrity: sha512-OA3KGBCy6KtIvLf8DINC5880o5iBlDX4SxzLQS8HorJAbqluzLRn80UXU0bxZn7UOFhFgpRJDasfwn9nG4FG4A==}
 
   '@fastify/proxy-addr@5.1.0':
     resolution: {integrity: sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw==}
-
-  '@fastify/reply-from@12.3.1':
-    resolution: {integrity: sha512-uaeijLjIceeU+T+9P50rMSOkLeKfBpv9blvw3kbK9+8ZJxTjGAgDkveW20ZiWMerWKd7WVHx6NiMPvQJ55eBLQ==}
 
   '@fastify/swagger@9.5.2':
     resolution: {integrity: sha512-8e8w/LItg/cF6IR/hYKtnt+E0QImees5o3YWJsTLxaIk+tzNUEc6Z2Ursi4oOHWwUlKjUCnV6yh5z5ZdxvlsWA==}
@@ -771,9 +712,6 @@ packages:
   '@tailwindcss/postcss@4.1.13':
     resolution: {integrity: sha512-HLgx6YSFKJT7rJqh9oJs/TkBFhxuMOfUKSBEPYwV+t78POOBsdQ7crhZLzwcH3T0UyUuOzU/GK5pk5eKr3wCiQ==}
 
-  '@types/http-proxy@1.17.16':
-    resolution: {integrity: sha512-sdWoUajOB1cd0A8cRRQ1cfyWNbmFKLAqBB89Y8x5iYyG/mkJHc0YUH8pdWBy2omi9qtCpiIgGjuwO0dQST2l5w==}
-
   '@types/lodash@4.17.20':
     resolution: {integrity: sha512-H3MHACvFUEiujabxhaI/ImO6gUrd8oOurg7LQtS7mbwIXA/cUqWrvBsaeJ23aZEPk1TAYkurjfMbSELfoCXlGA==}
 
@@ -795,8 +733,8 @@ packages:
   abstract-logging@2.0.1:
     resolution: {integrity: sha512-2BjRTZxTPvheOvGbBslFSYOUkr+SjPtOnrLP33f+VIWLzezQpZcqVg7ja3L4dBXmzzgwT+a029jRx5PCi3JuiA==}
 
-  ai@5.1.0-beta.12:
-    resolution: {integrity: sha512-FZ6JnmXRzd75bp2FPezw75L0VwZaS5qfgeYUKzXmw8tWpte+6OltZk7thDwKcbbWZGJbesTO1kXuzZkRUysXCg==}
+  ai@5.0.57:
+    resolution: {integrity: sha512-g4K881HFl9aGqvnp1Z/gRXYmfjORn5q5pyPIVmMndT+5AjiBRvUVzFZn1rXdzL61cjbMNyjO4NPfEbBE6Z/W3A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -953,9 +891,6 @@ packages:
   fast-check@3.23.2:
     resolution: {integrity: sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==}
     engines: {node: '>=8.0.0'}
-
-  fast-content-type-parse@3.0.0:
-    resolution: {integrity: sha512-ZvLdcY8P+N8mGQJahJV5G4U88CSvT1rP8ApL6uETe88MBXrBHAkZlSEySdUlyztF7ccb+Znos3TFqaepHxdhBg==}
 
   fast-copy@3.0.2:
     resolution: {integrity: sha512-dl0O9Vhju8IrcLndv2eU4ldt1ftXMqqfgN4H1cpmGV7P6jeB9FwpN9a2c8DPGE1Ys88rNUJVYDHq73CGAGOPfQ==}
@@ -1485,10 +1420,6 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@7.16.0:
-    resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
-    engines: {node: '>=20.18.1'}
-
   uuid@13.0.0:
     resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
     hasBin: true
@@ -1522,23 +1453,10 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@1.1.0-beta.8(zod@4.1.11)':
-    dependencies:
-      '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.1.11)
-      zod: 4.1.11
-
-  '@ai-sdk/google@2.0.17(zod@4.1.11)':
+  '@ai-sdk/gateway@1.0.30(zod@4.1.11)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
-      zod: 4.1.11
-
-  '@ai-sdk/openai@2.1.0-beta.5(zod@4.1.11)':
-    dependencies:
-      '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.1.11)
-      '@ai-sdk/test-server': 1.0.0-beta.0
       zod: 4.1.11
 
   '@ai-sdk/provider-utils@3.0.10(zod@4.1.11)':
@@ -1548,22 +1466,9 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.1.11
 
-  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@4.1.11)':
-    dependencies:
-      '@ai-sdk/provider': 2.1.0-beta.2
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 4.1.11
-
   '@ai-sdk/provider@2.0.0':
     dependencies:
       json-schema: 0.4.0
-
-  '@ai-sdk/provider@2.1.0-beta.2':
-    dependencies:
-      json-schema: 0.4.0
-
-  '@ai-sdk/test-server@1.0.0-beta.0': {}
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -1699,16 +1604,6 @@ snapshots:
 
   '@fastify/forwarded@3.0.1': {}
 
-  '@fastify/http-proxy@11.3.0':
-    dependencies:
-      '@fastify/reply-from': 12.3.1
-      fast-querystring: 1.1.2
-      fastify-plugin: 5.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@fastify/merge-json-schemas@0.2.1':
     dependencies:
       dequal: 2.0.3
@@ -1717,16 +1612,6 @@ snapshots:
     dependencies:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.2.0
-
-  '@fastify/reply-from@12.3.1':
-    dependencies:
-      '@fastify/error': 4.2.0
-      end-of-stream: 1.4.5
-      fast-content-type-parse: 3.0.0
-      fast-querystring: 1.1.2
-      fastify-plugin: 5.1.0
-      toad-cache: 3.7.0
-      undici: 7.16.0
 
   '@fastify/swagger@9.5.2':
     dependencies:
@@ -1991,10 +1876,6 @@ snapshots:
       postcss: 8.5.6
       tailwindcss: 4.1.13
 
-  '@types/http-proxy@1.17.16':
-    dependencies:
-      '@types/node': 20.19.17
-
   '@types/lodash@4.17.20': {}
 
   '@types/node@20.19.17':
@@ -2015,12 +1896,11 @@ snapshots:
 
   abstract-logging@2.0.1: {}
 
-  ai@5.1.0-beta.12(zod@4.1.11):
+  ai@5.0.57(zod@4.1.11):
     dependencies:
-      '@ai-sdk/gateway': 1.1.0-beta.8(zod@4.1.11)
-      '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.1.11)
-      '@ai-sdk/test-server': 1.0.0-beta.0
+      '@ai-sdk/gateway': 1.0.30(zod@4.1.11)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.10(zod@4.1.11)
       '@opentelemetry/api': 1.9.0
       zod: 4.1.11
 
@@ -2187,8 +2067,6 @@ snapshots:
   fast-check@3.23.2:
     dependencies:
       pure-rand: 6.1.0
-
-  fast-content-type-parse@3.0.0: {}
 
   fast-copy@3.0.2: {}
 
@@ -2707,13 +2585,12 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@7.16.0: {}
-
   uuid@13.0.0: {}
 
   wrappy@1.0.2: {}
 
-  ws@8.18.3: {}
+  ws@8.18.3:
+    optional: true
 
   yallist@5.0.0: {}
 

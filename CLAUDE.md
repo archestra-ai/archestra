@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ALWAYS run all commands from the `desktop_app/` directory unless specifically instructed otherwise.**
 
+**Exception: When working on experiments, run commands from the `platform/experiments/` directory.**
+
 ## Important Rules
 
 1. **NEVER modify files in `src/ui/components/ui/`** - These are shadcn/ui components and should remain unchanged
@@ -182,6 +184,13 @@ desktop_app/
 ├── resources/
 │   └── bin/               # Platform-specific binaries (Podman, Ollama)
 └── openapi/               # OpenAPI specs and generated clients
+
+platform/
+└── experiments/           # Experimental features and prototypes
+    ├── src/
+    │   ├── guardrails/    # Security guardrails implementation
+    │   └── main.ts        # OpenAI proxy server
+    └── README.md          # Experiments documentation
 ```
 
 ### Development Best Practices
@@ -226,3 +235,29 @@ Archestra supports deep linking for OAuth authentication flows:
 - Deep link handler is in `src/deep-linking.ts`
 - Auth tokens are stored in the `cloud_providers` table (not user table)
 - WebSocket broadcasts notify UI of authentication status changes
+
+### Experiments Platform
+
+The `platform/experiments/` directory contains experimental features and prototypes:
+
+#### OpenAI Proxy Server
+- Development proxy server for intercepting and logging LLM API calls
+- Located in `src/main.ts`
+- Runs on port 9000 by default
+- To use in desktop app, uncomment line 56 in `desktop_app/src/backend/server/plugins/llm/index.ts`
+
+#### Security Guardrails
+- Advanced security features in `src/guardrails/`:
+  - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
+  - **Tool Invocation Policies**: Fine-grained control over tool usage
+  - **Taint Analysis**: Tracks untrusted data through the system
+- CLI testing interface: `pnpm cli-chat-with-guardrails`
+
+#### Running Experiments
+```bash
+cd platform/experiments
+pnpm install
+cp .env.example .env      # Configure OPENAI_API_KEY
+pnpm proxy:dev           # Start proxy server (port 9000)
+pnpm cli-chat-with-guardrails  # Test guardrails CLI
+```

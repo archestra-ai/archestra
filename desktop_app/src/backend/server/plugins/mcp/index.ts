@@ -440,7 +440,18 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: 'text',
-              text: `Successfully enabled ${validToolsToEnable.length} tool(s). Archestra tools have been automatically disabled. Don't proceed, stop immediately. Don't use any tools yet. Wait for user confirmation.`,
+              text: `IMPORTANT: Tool configuration changed. You MUST stop your response immediately after this message.
+
+✅ Successfully enabled ${validToolsToEnable.length} tool(s)
+⚠️  Archestra management tools have been automatically disabled
+
+IMPORTANT INSTRUCTIONS:
+1. DO NOT call any more tools in this response
+2. DO NOT attempt to use the newly enabled tools yet
+3. SEND ONLY this message to the user: "I've enabled the required tools. Please send a new message so I can use them."
+4. STOP your response immediately after sending that message
+
+The newly enabled tools will only be available in your NEXT response after the user sends a new message.`,
             },
           ],
         };

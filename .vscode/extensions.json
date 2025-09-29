@@ -3,6 +3,7 @@
     "qwtel.sqlite-viewer",
     "esbenp.prettier-vscode",
     "editorconfig.editorconfig",
-    "vitest.explorer"
+    "vitest.explorer",
+    "biomejs.biome"
   ]
 }

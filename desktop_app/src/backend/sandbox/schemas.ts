@@ -39,8 +39,8 @@ export const SandboxStatusSummarySchema = z.object({
   status: SandboxStatusSchema,
   runtime: PodmanRuntimeStatusSummarySchema,
   mcpServers: z.record(z.string().describe('The MCP server ID'), SandboxedMcpServerStatusSummarySchema),
-  // Optional field for all aggregated tools (includes Archestra tools)
-  allAvailableTools: z.array(AvailableToolSchema).optional(),
+  // All aggregated tools (includes both sandboxed and Archestra MCP tools)
+  allAvailableTools: z.array(AvailableToolSchema),
 });
 
 // Type exports

@@ -377,38 +377,39 @@ export const useToolsStore = create<ToolsStore>()(
   )
 );
 
-// Initial fetch of available tools
+// Initial fetch of available tools (only once on startup)
 useToolsStore.getState().fetchAvailableTools();
 
-// Subscribe to tools updates via WebSocket
-websocketService.subscribe('tools-updated', async ({ payload }) => {
-  // For analysis updates, use merge to preserve scroll position
-  // For initial tool discovery or major changes, do a full fetch
-  const { availableTools } = useToolsStore.getState();
-  const isInitialLoad = availableTools.length === 0;
+// Subscribe to sandbox status updates which include all available tools (pushed every 1s via WebSocket)
+websocketService.subscribe('sandbox-status-update', ({ payload }) => {
+  const { allAvailableTools } = payload;
 
-  if (isInitialLoad || payload.message?.includes('Discovered')) {
-    // Full fetch for initial load or when new tools are discovered
-    useToolsStore.getState().fetchAvailableTools();
-  } else {
-    // Merge updates for analysis changes to preserve scroll
-    try {
-      const { data } = await getAvailableTools();
-      if (data) {
-        useToolsStore.getState().mergeAvailableTools(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch tools for merge:', error);
-      // Fallback to full fetch on error
-      useToolsStore.getState().fetchAvailableTools();
+  if (allAvailableTools) {
+    const { availableTools } = useToolsStore.getState();
+    const isInitialLoad = availableTools.length === 0;
+
+    if (isInitialLoad) {
+      // On initial load, set tools directly
+      useToolsStore.getState().setAvailableTools(allAvailableTools);
+    } else {
+      // For subsequent updates, merge to preserve scroll position and minimize re-renders
+      useToolsStore.getState().mergeAvailableTools(allAvailableTools);
     }
   }
 });
 
-// Subscribe to tool analysis progress without refetching
+// Subscribe to tools updates for logging/debugging only (no API calls)
+websocketService.subscribe('tools-updated', ({ payload }) => {
+  // Log tool updates for visibility but don't refetch
+  // Tools data is already pushed via sandbox-status-update event
+  console.log(`[Tools] ${payload.message}`);
+});
+
+// Subscribe to tool analysis progress for logging/debugging only
 websocketService.subscribe('tool-analysis-progress', ({ payload }) => {
-  // Log progress but don't refetch - wait for tools-updated event with actual data
-  // The actual tool updates will come through tools-updated event
+  // Log progress for visibility but don't refetch
+  // Tools data is already pushed via sandbox-status-update event
+  console.log(`[Tool Analysis] ${payload.message}`);
 });
 
 // Subscribe to chat tools selection updates (when enable_tools/disable_tools are called)

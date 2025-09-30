@@ -25,6 +25,4 @@ jobs:
         run: pnpm db:generate
 
       - name: Type checking, linting, formatting checks
-        permissions:
-          contents: read
         run: pnpm check:ci

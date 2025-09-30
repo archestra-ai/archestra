@@ -112,6 +112,9 @@ import type {
   StoreOAuthCodeData,
   StoreOAuthCodeErrors,
   StoreOAuthCodeResponses,
+  TranscribeAudioData,
+  TranscribeAudioErrors,
+  TranscribeAudioResponses,
   UninstallMcpServerData,
   UninstallMcpServerResponses,
   UpdateChatData,
@@ -742,6 +745,22 @@ export const resetSandbox = <ThrowOnError extends boolean = false>(
   return (options?.client ?? _heyApiClient).post<ResetSandboxResponses, ResetSandboxErrors, ThrowOnError>({
     url: '/api/sandbox/reset',
     ...options,
+  });
+};
+
+/**
+ * Transcribe audio to text using OpenAI Whisper
+ */
+export const transcribeAudio = <ThrowOnError extends boolean = false>(
+  options?: Options<TranscribeAudioData, ThrowOnError>
+) => {
+  return (options?.client ?? _heyApiClient).post<TranscribeAudioResponses, TranscribeAudioErrors, ThrowOnError>({
+    url: '/api/speech/transcribe',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
   });
 };
 

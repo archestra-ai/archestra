@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { deconstructToolId } from '@constants';
 import ChatTokenUsage from '@ui/components/ChatTokenUsage';
-import { ToolHoverCard } from '@ui/components/ToolHoverCard';
+import Microphone from '@ui/components/icons/Microphone';
 import {
   AIInput,
   AIInputButton,
@@ -20,7 +20,10 @@ import {
   AIInputToolbar,
   AIInputTools,
 } from '@ui/components/kibo/ai-input';
+import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@ui/components/ui/tooltip';
+import { WaveformVisualizer } from '@ui/components/WaveformVisualizer';
+import { useSpeech } from '@ui/hooks/useSpeech';
 import { cn } from '@ui/lib/utils/tailwind';
 import { formatToolName } from '@ui/lib/utils/tools';
 import {
@@ -81,9 +84,35 @@ export default function ChatInput({
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperModeStore();
   const { selectedModel, setSelectedModel } = useChatStore();
   const userSelectableModels = useUserSelectableModels();
-  const { availableCloudProviderModels } = useCloudProvidersStore();
+  const { availableCloudProviderModels, cloudProviders } = useCloudProvidersStore();
   const { availableTools, selectedToolIds, removeSelectedTool } = useToolsStore();
   const { installedMcpServers } = useMcpServersStore();
+
+  // Check if OpenAI is configured for speech
+  const openAIConfigured = useMemo(() => {
+    const openAI = cloudProviders.find((p) => p.type === 'openai');
+    return openAI?.configured && openAI?.enabled;
+  }, [cloudProviders]);
+
+  // Speech hook
+  const { isRecording, isTranscribing, startRecording, stopRecording, cancelRecording } = useSpeech({
+    onTranscription: (text) => {
+      // Append transcribed text to input
+      const newValue = input.trim() ? `${input.trim()} ${text}` : text;
+      const syntheticEvent = {
+        target: { value: newValue },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      handleInputChange(syntheticEvent);
+    },
+    onError: (error) => {
+      console.error('Speech Error:', error.message);
+      // TODO: Show user-friendly error notification
+    },
+    onSizeWarning: (sizeMB) => {
+      console.warn(`Recording Size Warning: ${sizeMB.toFixed(1)}MB (near 25MB limit)`);
+      // TODO: Show user-friendly size warning
+    },
+  });
 
   // Rotating placeholder state
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -352,7 +381,7 @@ export default function ChatInput({
                                     >
                                       {/* Status indicator */}
                                       {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                      tool.analysis?.status === 'in_progress' ? (
+                                        tool.analysis?.status === 'in_progress' ? (
                                         <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                       ) : tool.analysis?.status === 'error' ? (
                                         <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -398,7 +427,7 @@ export default function ChatInput({
                                     >
                                       {/* Status indicator */}
                                       {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                      tool.analysis?.status === 'in_progress' ? (
+                                        tool.analysis?.status === 'in_progress' ? (
                                         <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                       ) : tool.analysis?.status === 'error' ? (
                                         <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -444,7 +473,7 @@ export default function ChatInput({
                                     >
                                       {/* Status indicator */}
                                       {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                      tool.analysis?.status === 'in_progress' ? (
+                                        tool.analysis?.status === 'in_progress' ? (
                                         <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                       ) : tool.analysis?.status === 'error' ? (
                                         <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -490,7 +519,7 @@ export default function ChatInput({
                                     >
                                       {/* Status indicator */}
                                       {tool.analysis?.status === 'awaiting_ollama_model' ||
-                                      tool.analysis?.status === 'in_progress' ? (
+                                        tool.analysis?.status === 'in_progress' ? (
                                         <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                       ) : tool.analysis?.status === 'error' ? (
                                         <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
@@ -529,12 +558,36 @@ export default function ChatInput({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder=""
-            disabled={false}
+            disabled={isRecording || isTranscribing}
             minHeight={48}
             maxHeight={164}
             className="relative z-10"
+            style={
+              isRecording || isTranscribing
+                ? {
+                  color: 'transparent',
+                  textShadow: '0 0 0 rgba(0, 0, 0, 0.15)',
+                }
+                : undefined
+            }
           />
-          {!input && !hasMessages && (
+          {/* Show waveform when recording - aligned left */}
+          {isRecording && (
+            <div className="absolute inset-0 flex items-center pointer-events-none px-4">
+              <WaveformVisualizer isRecording={isRecording} className="h-6 w-48" />
+            </div>
+          )}
+          {/* Show transcribing message - aligned left */}
+          {isTranscribing && (
+            <div className="absolute inset-0 flex items-center pointer-events-none px-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Transcribing...</span>
+              </div>
+            </div>
+          )}
+          {/* Show placeholder when idle */}
+          {!input && !hasMessages && !isRecording && !isTranscribing && (
             <div className="absolute inset-0 flex items-start pointer-events-none overflow-hidden">
               <div className="relative w-full h-full pt-2.5 px-4">
                 {PLACEHOLDER_EXAMPLES.map((example, index) => {
@@ -654,6 +707,62 @@ export default function ChatInput({
                 </TooltipContent>
               </Tooltip>
             )}
+
+            {/* Speech controls - show only if OpenAI is configured */}
+            {openAIConfigured && (
+              <>
+                {isRecording || isTranscribing ? (
+                  // Show X (cancel) and checkmark (stop & transcribe) when recording
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AIInputButton onClick={cancelRecording} type="button" disabled={isTranscribing}>
+                          <X size={16} />
+                        </AIInputButton>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span>Cancel</span>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AIInputButton onClick={stopRecording} type="button" disabled={isTranscribing}>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </AIInputButton>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span>{isTranscribing ? 'Transcribing...' : 'Stop & transcribe'}</span>
+                      </TooltipContent>
+                    </Tooltip>
+                  </>
+                ) : (
+                  // Show normal microphone when idle
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AIInputButton onClick={startRecording} type="button">
+                        <Microphone />
+                      </AIInputButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span>Dictate</span>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </>
+            )}
+
             <AIInputSubmit
               onClick={status === 'streaming' || status === 'submitted' || isSubmitting ? stop : undefined}
               disabled={status === 'streaming' || status === 'submitted' || isSubmitting ? false : disabled}

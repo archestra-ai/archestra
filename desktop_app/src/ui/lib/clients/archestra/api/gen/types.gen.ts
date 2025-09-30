@@ -495,6 +495,24 @@ export type SandboxActionResponseInput = {
   message: string;
 };
 
+export type TranscribeRequestInput = {
+  /**
+   * Base64-encoded audio data
+   */
+  audio: string;
+  /**
+   * Audio MIME type (e.g., audio/webm, audio/mp4)
+   */
+  mimeType: string;
+};
+
+export type TranscribeResponseInput = {
+  /**
+   * Transcribed text from audio
+   */
+  text: string;
+};
+
 export type BackendLogsResponseInput = {
   /**
    * The log content or error message
@@ -1009,6 +1027,24 @@ export type OllamaRequiredModelStatus = {
 export type SandboxActionResponse = {
   success: boolean;
   message: string;
+};
+
+export type TranscribeRequest = {
+  /**
+   * Base64-encoded audio data
+   */
+  audio: string;
+  /**
+   * Audio MIME type (e.g., audio/webm, audio/mp4)
+   */
+  mimeType: string;
+};
+
+export type TranscribeResponse = {
+  /**
+   * Transcribed text from audio
+   */
+  text: string;
 };
 
 export type BackendLogsResponse = {
@@ -2211,6 +2247,59 @@ export type ResetSandboxResponses = {
 };
 
 export type ResetSandboxResponse = ResetSandboxResponses[keyof ResetSandboxResponses];
+
+export type TranscribeAudioData = {
+  body?: TranscribeRequestInput;
+  path?: never;
+  query?: never;
+  url: '/api/speech/transcribe';
+};
+
+export type TranscribeAudioErrors = {
+  /**
+   * Default Response
+   */
+  400: {
+    error: {
+      message: string;
+    };
+  };
+  /**
+   * Default Response
+   */
+  401: {
+    error: {
+      message: string;
+    };
+  };
+  /**
+   * Default Response
+   */
+  402: {
+    error: {
+      message: string;
+    };
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: {
+      message: string;
+    };
+  };
+};
+
+export type TranscribeAudioError = TranscribeAudioErrors[keyof TranscribeAudioErrors];
+
+export type TranscribeAudioResponses = {
+  /**
+   * Default Response
+   */
+  200: TranscribeResponse;
+};
+
+export type TranscribeAudioResponse = TranscribeAudioResponses[keyof TranscribeAudioResponses];
 
 export type GetSystemBackendLogsData = {
   body?: never;

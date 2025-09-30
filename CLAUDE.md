@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ALWAYS run all commands from the `desktop_app/` directory unless specifically instructed otherwise.**
 
-**Exception: When working on experiments, run commands from the `platform/experiments/` directory.**
+**Exceptions:**
+- When working on experiments, run commands from the `platform/experiments/` directory.
+- When working on the platform backend, run commands from the `platform/` directory.
 
 ## Important Rules
 
@@ -261,3 +263,22 @@ cp .env.example .env      # Configure OPENAI_API_KEY
 pnpm proxy:dev           # Start proxy server (port 9000)
 pnpm cli-chat-with-guardrails  # Test guardrails CLI
 ```
+
+### Platform Development
+
+When working on the platform backend:
+
+```bash
+cd platform/
+pnpm install
+# Tilt will automatically create .env from .env.example if it doesn't exist
+tilt up
+```
+
+**Development Features:**
+- **Tilt Integration**: Manages PostgreSQL, migrations, and dev servers
+- **Auto-linting**: The `lint:fix` resource watches files and auto-fixes issues
+- **VS Code Support**: Platform has its own VS Code settings for optimal DX
+  - Auto-formatting with Biome
+  - Git support when opening platform/ as a workspace
+  - TypeScript project diagnostics enabled

@@ -32,7 +32,7 @@ const openai = new OpenAI({
 });
 
 // Health check route
-fastify.get("/", async function handler(request, reply) {
+fastify.get("/", async function handler(_request, _reply) {
   return { status: "OpenAI Proxy Server", version: "1.0.0" };
 });
 

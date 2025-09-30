@@ -402,7 +402,7 @@ Some examples:
   }
 };
 
-cliChatWithGuardrails().catch((error) => {
+cliChatWithGuardrails().catch((_error) => {
   console.log("\n\nBye!");
   process.exit(0);
 });

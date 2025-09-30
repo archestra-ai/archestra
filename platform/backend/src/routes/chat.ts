@@ -98,7 +98,7 @@ async function extractToolNameFromHistory(
   return null;
 }
 
-export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Create a new chat session
   fastify.post(
     "/api/chats",
@@ -264,7 +264,9 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const toolInput = JSON.parse(toolCall.function.arguments);
 
               fastify.log.info(
-                `Evaluating tool call: ${toolCall.function.name} with input: ${JSON.stringify(toolInput)}`,
+                `Evaluating tool call: ${
+                  toolCall.function.name
+                } with input: ${JSON.stringify(toolInput)}`,
               );
 
               const evaluator = new ToolInvocationPolicyEvaluator(
@@ -355,3 +357,5 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+export default chatRoutes;

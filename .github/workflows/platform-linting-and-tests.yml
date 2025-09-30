@@ -21,5 +21,7 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Check prettier formatting
+      - name: Type checking, linting, formatting checks
+        permissions:
+          contents: read
         run: pnpm check:ci

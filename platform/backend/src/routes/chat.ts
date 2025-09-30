@@ -118,6 +118,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Get all chats
+  fastify.get(
+    "/api/chats",
+    {
+      schema: {
+        operationId: "getChats",
+        description: "Get all chats",
+        tags: ["Chat"],
+        response: {
+          200: z.array(z.any()), // Array of chats with interactions
+        },
+      },
+    },
+    async (_, reply) => {
+      const chats = await chatModel.findAll();
+      return reply.send(chats);
+    },
+  );
+
   // Get chat by ID
   fastify.get(
     "/api/chats/:chatId",

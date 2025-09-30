@@ -13,6 +13,13 @@ export class ChatModel {
     return chat;
   }
 
+  async findAll() {
+    return await prisma.chat.findMany({
+      include: { interactions: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   async findById(id: string) {
     return await prisma.chat.findUnique({
       where: { id },

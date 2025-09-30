@@ -1,6 +1,5 @@
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
-import fastifyPrintRoutes from "fastify-print-routes";
 import {
   jsonSchemaTransform,
   jsonSchemaTransformObject,
@@ -30,8 +29,6 @@ fastify.setSerializerCompiler(serializerCompiler);
 // Run the server!
 const start = async () => {
   try {
-    await fastify.register(fastifyPrintRoutes, { colors: true });
-
     /**
      * Register openapi spec
      * https://github.com/fastify/fastify-swagger?tab=readme-ov-file#usage

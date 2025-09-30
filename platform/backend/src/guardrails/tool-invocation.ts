@@ -9,6 +9,7 @@ import type {
 type ToolCallInput = {
   toolName: string;
   toolCallId: string;
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   input: Record<string, any>;
 };
 
@@ -28,6 +29,7 @@ class ToolInvocationPolicyEvaluator
   }
 
   private evaluateValue(
+    // biome-ignore lint/suspicious/noExplicitAny: tbd later
     value: any,
     {
       operator,

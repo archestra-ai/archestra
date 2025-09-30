@@ -21,7 +21,7 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Type checking, linting, formatting checks
+      - name: Generate prisma client
         run: pnpm db:generate
 
       - name: Type checking, linting, formatting checks

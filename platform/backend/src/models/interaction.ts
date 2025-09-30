@@ -1,3 +1,4 @@
+import type { InputJsonValue } from "@prisma/client/runtime/library";
 import { PrismaClient } from "../database/generated/client";
 
 const prisma = new PrismaClient();
@@ -5,7 +6,7 @@ const prisma = new PrismaClient();
 export class InteractionModel {
   async create(data: {
     chatId: string;
-    content: any;
+    content: InputJsonValue;
     tainted?: boolean;
     taintReason?: string;
   }) {

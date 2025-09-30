@@ -9,6 +9,7 @@ import type {
 type ToolResultInput = {
   toolName: string;
   toolCallId: string;
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   output: any;
 };
 
@@ -35,6 +36,7 @@ class TrustedDataPolicyEvaluator
   }
 
   private evaluateValue(
+    // biome-ignore lint/suspicious/noExplicitAny: tbd later
     value: any,
     { operator, value: policyValue }: TrustedDataAutonomyPolicy,
   ): boolean {
@@ -58,6 +60,7 @@ class TrustedDataPolicyEvaluator
     }
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   private extractValuesFromPath(obj: any, path: string): any[] {
     // Handle wildcard paths like 'emails[*].from'
     if (path.includes("[*]")) {

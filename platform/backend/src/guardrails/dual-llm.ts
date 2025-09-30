@@ -187,6 +187,7 @@ class DualLLMController {
   }
 
   // Create a safe preview that can't contain injections
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   private createSafePreview(content: any): string {
     if (!content) return "[empty]";
 
@@ -220,10 +221,13 @@ class DualLLMEvaluator
     );
 
     const taintedContent = taintedInteractions.map((i) => ({
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       toolCallId: (i.content as any).toolCallId || "",
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       toolName: (i.content as any).toolName || "",
       isTainted: i.tainted,
       taintReason: i.taintReason,
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       output: (i.content as any).output,
     }));
 
@@ -281,6 +285,7 @@ class DualLLMEvaluator
     const interactions = await chatModel.getInteractions(this.chatId);
 
     for (const interaction of interactions.reverse()) {
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       const content = interaction.content as any;
       if (content.role === "user" && typeof content.content === "string") {
         return content.content;

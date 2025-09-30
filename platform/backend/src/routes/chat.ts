@@ -62,6 +62,15 @@ z.globalRegistry.add(ChatCompletionResponseSchema, {
 });
 z.globalRegistry.add(ModelsResponseSchema, { id: "ModelsResponse" });
 
+type InteractionContent = {
+  role: string;
+  tool_calls: {
+    id: string;
+    function: {
+      name: string;
+    };
+  }[];
+};
 /**
  * Extract tool name from conversation history by finding the assistant message
  * that contains the tool_call_id
@@ -75,7 +84,7 @@ async function extractToolNameFromHistory(
   // Find the most recent assistant message with tool_calls
   for (let i = interactions.length - 1; i >= 0; i--) {
     const interaction = interactions[i];
-    const content = interaction.content as any;
+    const content = interaction.content as InteractionContent;
 
     if (content.role === "assistant" && content.tool_calls) {
       for (const toolCall of content.tool_calls) {
@@ -178,7 +187,9 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Process incoming tool result messages and evaluate trusted data policies
         for (const message of requestBody.messages) {
+          // biome-ignore lint/suspicious/noExplicitAny: tbd later
           if ((message as any).role === "tool") {
+            // biome-ignore lint/suspicious/noExplicitAny: tbd later
             const toolMessage = message as any;
             const toolResult = JSON.parse(toolMessage.content);
 
@@ -215,6 +226,7 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the user message
         const lastMessage =
           requestBody.messages[requestBody.messages.length - 1];
+        // biome-ignore lint/suspicious/noExplicitAny: tbd later
         if ((lastMessage as any).role === "user") {
           await chatModel.addInteraction(chatId, lastMessage);
         }
@@ -291,7 +303,7 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         fastify.log.error(error);
         const statusCode =
           error instanceof Error && "status" in error
-            ? (error as any).status
+            ? (error.status as 200 | 400 | 404 | 403 | 500)
             : 500;
         const errorMessage =
           error instanceof Error ? error.message : "Internal server error";

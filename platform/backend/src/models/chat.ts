@@ -1,3 +1,5 @@
+import type { InputJsonValue } from "@prisma/client/runtime/library";
+import type { ChatCompletionMessage } from "openai/resources";
 import { PrismaClient } from "../database/generated/client";
 import { interactionModel } from "./interaction";
 
@@ -24,13 +26,13 @@ export class ChatModel {
 
   async addInteraction(
     chatId: string,
-    content: any,
+    content: InputJsonValue | ChatCompletionMessage,
     tainted = false,
     taintReason?: string,
   ) {
     return await interactionModel.create({
       chatId,
-      content,
+      content: content as InputJsonValue,
       tainted,
       taintReason,
     });

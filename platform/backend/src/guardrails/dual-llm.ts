@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from "ai";
-import { chatModel } from "../models/chat";
+import InteractionModel from "../models/interaction";
 import type {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
@@ -216,7 +216,7 @@ class DualLLMEvaluator
   }
 
   async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
-    const taintedInteractions = await chatModel.getTaintedInteractions(
+    const taintedInteractions = await InteractionModel.findTaintedByChatId(
       this.chatId,
     );
 
@@ -282,7 +282,7 @@ class DualLLMEvaluator
 
   private async extractUserRequest(): Promise<string> {
     // Find the most recent user message in interactions
-    const interactions = await chatModel.getInteractions(this.chatId);
+    const interactions = await InteractionModel.findByChatId(this.chatId);
 
     for (const interaction of interactions.reverse()) {
       // biome-ignore lint/suspicious/noExplicitAny: tbd later

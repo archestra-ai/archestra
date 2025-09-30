@@ -15,11 +15,16 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is not set");
+} else if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not set");
 }
 
 export default {
   openAi: {
     apiKey: process.env.OPENAI_API_KEY,
+  },
+  database: {
+    url: process.env.DATABASE_URL,
   },
   toolInvocationAutonomyPolicies: [
     // cannot send emails to @grafana.com domain
@@ -70,4 +75,5 @@ export default {
       value: ".*/Desktop.*",
     },
   ] as TrustedDataAutonomyPolicy[],
+  debug: process.env.NODE_ENV === "development",
 };

@@ -44,14 +44,12 @@ local_resource(
 )
 
 local_resource(
-  'prisma-migrate',
+  'db-migrate',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
-  #
-  # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
   cmd='cd backend && pnpm db:migrate',
-  deps=['./backend/src/prisma/schema.prisma'],
+  deps=['./backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
 )
@@ -61,21 +59,24 @@ local_resource(
   'pnpm dev',
   serve_cmd='pnpm dev',
   labels=['dev'],
-  resource_deps=['prisma-migrate']
+  resource_deps=['db-migrate']
 )
 
 local_resource(
-  'prisma-studio',
-  serve_cmd='pnpm db:studio',
+  'database-gui',
+  # NOTE: we need to cd into the backend directory to run the migrate command
+  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
+  # propogate the required environment variables (ie. DATABASE_URL)
+  serve_cmd='cd backend && pnpm db:studio',
   labels=['dev'],
-  resource_deps=['prisma-migrate']
+  resource_deps=['db-migrate']
 )
 
 local_resource(
   'lint:fix',
   cmd='pnpm type-check && pnpm lint:fix',
   labels=['dev'],
-  resource_deps=['prisma-migrate'],
+  resource_deps=['pnpm-install'],
   deps=[
     "./frontend/src",
     "./backend/src",

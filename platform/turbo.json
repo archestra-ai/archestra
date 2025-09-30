@@ -20,14 +20,14 @@
     "type-check": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
     },
+    "codegen:api-client": {
+      "cache": false
+    },
     "db:generate": {
-      "inputs": ["backend/src/prisma/schema.prisma"]
+      "inputs": ["backend/src/database/**/*.ts"]
     },
     "db:migrate": {
-      "inputs": ["backend/src/prisma/schema.prisma"]
-    },
-    "db:push": {
-      "inputs": ["backend/src/prisma/schema.prisma"]
+      "inputs": ["backend/src/database/**/*.ts"]
     },
     "db:studio": {
       "persistent": true,

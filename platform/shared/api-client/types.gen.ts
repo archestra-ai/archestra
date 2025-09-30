@@ -4,76 +4,6 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type ChatIdResponseInput = {
-    chatId: string;
-};
-
-export type ErrorResponseInput = {
-    error: string | {
-        message: string;
-        type: string;
-    };
-};
-
-export type ChatCompletionRequestInput = {
-    chatId: string;
-    model: string;
-    messages: Array<unknown>;
-    tools?: Array<unknown>;
-    tool_choice?: unknown;
-    temperature?: number;
-    max_tokens?: number;
-    stream?: boolean;
-};
-
-export type ChatCompletionResponseInput = {
-    id: string;
-    object: string;
-    created: number;
-    model: string;
-    choices: Array<unknown>;
-    usage?: unknown;
-};
-
-export type ModelsResponseInput = {
-    data: Array<unknown>;
-};
-
-export type ChatIdResponse = {
-    chatId: string;
-};
-
-export type ErrorResponse = {
-    error: string | {
-        message: string;
-        type: string;
-    };
-};
-
-export type ChatCompletionRequest = {
-    chatId: string;
-    model: string;
-    messages: Array<unknown>;
-    tools?: Array<unknown>;
-    tool_choice?: unknown;
-    temperature?: number;
-    max_tokens?: number;
-    stream?: boolean;
-};
-
-export type ChatCompletionResponse = {
-    id: string;
-    object: string;
-    created: number;
-    model: string;
-    choices: Array<unknown>;
-    usage?: unknown;
-};
-
-export type ModelsResponse = {
-    data: Array<unknown>;
-};
-
 export type GetOpenapiJsonData = {
     body?: never;
     path?: never;
@@ -102,6 +32,47 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
+export type GetChatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chats';
+};
+
+export type GetChatsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        interactions: Array<{
+            id: string;
+            chatId: string;
+            content: {
+                role: 'system' | 'user' | 'assistant' | 'tool';
+                content?: string | null;
+                name?: string | null;
+                tool_call_id?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        name: string;
+                        arguments: string;
+                    };
+                }> | null;
+            };
+            tainted: boolean;
+            taintReason: string | null;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetChatsResponse = GetChatsResponses[keyof GetChatsResponses];
+
 export type CreateChatData = {
     body?: never;
     path?: never;
@@ -113,7 +84,11 @@ export type CreateChatResponses = {
     /**
      * Default Response
      */
-    200: ChatIdResponse;
+    200: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+    };
 };
 
 export type CreateChatResponse = CreateChatResponses[keyof CreateChatResponses];
@@ -131,7 +106,12 @@ export type GetChatErrors = {
     /**
      * Default Response
      */
-    404: ErrorResponse;
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
 export type GetChatError = GetChatErrors[keyof GetChatErrors];
@@ -140,11 +120,49 @@ export type GetChatResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    200: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        interactions: Array<{
+            id: string;
+            chatId: string;
+            content: {
+                role: 'system' | 'user' | 'assistant' | 'tool';
+                content?: string | null;
+                name?: string | null;
+                tool_call_id?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    function: {
+                        name: string;
+                        arguments: string;
+                    };
+                }> | null;
+            };
+            tainted: boolean;
+            taintReason: string | null;
+            createdAt: string;
+        }>;
+    };
 };
 
+export type GetChatResponse = GetChatResponses[keyof GetChatResponses];
+
 export type ChatCompletionsData = {
-    body?: ChatCompletionRequestInput;
+    body: {
+        model: string;
+        messages: Array<unknown>;
+        tools?: Array<unknown>;
+        tool_choice?: unknown;
+        temperature?: number;
+        max_tokens?: number;
+        stream?: boolean;
+    };
+    headers: {
+        'x-archestra-chat-id': string;
+    };
     path: {
         provider: 'openai';
     };
@@ -156,19 +174,39 @@ export type ChatCompletionsErrors = {
     /**
      * Default Response
      */
-    400: ErrorResponse;
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
-    403: ErrorResponse;
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
-    404: ErrorResponse;
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
-    500: ErrorResponse;
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
 export type ChatCompletionsError = ChatCompletionsErrors[keyof ChatCompletionsErrors];
@@ -177,12 +215,19 @@ export type ChatCompletionsResponses = {
     /**
      * Default Response
      */
-    200: ChatCompletionResponse;
+    200: {
+        id: string;
+        object: string;
+        created: number;
+        model: string;
+        choices: Array<unknown>;
+        usage?: unknown;
+    };
 };
 
 export type ChatCompletionsResponse = ChatCompletionsResponses[keyof ChatCompletionsResponses];
 
-export type ListModelsData = {
+export type ListProviderModelsData = {
     body?: never;
     path: {
         provider: 'openai';
@@ -191,24 +236,36 @@ export type ListModelsData = {
     url: '/v1/{provider}/models';
 };
 
-export type ListModelsErrors = {
+export type ListProviderModelsErrors = {
     /**
      * Default Response
      */
-    400: ErrorResponse;
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
-    500: ErrorResponse;
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
-export type ListModelsError = ListModelsErrors[keyof ListModelsErrors];
+export type ListProviderModelsError = ListProviderModelsErrors[keyof ListProviderModelsErrors];
 
-export type ListModelsResponses = {
+export type ListProviderModelsResponses = {
     /**
      * Default Response
      */
-    200: ModelsResponse;
+    200: {
+        data: Array<unknown>;
+    };
 };
 
-export type ListModelsResponse = ListModelsResponses[keyof ListModelsResponses];
+export type ListProviderModelsResponse = ListProviderModelsResponses[keyof ListProviderModelsResponses];

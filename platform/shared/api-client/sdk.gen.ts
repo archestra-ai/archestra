@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatCompletionsData, ChatCompletionsErrors, ChatCompletionsResponses, CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, ListModelsData, ListModelsErrors, ListModelsResponses } from './types.gen';
+import type { ChatCompletionsData, ChatCompletionsErrors, ChatCompletionsResponses, CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, ListProviderModelsData, ListProviderModelsErrors, ListProviderModelsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -28,6 +28,16 @@ export const getOpenapiJson = <ThrowOnError extends boolean = false>(options?: O
 export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetHealthResponses, unknown, ThrowOnError>({
         url: '/health',
+        ...options
+    });
+};
+
+/**
+ * Get all chats
+ */
+export const getChats = <ThrowOnError extends boolean = false>(options?: Options<GetChatsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetChatsResponses, unknown, ThrowOnError>({
+        url: '/api/chats',
         ...options
     });
 };
@@ -69,8 +79,8 @@ export const chatCompletions = <ThrowOnError extends boolean = false>(options: O
 /**
  * List available models for the specified provider
  */
-export const listModels = <ThrowOnError extends boolean = false>(options: Options<ListModelsData, ThrowOnError>) => {
-    return (options.client ?? client).get<ListModelsResponses, ListModelsErrors, ThrowOnError>({
+export const listProviderModels = <ThrowOnError extends boolean = false>(options: Options<ListProviderModelsData, ThrowOnError>) => {
+    return (options.client ?? client).get<ListProviderModelsResponses, ListProviderModelsErrors, ThrowOnError>({
         url: '/v1/{provider}/models',
         ...options
     });

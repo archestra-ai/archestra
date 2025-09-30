@@ -1,41 +1,46 @@
-import type { InputJsonValue } from "@prisma/client/runtime/library";
-import { PrismaClient } from "../database/generated/client";
+import { and, asc, eq } from "drizzle-orm";
+import db, { interactionsTable, type MessageContent } from "../database";
 
-const prisma = new PrismaClient();
-
-export class InteractionModel {
-  async create(data: {
+class InteractionModel {
+  static async create(data: {
     chatId: string;
-    content: InputJsonValue;
+    content: MessageContent;
     tainted?: boolean;
     taintReason?: string;
   }) {
-    return await prisma.interaction.create({
-      data: {
+    const [interaction] = await db
+      .insert(interactionsTable)
+      .values({
         chatId: data.chatId,
         content: data.content,
         tainted: data.tainted ?? false,
         taintReason: data.taintReason,
-      },
-    });
+      })
+      .returning();
+
+    return interaction;
   }
 
-  async findByChatId(chatId: string) {
-    return await prisma.interaction.findMany({
-      where: { chatId },
-      orderBy: { createdAt: "asc" },
-    });
+  static async findByChatId(chatId: string) {
+    return await db
+      .select()
+      .from(interactionsTable)
+      .where(eq(interactionsTable.chatId, chatId))
+      .orderBy(asc(interactionsTable.createdAt));
   }
 
-  async findTaintedByChatId(chatId: string) {
-    return await prisma.interaction.findMany({
-      where: {
-        chatId,
-        tainted: true,
-      },
-      orderBy: { createdAt: "asc" },
-    });
+  static async findTaintedByChatId(chatId: string) {
+    return await db
+      .select()
+      .from(interactionsTable)
+      .where(
+        and(
+          eq(interactionsTable.chatId, chatId),
+          eq(interactionsTable.tainted, true),
+        ),
+      )
+      .orderBy(asc(interactionsTable.createdAt));
   }
 }
 
-export const interactionModel = new InteractionModel();
+export default InteractionModel;

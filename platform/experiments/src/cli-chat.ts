@@ -40,7 +40,7 @@ const createNewChat = async (): Promise<string> => {
   }
 
   const data = await response.json();
-  return data.chatId;
+  return data.id;
 };
 
 const printHelp = () => {
@@ -290,14 +290,19 @@ Some examples:
 
       let response;
       try {
-        response = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages,
-          tools: getToolDefinitions(),
-          tool_choice: "auto",
-          // @ts-expect-error - chatId is a custom field for our backend
-          chatId,
-        });
+        response = await openai.chat.completions.create(
+          {
+            model: "gpt-4o",
+            messages,
+            tools: getToolDefinitions(),
+            tool_choice: "auto",
+          },
+          {
+            headers: {
+              "X-Archestra-Chat-Id": chatId,
+            },
+          },
+        );
       } catch (error: any) {
         // Handle backend guardrails errors (403, etc.)
         if (error.status === 403) {

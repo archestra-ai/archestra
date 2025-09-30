@@ -1,63 +1,64 @@
-import type { InputJsonValue } from "@prisma/client/runtime/library";
-import type { ChatCompletionMessage } from "openai/resources";
-import { PrismaClient } from "../database/generated/client";
-import { interactionModel } from "./interaction";
+import { desc, eq } from "drizzle-orm";
+import db, {
+  type ChatWithInteractions,
+  chatsTable,
+  interactionsTable,
+} from "../database";
 
-const prisma = new PrismaClient();
-
-export class ChatModel {
-  async create() {
-    const chat = await prisma.chat.create({
-      data: {},
-    });
+class ChatModel {
+  static async create() {
+    const [chat] = await db.insert(chatsTable).values({}).returning();
     return chat;
   }
 
-  async findAll() {
-    return await prisma.chat.findMany({
-      include: { interactions: true },
-      orderBy: { createdAt: "desc" },
-    });
+  static async findAll() {
+    const chats = await db
+      .select()
+      .from(chatsTable)
+      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
+      .orderBy(desc(chatsTable.createdAt));
+
+    // Group interactions by chat
+    const chatMap = new Map<string, ChatWithInteractions>();
+    for (const row of chats) {
+      if (!row.chats) continue;
+
+      if (!chatMap.has(row.chats.id)) {
+        chatMap.set(row.chats.id, {
+          ...row.chats,
+          interactions: [],
+        });
+      }
+
+      if (row.interactions) {
+        chatMap.get(row.chats.id)?.interactions.push(row.interactions);
+      }
+    }
+
+    return Array.from(chatMap.values());
   }
 
-  async findById(id: string) {
-    return await prisma.chat.findUnique({
-      where: { id },
-      include: { interactions: true },
-    });
-  }
+  static async findById(id: string) {
+    const rows = await db
+      .select()
+      .from(chatsTable)
+      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
+      .where(eq(chatsTable.id, id));
 
-  async getInteractions(chatId: string) {
-    return await interactionModel.findByChatId(chatId);
-  }
+    if (rows.length === 0) {
+      return null;
+    }
 
-  async addInteraction(
-    chatId: string,
-    content: InputJsonValue | ChatCompletionMessage,
-    tainted = false,
-    taintReason?: string,
-  ) {
-    return await interactionModel.create({
-      chatId,
-      content: content as InputJsonValue,
-      tainted,
-      taintReason,
-    });
-  }
+    const chat = rows[0].chats;
+    const interactions = rows
+      .filter((row) => row.interactions !== null)
+      .map((row) => row.interactions!);
 
-  async hasTaintedData(chatId: string): Promise<boolean> {
-    const taintedCount = await prisma.interaction.count({
-      where: {
-        chatId,
-        tainted: true,
-      },
-    });
-    return taintedCount > 0;
-  }
-
-  async getTaintedInteractions(chatId: string) {
-    return await interactionModel.findTaintedByChatId(chatId);
+    return {
+      ...chat,
+      interactions,
+    };
   }
 }
 
-export const chatModel = new ChatModel();
+export default ChatModel;

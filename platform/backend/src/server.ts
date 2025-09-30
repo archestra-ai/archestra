@@ -8,6 +8,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import chatRoutes from "./routes/chat";
+import llmProviderProxyRoutes from "./routes/proxy";
 
 const fastify = Fastify({
   logger: {
@@ -62,6 +63,7 @@ const start = async () => {
     }));
 
     fastify.register(chatRoutes);
+    fastify.register(llmProviderProxyRoutes);
 
     await fastify.listen({ port: 9000, host: "0.0.0.0" });
     fastify.log.info("Archestra Backend API started on port 9000");

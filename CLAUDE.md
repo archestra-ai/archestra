@@ -282,3 +282,19 @@ tilt up
   - Auto-formatting with Biome
   - Git support when opening platform/ as a workspace
   - TypeScript project diagnostics enabled
+
+#### Platform API Client
+
+The platform includes an auto-generated TypeScript API client:
+
+```bash
+cd platform/shared/
+pnpm install
+pnpm codegen:api-client  # Regenerate client from OpenAPI spec
+```
+
+**API Client Features:**
+- Generated from backend OpenAPI spec at `http://localhost:9000/openapi.json`
+- Type-safe client code in `platform/shared/api-client/`
+- Automatic regeneration when backend API changes
+- Uses `@hey-api/openapi-ts` for code generation

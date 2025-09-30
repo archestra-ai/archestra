@@ -9,10 +9,29 @@
       "cache": false
     },
     "lint": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "lint:fix": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "check:ci": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },
     "type-check": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+    },
+    "db:generate": {
+      "inputs": ["backend/src/prisma/schema.prisma"]
+    },
+    "db:migrate": {
+      "inputs": ["backend/src/prisma/schema.prisma"]
+    },
+    "db:push": {
+      "inputs": ["backend/src/prisma/schema.prisma"]
+    },
+    "db:studio": {
+      "persistent": true,
+      "cache": false
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "archestra",
+  "name": "experiments",
   "version": "0.0.1",
   "description": "Record all your interactions with Claude Code as you develop your projects",
   "main": "dist/index.js",
@@ -9,7 +9,9 @@
     "start": "node dist/main.js",
     "proxy:dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
     "cli-chat-with-guardrails": "tsx src/cli-chat.ts",
-    "typecheck": "tsc --noEmit"
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "type-check": "tsc --noEmit"
   },
   "files": [
     "dist/**/*",

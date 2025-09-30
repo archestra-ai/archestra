@@ -12,7 +12,7 @@
       "**/src/**/*.ts",
       "!node_modules",
       "!.next",
-      "!dist",
+      "!**/dist",
       "!build"
     ]
   },
@@ -26,7 +26,8 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noUnknownAtRules": "off"
+        "noUnknownAtRules": "off",
+        "noExplicitAny": "error"
       }
     },
     "domains": {

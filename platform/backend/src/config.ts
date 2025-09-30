@@ -1,5 +1,5 @@
-import dotenv from "dotenv";
 import path from "node:path";
+import dotenv from "dotenv";
 
 import type {
   ToolInvocationAutonomyPolicy,
@@ -11,7 +11,7 @@ import type {
  *
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") })
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is not set");

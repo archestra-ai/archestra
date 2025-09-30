@@ -1,6 +1,7 @@
 allow_k8s_contexts(['orbstack', 'docker-desktop'])
 
 load('ext://helm_remote', 'helm_remote')
+load('ext://dotenv', 'dotenv')
 
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
@@ -23,6 +24,13 @@ helm_remote(
 
 k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 
+dotenv(
+  './.env'
+)
+
+print('AAAAAAAAA')
+print(os.getenv('DATABASE_URL'))
+
 # pre
 local_resource(
   'pnpm-install',
@@ -34,7 +42,7 @@ local_resource(
 local_resource(
   'prisma-migrate',
   # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
-  cmd='cd backend && pnpm db:migrate',
+  cmd='DATABASE_URL=$DATABASE_URL pnpm db:migrate',
   deps=['./backend/src/prisma/schema.prisma'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
@@ -50,14 +58,20 @@ local_resource(
 
 local_resource(
   'prisma-studio',
-  serve_cmd='cd backend && pnpm db:studio',
+  serve_cmd='pnpm db:studio',
   labels=['dev'],
   resource_deps=['prisma-migrate']
 )
 
 local_resource(
-  'linting',
-  cmd='pnpm type-check && pnpm lint',
+  'lint:fix',
+  cmd='pnpm type-check && pnpm lint:fix',
   labels=['dev'],
-  resource_deps=['pnpm-install']
+  resource_deps=['pnpm-install'],
+  deps=[
+    "./frontend/src",
+    "./backend/src",
+    "./experiments/src", 
+    "./biome.json"
+  ]
 )

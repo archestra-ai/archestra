@@ -7,8 +7,9 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "biome check",
-    "format": "biome format --write",
-    "type-check": "tsc --noEmit"
+    "lint:fix": "biome check --write",
+    "type-check": "tsc --noEmit",
+    "check:ci": "pnpm type-check && biome ci"
   },
   "dependencies": {
     "react": "19.1.0",

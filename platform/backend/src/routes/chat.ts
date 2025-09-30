@@ -1,13 +1,16 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-
-import { chatModel } from "../models/chat";
-import { createProvider, SupportedProvidersSchema } from "../providers/factory";
 import config from "../config";
 import ToolInvocationPolicyEvaluator from "../guardrails/tool-invocation";
 import TrustedDataPolicyEvaluator from "../guardrails/trusted-data";
+import { chatModel } from "../models/chat";
+import { createProvider, SupportedProvidersSchema } from "../providers/factory";
 
-const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies, openAi: { apiKey: openAiApiKey } } = config;
+const {
+  trustedDataAutonomyPolicies,
+  toolInvocationAutonomyPolicies,
+  openAi: { apiKey: openAiApiKey },
+} = config;
 
 // Register Zod schemas for OpenAPI
 const ChatIdResponseSchema = z.object({
@@ -65,7 +68,7 @@ z.globalRegistry.add(ModelsResponseSchema, { id: "ModelsResponse" });
  */
 async function extractToolNameFromHistory(
   chatId: string,
-  toolCallId: string
+  toolCallId: string,
 ): Promise<string | null> {
   const interactions = await chatModel.getInteractions(chatId);
 
@@ -155,8 +158,10 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { provider }, body: { chatId, ...requestBody } }, reply) => {
-
+    async (
+      { params: { provider }, body: { chatId, ...requestBody } },
+      reply,
+    ) => {
       // Validate chat exists
       const chat = await chatModel.findById(chatId);
       if (!chat) {
@@ -178,7 +183,10 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const toolResult = JSON.parse(toolMessage.content);
 
             // Extract tool name from conversation history
-            const toolName = await extractToolNameFromHistory(chatId, toolMessage.tool_call_id);
+            const toolName = await extractToolNameFromHistory(
+              chatId,
+              toolMessage.tool_call_id,
+            );
 
             if (toolName) {
               // Evaluate trusted data policy
@@ -188,19 +196,25 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   toolCallId: toolMessage.tool_call_id,
                   output: toolResult,
                 },
-                trustedDataAutonomyPolicies
+                trustedDataAutonomyPolicies,
               );
 
               const { isTrusted, trustReason } = evaluator.evaluate();
 
               // Store tool result as interaction (tainted if not trusted)
-              await chatModel.addInteraction(chatId, toolMessage, !isTrusted, trustReason);
+              await chatModel.addInteraction(
+                chatId,
+                toolMessage,
+                !isTrusted,
+                trustReason,
+              );
             }
           }
         }
 
         // Store the user message
-        const lastMessage = requestBody.messages[requestBody.messages.length - 1];
+        const lastMessage =
+          requestBody.messages[requestBody.messages.length - 1];
         if ((lastMessage as any).role === "user") {
           await chatModel.addInteraction(chatId, lastMessage);
         }
@@ -228,13 +242,18 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const assistantMessage = response.choices[0].message;
 
         // Intercept and evaluate tool calls
-        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        if (
+          assistantMessage.tool_calls &&
+          assistantMessage.tool_calls.length > 0
+        ) {
           for (const toolCall of assistantMessage.tool_calls) {
             // Only process function tool calls (not custom tool calls)
-            if (toolCall.type === 'function' && 'function' in toolCall) {
+            if (toolCall.type === "function" && "function" in toolCall) {
               const toolInput = JSON.parse(toolCall.function.arguments);
 
-              fastify.log.info(`Evaluating tool call: ${toolCall.function.name} with input: ${JSON.stringify(toolInput)}`);
+              fastify.log.info(
+                `Evaluating tool call: ${toolCall.function.name} with input: ${JSON.stringify(toolInput)}`,
+              );
 
               const evaluator = new ToolInvocationPolicyEvaluator(
                 {
@@ -242,12 +261,14 @@ export const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   toolCallId: toolCall.id,
                   input: toolInput,
                 },
-                toolInvocationAutonomyPolicies
+                toolInvocationAutonomyPolicies,
               );
 
               const { isAllowed, denyReason } = evaluator.evaluate();
 
-              fastify.log.info(`Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`);
+              fastify.log.info(
+                `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
+              );
 
               if (!isAllowed) {
                 // Block this tool call

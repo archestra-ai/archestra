@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noExplicitAny: experiments
+
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { OpenAI } from "openai";
 

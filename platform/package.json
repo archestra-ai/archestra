@@ -5,9 +5,14 @@
   "author": "Archestra",
   "scripts": {
     "dev": "turbo dev",
-    "lint": "biome check --write",
-    "format": "biome format --write",
-    "type-check": "turbo type-check"
+    "lint": "turbo lint",
+    "lint:fix": "turbo lint:fix",
+    "type-check": "turbo type-check",
+    "check:ci": "turbo check:ci",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:push": "turbo db:push",
+    "db:studio": "turbo db:studio"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

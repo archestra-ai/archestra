@@ -1,3 +1,3 @@
-export function HistoryPage() {
+export default function HistoryPage() {
   return "history page";
-};
+}

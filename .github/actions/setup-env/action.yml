@@ -31,4 +31,5 @@ runs:
     - name: Rebuild Electron native modules
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      if: ${{ inputs.working-directory == 'desktop_app' }}
       run: pnpm electron-rebuild --force

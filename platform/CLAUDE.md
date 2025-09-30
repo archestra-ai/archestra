@@ -32,7 +32,7 @@ pnpm build           # Compile TypeScript to dist/
 pnpm start           # Run compiled backend
 pnpm db:migrate      # Run database migrations
 pnpm db:migrate:dev  # Run migrations in dev mode
-pnpm db:studio       # Open Prisma Studio for database inspection
+pnpm db:studio       # Open Drizzle Studio for database inspection
 
 # Frontend (Next.js)
 cd frontend
@@ -64,9 +64,9 @@ Archestra Platform is an enterprise Model Context Protocol (MCP) platform built 
 
 - **Monorepo**: pnpm workspaces with Turbo for build orchestration
 - **Development**: Tilt for local development orchestration
-- **Backend**: Fastify server with pino logging + Prisma ORM (PostgreSQL)
+- **Backend**: Fastify server with pino logging + Drizzle ORM (PostgreSQL)
 - **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4
-- **Database**: PostgreSQL with Prisma ORM for chat/interaction persistence
+- **Database**: PostgreSQL with Drizzle ORM for chat/interaction persistence
 - **Security**: Production-ready guardrails with dual LLM pattern and taint analysis
 - **Build System**: TypeScript with separate tsconfig per workspace
 - **Code Quality**: Biome for linting and formatting
@@ -76,21 +76,20 @@ Archestra Platform is an enterprise Model Context Protocol (MCP) platform built 
 ```
 platform/
 ├── backend/           # Fastify REST API server with integrated guardrails
-│   ├── prisma.config.ts         # Prisma configuration
+│   ├── drizzle.config.ts        # Drizzle configuration
 │   └── src/
 │       ├── config.ts            # Application configuration
 │       ├── server.ts            # Main Fastify server (port 9000)
 │       ├── types.ts             # TypeScript type definitions
 │       ├── database/            # Database layer
-│       │   ├── migrations/      # Prisma migrations
-│       │   ├── generated/       # Prisma client output
-│       │   └── schema.prisma    # Database schema
+│       │   ├── migrations/      # Drizzle migrations
+│       │   └── schema.ts        # Database schema
 │       ├── guardrails/          # Security guardrails (production-ready)
 │       │   ├── dual-llm.ts      # Dual LLM pattern for prompt injection detection
 │       │   ├── tool-invocation.ts  # Tool invocation policies
 │       │   └── trusted-data.ts     # Taint analysis
 │       ├── models/              # Data models
-│       │   ├── chat.ts          # Chat model with Prisma
+│       │   ├── chat.ts          # Chat model
 │       │   └── interaction.ts   # Interaction model
 │       ├── providers/           # LLM provider abstraction
 │       │   ├── factory.ts       # Provider factory pattern
@@ -125,6 +124,7 @@ Tilt automatically manages dependencies and ensures services start in the correc
 The production backend provides:
 
 #### REST API Endpoints
+
 - **Chat Management**:
   - `POST /api/chats` - Create new chat session
   - `GET /api/chats/:chatId` - Get chat with all interactions
@@ -134,13 +134,16 @@ The production backend provides:
   - Supports streaming responses for real-time AI interactions
 
 #### Security Features (Production-Ready)
+
 The backend integrates advanced security guardrails:
+
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
-- **Tool Invocation Policies**: Fine-grained control over tool usage  
+- **Tool Invocation Policies**: Fine-grained control over tool usage
 - **Taint Analysis**: Tracks untrusted data through the system
 - **Database Persistence**: All chats and interactions stored in PostgreSQL
 
 #### Database Schema
+
 - **Chat**: Stores chat sessions with timestamps
 - **Interaction**: Stores messages with taint status and reasoning
 - Supports taint tracking for security analysis
@@ -150,6 +153,7 @@ The backend integrates advanced security guardrails:
 The `experiments/` workspace contains prototype features:
 
 #### OpenAI Proxy Server
+
 - Development proxy for intercepting and logging LLM API calls
 - Located in `src/main.ts`
 - Runs on port 9000 (same as backend, so run one at a time)
@@ -157,12 +161,14 @@ The `experiments/` workspace contains prototype features:
 - Logs all requests/responses for debugging
 
 #### CLI Testing
+
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
 - Requires `OPENAI_API_KEY` in `.env` (copy from `.env.example`)
 
 ### Code Quality Tools
 
 **Biome** (v2.2.0) is configured at the root level with:
+
 - 2-space indentation
 - Automatic import organization on save
 - Recommended rules for React and Next.js

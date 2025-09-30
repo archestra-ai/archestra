@@ -9,10 +9,29 @@
       "cache": false
     },
     "lint": {
-      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "lint:fix": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "check:ci": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },
     "type-check": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+    },
+    "codegen:api-client": {
+      "cache": false
+    },
+    "db:generate": {
+      "inputs": ["backend/src/database/**/*.ts"]
+    },
+    "db:migrate": {
+      "inputs": ["backend/src/database/**/*.ts"]
+    },
+    "db:studio": {
+      "persistent": true,
+      "cache": false
     }
   }
 }

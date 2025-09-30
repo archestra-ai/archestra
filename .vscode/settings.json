@@ -17,5 +17,6 @@
   },
   "search.exclude": {
     "**/routeTree.gen.ts": true
-  }
+  },
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true
 }

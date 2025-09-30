@@ -1,3 +1,0 @@
-# Keep the generated Prisma Client + query engine out of version control
-# https://www.prisma.io/docs/orm/prisma-schema/overview/generators#3-exclude-the-generated-directory-from-version-control
-src/database/generated

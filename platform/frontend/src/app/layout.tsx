@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Lato } from "next/font/google";
+
+import { ColorModeToggle } from "@/components/color-mode-toggle";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "./_parts/sidebar";
+import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const mainFont = Lato({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["300", "400", "700", "900"],
+  variable: "--font-saira",
 });
 
 export const metadata: Metadata = {
@@ -23,11 +24,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${mainFont.className} antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SidebarProvider>
+            <AppSidebar />
+            <main>
+              <SidebarTrigger className="cursor-pointer" />
+              <div className="absolute top-2 right-2">
+                <ColorModeToggle />
+              </div>
+              {children}
+            </main>
+          </SidebarProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

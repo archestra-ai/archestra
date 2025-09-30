@@ -7,19 +7,34 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "tsc",
-    "start": "node/main.js start",
-    "dev": "nodemon --exec \"tsc && node dist/main.js\" --watch src --ext ts",
+    "start": "node dist/src/server.js",
+    "dev": "nodemon --exec \"tsc && node dist/src/server.js\" --watch src --ext ts",
     "lint": "biome check --write",
     "format": "biome format --write",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
-    "fastify": "^5.6.1"
+    "@prisma/client": "^6.16.2",
+    "ai": "^5.0.57",
+    "dotenv": "^17.2.2",
+    "fastify": "^5.6.1",
+    "fastify-type-provider-zod": "^6.0.0",
+    "lodash": "^4.17.21",
+    "openai": "^5.23.1",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.20",
     "@types/node": "^20.0.0",
+    "@types/uuid": "^11.0.0",
     "nodemon": "^3.1.10",
     "pino-pretty": "^13.1.1",
+    "prisma": "^6.16.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.0"
   }

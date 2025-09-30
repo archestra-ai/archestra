@@ -1,24 +1,63 @@
+allow_k8s_contexts(['orbstack', 'docker-desktop'])
+
+load('ext://helm_remote', 'helm_remote')
+
+# PostgreSQL database for local development
+# https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
+helm_remote(
+  'postgresql',
+  repo_url='https://charts.bitnami.com/bitnami',
+  set=[
+    'auth.database=archestra_dev',
+    'auth.username=archestra',
+    'auth.password=archestra_dev_password',
+
+    # Bitnami is archiving their image.. see this github comment for details
+    # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
+    # https://github.com/bitnami/containers/issues/83267
+    'image.repository=bitnamisecure/postgresql',
+    'image.tag=latest',
+    'global.security.allowInsecureImages=true'
+  ]
+)
+
+k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
+
 # pre
 local_resource(
-    'pnpm-install',
-    cmd='pnpm install',
-    deps=['./frontend/package.json', './backend/package.json'],
-    labels=['pre']
+  'pnpm-install',
+  cmd='pnpm install',
+  deps=['./frontend/package.json', './backend/package.json'],
+  labels=['pre']
+)
+
+local_resource(
+  'prisma-migrate',
+  # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
+  cmd='cd backend && pnpm db:migrate',
+  deps=['./backend/src/prisma/schema.prisma'],
+  resource_deps=['pnpm-install', 'postgresql'],
+  labels=['pre']
 )
 
 # dev
 local_resource(
-    'pnpm dev',
-    serve_cmd='pnpm dev',
-    labels=['dev'],
-    resource_deps=['pnpm-install']
+  'pnpm dev',
+  serve_cmd='pnpm dev',
+  labels=['dev'],
+  resource_deps=['pnpm-install', 'prisma-migrate']
 )
 
 local_resource(
-    'linting',
-    cmd='pnpm type-check && pnpm lint',
-    labels=['dev'],
-    resource_deps=['pnpm-install']
+  'prisma-studio',
+  serve_cmd='cd backend && pnpm db:studio',
+  labels=['dev'],
+  resource_deps=['prisma-migrate']
 )
 
-#DB TBD
+local_resource(
+  'linting',
+  cmd='pnpm type-check && pnpm lint',
+  labels=['dev'],
+  resource_deps=['pnpm-install']
+)

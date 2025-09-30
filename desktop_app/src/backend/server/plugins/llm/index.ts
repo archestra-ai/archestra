@@ -48,7 +48,14 @@ const createModelInstance = async (model: string, provider?: string) => {
 
   const clientFactories = {
     anthropic: () => createAnthropic({ apiKey, baseURL: baseUrl }),
-    openai: () => createOpenAI({ apiKey, baseURL: baseUrl, headers }),
+    openai: () =>
+      createOpenAI({
+        apiKey,
+        baseURL: baseUrl,
+        // uncomment out the following line if you want to use the proxy server
+        // baseURL: 'http://localhost:9000/v1',
+        headers,
+      }),
     deepseek: () => createDeepSeek({ apiKey, baseURL: baseUrl || 'https://api.deepseek.com/v1' }),
     gemini: () => createGoogleGenerativeAI({ apiKey, baseURL: baseUrl }),
     archestra: () =>
@@ -60,7 +67,14 @@ const createModelInstance = async (model: string, provider?: string) => {
     ollama: () => createOllama({ baseURL: baseUrl }),
   };
 
-  const createClient = clientFactories[type] || (() => createOpenAI({ apiKey, baseURL: baseUrl, headers }));
+  const createClient =
+    clientFactories[type] ||
+    (() =>
+      createOpenAI({
+        apiKey,
+        baseURL: baseUrl, // 'http://localhost:9000/v1', // Use proxy server
+        headers,
+      }));
   const client = createClient();
 
   // For archestra models, extract the actual model name after the slash

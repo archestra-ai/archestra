@@ -62,5 +62,6 @@ export type TaintedInteractionData = {
   toolName: string;
   isTainted: boolean;
   taintReason: string | null;
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   output: any;
 };

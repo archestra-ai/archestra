@@ -11,7 +11,7 @@ class ChatModel {
     return chat;
   }
 
-  static async findAll() {
+  static async findAll(): Promise<ChatWithInteractions[]> {
     const chats = await db
       .select()
       .from(chatsTable)
@@ -38,7 +38,7 @@ class ChatModel {
     return Array.from(chatMap.values());
   }
 
-  static async findById(id: string) {
+  static async findById(id: string): Promise<ChatWithInteractions | null> {
     const rows = await db
       .select()
       .from(chatsTable)
@@ -52,7 +52,7 @@ class ChatModel {
     const chat = rows[0].chats;
     const interactions = rows
       .filter((row) => row.interactions !== null)
-      .map((row) => row.interactions);
+      .map((row) => row.interactions!);
 
     return {
       ...chat,

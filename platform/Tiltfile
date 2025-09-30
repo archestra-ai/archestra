@@ -28,9 +28,6 @@ dotenv(
   './.env'
 )
 
-print('AAAAAAAAA')
-print(os.getenv('DATABASE_URL'))
-
 # pre
 local_resource(
   'pnpm-install',
@@ -42,7 +39,7 @@ local_resource(
 local_resource(
   'prisma-migrate',
   # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
-  cmd='DATABASE_URL=$DATABASE_URL pnpm db:migrate',
+  cmd='pnpm db:migrate',
   deps=['./backend/src/prisma/schema.prisma'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']

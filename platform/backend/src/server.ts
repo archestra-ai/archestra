@@ -7,8 +7,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import config from "./config";
 import chatRoutes from "./routes/chat";
-import llmProviderProxyRoutes from "./routes/proxy";
+import openAiProxyRoutes from "./routes/proxy/openai";
+
+const {
+  api: { port, name, version, host },
+} = config;
 
 const fastify = Fastify({
   logger: {
@@ -27,7 +32,6 @@ const fastify = Fastify({
 fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
 
-// Run the server!
 const start = async () => {
   try {
     /**
@@ -41,8 +45,8 @@ const start = async () => {
       openapi: {
         openapi: "3.0.0",
         info: {
-          title: "Archestra API",
-          version: "0.0.1", // x-release-please-version
+          title: name,
+          version,
         },
       },
       /**
@@ -58,15 +62,15 @@ const start = async () => {
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
     fastify.get("/health", async () => ({
-      status: "Archestra Backend API",
-      version: "0.0.1",
+      status: name,
+      version,
     }));
 
     fastify.register(chatRoutes);
-    fastify.register(llmProviderProxyRoutes);
+    fastify.register(openAiProxyRoutes);
 
-    await fastify.listen({ port: 9000, host: "0.0.0.0" });
-    fastify.log.info("Archestra Backend API started on port 9000");
+    await fastify.listen({ port, host });
+    fastify.log.info(`${name} started on port ${port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

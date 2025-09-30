@@ -1,67 +1,36 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import OpenAI from "openai";
 import { z } from "zod";
-import config from "../config";
-import ToolInvocationPolicyEvaluator from "../guardrails/tool-invocation";
-import TrustedDataPolicyEvaluator from "../guardrails/trusted-data";
-import ChatModel from "../models/chat";
-import InteractionModel from "../models/interaction";
-import { createProvider, SupportedProvidersSchema } from "../providers/factory";
-import { ErrorResponseSchema } from "./schemas";
+import config from "../../../config";
+import ToolInvocationPolicyEvaluator from "../../../guardrails/tool-invocation";
+import TrustedDataPolicyEvaluator from "../../../guardrails/trusted-data";
+import ChatModel from "../../../models/chat";
+import InteractionModel from "../../../models/interaction";
+import { ChatIdSchema, ErrorResponseSchema } from "../../schemas";
+import {
+  ChatCompletionRequestSchema,
+  ChatCompletionResponseSchema,
+  ModelsResponseSchema,
+  OpenAiApiKeySchema,
+} from "./schemas";
 
-const {
-  trustedDataAutonomyPolicies,
-  toolInvocationAutonomyPolicies,
-  openAi: { apiKey: openAiApiKey },
-} = config;
-
-type InteractionContent = {
-  role: string;
-  tool_calls: {
-    id: string;
-    function: {
-      name: string;
-    };
-  }[];
-};
-
-// Register Zod schemas for OpenAPI
-const ChatCompletionRequestSchema = z.object({
-  model: z.string(),
-  messages: z.array(z.any()), // OpenAI message format
-  tools: z.array(z.any()).optional(),
-  tool_choice: z.any().optional(),
-  temperature: z.number().optional(),
-  max_tokens: z.number().optional(),
-  stream: z.boolean().optional(),
-});
-
-const ChatCompletionResponseSchema = z.object({
-  id: z.string(),
-  object: z.string(),
-  created: z.number(),
-  model: z.string(),
-  choices: z.array(z.any()),
-  usage: z.any().optional(),
-});
-
-const ModelsResponseSchema = z.object({
-  data: z.array(z.any()),
-});
+const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies } = config;
 
 /**
  * Extract tool name from conversation history by finding the assistant message
  * that contains the tool_call_id
+ *
+ * TODO: we probably don't need this.. to verify
  */
-async function extractToolNameFromHistory(
+const extractToolNameFromHistory = async (
   chatId: string,
   toolCallId: string,
-): Promise<string | null> {
+): Promise<string | null> => {
   const interactions = await InteractionModel.findByChatId(chatId);
 
   // Find the most recent assistant message with tool_calls
   for (let i = interactions.length - 1; i >= 0; i--) {
-    const interaction = interactions[i];
-    const content = interaction.content as InteractionContent;
+    const { content } = interactions[i];
 
     if (content.role === "assistant" && content.tool_calls) {
       for (const toolCall of content.tool_calls) {
@@ -73,22 +42,20 @@ async function extractToolNameFromHistory(
   }
 
   return null;
-}
+};
 
-const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
-    "/v1/:provider/chat/completions",
+    "/api/proxy/openai/chat/completions",
     {
       schema: {
-        operationId: "chatCompletions",
-        description: "Create a chat completion with the specified LLM provider",
-        tags: ["LLM"],
-        params: z.object({
-          provider: SupportedProvidersSchema,
-        }),
+        operationId: "openAiChatCompletions",
+        description: "Create a chat completion with OpenAI",
+        tags: ["llm-proxy"],
         body: ChatCompletionRequestSchema,
         headers: z.object({
-          "x-archestra-chat-id": z.string().uuid(),
+          "x-archestra-chat-id": ChatIdSchema,
+          authorization: OpenAiApiKeySchema,
         }),
         response: {
           200: ChatCompletionResponseSchema,
@@ -101,15 +68,13 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        params: { provider },
         body: { ...requestBody },
-        headers: { "x-archestra-chat-id": chatId },
+        headers: { "x-archestra-chat-id": chatId, authorization: openAiApiKey },
       },
       reply,
     ) => {
       // Validate chat exists
-      const chat = await ChatModel.findById(chatId);
-      if (!chat) {
+      if (!(await ChatModel.findById(chatId))) {
         return reply.status(404).send({
           error: {
             message: "Chat not found",
@@ -118,21 +83,20 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      try {
-        const llmProvider = createProvider(provider, openAiApiKey);
+      const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
+      try {
         // Process incoming tool result messages and evaluate trusted data policies
         for (const message of requestBody.messages) {
-          // biome-ignore lint/suspicious/noExplicitAny: tbd later
-          if ((message as any).role === "tool") {
-            // biome-ignore lint/suspicious/noExplicitAny: tbd later
-            const toolMessage = message as any;
-            const toolResult = JSON.parse(toolMessage.content);
+          if (message.role === "tool") {
+            const { tool_call_id: toolCallId, content } = message;
+            const toolResult =
+              typeof content === "string" ? JSON.parse(content) : content;
 
             // Extract tool name from conversation history
             const toolName = await extractToolNameFromHistory(
               chatId,
-              toolMessage.tool_call_id,
+              toolCallId,
             );
 
             if (toolName) {
@@ -140,7 +104,7 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               const evaluator = new TrustedDataPolicyEvaluator(
                 {
                   toolName,
-                  toolCallId: toolMessage.tool_call_id,
+                  toolCallId,
                   output: toolResult,
                 },
                 trustedDataAutonomyPolicies,
@@ -151,7 +115,8 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Store tool result as interaction (tainted if not trusted)
               await InteractionModel.create({
                 chatId,
-                content: toolMessage,
+                // biome-ignore lint/suspicious/noExplicitAny: tbd later
+                content: message as any,
                 tainted: !isTrusted,
                 taintReason: trustReason,
               });
@@ -162,11 +127,12 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the user message
         const lastMessage =
           requestBody.messages[requestBody.messages.length - 1];
-        // biome-ignore lint/suspicious/noExplicitAny: tbd later
-        if ((lastMessage as any).role === "user") {
+
+        if (lastMessage.role === "user") {
           await InteractionModel.create({
             chatId,
-            content: lastMessage,
+            // biome-ignore lint/suspicious/noExplicitAny: tbd later
+            content: lastMessage as any,
           });
         }
 
@@ -176,9 +142,14 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reply.header("Cache-Control", "no-cache");
           reply.header("Connection", "keep-alive");
 
-          for await (const chunk of llmProvider.chatCompletionStream(
-            requestBody,
-          )) {
+          const stream = await openAiClient.chat.completions.create({
+            // biome-ignore lint/suspicious/noExplicitAny: tbd later
+            ...(requestBody as any),
+            stream: true,
+          });
+
+          // biome-ignore lint/suspicious/noExplicitAny: tbd later
+          for await (const chunk of stream as any) {
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
 
@@ -188,7 +159,11 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Handle non-streaming response
-        const response = await llmProvider.chatCompletion(requestBody);
+        const response = await openAiClient.chat.completions.create({
+          // biome-ignore lint/suspicious/noExplicitAny: tbd later
+          ...(requestBody as any),
+          stream: false,
+        });
 
         const assistantMessage = response.choices[0].message;
 
@@ -199,19 +174,23 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           for (const toolCall of assistantMessage.tool_calls) {
             // Only process function tool calls (not custom tool calls)
-            if (toolCall.type === "function" && "function" in toolCall) {
-              const toolInput = JSON.parse(toolCall.function.arguments);
+            if (toolCall.type === "function") {
+              const {
+                id: toolCallId,
+                function: { arguments: toolCallArgs, name: toolCallName },
+              } = toolCall;
+              const toolInput = JSON.parse(toolCallArgs);
 
               fastify.log.info(
                 `Evaluating tool call: ${
-                  toolCall.function.name
+                  toolCallName
                 } with input: ${JSON.stringify(toolInput)}`,
               );
 
               const evaluator = new ToolInvocationPolicyEvaluator(
                 {
-                  toolName: toolCall.function.name,
-                  toolCallId: toolCall.id,
+                  toolName: toolCallName,
+                  toolCallId,
                   input: toolInput,
                 },
                 toolInvocationAutonomyPolicies,
@@ -243,7 +222,8 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           content: assistantMessage as any,
         });
 
-        return reply.send(response);
+        // biome-ignore lint/suspicious/noExplicitAny: tbd later
+        return reply.send(response as any);
       } catch (error) {
         fastify.log.error(error);
         const statusCode =
@@ -264,28 +244,27 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/v1/:provider/models",
+    "/api/proxy/openai/models",
     {
       schema: {
-        operationId: "listProviderModels",
-        description: "List available models for the specified provider",
-        tags: ["LLM"],
-        params: z.object({
-          provider: SupportedProvidersSchema,
+        operationId: "listOpenAiModels",
+        description: "List available models for OpenAI",
+        tags: ["llm-proxy"],
+        headers: z.object({
+          authorization: OpenAiApiKeySchema,
         }),
         response: {
-          200: ModelsResponseSchema,
+          200: z.array(ModelsResponseSchema),
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { provider } }, reply) => {
+    async ({ headers: { authorization: openAiApiKey } }, reply) => {
       try {
-        const llmProvider = createProvider(provider, openAiApiKey);
-        const models = await llmProvider.listModels();
-
-        return reply.send({ data: models });
+        const openAiClient = new OpenAI({ apiKey: openAiApiKey });
+        const models = await openAiClient.models.list();
+        return reply.send(models.data);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -300,4 +279,4 @@ const llmProviderProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default llmProviderProxyRoutes;
+export default openAiProxyRoutes;

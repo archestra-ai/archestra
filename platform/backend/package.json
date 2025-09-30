@@ -26,7 +26,7 @@
     "fastify": "^5.6.1",
     "fastify-type-provider-zod": "^6.0.0",
     "lodash": "^4.17.21",
-    "openai": "^5.23.1",
+    "openai": "^6.0.0",
     "pg": "^8.16.3",
     "uuid": "^13.0.0",
     "zod": "^4.1.11"

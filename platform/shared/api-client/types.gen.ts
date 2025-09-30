@@ -150,27 +150,36 @@ export type GetChatResponses = {
 
 export type GetChatResponse = GetChatResponses[keyof GetChatResponses];
 
-export type ChatCompletionsData = {
+export type OpenAiChatCompletionsData = {
     body: {
         model: string;
         messages: Array<unknown>;
-        tools?: Array<unknown>;
-        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            function: {
+                name: string;
+                description: string;
+                parameters: unknown;
+            };
+        }>;
+        tool_choice?: 'none' | 'auto' | 'required';
         temperature?: number;
         max_tokens?: number;
         stream?: boolean;
     };
     headers: {
         'x-archestra-chat-id': string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
     };
-    path: {
-        provider: 'openai';
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/chat/completions';
+    url: '/api/proxy/openai/chat/completions';
 };
 
-export type ChatCompletionsErrors = {
+export type OpenAiChatCompletionsErrors = {
     /**
      * Default Response
      */
@@ -209,9 +218,9 @@ export type ChatCompletionsErrors = {
     };
 };
 
-export type ChatCompletionsError = ChatCompletionsErrors[keyof ChatCompletionsErrors];
+export type OpenAiChatCompletionsError = OpenAiChatCompletionsErrors[keyof OpenAiChatCompletionsErrors];
 
-export type ChatCompletionsResponses = {
+export type OpenAiChatCompletionsResponses = {
     /**
      * Default Response
      */
@@ -225,18 +234,22 @@ export type ChatCompletionsResponses = {
     };
 };
 
-export type ChatCompletionsResponse = ChatCompletionsResponses[keyof ChatCompletionsResponses];
+export type OpenAiChatCompletionsResponse = OpenAiChatCompletionsResponses[keyof OpenAiChatCompletionsResponses];
 
-export type ListProviderModelsData = {
+export type ListOpenAiModelsData = {
     body?: never;
-    path: {
-        provider: 'openai';
+    headers: {
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
     };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/models';
+    url: '/api/proxy/openai/models';
 };
 
-export type ListProviderModelsErrors = {
+export type ListOpenAiModelsErrors = {
     /**
      * Default Response
      */
@@ -257,15 +270,30 @@ export type ListProviderModelsErrors = {
     };
 };
 
-export type ListProviderModelsError = ListProviderModelsErrors[keyof ListProviderModelsErrors];
+export type ListOpenAiModelsError = ListOpenAiModelsErrors[keyof ListOpenAiModelsErrors];
 
-export type ListProviderModelsResponses = {
+export type ListOpenAiModelsResponses = {
     /**
      * Default Response
      */
-    200: {
-        data: Array<unknown>;
-    };
+    200: Array<{
+        /**
+         * The model identifier, which can be referenced in the API endpoints
+         */
+        id: string;
+        /**
+         * The Unix timestamp (in seconds) when the model was created.
+         */
+        created: number;
+        /**
+         * The object type, which is always 'model'
+         */
+        object: 'model';
+        /**
+         * The organization that owns the model
+         */
+        owned_by: string;
+    }>;
 };
 
-export type ListProviderModelsResponse = ListProviderModelsResponses[keyof ListProviderModelsResponses];
+export type ListOpenAiModelsResponse = ListOpenAiModelsResponses[keyof ListOpenAiModelsResponses];

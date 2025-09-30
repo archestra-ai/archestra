@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChatCompletionsData, ChatCompletionsErrors, ChatCompletionsResponses, CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, ListProviderModelsData, ListProviderModelsErrors, ListProviderModelsResponses } from './types.gen';
+import type { CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, ListOpenAiModelsData, ListOpenAiModelsErrors, ListOpenAiModelsResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -63,11 +63,11 @@ export const getChat = <ThrowOnError extends boolean = false>(options: Options<G
 };
 
 /**
- * Create a chat completion with the specified LLM provider
+ * Create a chat completion with OpenAI
  */
-export const chatCompletions = <ThrowOnError extends boolean = false>(options: Options<ChatCompletionsData, ThrowOnError>) => {
-    return (options.client ?? client).post<ChatCompletionsResponses, ChatCompletionsErrors, ThrowOnError>({
-        url: '/v1/{provider}/chat/completions',
+export const openAiChatCompletions = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsData, ThrowOnError>) => {
+    return (options.client ?? client).post<OpenAiChatCompletionsResponses, OpenAiChatCompletionsErrors, ThrowOnError>({
+        url: '/api/proxy/openai/chat/completions',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -77,11 +77,11 @@ export const chatCompletions = <ThrowOnError extends boolean = false>(options: O
 };
 
 /**
- * List available models for the specified provider
+ * List available models for OpenAI
  */
-export const listProviderModels = <ThrowOnError extends boolean = false>(options: Options<ListProviderModelsData, ThrowOnError>) => {
-    return (options.client ?? client).get<ListProviderModelsResponses, ListProviderModelsErrors, ThrowOnError>({
-        url: '/v1/{provider}/models',
+export const listOpenAiModels = <ThrowOnError extends boolean = false>(options: Options<ListOpenAiModelsData, ThrowOnError>) => {
+    return (options.client ?? client).get<ListOpenAiModelsResponses, ListOpenAiModelsErrors, ThrowOnError>({
+        url: '/api/proxy/openai/models',
         ...options
     });
 };

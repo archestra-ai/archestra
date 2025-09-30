@@ -1,5 +1,6 @@
 import path from "node:path";
 import dotenv from "dotenv";
+import packageJson from "../package.json";
 
 import type {
   ToolInvocationAutonomyPolicy,
@@ -13,15 +14,16 @@ import type {
  */
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is not set");
-} else if (!process.env.DATABASE_URL) {
+if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
 export default {
-  openAi: {
-    apiKey: process.env.OPENAI_API_KEY,
+  api: {
+    host: "0.0.0.0",
+    port: 9000,
+    name: "Archestra Platform API",
+    version: packageJson.version,
   },
   database: {
     url: process.env.DATABASE_URL,

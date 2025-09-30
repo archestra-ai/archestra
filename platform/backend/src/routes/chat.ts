@@ -6,9 +6,7 @@ import {
   GetChatsResponseSchema,
 } from "../database";
 import ChatModel from "../models/chat";
-import { ErrorResponseSchema } from "./schemas";
-
-const ChatIdSchema = z.string().uuid();
+import { ChatIdSchema, ErrorResponseSchema } from "./schemas";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(

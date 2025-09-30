@@ -14,13 +14,13 @@ import type {
  *
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const BACKEND_URL = "http://localhost:9000";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "dummy-key",
-  baseURL: `${BACKEND_URL}/v1/openai`,
+  baseURL: `${BACKEND_URL}/api/proxy/openai`,
 });
 
 /**

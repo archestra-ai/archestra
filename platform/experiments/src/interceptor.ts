@@ -1,6 +1,6 @@
 // inspired by https://github.com/badlogic/lemmy/blob/main/apps/claude-trace/src/interceptor.ts
 
-import type { IncomingMessage, request } from "http";
+import type { IncomingMessage, request } from "node:http";
 import { logger } from "./logger";
 
 export interface ArchestraConfig {
@@ -8,7 +8,7 @@ export interface ArchestraConfig {
 }
 
 export class Archestra {
-  constructor(private readonly config: ArchestraConfig) {
+  constructor() {
     this.instrumentAll();
   }
 
@@ -47,70 +47,66 @@ export class Archestra {
         "blue",
       );
 
-      try {
-        // Make the actual request
-        const response = await originalFetch(input, init);
+      // Make the actual request
+      const response = await originalFetch(input, init);
 
-        // Check if this is a streaming response
-        const contentType = response.headers.get("content-type") || "";
-        const isStreaming =
-          contentType.includes("text/event-stream") ||
-          contentType.includes("application/x-ndjson") ||
-          contentType.includes("text/plain") ||
-          response.headers.get("transfer-encoding") === "chunked";
+      // Check if this is a streaming response
+      const contentType = response.headers.get("content-type") || "";
+      const isStreaming =
+        contentType.includes("text/event-stream") ||
+        contentType.includes("application/x-ndjson") ||
+        contentType.includes("text/plain") ||
+        response.headers.get("transfer-encoding") === "chunked";
 
-        if (isStreaming && response.body) {
-          // For streaming responses, intercept the stream
-          const reader = response.body.getReader();
-          const stream = new ReadableStream({
-            start(controller) {
-              function pump(): Promise<void> {
-                return reader.read().then(({ done, value }) => {
-                  if (done) {
-                    controller.close();
-                    return;
-                  }
+      if (isStreaming && response.body) {
+        // For streaming responses, intercept the stream
+        const reader = response.body.getReader();
+        const stream = new ReadableStream({
+          start(controller) {
+            function pump(): Promise<void> {
+              return reader.read().then(({ done, value }) => {
+                if (done) {
+                  controller.close();
+                  return;
+                }
 
-                  // Log each chunk as it arrives
-                  const chunk = new TextDecoder().decode(value);
-                  logger.info(
-                    `Streaming Response Chunk - ${init.method} ${url} - ${response.status}: ${chunk}`,
-                    "yellow",
-                  );
+                // Log each chunk as it arrives
+                const chunk = new TextDecoder().decode(value);
+                logger.info(
+                  `Streaming Response Chunk - ${init.method} ${url} - ${response.status}: ${chunk}`,
+                  "yellow",
+                );
 
-                  controller.enqueue(value);
-                  return pump();
-                });
-              }
-              return pump();
-            },
-          });
+                controller.enqueue(value);
+                return pump();
+              });
+            }
+            return pump();
+          },
+        });
 
-          // Return a new response with the intercepted stream
-          return new Response(stream, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: response.headers,
-          });
-        } else {
-          // For non-streaming responses, use the original approach
-          const clonedResponse = await response.clone();
-          const responseBodyData = await parseResponseBody(clonedResponse);
+        // Return a new response with the intercepted stream
+        return new Response(stream, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      } else {
+        // For non-streaming responses, use the original approach
+        const clonedResponse = await response.clone();
+        const responseBodyData = await parseResponseBody(clonedResponse);
 
-          logger.info(
-            `Response Fetch - ${init.method} ${url} - ${response.status} ${
-              response.statusText
-            } - ${JSON.stringify(
-              responseBodyData.body || responseBodyData.body_raw,
-            )}`,
-            "yellow",
-          );
-        }
-
-        return response;
-      } catch (error) {
-        throw error;
+        logger.info(
+          `Response Fetch - ${init.method} ${url} - ${response.status} ${
+            response.statusText
+          } - ${JSON.stringify(
+            responseBodyData.body || responseBodyData.body_raw,
+          )}`,
+          "yellow",
+        );
       }
+
+      return response;
     };
 
     // Mark fetch as instrumented
@@ -121,8 +117,8 @@ export class Archestra {
 
   public instrumentNodeHTTP(): void {
     try {
-      const http = require("http");
-      const https = require("https");
+      const http = require("node:http");
+      const https = require("node:https");
 
       // Instrument http.request
       if (http.request && !(http.request as any).__archestraTraceInstrumented) {
@@ -158,32 +154,10 @@ export class Archestra {
           interceptNodeRequest(originalHttpsGet, options, callback, true);
         (https.get as any).__archestraTraceInstrumented = true;
       }
-    } catch (error) {
+    } catch (_error) {
       // Silent error handling
     }
   }
-}
-
-async function parseRequestBody(body: any): Promise<any> {
-  if (!body) return null;
-
-  if (typeof body === "string") {
-    try {
-      return JSON.parse(body);
-    } catch {
-      return body;
-    }
-  }
-
-  if (body instanceof FormData) {
-    const formObject: Record<string, any> = {};
-    for (const [key, value] of body.entries()) {
-      formObject[key] = value;
-    }
-    return formObject;
-  }
-
-  return body;
 }
 
 async function parseResponseBody(
@@ -206,7 +180,7 @@ async function parseResponseBody(
       const body_raw = await response.text();
       return { body_raw };
     }
-  } catch (error) {
+  } catch (_error) {
     // Silent error handling during runtime
     return {};
   }
@@ -223,23 +197,6 @@ function parseNodeRequestURL(options: any, isHttps: boolean): string {
   const path = options.path || "/";
 
   return `${protocol}//${hostname}${port}${path}`;
-}
-
-function parseResponseBodyFromString(
-  body: string,
-  contentType?: string,
-): { body?: any; body_raw?: string } {
-  try {
-    if (contentType && contentType.includes("application/json")) {
-      return { body: JSON.parse(body) };
-    } else if (contentType && contentType.includes("text/event-stream")) {
-      return { body_raw: body };
-    } else {
-      return { body_raw: body };
-    }
-  } catch (error) {
-    return { body_raw: body };
-  }
 }
 
 function interceptNodeRequest(

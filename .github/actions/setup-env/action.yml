@@ -1,5 +1,10 @@
 name: Setup node/pnpm + install dependencies
 description: Setup node/pnpm + install dependencies
+inputs:
+  working-directory:
+    description: The working directory to install dependencies in
+    required: true
+    default: desktop_app
 runs:
   using: composite
   steps:
@@ -15,15 +20,16 @@ runs:
         # https://www.electronjs.org/docs/latest/tutorial/electron-timelines
         node-version: "22.16.0"
         cache: "pnpm"
-        cache-dependency-path: desktop_app/pnpm-lock.yaml
+        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
 
     - name: Install dependencies
       shell: bash
-      working-directory: desktop_app
+      working-directory: ${{ inputs.working-directory }}
       run: pnpm install --frozen-lockfile --prefer-offline
 
     # This step is crucial for ensuring native modules are compiled against the correct Electron version.
     - name: Rebuild Electron native modules
       shell: bash
-      working-directory: desktop_app
+      working-directory: ${{ inputs.working-directory }}
+      if: ${{ inputs.working-directory == 'desktop_app' }}
       run: pnpm electron-rebuild --force

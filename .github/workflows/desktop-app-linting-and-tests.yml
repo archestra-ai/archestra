@@ -1,4 +1,4 @@
-name: Linting and Tests
+name: Desktop App Linting and Tests
 
 on:
   workflow_call:

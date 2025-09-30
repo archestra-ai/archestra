@@ -1,10 +1,5 @@
 # Experiments
 
-## Getting started
-
-1. `pnpm install`
-2. `cp .env.example .env` + add necessary environment variables (right now just `OPENAI_KEY`)
-
 ## Proxy Server
 
 1. `pnpm proxy:dev`
@@ -17,4 +12,10 @@ Try asking the model what tools it has access to, for example ask it to read you
 
 ```bash
 $ pnpm cli-chat-with-guardrails --help
+
+Options:
+--include-external-email - Include external email in mock Gmail data
+--include-malicious-email - Include malicious email in mock Gmail data
+--debug - Print debug messages
+--help - Print this help message
 ```

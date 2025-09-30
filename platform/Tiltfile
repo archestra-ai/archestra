@@ -3,7 +3,12 @@ allow_k8s_contexts(['orbstack', 'docker-desktop'])
 load('ext://helm_remote', 'helm_remote')
 load('ext://dotenv', 'dotenv')
 
-dotenv()
+# Check if .env exists, if not copy from .env.example
+if not os.path.exists('.env'):
+  local('cp .env.example .env')
+  print("📝 Created .env from .env.example, be sure to fill in any necessary unique values (ex. API keys)")
+else:
+  print("📝 .env already exists, skipping copy from .env.example")
 
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
@@ -26,6 +31,10 @@ helm_remote(
 
 k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 
+dotenv(
+  './.env'
+)
+
 # pre
 local_resource(
   'pnpm-install',
@@ -35,10 +44,12 @@ local_resource(
 )
 
 local_resource(
-  'prisma-migrate',
-  # https://www.prisma.io/docs/orm/reference/prisma-cli-reference#migrate-dev
+  'db-migrate',
+  # NOTE: we need to cd into the backend directory to run the migrate command
+  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
+  # propogate the required environment variables (ie. DATABASE_URL)
   cmd='cd backend && pnpm db:migrate',
-  deps=['./backend/src/prisma/schema.prisma'],
+  deps=['./backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
 )
@@ -47,24 +58,29 @@ local_resource(
 local_resource(
   'pnpm dev',
   serve_cmd='pnpm dev',
-  serve_env={
-    'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY', ''),
-    'DATABASE_URL': 'postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public'
-  },
   labels=['dev'],
-  resource_deps=['pnpm-install', 'prisma-migrate']
+  resource_deps=['db-migrate']
 )
 
 local_resource(
-  'prisma-studio',
+  'database-gui',
+  # NOTE: we need to cd into the backend directory to run the migrate command
+  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
+  # propogate the required environment variables (ie. DATABASE_URL)
   serve_cmd='cd backend && pnpm db:studio',
   labels=['dev'],
-  resource_deps=['prisma-migrate']
+  resource_deps=['db-migrate']
 )
 
 local_resource(
-  'linting',
-  cmd='pnpm type-check && pnpm lint',
+  'lint:fix',
+  cmd='pnpm type-check && pnpm lint:fix',
   labels=['dev'],
-  resource_deps=['pnpm-install']
+  resource_deps=['pnpm-install'],
+  deps=[
+    "./frontend/src",
+    "./backend/src",
+    "./experiments/src",
+    "./biome.json"
+  ]
 )

@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from "ai";
-import { chatModel } from "../models/chat";
+import InteractionModel from "../models/interaction";
 import type {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
@@ -187,6 +187,7 @@ class DualLLMController {
   }
 
   // Create a safe preview that can't contain injections
+  // biome-ignore lint/suspicious/noExplicitAny: tbd later
   private createSafePreview(content: any): string {
     if (!content) return "[empty]";
 
@@ -215,15 +216,18 @@ class DualLLMEvaluator
   }
 
   async evaluate(): Promise<DynamicAutonomyPolicyEvaluatorResult> {
-    const taintedInteractions = await chatModel.getTaintedInteractions(
+    const taintedInteractions = await InteractionModel.findTaintedByChatId(
       this.chatId,
     );
 
     const taintedContent = taintedInteractions.map((i) => ({
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       toolCallId: (i.content as any).toolCallId || "",
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       toolName: (i.content as any).toolName || "",
       isTainted: i.tainted,
       taintReason: i.taintReason,
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       output: (i.content as any).output,
     }));
 
@@ -278,9 +282,10 @@ class DualLLMEvaluator
 
   private async extractUserRequest(): Promise<string> {
     // Find the most recent user message in interactions
-    const interactions = await chatModel.getInteractions(this.chatId);
+    const interactions = await InteractionModel.findByChatId(this.chatId);
 
     for (const interaction of interactions.reverse()) {
+      // biome-ignore lint/suspicious/noExplicitAny: tbd later
       const content = interaction.content as any;
       if (content.role === "user" && typeof content.content === "string") {
         return content.content;

@@ -3,9 +3,6 @@
     "qwtel.sqlite-viewer",
     "esbenp.prettier-vscode",
     "editorconfig.editorconfig",
-    "vitest.explorer",
-    "biomejs.biome",
-    "Prisma.prisma",
-    "Tchoupinax.tilt"
+    "vitest.explorer"
   ]
 }

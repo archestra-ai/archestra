@@ -1,12 +1,4 @@
-# Archestra Desktop, the Most Simple and Safe MCP Client
-
-
-- 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!
-- 🔒 **Sandboxed MCP Runtime** — Isolated sandbox protecting the host from supply chain attacks.
-- 🔌 **Full OSS MCPs Support** — Compatible with thousands of existing MCP servers.
-- 💻 **Local-First Architecture** — Privacy-focused design with local LLM.
-
-![Archestra Screenshot](./docs/assets/screenshot.png)
+# Archestra Platform (alpha)
 
 <div align="center">
 
@@ -24,42 +16,48 @@
   - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Commuity</a>
 </p>
 
+A lightweight pluggable proxy bringing fine-grained guardrails to mitigate the Lethal Trifecta for external and internal agents.
 
-## Overview
+- **Open Source**
+- **Supports MCP, A2A, structured output, custom tool calls**
+- **Guardrails**
+- **Lightweight**
 
-Archestra is a 100% local runtime for MCP (Model Context Protocol) servers and a ChatGPT-like UI allowing non-technical users to build safe and private agents with powerful data access.
+![Trifecta](/docs/assets/trifecta.png)
 
+The Lethal Trifecta: [Simon Willison](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/), [The Economist](https://www.economist.com/leaders/2025/09/25/how-to-stop-ais-lethal-trifecta)
 
-## Installation
+Examples of hacks:
+[ChatGPT](https://simonwillison.net/2023/Apr/14/new-prompt-injection-attack-on-chatgpt-web-version-markdown-imag/) (April 2023), [ChatGPT Plugins](https://simonwillison.net/2023/May/19/chatgpt-prompt-injection/) (May 2023), [Google Bard](https://simonwillison.net/2023/Nov/4/hacking-google-bard-from-prompt-injection-to-data-exfiltration/) (November 2023), [Writer.com](https://simonwillison.net/2023/Dec/15/writercom-indirect-prompt-injection/) (December 2023), [Amazon Q](https://simonwillison.net/2024/Jan/19/aws-fixes-data-exfiltration/) (January 2024), [Google NotebookLM](https://simonwillison.net/2024/Apr/16/google-notebooklm-data-exfiltration/) (April 2024), [GitHub Copilot Chat](https://simonwillison.net/2024/Jun/16/github-copilot-chat-prompt-injection/) (June 2024), [Google AI Studio](https://simonwillison.net/2024/Aug/7/google-ai-studio-data-exfiltration-demo/) (August 2024), [Microsoft Copilot](https://simonwillison.net/2024/Aug/14/living-off-microsoft-copilot/) (August 2024), [Slack](https://simonwillison.net/2024/Aug/20/data-exfiltration-from-slack-ai/) (August 2024), [Mistral Le Chat](https://simonwillison.net/2024/Oct/22/imprompter/) (October 2024), [xAI's Grok](https://simonwillison.net/2024/Dec/16/security-probllms-in-xais-grok/) (December 2024), [Anthropic's Claude iOS app](https://simonwillison.net/2024/Dec/17/johann-rehberger/) (December 2024), [ChatGPT Operator](https://simonwillison.net/2025/Feb/17/chatgpt-operator-prompt-injection/) (February 2025), [Notion 3.0](https://www.codeintegrity.ai/blog/notion) (September 2025).
 
-Download from [archestra.ai](https://archestra.ai/) or [GitHub Releases](https://github.com/archestra-ai/archestra/releases).
-
-## Build from Source
+## Development
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js** (v18 or higher)
-- **pnpm** (v8 or higher) - Install with `npm install -g pnpm`
-- **Git**
+- Node.js (v18 or higher)
+- pnpm (v8 or higher) - Install with npm install -g pnpm
+- [Tilt](https://docs.tilt.dev/install.html)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/)
+- Local k8s cluster (Docker Desktop with k8s enabled, Kind or Orbstack)
+- [Biome VSCode extension](https://open-vsx.org/extension/biomejs/biome)
+- Git
 
-Clone the Repository
+Run dev environment
 
 ```bash
 git clone https://github.com/archestra-ai/archestra.git
-cd archestra/desktop_app
+cd archestra/platform
+tilt up
 ```
 
-Use pnpm to install all required dependencies:
+# Archestra Desktop, the Most Simple and Safe MCP Client
 
-```bash
-pnpm install
-```
+- 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!
+- 🔒 **Sandboxed MCP Runtime** — Isolated sandbox protecting the host from supply chain attacks.
+- 🔌 **Full OSS MCPs Support** — Compatible with thousands of existing MCP servers.
+- 💻 **Local-First Architecture** — Privacy-focused design with local LLM.
 
-Start Dev Environment
-
-```bash
-pnpm start
-```
+**[Read more about Archestra Desktop](/desktop_app/README.md)**
 
 ## 🤝 Contributing
 
@@ -70,7 +68,6 @@ Thank you for contributing and continuously making <b>Archestra</b> better, <b>y
 <a href="https://github.com/archestra-ai/archestra/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" />
 </a>
-
 
 ---
 

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "persistent": true,
+      "cache": false
+    },
+    "lint": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "lint:fix": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "check:ci": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
+    "type-check": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
+    },
+    "codegen:api-client": {
+      "cache": false
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:migrate": {
+      "inputs": ["backend/src/database/**/*.ts"]
+    },
+    "db:studio": {
+      "persistent": true,
+      "cache": false
+    }
+  }
+}

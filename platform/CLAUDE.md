@@ -86,16 +86,21 @@ platform/
 │       │   └── schema.ts        # Database schema
 │       ├── guardrails/          # Security guardrails (production-ready)
 │       │   ├── dual-llm.ts      # Dual LLM pattern for prompt injection detection
-│       │   ├── tool-invocation.ts  # Tool invocation policies
-│       │   └── trusted-data.ts     # Taint analysis
+│       │   ├── tool-invocation.ts  # Tool invocation policy enforcement
+│       │   └── trusted-data.ts     # Taint analysis and trusted data marking
 │       ├── models/              # Data models
+│       │   ├── agent.ts         # Agent model with CRUD operations
 │       │   ├── chat.ts          # Chat model
-│       │   └── interaction.ts   # Interaction model
+│       │   ├── interaction.ts   # Interaction model
+│       │   ├── tool-invocation-policy.ts  # Tool invocation policy model
+│       │   └── trusted-data-policy.ts     # Trusted data policy model
 │       ├── providers/           # LLM provider abstraction
 │       │   ├── factory.ts       # Provider factory pattern
 │       │   ├── openai.ts        # OpenAI provider implementation
 │       │   └── types.ts         # Provider interfaces
 │       └── routes/              # API routes
+│           ├── agent.ts         # Agent management endpoints
+│           ├── autonomy-policies.ts  # Autonomy policies endpoints
 │           └── chat.ts          # Chat and LLM endpoints
 ├── frontend/          # Next.js web application
 │   └── src/
@@ -132,6 +137,29 @@ The production backend provides:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
+- **Agent Management**:
+  - `GET /api/agents` - List all agents
+  - `POST /api/agents` - Create new agent
+  - `GET /api/agents/:id` - Get agent by ID
+  - `PUT /api/agents/:id` - Update agent
+  - `DELETE /api/agents/:id` - Delete agent
+  - `GET /api/agents/:id/tool-invocation-policies` - Get agent's tool policies
+  - `POST /api/agents/:id/tool-invocation-policies` - Add policy to agent
+  - `DELETE /api/agents/:agentId/tool-invocation-policies/:policyId` - Remove policy
+- **Autonomy Policies**:
+  - `GET /api/autonomy-policies/operators` - Get supported operators
+  - Tool Invocation Policies:
+    - `GET /api/autonomy-policies/tool-invocation` - List all policies
+    - `POST /api/autonomy-policies/tool-invocation` - Create policy
+    - `GET /api/autonomy-policies/tool-invocation/:id` - Get policy
+    - `PUT /api/autonomy-policies/tool-invocation/:id` - Update policy
+    - `DELETE /api/autonomy-policies/tool-invocation/:id` - Delete policy
+  - Trusted Data Policies:
+    - `GET /api/trusted-data-policies` - List all policies
+    - `POST /api/trusted-data-policies` - Create policy
+    - `GET /api/trusted-data-policies/:id` - Get policy
+    - `PUT /api/trusted-data-policies/:id` - Update policy
+    - `DELETE /api/trusted-data-policies/:id` - Delete policy
 
 #### Security Features (Production-Ready)
 
@@ -139,13 +167,27 @@ The backend integrates advanced security guardrails:
 
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
 - **Tool Invocation Policies**: Fine-grained control over tool usage
+  - Control when tools can be invoked based on argument values
+  - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
+  - Actions: allow or block with optional custom block prompts
+- **Trusted Data Policies**: Mark specific data patterns as trusted sources
+  - Uses attribute paths to identify data fields
+  - Same operator support as invocation policies
 - **Taint Analysis**: Tracks untrusted data through the system
 - **Database Persistence**: All chats and interactions stored in PostgreSQL
 
 #### Database Schema
 
-- **Chat**: Stores chat sessions with timestamps
+- **Agent**: Stores AI agents with name and timestamps
+- **Chat**: Stores chat sessions with timestamps and agent reference
 - **Interaction**: Stores messages with taint status and reasoning
+- **Tool**: Stores available tools with metadata
+- **ToolInvocationPolicy**: Policies for controlling tool usage
+  - Links to tools and agents
+  - Stores argument path, operator, value, and action
+- **TrustedDataPolicy**: Policies for marking data as trusted
+  - Stores attribute path, operator, and value
+- **AgentToolInvocationPolicy**: Junction table linking agents to their policies
 - Supports taint tracking for security analysis
 
 ### Experiments Workspace

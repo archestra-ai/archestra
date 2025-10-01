@@ -109,7 +109,7 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
 
 - **McpServerSandboxManager**: Orchestrates multiple MCP servers
 
-  - Base image: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.2`
+  - Base image: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - WebSocket broadcasting for real-time status updates
   - Tool discovery and management across all servers
 

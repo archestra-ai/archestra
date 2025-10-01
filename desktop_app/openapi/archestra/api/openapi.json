@@ -606,6 +606,36 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["mcp-setup"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "serverId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": ["whatsapp"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pending", "success", "error"]
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["serverId", "provider", "status"]
+              }
+            },
+            "required": ["type", "payload"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["ollama-model-download-progress"]
               },
               "payload": {
@@ -1382,6 +1412,23 @@
             "type": "object",
             "additionalProperties": {
               "type": "string"
+            }
+          },
+          "setup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["log-monitor"]
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": ["whatsapp"]
+                }
+              },
+              "required": ["type", "provider"]
             }
           }
         },
@@ -2457,6 +2504,38 @@
             "properties": {
               "type": {
                 "type": "string",
+                "enum": ["mcp-setup"]
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "serverId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": ["whatsapp"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pending", "success", "error"]
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["serverId", "provider", "status"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "payload"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "enum": ["ollama-model-download-progress"]
               },
               "payload": {
@@ -3257,6 +3336,24 @@
             "type": "object",
             "additionalProperties": {
               "type": "string"
+            }
+          },
+          "setup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["log-monitor"]
+                },
+                "provider": {
+                  "type": "string",
+                  "enum": ["whatsapp"]
+                }
+              },
+              "required": ["type", "provider"],
+              "additionalProperties": false
             }
           }
         },
@@ -5356,6 +5453,79 @@
                     }
                   },
                   "required": ["success"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp_server/{id}/restart": {
+      "post": {
+        "operationId": "restartMcpServer",
+        "tags": ["MCP Server"],
+        "description": "Restart a single MCP server",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["success", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
                   "additionalProperties": false
                 }
               }

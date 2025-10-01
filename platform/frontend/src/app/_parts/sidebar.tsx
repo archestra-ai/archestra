@@ -1,5 +1,12 @@
 "use client";
-import { FileJson2, History, Settings, ShieldCheck } from "lucide-react";
+import {
+  FileJson2,
+  FlaskConical,
+  History,
+  Settings,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { Roboto_Mono } from "next/font/google";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -12,13 +19,27 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
 const items = [
   {
     title: "Test Agent",
     url: "/test-agent",
-    icon: ShieldCheck,
+    icon: FlaskConical,
+    subItems: [
+      {
+        title: "Lethal Trifecta",
+        url: "/test-agent/not-mitigated",
+        icon: TriangleAlert,
+      },
+      {
+        title: "Mitigated",
+        url: "/test-agent/mitigated",
+        icon: ShieldCheck,
+      },
+    ],
   },
   {
     title: "Tool Mapping",
@@ -45,7 +66,7 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar variant="floating">
+    <Sidebar variant="floating" className="pr-0">
       <SidebarContent>
         <SidebarGroup>
           <div className="flex items-center gap-2 mt-2 mx-auto">
@@ -78,6 +99,23 @@ export function AppSidebar() {
                       <span className="text-base">{item.title}</span>
                     </a>
                   </SidebarMenuButton>
+                  {item.subItems && (
+                    <SidebarMenuSub>
+                      {item.subItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={subItem.url === pathname}
+                          >
+                            <a href={subItem.url} className="text-xl">
+                              <subItem.icon />
+                              <span className="text-base">{subItem.title}</span>
+                            </a>
+                          </SidebarMenuButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

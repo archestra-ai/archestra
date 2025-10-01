@@ -1,6 +1,7 @@
-import { AlertCircle, CheckCircle, FileText, Loader2, Trash2, Wrench } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileText, Loader2, Settings, Trash2, Wrench } from 'lucide-react';
 import { useState } from 'react';
 
+import McpServerSetup from '@ui/components/ConnectorCatalog/McpServerSetup';
 import ReportIssueWithCatalogEntry from '@ui/components/ReportIssueWithCatalogEntry';
 import { Badge } from '@ui/components/ui/badge';
 import { Button } from '@ui/components/ui/button';
@@ -21,8 +22,9 @@ export default function McpServer({
   mcpServer: { id, name, state, error, startupPercentage, message, remoteUrl },
 }: McpServerProps) {
   const [showLogs, setShowLogs] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const [showUninstallDialog, setShowUninstallDialog] = useState(false);
-  const { uninstallMcpServer, uninstallingMcpServerId } = useMcpServersStore();
+  const { uninstallMcpServer, uninstallingMcpServerId, mcpServerSetup } = useMcpServersStore();
   const { availableTools } = useToolsStore();
 
   const url = `${config.archestra.mcpProxyUrl}/${id}`;
@@ -31,6 +33,7 @@ export default function McpServer({
   const tools = availableTools.filter((tool) => tool.mcpServerId === id);
   const hasFetchedTools = tools.length > 0;
   const isRemoteMcp = !!remoteUrl;
+  const setup = mcpServerSetup[id];
 
   const getStateIcon = (state: ConnectedMcpServer['state']) => {
     switch (state) {
@@ -64,6 +67,38 @@ export default function McpServer({
           </Badge>
         );
     }
+  };
+
+  const getSetupBadge = () => {
+    if (!setup) return null;
+
+    if (setup.status === 'pending') {
+      return (
+        <Badge
+          variant="outline"
+          className="text-orange-600 border-orange-500 cursor-pointer hover:bg-orange-50 hover:text-orange-700"
+          onClick={() => setShowSetup(true)}
+          title="Open MCP setup"
+        >
+          Setup Required
+        </Badge>
+      );
+    }
+
+    if (setup.status === 'error') {
+      return (
+        <Badge
+          variant="outline"
+          className="text-red-600 border-red-500 cursor-pointer hover:bg-red-50 hover:text-red-700"
+          onClick={() => setShowSetup(true)}
+          title="Setup failed - click to retry"
+        >
+          Setup Failed
+        </Badge>
+      );
+    }
+
+    return null;
   };
 
   const Tools = () => {
@@ -116,6 +151,7 @@ export default function McpServer({
                 {getStateIcon(state)}
                 <h4 className="font-medium">{name}</h4>
                 {getStateBadge(state)}
+                {getSetupBadge()}
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-muted-foreground">
@@ -132,6 +168,25 @@ export default function McpServer({
                   >
                     <FileText className="h-3 w-3" />
                   </Button>
+                )}
+                {setup && (
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 cursor-pointer"
+                      onClick={() => setShowSetup(true)}
+                      title="Open MCP setup"
+                    >
+                      <Settings className="h-3 w-3" />
+                    </Button>
+                    {setup.status === 'pending' && (
+                      <div className="absolute top-0 right-0 h-2 w-2 bg-orange-500 rounded-full"></div>
+                    )}
+                    {setup.status === 'error' && (
+                      <div className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></div>
+                    )}
+                  </div>
                 )}
                 {(state === 'running' || isRemoteMcp) && (
                   <Button
@@ -219,6 +274,16 @@ export default function McpServer({
       </Dialog>
 
       <LogViewerDialog open={showLogs} onOpenChange={setShowLogs} mcpServerId={id} mcpServerName={name} />
+      {setup && (
+        <McpServerSetup
+          open={setup && showSetup}
+          onOpenChange={setShowSetup}
+          provider={setup.provider}
+          content={setup.content}
+          status={setup.status}
+          serverId={id}
+        />
+      )}
     </>
   );
 }

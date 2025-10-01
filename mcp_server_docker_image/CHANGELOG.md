@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/archestra-ai/archestra/compare/mcp_server_docker_image-v0.0.2...mcp_server_docker_image-v0.0.3) (2025-10-01)
+
+
+### Features
+
+* WhatsApp MCP ([#516](https://github.com/archestra-ai/archestra/issues/516)) ([574cdac](https://github.com/archestra-ai/archestra/commit/574cdac5a94d254808e17e0291e0b28cdd810065))
+
 ## [0.0.2](https://github.com/archestra-ai/archestra/compare/mcp_server_docker_image-v0.0.1...mcp_server_docker_image-v0.0.2) (2025-09-22)
 
 

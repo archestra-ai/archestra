@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
 import config from "../../config";
+import db, { schema } from "../../database";
 import ToolInvocationPolicyEvaluator from "../../guardrails/tool-invocation";
 import TrustedDataPolicyEvaluator from "../../guardrails/trusted-data";
 import ChatModel from "../../models/chat";
@@ -85,6 +86,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
       try {
+        // Persist tools if present in the request
+        if (requestBody.tools && requestBody.tools.length > 0) {
+          for (const tool of requestBody.tools) {
+            await db
+              .insert(schema.toolsTable)
+              .values({ definition: tool })
+              .onConflictDoNothing();
+          }
+        }
+
         // Process incoming tool result messages and evaluate trusted data policies
         for (const message of requestBody.messages) {
           if (message.role === "tool") {

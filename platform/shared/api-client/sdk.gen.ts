@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, ListOpenAiModelsData, ListOpenAiModelsErrors, ListOpenAiModelsResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses } from './types.gen';
+import type { CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetToolsData, GetToolsErrors, GetToolsResponses, ListOpenAiModelsData, ListOpenAiModelsErrors, ListOpenAiModelsResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -82,6 +82,16 @@ export const openAiChatCompletions = <ThrowOnError extends boolean = false>(opti
 export const listOpenAiModels = <ThrowOnError extends boolean = false>(options: Options<ListOpenAiModelsData, ThrowOnError>) => {
     return (options.client ?? client).get<ListOpenAiModelsResponses, ListOpenAiModelsErrors, ThrowOnError>({
         url: '/api/proxy/openai/models',
+        ...options
+    });
+};
+
+/**
+ * Get all tools
+ */
+export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({
+        url: '/api/tools',
         ...options
     });
 };

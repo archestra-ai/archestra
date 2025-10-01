@@ -8,6 +8,13 @@
       "when": 1759254137400,
       "tag": "0000_simple_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759328546891,
+      "tag": "0001_steady_loners",
+      "breakpoints": true
     }
   ]
 }

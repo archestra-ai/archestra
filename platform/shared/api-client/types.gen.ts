@@ -796,3 +796,40 @@ export type ListOpenAiModelsResponses = {
 };
 
 export type ListOpenAiModelsResponse = ListOpenAiModelsResponses[keyof ListOpenAiModelsResponses];
+
+export type GetToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tools';
+};
+
+export type GetToolsErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetToolsError = GetToolsErrors[keyof GetToolsErrors];
+
+export type GetToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        definition: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

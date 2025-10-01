@@ -15,6 +15,13 @@
       "when": 1759331715713,
       "tag": "0001_naive_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759334107032,
+      "tag": "0002_pretty_leo",
+      "breakpoints": true
     }
   ]
 }

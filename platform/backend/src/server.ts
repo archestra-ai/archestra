@@ -12,6 +12,8 @@ import config from "./config";
 import chatRoutes from "./routes/chat";
 import openAiProxyRoutes from "./routes/proxy/openai";
 import toolRoutes from "./routes/tool";
+import toolInvocationPolicyRoutes from "./routes/tool-invocation-policy";
+import trustedDataPolicyRoutes from "./routes/trusted-data-policy";
 
 const {
   api: { port, name, version, host },
@@ -77,6 +79,8 @@ const start = async () => {
     fastify.register(chatRoutes);
     fastify.register(openAiProxyRoutes);
     fastify.register(toolRoutes);
+    fastify.register(toolInvocationPolicyRoutes);
+    fastify.register(trustedDataPolicyRoutes);
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);

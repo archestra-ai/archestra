@@ -5,12 +5,11 @@ export default async function callbackRoutes(fastify) {
 
     // Build parameters for deeplink
     const params = new URLSearchParams();
-    if (code) params.append("code", code);
-    if (state) params.append("state", state);
-    if (error) params.append("error", error);
-    if (error_description)
-      params.append("error_description", error_description);
-    params.append("service", provider);
+    if (code) params.append('code', code);
+    if (state) params.append('state', state);
+    if (error) params.append('error', error);
+    if (error_description) params.append('error_description', error_description);
+    params.append('service', provider);
 
     // Create deeplink to the desktop app
     const deeplinkUrl = `archestra-ai://oauth-callback?${params.toString()}`;
@@ -203,28 +202,26 @@ export default async function callbackRoutes(fastify) {
       </html>
     `;
 
-    fastify.log.info(
-      `OAuth callback for ${provider}, opening deeplink: ${deeplinkUrl}`,
-    );
+    fastify.log.info(`OAuth callback for ${provider}, opening deeplink: ${deeplinkUrl}`);
 
     return reply.type('text/html').send(html);
   };
 
   // OAuth callback endpoint - redirects back to the desktop app
-  fastify.get("/callback/:provider", async (request, reply) => {
+  fastify.get('/callback/:provider', async (request, reply) => {
     const { provider } = request.params;
     return handleCallback(request, reply, provider);
   });
 
   // Alternative OAuth callback endpoint (for Slack which uses /oauth-callback)
-  fastify.get("/oauth-callback", async (request, reply) => {
+  fastify.get('/oauth-callback', async (request, reply) => {
     // Determine provider from query params (Slack includes service param)
     const provider = request.query.service || 'slack';
     return handleCallback(request, reply, provider);
   });
 
   // Generic OAuth callback endpoint (for providers using /oauth/callback)
-  fastify.get("/oauth/callback", async (request, reply) => {
+  fastify.get('/oauth/callback', async (request, reply) => {
     // Default to google since this is the most common OAuth callback pattern
     const provider = 'google';
     return handleCallback(request, reply, provider);

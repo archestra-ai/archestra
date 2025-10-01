@@ -1,6 +1,5 @@
 # Archestra Desktop, the Most Simple and Safe MCP Client
 
-
 - 🔥 **Unique Authentication** — No need to toss API keys and config files to run MCP!
 - 🔒 **Sandboxed MCP Runtime** — Isolated sandbox protecting the host from supply chain attacks.
 - 🔌 **Full OSS MCPs Support** — Compatible with thousands of existing MCP servers.
@@ -24,11 +23,9 @@
   - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Commuity</a>
 </p>
 
-
 ## Overview
 
 Archestra is a 100% local runtime for MCP (Model Context Protocol) servers and a ChatGPT-like UI allowing non-technical users to build safe and private agents with powerful data access.
-
 
 ## Installation
 
@@ -70,7 +67,6 @@ Thank you for contributing and continuously making <b>Archestra</b> better, <b>y
 <a href="https://github.com/archestra-ai/archestra/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" />
 </a>
-
 
 ---
 

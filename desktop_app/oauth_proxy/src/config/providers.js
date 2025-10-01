@@ -1,6 +1,6 @@
 /**
  * OAuth Destination Configuration for OAuth Proxy
- * 
+ *
  * Defines allowed OAuth endpoints to prevent SSRF attacks while keeping
  * the proxy generic and easy to configure.
  */
@@ -12,13 +12,13 @@
 export const ALLOWED_DESTINATIONS = [
   'oauth2.googleapis.com',
   'accounts.google.com',
-  'slack.com', 
+  'slack.com',
   'api.slack.com',
   'github.com',
   'api.githubcopilot.com',
   'login.microsoftonline.com',
   'auth.atlassian.com',
-  
+
   // Development flexibility
   'localhost',
   '127.0.0.1',
@@ -26,7 +26,7 @@ export const ALLOWED_DESTINATIONS = [
 
 /**
  * Validate that a token endpoint URL is allowed
- * 
+ *
  * @param {string} url - The token endpoint URL to validate
  * @returns {boolean} True if the URL hostname is in the allowlist
  */
@@ -41,7 +41,7 @@ export function isValidOAuthEndpoint(url) {
 
 /**
  * Get list of allowed OAuth destination hostnames
- * 
+ *
  * @returns {string[]} Array of allowed hostnames
  */
 export function getAllowedDestinations() {

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
+    "@fastify/http-proxy": "^11.3.0",
     "@fastify/swagger": "^9.5.2",
     "ai": "^5.0.57",
     "dotenv": "^17.2.2",

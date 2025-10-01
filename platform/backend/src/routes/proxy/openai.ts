@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
@@ -119,16 +120,29 @@ const getAgentAndChatIdFromRequest = async (
   return { chatId, agentId };
 };
 
-/**
- * NOTE: we may just want to use something like fastify-http-proxy to proxy ALL openai endpoints
- * except for the ones that we are handling "specially" (ex. chat/completions)
- *
- * https://github.com/fastify/fastify-http-proxy
- *
- * Also see https://github.com/archestra-ai/archestra/blob/ba98a62945ff23a0d2075dfd415cdd358bd61991/desktop_app/src/backend/server/plugins/ollama/proxy.ts
- * for how we are handling this in the desktop app ollama proxy
- */
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
+   * This will proxy routes like /api/proxy/openai/models to https://api.openai.com/v1/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://api.openai.com/v1",
+    prefix: "/api/proxy/openai",
+    // Exclude chat/completions route since we handle it specially below
+    preHandler: (request, _reply, done) => {
+      if (
+        request.method === "POST" &&
+        request.url === "/api/proxy/openai/chat/completions"
+      ) {
+        // Skip proxy for this route - we handle it below
+        done(new Error("skip"));
+      } else {
+        done();
+      }
+    },
+  });
+
+  // Handle the special chat/completions route with guardrails
   fastify.post(
     "/api/proxy/openai/chat/completions",
     {

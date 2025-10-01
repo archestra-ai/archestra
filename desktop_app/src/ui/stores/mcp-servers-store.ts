@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 
+import { type MCPSetup } from '@backend/websocket';
 import { ARCHESTRA_MCP_SERVER_ID } from '@constants';
 import {
   type InstallMcpServerData,
@@ -11,6 +12,7 @@ import {
   uninstallMcpServer,
 } from '@ui/lib/clients/archestra/api/gen';
 import posthogClient from '@ui/lib/posthog';
+import websocketService from '@ui/lib/websocket';
 import { useStatusBarStore } from '@ui/stores/status-bar-store';
 import { ConnectedMcpServer } from '@ui/types';
 
@@ -19,6 +21,7 @@ interface McpServersState {
 
   installedMcpServers: ConnectedMcpServer[];
   loadingInstalledMcpServers: boolean;
+  installedMcpServersLoaded: boolean;
   errorLoadingInstalledMcpServers: string | null;
 
   installingMcpServerId: string | null;
@@ -26,6 +29,16 @@ interface McpServersState {
 
   uninstallingMcpServerId: string | null;
   errorUninstallingMcpServer: string | null;
+
+  /** Data for MCP server setup, such as pair with QR code */
+  mcpServerSetup: Record<
+    string,
+    {
+      status: MCPSetup['status'];
+      provider: MCPSetup['provider'];
+      content: string;
+    }
+  >;
 }
 
 interface McpServersActions {
@@ -70,6 +83,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
   installedMcpServers: [],
   loadingInstalledMcpServers: false,
+  installedMcpServersLoaded: false,
   errorLoadingInstalledMcpServers: null,
 
   installingMcpServerId: null,
@@ -77,6 +91,8 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
 
   uninstallingMcpServerId: null,
   errorUninstallingMcpServer: null,
+
+  mcpServerSetup: {},
 
   // Actions
   loadInstalledMcpServers: async () => {
@@ -96,7 +112,7 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
       const errorMessage = error instanceof Error ? error.message : String(error);
       set({ errorLoadingInstalledMcpServers: errorMessage });
     } finally {
-      set({ loadingInstalledMcpServers: false });
+      set({ loadingInstalledMcpServers: false, installedMcpServersLoaded: true });
     }
   },
 
@@ -117,9 +133,14 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
   },
 
   removeMcpServerFromInstalledMcpServers: (mcpServerId: string) => {
-    set((state) => ({
-      installedMcpServers: state.installedMcpServers.filter((mcpServer) => mcpServer.id !== mcpServerId),
-    }));
+    set((state) => {
+      const setupUpdate = { ...state.mcpServerSetup };
+      delete setupUpdate[mcpServerId];
+      return {
+        installedMcpServers: state.installedMcpServers.filter((mcpServer) => mcpServer.id !== mcpServerId),
+        mcpServerSetup: setupUpdate,
+      };
+    });
   },
 
   updateMcpServer: (mcpServerId: string, data: Partial<ConnectedMcpServer>) => {
@@ -439,6 +460,13 @@ export const useMcpServersStore = create<McpServersStore>((set, get) => ({
     });
   },
 }));
+
+websocketService.subscribe('mcp-setup', ({ payload }) => {
+  const { serverId, provider, status, content } = payload;
+  useMcpServersStore.setState((state) => ({
+    mcpServerSetup: { ...state.mcpServerSetup, [serverId]: { status, provider, content: content || '' } },
+  }));
+});
 
 // Initialize data on store creation
 useMcpServersStore.getState().loadInstalledMcpServers();

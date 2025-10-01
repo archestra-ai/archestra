@@ -1,3 +1,4 @@
+import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
 import {
@@ -8,8 +9,11 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "./config";
+import agentRoutes from "./routes/agent";
+import autonomyPolicyRoutes from "./routes/autonomy-policies";
 import chatRoutes from "./routes/chat";
 import openAiProxyRoutes from "./routes/proxy/openai";
+import toolRoutes from "./routes/tool";
 
 const {
   api: { port, name, version, host },
@@ -34,6 +38,13 @@ fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
   try {
+    // Register CORS plugin to allow cross-origin requests from frontend
+    await fastify.register(fastifyCors, {
+      origin: ["http://localhost:3000"],
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      credentials: true,
+    });
+
     /**
      * Register openapi spec
      * https://github.com/fastify/fastify-swagger?tab=readme-ov-file#usage
@@ -66,8 +77,11 @@ const start = async () => {
       version,
     }));
 
+    fastify.register(agentRoutes);
     fastify.register(chatRoutes);
     fastify.register(openAiProxyRoutes);
+    fastify.register(toolRoutes);
+    fastify.register(autonomyPolicyRoutes);
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);

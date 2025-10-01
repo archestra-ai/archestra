@@ -54,5 +54,5 @@ jobs:
 
             Tasks:
             1. Add PR description if the description is currently blank (actually add it, don't just say "add PR description")
-            2. Update CLAUDE.md if needed (push a commit to the branch with the changes you are proposing)
+            2. Update platform/CLAUDE.md if needed (only if the bulk of the changes are related to the platform sub-directory). If this is the case, push a commit to the branch with the changes you are proposing.
             3. Quick review: bugs, security, performance (skip if none found)

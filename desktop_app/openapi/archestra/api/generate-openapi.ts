@@ -73,8 +73,9 @@ async function generateOpenAPISpec() {
       const llmProxyPath = path.startsWith('/llm/');
       const archestraMcpServerPath = path.startsWith('/mcp/');
       const ollamaProxyPath = path.startsWith('/ollama/proxy');
+      const isTestFile = path.includes('.test.');
 
-      return llmProxyPath || archestraMcpServerPath || ollamaProxyPath;
+      return llmProxyPath || archestraMcpServerPath || ollamaProxyPath || isTestFile;
     },
     dirNameRoutePrefix: false, // Disable automatic directory-based prefixing for clean API names
   });

@@ -14,8 +14,9 @@ Try asking the model what tools it has access to, for example ask it to read you
 $ pnpm cli-chat-with-guardrails --help
 
 Options:
---include-external-email - Include external email in mock Gmail data
---include-malicious-email - Include malicious email in mock Gmail data
---debug - Print debug messages
---help - Print this help message
+--agent-id <agent-id>     The ID of the agent to use for the chat
+--include-external-email  Include external email in mock Gmail data
+--include-malicious-email Include malicious email in mock Gmail data
+--debug                   Print debug messages
+--help                    Print this help message
 ```

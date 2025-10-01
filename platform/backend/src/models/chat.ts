@@ -1,22 +1,40 @@
 import { desc, eq } from "drizzle-orm";
-import db, {
-  type ChatWithInteractions,
-  chatsTable,
-  interactionsTable,
-} from "../database";
+import type { z } from "zod";
+import db, { schema } from "../database";
+import type { ChatWithInteractions, InsertChatSchema } from "../types";
 
 class ChatModel {
-  static async create() {
-    const [chat] = await db.insert(chatsTable).values({}).returning();
+  static async create(data: z.infer<typeof InsertChatSchema>) {
+    const [chat] = await db.insert(schema.chatsTable).values(data).returning();
     return chat;
+  }
+
+  static async createOrGetByHash(data: { agentId: string; hashForId: string }) {
+    const [chat] = await db
+      .select()
+      .from(schema.chatsTable)
+      .where(eq(schema.chatsTable.hashForId, data.hashForId));
+
+    if (chat) {
+      return chat;
+    } else {
+      const [chat] = await db
+        .insert(schema.chatsTable)
+        .values(data)
+        .returning();
+      return chat;
+    }
   }
 
   static async findAll(): Promise<ChatWithInteractions[]> {
     const chats = await db
       .select()
-      .from(chatsTable)
-      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
-      .orderBy(desc(chatsTable.createdAt));
+      .from(schema.chatsTable)
+      .leftJoin(
+        schema.interactionsTable,
+        eq(schema.chatsTable.id, schema.interactionsTable.chatId),
+      )
+      .orderBy(desc(schema.chatsTable.createdAt));
 
     // Group interactions by chat
     const chatMap = new Map<string, ChatWithInteractions>();
@@ -41,9 +59,12 @@ class ChatModel {
   static async findById(id: string): Promise<ChatWithInteractions | null> {
     const rows = await db
       .select()
-      .from(chatsTable)
-      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
-      .where(eq(chatsTable.id, id));
+      .from(schema.chatsTable)
+      .leftJoin(
+        schema.interactionsTable,
+        eq(schema.chatsTable.id, schema.interactionsTable.chatId),
+      )
+      .where(eq(schema.chatsTable.id, id));
 
     if (rows.length === 0) {
       return null;
@@ -52,7 +73,8 @@ class ChatModel {
     const chat = rows[0].chats;
     const interactions = rows
       .filter((row) => row.interactions !== null)
-      .map((row) => row.interactions!);
+      .map((row) => row.interactions)
+      .filter((interaction) => interaction !== null);
 
     return {
       ...chat,

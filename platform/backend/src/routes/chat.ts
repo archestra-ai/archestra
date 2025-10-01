@@ -1,12 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { ChatModel } from "../models";
 import {
-  CreateChatResponseSchema,
-  GetChatResponseSchema,
-  GetChatsResponseSchema,
-} from "../database";
-import ChatModel from "../models/chat";
-import { ChatIdSchema, ErrorResponseSchema } from "./schemas";
+  ChatWithInteractionsSchema,
+  ErrorResponseSchema,
+  InsertChatSchema,
+  SelectChatSchema,
+  UuidIdSchema,
+} from "../types";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -16,13 +17,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "createChat",
         description: "Create a new chat session",
         tags: ["Chat"],
+        body: InsertChatSchema.omit({
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+        }),
         response: {
-          200: CreateChatResponseSchema,
+          200: SelectChatSchema,
         },
       },
     },
-    async (_request, reply) => {
-      const chat = await ChatModel.create();
+    async (request, reply) => {
+      const chat = await ChatModel.create(request.body);
       return reply.send(chat);
     },
   );
@@ -35,7 +41,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all chats",
         tags: ["Chat"],
         response: {
-          200: GetChatsResponseSchema,
+          200: z.array(ChatWithInteractionsSchema),
         },
       },
     },
@@ -53,10 +59,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get chat by ID",
         tags: ["Chat"],
         params: z.object({
-          chatId: ChatIdSchema,
+          chatId: UuidIdSchema,
         }),
         response: {
-          200: GetChatResponseSchema,
+          200: ChatWithInteractionsSchema,
           404: ErrorResponseSchema,
         },
       },

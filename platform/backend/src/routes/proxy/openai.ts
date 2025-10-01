@@ -1,0 +1,339 @@
+import crypto from "node:crypto";
+import fastifyHttpProxy from "@fastify/http-proxy";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import OpenAI from "openai";
+import { z } from "zod";
+import {
+  AgentModel,
+  ChatModel,
+  InteractionModel,
+  ToolInvocationPolicyModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+} from "../../models";
+import {
+  type Chat,
+  ErrorResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "../../types";
+
+const ChatCompletionsHeadersSchema = z.object({
+  "x-archestra-chat-id": UuidIdSchema.optional().describe(
+    "If specified, interactions will be associated with this chat, otherwise a new chat will be created",
+  ),
+  authorization: OpenAi.API.ApiKeySchema,
+});
+
+/**
+ * Extract tool name from conversation history by finding the assistant message
+ * that contains the tool_call_id
+ *
+ * We need to do this because the name of the tool is not included in the "tool" message (ie. tool call result)
+ * (just the content and tool_call_id)
+ */
+const extractToolNameFromHistory = async (
+  chatId: string,
+  toolCallId: string,
+): Promise<string | null> => {
+  const interactions = await InteractionModel.findByChatId(chatId);
+
+  // Find the most recent assistant message with tool_calls
+  for (let i = interactions.length - 1; i >= 0; i--) {
+    const { content } = interactions[i];
+
+    if (content.role === "assistant" && content.tool_calls) {
+      for (const toolCall of content.tool_calls) {
+        /**
+         * TODO: do we need to handle custom tool calls here as well?
+         */
+        if (toolCall.id === toolCallId && toolCall.type === "function") {
+          return toolCall.function.name;
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * We need to explicitly get the first user message
+ * (because if there is a system message it may be consistent across multiple chats and we'll end up with the same hash)
+ */
+const generateChatIdHashFromRequest = ({
+  messages,
+}: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>) => {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(firstUserMessage))
+    .digest("hex");
+};
+
+const getAgentAndChatIdFromRequest = async (
+  request: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,
+  {
+    "x-archestra-chat-id": chatIdHeader,
+  }: z.infer<typeof ChatCompletionsHeadersSchema>,
+): Promise<
+  { chatId: string; agentId: string } | z.infer<typeof ErrorResponseSchema>
+> => {
+  let chatId = chatIdHeader;
+  let agentId: string | undefined;
+  let chat: Chat | null = null;
+
+  if (chatId) {
+    /**
+     * User has specified a particular chat ID, therefore let's first get the chat and then get the agent ID
+     * associated with that chat
+     */
+
+    // Validate chat exists and get agent ID
+    chat = await ChatModel.findById(chatId);
+    if (!chat) {
+      return {
+        error: {
+          message: `Specified chat ID ${chatId} not found`,
+          type: "not_found",
+        },
+      };
+    }
+
+    agentId = chat.agentId;
+  } else {
+    /**
+     * User has not specified a particular chat ID, therefore let's first create or get the
+     * "first" agent, and then we will take a hash of the first chat message to create a new chat ID
+     */
+    const agent = await AgentModel.ensureDefaultAgentExists();
+    agentId = agent.id;
+
+    // Create or get chat
+    chat = await ChatModel.createOrGetByHash({
+      agentId,
+      hashForId: generateChatIdHashFromRequest(request), // Generate chat ID hash from request
+    });
+    chatId = chat.id;
+  }
+
+  return { chatId, agentId };
+};
+
+const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
+   * This will proxy routes like /api/proxy/openai/models to https://api.openai.com/v1/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://api.openai.com/v1",
+    prefix: "/api/proxy/openai",
+    // Exclude chat/completions route since we handle it specially below
+    preHandler: (request, _reply, done) => {
+      if (
+        request.method === "POST" &&
+        request.url === "/api/proxy/openai/chat/completions"
+      ) {
+        // Skip proxy for this route - we handle it below
+        done(new Error("skip"));
+      } else {
+        done();
+      }
+    },
+  });
+
+  // Handle the special chat/completions route with guardrails
+  fastify.post(
+    "/api/proxy/openai/chat/completions",
+    {
+      schema: {
+        operationId: "openAiChatCompletions",
+        description: "Create a chat completion with OpenAI",
+        tags: ["llm-proxy"],
+        body: OpenAi.API.ChatCompletionRequestSchema,
+        headers: ChatCompletionsHeadersSchema,
+        response: {
+          200: OpenAi.API.ChatCompletionResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async ({ body: { ...requestBody }, headers }, reply) => {
+      const chatAndAgent = await getAgentAndChatIdFromRequest(
+        requestBody,
+        headers,
+      );
+
+      if ("error" in chatAndAgent) {
+        return reply.status(400).send(chatAndAgent);
+      }
+
+      const { chatId, agentId } = chatAndAgent;
+      const { authorization: openAiApiKey } = headers;
+
+      const openAiClient = new OpenAI({ apiKey: openAiApiKey });
+
+      try {
+        /**
+         * Persist tools if present in the request
+         *
+         * NOTE: for right now we are only persisting function tools (not custom tools)
+         */
+        const tools =
+          requestBody.tools?.filter((tool) => tool.type === "function") || [];
+
+        for (const {
+          function: { name, parameters, description },
+        } of tools) {
+          await ToolModel.createToolIfNotExists({
+            agentId,
+            name,
+            parameters,
+            description,
+          });
+        }
+
+        // Process incoming tool result messages and evaluate trusted data policies
+        for (const message of requestBody.messages) {
+          if (message.role === "tool") {
+            const { tool_call_id: toolCallId, content } = message;
+            const toolResult =
+              typeof content === "string" ? JSON.parse(content) : content;
+
+            // Extract tool name from conversation history
+            const toolName = await extractToolNameFromHistory(
+              chatId,
+              toolCallId,
+            );
+
+            if (toolName) {
+              // Evaluate trusted data policy
+              const { isTrusted, trustReason } =
+                await TrustedDataPolicyModel.evaluateForAgent(
+                  agentId,
+                  toolName,
+                  toolResult,
+                );
+
+              // Store tool result as interaction (tainted if not trusted)
+              await InteractionModel.create({
+                chatId,
+                content: message,
+                tainted: !isTrusted,
+                taintReason: trustReason,
+              });
+            }
+          }
+        }
+
+        // Store the user message
+        const lastMessage =
+          requestBody.messages[requestBody.messages.length - 1];
+
+        if (lastMessage.role === "user") {
+          await InteractionModel.create({
+            chatId,
+            content: lastMessage,
+          });
+        }
+
+        // Handle streaming response
+        if (requestBody.stream) {
+          reply.header("Content-Type", "text/event-stream");
+          reply.header("Cache-Control", "no-cache");
+          reply.header("Connection", "keep-alive");
+
+          const stream = await openAiClient.chat.completions.create({
+            ...requestBody,
+            stream: true,
+          });
+
+          for await (const chunk of stream) {
+            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+          }
+
+          reply.raw.write("data: [DONE]\n\n");
+          reply.raw.end();
+          return;
+        }
+
+        // Handle non-streaming response
+        const response = await openAiClient.chat.completions.create({
+          ...requestBody,
+          stream: false,
+        });
+
+        const assistantMessage = response.choices[0].message;
+
+        // Intercept and evaluate tool calls
+        if (
+          assistantMessage.tool_calls &&
+          assistantMessage.tool_calls.length > 0
+        ) {
+          for (const toolCall of assistantMessage.tool_calls) {
+            // Only process function tool calls (not custom tool calls)
+            if (toolCall.type === "function") {
+              const {
+                function: { arguments: toolCallArgs, name: toolCallName },
+              } = toolCall;
+              const toolInput = JSON.parse(toolCallArgs);
+
+              fastify.log.info(
+                `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
+              );
+
+              // Evaluate tool invocation policy
+              const { isAllowed, denyReason } =
+                await ToolInvocationPolicyModel.evaluateForAgent(
+                  agentId,
+                  toolCallName,
+                  toolInput,
+                );
+
+              fastify.log.info(
+                `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
+              );
+
+              if (!isAllowed) {
+                // Block this tool call
+                return reply.status(403).send({
+                  error: {
+                    message: denyReason,
+                    type: "tool_invocation_blocked",
+                  },
+                });
+              }
+            }
+          }
+        }
+
+        await InteractionModel.create({
+          chatId,
+          content: assistantMessage,
+        });
+
+        return reply.send(response);
+      } catch (error) {
+        fastify.log.error(error);
+        const statusCode =
+          error instanceof Error && "status" in error
+            ? (error.status as 200 | 400 | 404 | 403 | 500)
+            : 500;
+        const errorMessage =
+          error instanceof Error ? error.message : "Internal server error";
+
+        return reply.status(statusCode).send({
+          error: {
+            message: errorMessage,
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+};
+
+export default openAiProxyRoutes;

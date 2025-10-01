@@ -163,6 +163,15 @@ export type WebSocketMessageInput =
       payload: SandboxStatusSummaryInput;
     }
   | {
+      type: 'mcp-setup';
+      payload: {
+        serverId: string;
+        provider: 'whatsapp';
+        status: 'pending' | 'success' | 'error';
+        content?: string;
+      };
+    }
+  | {
       type: 'ollama-model-download-progress';
       payload: OllamaModelDownloadProgressInput;
     }
@@ -345,6 +354,10 @@ export type McpServerConfigInput = {
   inject_file?: {
     [key: string]: string;
   };
+  setup?: Array<{
+    type: 'log-monitor';
+    provider: 'whatsapp';
+  }>;
   [key: string]:
     | unknown
     | string
@@ -355,6 +368,10 @@ export type McpServerConfigInput = {
     | {
         [key: string]: string;
       }
+    | Array<{
+        type: 'log-monitor';
+        provider: 'whatsapp';
+      }>
     | undefined;
 };
 
@@ -679,6 +696,15 @@ export type WebSocketMessage =
       payload: SandboxStatusSummary;
     }
   | {
+      type: 'mcp-setup';
+      payload: {
+        serverId: string;
+        provider: 'whatsapp';
+        status: 'pending' | 'success' | 'error';
+        content?: string;
+      };
+    }
+  | {
       type: 'ollama-model-download-progress';
       payload: OllamaModelDownloadProgress;
     }
@@ -861,6 +887,10 @@ export type McpServerConfig = {
   inject_file?: {
     [key: string]: string;
   };
+  setup?: Array<{
+    type: 'log-monitor';
+    provider: 'whatsapp';
+  }>;
   [key: string]:
     | unknown
     | string
@@ -871,6 +901,10 @@ export type McpServerConfig = {
     | {
         [key: string]: string;
       }
+    | Array<{
+        type: 'log-monitor';
+        provider: 'whatsapp';
+      }>
     | undefined;
 };
 
@@ -1880,6 +1914,44 @@ export type UninstallMcpServerResponses = {
 };
 
 export type UninstallMcpServerResponse = UninstallMcpServerResponses[keyof UninstallMcpServerResponses];
+
+export type RestartMcpServerData = {
+  body?: never;
+  path: {
+    id: string;
+  };
+  query?: never;
+  url: '/api/mcp_server/{id}/restart';
+};
+
+export type RestartMcpServerErrors = {
+  /**
+   * Default Response
+   */
+  404: {
+    error: string;
+  };
+  /**
+   * Default Response
+   */
+  500: {
+    error: string;
+  };
+};
+
+export type RestartMcpServerError = RestartMcpServerErrors[keyof RestartMcpServerErrors];
+
+export type RestartMcpServerResponses = {
+  /**
+   * Default Response
+   */
+  200: {
+    success: boolean;
+    message: string;
+  };
+};
+
+export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
 export type GetMcpServerLogsData = {
   body?: never;

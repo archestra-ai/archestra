@@ -27,10 +27,19 @@
       "recommended": true,
       "suspicious": {
         "noUnknownAtRules": "off",
-        "noExplicitAny": "error"
+        "noExplicitAny": "error",
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["assert", "error", "info", "warn"]
+          }
+        }
       },
       "complexity": {
         "noStaticOnlyClass": "off"
+      },
+      "performance": {
+        "noImgElement": "off"
       }
     },
     "domains": {

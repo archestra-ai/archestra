@@ -24,7 +24,7 @@
       "cache": false
     },
     "db:generate": {
-      "inputs": ["backend/src/database/**/*.ts"]
+      "cache": false
     },
     "db:migrate": {
       "inputs": ["backend/src/database/**/*.ts"]

@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noConsole: it's fine to use console.log here..
+
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path, { resolve } from "node:path";
@@ -26,47 +28,76 @@ const openai = new OpenAI({
 /**
  * Create a new chat session via the backend API
  */
-const createNewChat = async (): Promise<string> => {
+const createNewChat = async (
+  agentId: string | null,
+): Promise<string | null> => {
+  /**
+   * If agent ID is specified, create a new chat session that we will then pass along to the
+   * Archestra proxy to explicitly tie our agent's interactions to that chat (and the Archestra agent associated with that chat)
+   *
+   * If agent ID is not specified, the Archestra proxy creates one for us
+   * (and implicitly creates a chat session for us based on the hash of the first message)
+   */
+  if (!agentId) {
+    console.log(`
+⚠️ ⚠️ ⚠️
+No agent ID specified, the Archestra proxy will ensure a default one is created for us.
+
+Additionally, it will implicitly create a chat session for us based on the hash of the first message
+
+These IDs will be used to associate the agent's interactions to that chat/agent.
+`);
+    return null;
+  }
+
+  console.log(`Creating new chat session for agent ${agentId}...`);
+
   const response = await fetch(`${BACKEND_URL}/api/chats`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ agentId }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create chat: ${response.statusText}`);
+    console.error(
+      `Failed to create chat session ${response.statusText}. Is the backend is running at ${BACKEND_URL}?`,
+    );
+    process.exit(1);
   }
 
   const data = await response.json();
-  return data.id;
-};
+  const chatId = data.id;
 
-const printHelp = () => {
-  console.log("Usage: pnpm cli-chat-with-guardrails [options]\n");
-  console.log("Options:");
-  console.log(
-    "--include-external-email - Include external email in mock Gmail data",
-  );
-  console.log(
-    "--include-malicious-email - Include malicious email in mock Gmail data",
-  );
-  console.log("--debug - Print debug messages");
-  console.log("--help - Print this help message");
+  console.log(`Chat session created: ${chatId}`);
+
+  return chatId;
 };
 
 const parseArgs = (): {
+  agentId: string | null;
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
 } => {
   if (process.argv.includes("--help")) {
-    printHelp();
+    console.log(`
+Options:
+--agent-id <agent-id>     The ID of the agent to use for the chat. Optional, if not provided, a new agent will be created.
+--include-external-email  Include external email in mock Gmail data
+--include-malicious-email Include malicious email in mock Gmail data
+--debug                   Print debug messages
+--help                    Print this help message
+    `);
     process.exit(0);
   }
 
+  // Parse --agent-id flag
+  const agentIdIndex = process.argv.indexOf("--agent-id");
+
   return {
+    agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
@@ -218,24 +249,16 @@ const executeToolCall = async (
 };
 
 const cliChatWithGuardrails = async () => {
-  const { includeExternalEmail, includeMaliciousEmail, debug } = parseArgs();
+  const { agentId, includeExternalEmail, includeMaliciousEmail, debug } =
+    parseArgs();
 
   const terminal = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
-  // Create initial chat session
-  console.log("Creating new chat session...");
-  let chatId: string;
-  try {
-    chatId = await createNewChat();
-    console.log(`Chat session created: ${chatId}\n`);
-  } catch (error) {
-    console.error("Failed to create chat session:", error);
-    console.error("Make sure the backend is running at", BACKEND_URL);
-    process.exit(1);
-  }
+  // (conditionally) create new chat session (if agent ID is specified)
+  let chatId = await createNewChat(agentId);
 
   const systemPromptMessage: ChatCompletionMessageParam = {
     role: "system",
@@ -266,15 +289,8 @@ Some examples:
       console.log("Exiting...");
       process.exit(0);
     } else if (userInput === "/new") {
-      console.log("Starting a new session...");
-
-      try {
-        chatId = await createNewChat();
-        console.log(`Chat session created: ${chatId}\n`);
-        messages = [systemPromptMessage];
-      } catch (error) {
-        console.error("Failed to create chat session:", error);
-      }
+      chatId = await createNewChat(agentId);
+      messages = [systemPromptMessage];
       continue;
     }
 
@@ -297,11 +313,13 @@ Some examples:
             tools: getToolDefinitions(),
             tool_choice: "auto",
           },
-          {
-            headers: {
-              "X-Archestra-Chat-Id": chatId,
-            },
-          },
+          chatId
+            ? {
+                headers: {
+                  "X-Archestra-Chat-Id": chatId,
+                },
+              }
+            : undefined,
         );
       } catch (error: any) {
         // Handle backend guardrails errors (403, etc.)

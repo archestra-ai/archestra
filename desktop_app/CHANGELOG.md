@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.0.13](https://github.com/archestra-ai/archestra/compare/v0.0.12...v0.0.13) (2025-10-01)
+
+
+### Dependencies
+
+* bump mcp-server-base to 0.0.3 ([#598](https://github.com/archestra-ai/archestra/issues/598)) ([d6f4509](https://github.com/archestra-ai/archestra/commit/d6f4509c3219c257142497452ce55e374c2a8f02))
+
+## [0.0.12](https://github.com/archestra-ai/archestra/compare/v0.0.11...v0.0.12) (2025-10-01)
+
+
+### Features
+
+* WhatsApp MCP ([#516](https://github.com/archestra-ai/archestra/issues/516)) ([574cdac](https://github.com/archestra-ai/archestra/commit/574cdac5a94d254808e17e0291e0b28cdd810065))
+
+
+### Bug Fixes
+
+* update types.gen.ts ([#596](https://github.com/archestra-ai/archestra/issues/596)) ([a354149](https://github.com/archestra-ai/archestra/commit/a3541493c1f6eff6fbdcb27b5a56cfffcc055bba))
+
 ## [0.0.11](https://github.com/archestra-ai/archestra/compare/v0.0.10...v0.0.11) (2025-09-24)
 
 

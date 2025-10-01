@@ -1,5 +1,5 @@
 {
-  "id": "27add0b9-42da-4303-928b-3a09dd13b9cd",
+  "id": "8aab6550-e728-4b5a-9f86-c4f89a3779f5",
   "prevId": "2cef6124-182d-40ca-9fee-d8c66ddfd58e",
   "version": "7",
   "dialect": "postgresql",
@@ -131,11 +131,23 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "definition": {
-          "name": "definition",
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parameters": {
+          "name": "parameters",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -152,26 +164,18 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "tools_definition_idx": {
-          "name": "tools_definition_idx",
-          "columns": [
-            {
-              "expression": "definition",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "tools_name_unique": {
+          "name": "tools_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

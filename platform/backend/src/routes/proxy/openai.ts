@@ -83,13 +83,22 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
       try {
-        // Persist tools if present in the request
-        if (requestBody.tools && requestBody.tools.length > 0) {
-          for (const tool of requestBody.tools) {
-            await ToolModel.createToolIfNotExists({
-              definition: tool,
-            });
-          }
+        /**
+         * Persist tools if present in the request
+         *
+         * NOTE: for right now we are only persisting function tools (not custom tools)
+         */
+        const tools =
+          requestBody.tools?.filter((tool) => tool.type === "function") || [];
+
+        for (const {
+          function: { name, parameters, description },
+        } of tools) {
+          await ToolModel.createToolIfNotExists({
+            name,
+            parameters,
+            description,
+          });
         }
 
         // Process incoming tool result messages and evaluate trusted data policies

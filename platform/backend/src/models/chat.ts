@@ -1,22 +1,22 @@
 import { desc, eq } from "drizzle-orm";
-import db, {
-  type ChatWithInteractions,
-  chatsTable,
-  interactionsTable,
-} from "../database";
+import db, { schema } from "../database";
+import type { ChatWithInteractions } from "../types";
 
 class ChatModel {
   static async create() {
-    const [chat] = await db.insert(chatsTable).values({}).returning();
+    const [chat] = await db.insert(schema.chatsTable).values({}).returning();
     return chat;
   }
 
   static async findAll(): Promise<ChatWithInteractions[]> {
     const chats = await db
       .select()
-      .from(chatsTable)
-      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
-      .orderBy(desc(chatsTable.createdAt));
+      .from(schema.chatsTable)
+      .leftJoin(
+        schema.interactionsTable,
+        eq(schema.chatsTable.id, schema.interactionsTable.chatId),
+      )
+      .orderBy(desc(schema.chatsTable.createdAt));
 
     // Group interactions by chat
     const chatMap = new Map<string, ChatWithInteractions>();
@@ -41,9 +41,12 @@ class ChatModel {
   static async findById(id: string): Promise<ChatWithInteractions | null> {
     const rows = await db
       .select()
-      .from(chatsTable)
-      .leftJoin(interactionsTable, eq(chatsTable.id, interactionsTable.chatId))
-      .where(eq(chatsTable.id, id));
+      .from(schema.chatsTable)
+      .leftJoin(
+        schema.interactionsTable,
+        eq(schema.chatsTable.id, schema.interactionsTable.chatId),
+      )
+      .where(eq(schema.chatsTable.id, id));
 
     if (rows.length === 0) {
       return null;

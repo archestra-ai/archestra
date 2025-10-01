@@ -3,7 +3,7 @@ import InteractionModel from "../models/interaction";
 import type {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,
-  TaintedInteractionData,
+  Interaction,
 } from "../types";
 
 // Result from quarantined LLM analysis
@@ -78,15 +78,17 @@ class DualLLMController {
   }
 
   async analyzeInQuarantine(
-    taintedContent: TaintedInteractionData[],
+    taintedInteraction: Interaction[],
   ): Promise<QuarantineAnalysisResult> {
     try {
       // Create a sanitized view of the tainted content
-      const sanitizedView = taintedContent.map((tc) => ({
-        toolName: tc.toolName,
+      const sanitizedView = taintedInteraction.map((tc) => ({
+        // toolName: tc.content.toolName,
+        toolName: "TODO:", // we need to store this somehow..
         taintReason: tc.taintReason,
         // Never pass raw output to avoid injection
-        outputPreview: this.createSafePreview(tc.output),
+        // outputPreview: this.createSafePreview(tc.content.output),
+        outputPreview: this.createSafePreview("TODO:"),
       }));
 
       const response = await generateText({
@@ -239,7 +241,7 @@ class DualLLMEvaluator
     try {
       // Step 1: Analyze tainted content in quarantine
       const quarantineResult =
-        await this.controller.analyzeInQuarantine(taintedContent);
+        await this.controller.analyzeInQuarantine(taintedInteractions);
 
       // If no injection detected with high confidence, allow
       if (

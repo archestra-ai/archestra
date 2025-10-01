@@ -1,18 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
-import config from "../../../config";
-import ToolInvocationPolicyEvaluator from "../../../guardrails/tool-invocation";
-import TrustedDataPolicyEvaluator from "../../../guardrails/trusted-data";
-import ChatModel from "../../../models/chat";
-import InteractionModel from "../../../models/interaction";
-import { ChatIdSchema, ErrorResponseSchema } from "../../schemas";
-import {
-  ChatCompletionRequestSchema,
-  ChatCompletionResponseSchema,
-  ModelsResponseSchema,
-  OpenAiApiKeySchema,
-} from "./schemas";
+import config from "../../config";
+import ToolInvocationPolicyEvaluator from "../../guardrails/tool-invocation";
+import TrustedDataPolicyEvaluator from "../../guardrails/trusted-data";
+import ChatModel from "../../models/chat";
+import InteractionModel from "../../models/interaction";
+import { ChatIdSchema, ErrorResponseSchema } from "../../types";
+import { OpenAi } from "../../types/llm-providers";
 
 const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies } = config;
 
@@ -56,13 +51,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: "openAiChatCompletions",
         description: "Create a chat completion with OpenAI",
         tags: ["llm-proxy"],
-        body: ChatCompletionRequestSchema,
+        body: OpenAi.API.ChatCompletionRequestSchema,
         headers: z.object({
           "x-archestra-chat-id": ChatIdSchema,
-          authorization: OpenAiApiKeySchema,
+          authorization: OpenAi.API.ApiKeySchema,
         }),
         response: {
-          200: ChatCompletionResponseSchema,
+          200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
@@ -256,10 +251,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List available models for OpenAI",
         tags: ["llm-proxy"],
         headers: z.object({
-          authorization: OpenAiApiKeySchema,
+          authorization: OpenAi.API.ApiKeySchema,
         }),
         response: {
-          200: z.array(ModelsResponseSchema),
+          200: z.array(OpenAi.API.ModelsResponseSchema),
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },

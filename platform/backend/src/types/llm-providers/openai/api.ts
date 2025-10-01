@@ -1,15 +1,9 @@
-/**
- * NOTE: this is a bit of a PITA/verbose but in order to properly type everything that we are
- * proxing.. this is kinda necessary.
- *
- * the openai ts sdk doesn't expose zod schemas for all of this..
- */
 import { z } from "zod";
 
 import { MessageParamSchema, ToolCallSchema } from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
-export const OpenAiApiKeySchema = z
+export const ApiKeySchema = z
   .string()
   .describe("Bearer token for OpenAI")
   .transform((authorization) => authorization.replace("Bearer ", ""));

@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 type SupportedAutonomyPolicyOperators =
   | "equal"
   | "notEqual"
@@ -46,22 +44,3 @@ export type DynamicAutonomyPolicyEvaluatorResult = {
 export interface AutonomyPolicyEvaluator<R> {
   evaluate(): Promise<R> | R;
 }
-
-export const ToolCallContentSchema = z.object({
-  toolCallId: z.string(),
-  toolName: z.string(),
-  role: z.string().optional(),
-  output: z.any().optional(),
-  content: z.any().optional(),
-});
-
-export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
-
-export type TaintedInteractionData = {
-  toolCallId: string;
-  toolName: string;
-  isTainted: boolean;
-  taintReason: string | null;
-  // biome-ignore lint/suspicious/noExplicitAny: tbd later
-  output: any;
-};

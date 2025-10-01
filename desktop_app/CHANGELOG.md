@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.13](https://github.com/archestra-ai/archestra/compare/v0.0.12...v0.0.13) (2025-10-01)
+
+
+### Dependencies
+
+* bump mcp-server-base to 0.0.3 ([#598](https://github.com/archestra-ai/archestra/issues/598)) ([d6f4509](https://github.com/archestra-ai/archestra/commit/d6f4509c3219c257142497452ce55e374c2a8f02))
+
 ## [0.0.12](https://github.com/archestra-ai/archestra/compare/v0.0.11...v0.0.12) (2025-10-01)
 
 

@@ -294,6 +294,36 @@ class McpServerSandboxManager {
   }
 
   /**
+   * Restart a single MCP server
+   */
+  async restartServer(mcpServerId: string) {
+    log.info(`Restarting MCP server: ${mcpServerId}`);
+
+    try {
+      // Get the MCP server from database
+      const servers = await McpServerModel.getById(mcpServerId);
+      const mcpServer = servers[0];
+      if (!mcpServer) {
+        throw new Error(`MCP server with id ${mcpServerId} not found`);
+      }
+
+      // Stop the server
+      await this.stopServer(mcpServerId);
+
+      // Wait a moment for shutdown to complete
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Start the server again
+      await this.startServer(mcpServer);
+
+      log.info(`MCP server ${mcpServerId} restarted successfully`);
+    } catch (error) {
+      log.error(`Failed to restart MCP server ${mcpServerId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Clean/purge all data (uninstall all MCP servers + reset podman machine)
    */
   async reset() {

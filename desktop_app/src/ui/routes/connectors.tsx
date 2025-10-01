@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { AlertCircle, MessageSquare, Package, Plus, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import AuthConfirmationDialog from '@ui/components/AuthConfirmationDialog';
 import McpServer from '@ui/components/ConnectorCatalog/McpServer';
 import McpServerInstallDialog from '@ui/components/ConnectorCatalog/McpServerInstallDialog';
+import McpServerSetup from '@ui/components/ConnectorCatalog/McpServerSetup';
 import McpServers from '@ui/components/Settings/McpServers';
 import { Card, CardContent, CardHeader } from '@ui/components/ui/card';
 import { Input } from '@ui/components/ui/input';
@@ -23,6 +24,44 @@ function ConnectorCatalogPage() {
   const [pendingOAuthServer, setPendingOAuthServer] = useState<ArchestraMcpServerManifest | null>(null);
   const [pendingBrowserAuth, setPendingBrowserAuth] = useState(false);
 
+  // State for automatic setup dialog
+  const [setupServerId, setSetupServerId] = useState<string | null>(null);
+  const recentlyInstalledServersRef = useRef<Set<string>>(new Set());
+
+  // Tracks newly installed servers which require setup
+  useEffect(function trackNewSetup() {
+    const unsubscribe = useMcpServersStore.subscribe((state, prevState) => {
+      if (!state.installedMcpServersLoaded) {
+        return;
+      }
+
+      // Track newly installed servers
+      const nextInstalledIds = state.installedMcpServers.map((server) => server.id);
+      const prevInstalledIds = prevState.installedMcpServers.map((server) => server.id);
+      const justInstalledIds = nextInstalledIds.filter((id) => !prevInstalledIds.includes(id));
+
+      if (justInstalledIds.length > 0) {
+        // Keeps a ref of newly installed server ids to compare them later with incoming setup entries
+        justInstalledIds.forEach((id) => recentlyInstalledServersRef.current.add(id));
+      }
+
+      // Check for incoming setup entries
+      const nextSetupIds = Object.keys(state.mcpServerSetup);
+      const prevSetupIds = Object.keys(prevState.mcpServerSetup);
+      const newSetupIds = nextSetupIds.filter((id) => !prevSetupIds.includes(id));
+
+      for (const setupServerId of newSetupIds) {
+        if (recentlyInstalledServersRef.current.has(setupServerId)) {
+          setSetupServerId(setupServerId);
+          recentlyInstalledServersRef.current.delete(setupServerId);
+          break;
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
   const {
     connectorCatalog,
     catalogSearchQuery,
@@ -38,6 +77,7 @@ function ConnectorCatalogPage() {
     installMcpServer: _installMcpServer,
     uninstallMcpServer,
     cancelMcpServerInstallation,
+    mcpServerSetup,
   } = useMcpServersStore();
 
   const installMcpServer = async (
@@ -128,6 +168,8 @@ function ConnectorCatalogPage() {
       setSelectedServerForInstall(null);
     }
   };
+
+  const setup = setupServerId ? mcpServerSetup[setupServerId] : null;
 
   return (
     <div className="space-y-3">
@@ -294,6 +336,21 @@ function ConnectorCatalogPage() {
         onConfirm={handleOAuthConfirm}
         onCancel={handleOAuthCancel}
       />
+
+      {setupServerId && mcpServerSetup[setupServerId] && (
+        <McpServerSetup
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSetupServerId(null);
+            }
+          }}
+          provider={mcpServerSetup[setupServerId].provider}
+          status={mcpServerSetup[setupServerId].status}
+          content={mcpServerSetup[setupServerId].content}
+          serverId={setupServerId}
+        />
+      )}
     </div>
   );
 }

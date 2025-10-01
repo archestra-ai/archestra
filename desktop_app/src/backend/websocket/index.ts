@@ -88,10 +88,20 @@ const EnableToolsCalledPayloadSchema = z.object({
   enabledTools: z.array(z.string()),
 });
 
+export const MCPSetupSchema = z.object({
+  serverId: z.string(),
+  provider: z.enum(['whatsapp']),
+  status: z.enum(['pending', 'success', 'error']),
+  content: z.string().optional(),
+});
+
+export type MCPSetup = z.infer<typeof MCPSetupSchema>;
+
 export const WebSocketMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat-title-updated'), payload: ChatTitleUpdatedPayloadSchema }),
   z.object({ type: z.literal('chat-tools-updated'), payload: ChatToolsUpdatedPayloadSchema }),
   z.object({ type: z.literal('sandbox-status-update'), payload: SandboxStatusSummarySchema }),
+  z.object({ type: z.literal('mcp-setup'), payload: MCPSetupSchema }),
   z.object({
     type: z.literal('ollama-model-download-progress'),
     payload: OllamaModelDownloadProgressWebsocketPayloadSchema,

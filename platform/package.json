@@ -13,7 +13,8 @@
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
-    "db:studio": "turbo db:studio"
+    "db:studio": "turbo db:studio",
+    "cleanup:dev:k8s": "kubectl delete namespace archestra-dev"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

@@ -1,15 +1,16 @@
 import { and, asc, eq } from "drizzle-orm";
-import db, { interactionsTable, type MessageContent } from "../database";
+import db, { schema } from "../database";
+import type { InteractionContent } from "../types";
 
 class InteractionModel {
   static async create(data: {
     chatId: string;
-    content: MessageContent;
+    content: InteractionContent;
     tainted?: boolean;
     taintReason?: string;
   }) {
     const [interaction] = await db
-      .insert(interactionsTable)
+      .insert(schema.interactionsTable)
       .values({
         chatId: data.chatId,
         content: data.content,
@@ -24,22 +25,22 @@ class InteractionModel {
   static async findByChatId(chatId: string) {
     return await db
       .select()
-      .from(interactionsTable)
-      .where(eq(interactionsTable.chatId, chatId))
-      .orderBy(asc(interactionsTable.createdAt));
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.chatId, chatId))
+      .orderBy(asc(schema.interactionsTable.createdAt));
   }
 
   static async findTaintedByChatId(chatId: string) {
     return await db
       .select()
-      .from(interactionsTable)
+      .from(schema.interactionsTable)
       .where(
         and(
-          eq(interactionsTable.chatId, chatId),
-          eq(interactionsTable.tainted, true),
+          eq(schema.interactionsTable.chatId, chatId),
+          eq(schema.interactionsTable.tainted, true),
         ),
       )
-      .orderBy(asc(interactionsTable.createdAt));
+      .orderBy(asc(schema.interactionsTable.createdAt));
   }
 }
 

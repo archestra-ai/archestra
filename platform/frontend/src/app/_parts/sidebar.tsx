@@ -1,6 +1,7 @@
 "use client";
 import {
   FileJson2,
+  FlaskConical,
   History,
   Settings,
   ShieldCheck,
@@ -26,7 +27,7 @@ const items = [
   {
     title: "Test Agent",
     url: "/test-agent",
-    icon: ShieldCheck,
+    icon: FlaskConical,
     subItems: [
       {
         title: "Lethal Trifecta",

@@ -45,7 +45,7 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar variant="floating">
+    <Sidebar variant="floating" className="pr-0">
       <SidebarContent>
         <SidebarGroup>
           <div className="flex items-center gap-2 mt-2 mx-auto">

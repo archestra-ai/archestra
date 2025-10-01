@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import ChatBotDemo from "./_parts/chatbot-demo";
 
 export default async function TestAgentPage() {
   try {
@@ -17,6 +18,8 @@ export default async function TestAgentPage() {
   } catch (error) {
     console.error("Error fetching chats:", error);
   }
+
+  return <ChatBotDemo />;
 
   return (
     <div className="flex flex-col gap-20 items-center h-full w-full pt-[20vh]">

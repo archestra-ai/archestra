@@ -1,14 +1,11 @@
 import { index, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { z } from "zod";
-import type { ToolSchema } from "../../types/llm-providers/openai/tools";
+import type { ToolContent } from "../../types";
 
 const toolsTable = pgTable(
   "tools",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    definition: jsonb("definition")
-      .$type<z.infer<typeof ToolSchema>>()
-      .notNull(),
+    definition: jsonb("definition").$type<ToolContent>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

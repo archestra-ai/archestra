@@ -6,11 +6,7 @@ import { OpenAi } from "./llm-providers";
 /**
  * As we support more llm provider types, this type will expand and should be updated
  */
-export const InteractionContentSchema = z.union([
-  OpenAi.Messages.MessageParamSchema,
-]);
-
-export type InteractionContent = z.infer<typeof InteractionContentSchema>;
+const InteractionContentSchema = z.union([OpenAi.Messages.MessageParamSchema]);
 
 export const SelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
@@ -27,3 +23,5 @@ export const InsertInteractionSchema = createInsertSchema(
 
 export type Interaction = z.infer<typeof SelectInteractionSchema>;
 export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;
+
+export type InteractionContent = z.infer<typeof InteractionContentSchema>;

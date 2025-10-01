@@ -247,6 +247,8 @@ The `platform/experiments/` directory contains experimental features and prototy
 - Located in `src/main.ts`
 - Runs on port 9000 by default
 - To use in desktop app, uncomment line 56 in `desktop_app/src/backend/server/plugins/llm/index.ts`
+- **Automatic Tool Persistence**: Tools passed in OpenAI chat completion requests are automatically persisted to the database
+- **Tool Mapping Page**: View all persisted tools at `/tool-mapping` route
 
 #### Security Guardrails
 - Advanced security features in `src/guardrails/`:

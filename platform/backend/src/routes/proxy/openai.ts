@@ -56,13 +56,19 @@ const extractToolNameFromHistory = async (
   return null;
 };
 
+/**
+ * We need to explicitly get the first user message
+ * (because if there is a system message it may be consistent across multiple chats and we'll end up with the same hash)
+ */
 const generateChatIdHashFromRequest = ({
   messages,
-}: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>) =>
-  crypto
+}: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>) => {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  return crypto
     .createHash("sha256")
-    .update(JSON.stringify(messages[0].content))
+    .update(JSON.stringify(firstUserMessage))
     .digest("hex");
+};
 
 const getAgentAndChatIdFromRequest = async (
   request: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,

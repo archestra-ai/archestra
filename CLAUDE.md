@@ -142,6 +142,8 @@ Key tables:
 - `user`: User settings (onboarding, telemetry preferences)
 - `mcp_request_logs`: Request/response logging for debugging
 - `cloud_providers`: LLM provider configurations
+- `tool_invocation_policies`: Controls when tools can be invoked based on argument values
+- `trusted_data_policies`: Marks specific data patterns as trusted sources
 
 #### API Architecture
 

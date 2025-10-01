@@ -96,8 +96,8 @@ importers:
         specifier: ^2.0.8
         version: 2.0.8
       fastify-type-provider-zod:
-        specifier: ^5.0.3
-        version: 5.0.3(@fastify/swagger@9.5.1)(fastify@5.6.0)(openapi-types@12.1.3)(zod@4.1.8)
+        specifier: ^6.0.0
+        version: 6.0.0(@fastify/swagger@9.5.1)(fastify@5.6.0)(openapi-types@12.1.3)(zod@4.1.8)
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.1.1)
@@ -4720,13 +4720,13 @@ packages:
   fastify-plugin@5.0.1:
     resolution: {integrity: sha512-HCxs+YnRaWzCl+cWRYFnHmeRFyR5GVnJTAaCJQiYzQSDwK9MgJdyAsuL3nh0EWRCYMgQ5MeziymvmAhUHYHDUQ==}
 
-  fastify-type-provider-zod@5.0.3:
-    resolution: {integrity: sha512-h+/SL9qWD+J5OS4UZ86YnbQA/gaeTqKXqUDbYFm3NZYAhjVVqALCp/UBHFXnH/lv+TpBFyv8uKQ/U1692j0N1g==}
+  fastify-type-provider-zod@6.0.0:
+    resolution: {integrity: sha512-Bz+Qll2XuvvueHz0yhcr67V/43q1VecSyIqZm+P8OL8KZHznUXECZXkuwQePR5b6fWY/kzhhadmgNs9dB/Nifg==}
     peerDependencies:
       '@fastify/swagger': '>=9.5.1'
       fastify: ^5.0.0
       openapi-types: ^12.1.3
-      zod: '>=3.25.67'
+      zod: '>=4.1.5'
 
   fastify@5.6.0:
     resolution: {integrity: sha512-9j2r9TnwNsfGiCKGYT0Voqy244qwcoYM9qvNi/i+F8sNNWDnqUEVuGYNc9GyjldhXmMlJmVPS6gI1LdvjYGRJw==}
@@ -13102,7 +13102,7 @@ snapshots:
 
   fastify-plugin@5.0.1: {}
 
-  fastify-type-provider-zod@5.0.3(@fastify/swagger@9.5.1)(fastify@5.6.0)(openapi-types@12.1.3)(zod@4.1.8):
+  fastify-type-provider-zod@6.0.0(@fastify/swagger@9.5.1)(fastify@5.6.0)(openapi-types@12.1.3)(zod@4.1.8):
     dependencies:
       '@fastify/error': 4.2.0
       '@fastify/swagger': 9.5.1

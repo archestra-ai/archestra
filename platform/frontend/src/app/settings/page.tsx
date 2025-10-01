@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2, UserPlus, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   assignToolInvocationPolicyToAgent,
@@ -10,8 +10,6 @@ import {
   deleteToolInvocationPolicy,
   deleteTrustedDataPolicy,
   type GetAgentsResponse,
-  type GetAgentToolInvocationPoliciesResponse,
-  type GetAgentTrustedDataPoliciesResponse,
   type GetOperatorsResponse,
   type GetToolInvocationPoliciesResponse,
   type GetToolsResponse,
@@ -43,15 +41,8 @@ type Tool = GetToolsResponse[number];
 type ToolInvocationPolicy = GetToolInvocationPoliciesResponse[number];
 type TrustedDataPolicy = GetTrustedDataPoliciesResponse[number];
 type Operator = GetOperatorsResponse[number];
+type OperatorValue = Operator["value"];
 type Agent = GetAgentsResponse[number];
-type OperatorValue =
-  | "equal"
-  | "notEqual"
-  | "contains"
-  | "notContains"
-  | "startsWith"
-  | "endsWith"
-  | "regex";
 
 export default function SettingsPage() {
   const [tools, setTools] = useState<Tool[]>([]);

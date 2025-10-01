@@ -1,13 +1,14 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
+import type { ChatStatus } from "ai";
 import {
-  type ChatStatus,
-  DefaultChatTransport,
-  type ToolUIPart,
-  type UIMessage,
-} from "ai";
-import { CopyIcon, GlobeIcon } from "lucide-react";
+  Check,
+  CopyIcon,
+  GlobeIcon,
+  RefreshCcwIcon,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { Fragment, useState } from "react";
 import { Action, Actions } from "@/components/ai-elements/actions";
 import {
@@ -57,6 +58,8 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
+import { useMockedMessages } from "./chatbot-demo.hooks";
 
 const models = [
   {
@@ -69,56 +72,11 @@ const models = [
   },
 ];
 
-const mockedMessages: UIMessage[] = [
-  {
-    id: "1",
-    role: "user",
-    parts: [
-      {
-        type: "text",
-        text: "Hi, could you please read my last email from boss@gmail.com and give me a summary?",
-      },
-    ],
-  },
-  {
-    id: "3",
-    role: "assistant",
-    parts: [
-      { type: "text", text: "Here's a summary of your emails:" },
-      {
-        type: "tool-invocation",
-        toolCallId: "read_emails",
-        state: "input-streaming",
-        input: {
-          mailbox: "user@gmail.com",
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: just a mock
-        output: "Found 1 email" as any,
-      },
-      {
-        type: "tool-invocation",
-        toolCallId: "analyze_email",
-        state: "input-streaming",
-        input: {
-          email_id: "boss_email_id",
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: just a mock
-        output: "Boss email contains maliciousinstructions" as any,
-      },
-      { type: "text", text: "Here's a summary of your emails:" },
-    ],
-  },
-  {
-    id: "4",
-    role: "user",
-    parts: [{ type: "text", text: "What is the weather in New York222?" }],
-  },
-];
-
-const ChatBotDemo = () => {
+const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
   const [webSearch, setWebSearch] = useState(false);
+  const { messages, reload, isEnded } = useMockedMessages({ isMitigated });
   // We are mocking those parts
   // const { messages, sendMessage, status } = useChat({
   //   transport: new DefaultChatTransport({
@@ -149,7 +107,6 @@ const ChatBotDemo = () => {
     setInput("");
   };
 
-  const messages = mockedMessages;
   const status: ChatStatus = "streaming" as ChatStatus;
 
   return (
@@ -208,26 +165,60 @@ const ChatBotDemo = () => {
                             )}
                         </Fragment>
                       );
-                    case "tool-invocation":
+                    case "tool-invocation": {
+                      const isDanger = [
+                        "gather_sensitive_data",
+                        "send_email",
+                        "analyze_email_blocked",
+                      ].includes(part.toolCallId);
+                      const isShield = part.toolCallId === "dual_llm_activated";
+                      const isSuccess = part.toolCallId === "attack_blocked";
+                      const getIcon = () => {
+                        if (isDanger)
+                          return (
+                            <TriangleAlert className="size-4 text-muted-foreground" />
+                          );
+                        if (isShield)
+                          return (
+                            <ShieldCheck className="size-4 text-muted-foreground" />
+                          );
+                        if (isSuccess)
+                          return (
+                            <Check className="size-4 text-muted-foreground" />
+                          );
+                        return undefined;
+                      };
+                      const getColorClass = () => {
+                        if (isDanger) return "bg-red-500/30";
+                        if (isShield) return "bg-sky-400/60";
+                        if (isSuccess) return "bg-emerald-700/60";
+                        return "";
+                      };
+
                       return (
                         <Tool
                           defaultOpen={true}
                           key={`${message.id}-${part.toolCallId}`}
+                          className={getColorClass()}
                         >
                           <ToolHeader
                             type={`tool-${part.toolCallId}`}
                             state={part.state}
+                            icon={getIcon()}
                           />
                           <ToolContent>
-                            <ToolInput input={part.input} />
+                            {part.input &&
+                            Object.keys(part.input).length > 0 ? (
+                              <ToolInput input={part.input} />
+                            ) : null}
                             <ToolOutput
-                              // output={<Response>{toolPart.output}</Response>}
                               output={part.output}
                               errorText={part.errorText}
                             />
                           </ToolContent>
                         </Tool>
                       );
+                    }
                     case "reasoning":
                       return (
                         <Reasoning
@@ -253,7 +244,15 @@ const ChatBotDemo = () => {
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-
+        {isEnded && (
+          <Button
+            onClick={reload}
+            variant="ghost"
+            className="my-2 cursor-pointer w-fit mx-auto"
+          >
+            <RefreshCcwIcon /> Start again
+          </Button>
+        )}
         <PromptInput
           onSubmit={handleSubmit}
           className="mt-4"
@@ -267,6 +266,7 @@ const ChatBotDemo = () => {
             <PromptInputTextarea
               onChange={(e) => setInput(e.target.value)}
               value={input}
+              disabled
             />
           </PromptInputBody>
           <PromptInputToolbar>
@@ -305,7 +305,7 @@ const ChatBotDemo = () => {
                 </PromptInputModelSelectContent>
               </PromptInputModelSelect>
             </PromptInputTools>
-            <PromptInputSubmit disabled={!input && !status} status={status} />
+            <PromptInputSubmit disabled status="ready" />
           </PromptInputToolbar>
         </PromptInput>
       </div>

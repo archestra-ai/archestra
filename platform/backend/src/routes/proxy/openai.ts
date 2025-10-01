@@ -1,13 +1,14 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
-import config from "../../config";
-import ToolInvocationPolicyEvaluator from "../../guardrails/tool-invocation";
-import TrustedDataPolicyEvaluator from "../../guardrails/trusted-data";
-import { ChatModel, InteractionModel, ToolModel } from "../../models";
-import { ChatIdSchema, ErrorResponseSchema, OpenAi } from "../../types";
-
-const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies } = config;
+import {
+  ChatModel,
+  InteractionModel,
+  ToolInvocationPolicyModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+} from "../../models";
+import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "../../types";
 
 /**
  * Extract tool name from conversation history by finding the assistant message
@@ -41,6 +42,15 @@ const extractToolNameFromHistory = async (
   return null;
 };
 
+/**
+ * NOTE: we may just want to use something like fastify-http-proxy to proxy ALL openai endpoints
+ * except for the ones that we are handling "specially" (ex. chat/completions)
+ *
+ * https://github.com/fastify/fastify-http-proxy
+ *
+ * Also see https://github.com/archestra-ai/archestra/blob/ba98a62945ff23a0d2075dfd415cdd358bd61991/desktop_app/src/backend/server/plugins/ollama/proxy.ts
+ * for how we are handling this in the desktop app ollama proxy
+ */
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/proxy/openai/chat/completions",
@@ -51,7 +61,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: z.object({
-          "x-archestra-chat-id": ChatIdSchema,
+          "x-archestra-chat-id": UuidIdSchema,
           authorization: OpenAi.API.ApiKeySchema,
         }),
         response: {
@@ -70,8 +80,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      // Validate chat exists
-      if (!(await ChatModel.findById(chatId))) {
+      // Validate chat exists and get agent ID
+      const chat = await ChatModel.findById(chatId);
+      if (!chat) {
         return reply.status(404).send({
           error: {
             message: "Chat not found",
@@ -79,6 +90,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
+      const agentId = chat.agentId;
 
       const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
@@ -95,6 +107,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           function: { name, parameters, description },
         } of tools) {
           await ToolModel.createToolIfNotExists({
+            agentId,
             name,
             parameters,
             description,
@@ -116,16 +129,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             if (toolName) {
               // Evaluate trusted data policy
-              const evaluator = new TrustedDataPolicyEvaluator(
-                {
+              const { isTrusted, trustReason } =
+                await TrustedDataPolicyModel.evaluateForAgent(
+                  agentId,
                   toolName,
-                  toolCallId,
-                  output: toolResult,
-                },
-                trustedDataAutonomyPolicies,
-              );
-
-              const { isTrusted, trustReason } = evaluator.evaluate();
+                  toolResult,
+                );
 
               // Store tool result as interaction (tainted if not trusted)
               await InteractionModel.create({
@@ -186,27 +195,21 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Only process function tool calls (not custom tool calls)
             if (toolCall.type === "function") {
               const {
-                id: toolCallId,
                 function: { arguments: toolCallArgs, name: toolCallName },
               } = toolCall;
               const toolInput = JSON.parse(toolCallArgs);
 
               fastify.log.info(
-                `Evaluating tool call: ${
-                  toolCallName
-                } with input: ${JSON.stringify(toolInput)}`,
+                `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
               );
 
-              const evaluator = new ToolInvocationPolicyEvaluator(
-                {
-                  toolName: toolCallName,
-                  toolCallId,
-                  input: toolInput,
-                },
-                toolInvocationAutonomyPolicies,
-              );
-
-              const { isAllowed, denyReason } = evaluator.evaluate();
+              // Evaluate tool invocation policy
+              const { isAllowed, denyReason } =
+                await ToolInvocationPolicyModel.evaluateForAgent(
+                  agentId,
+                  toolCallName,
+                  toolInput,
+                );
 
               fastify.log.info(
                 `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
@@ -243,50 +246,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.status(statusCode).send({
           error: {
             message: errorMessage,
-            type: "api_error",
-          },
-        });
-      }
-    },
-  );
-
-  /**
-   * NOTE: we may just want to use something like fastify-http-proxy to proxy ALL openai endpoints
-   * except for the ones that we are handling "specially" (ex. chat/completions)
-   *
-   * https://github.com/fastify/fastify-http-proxy
-   *
-   * Also see https://github.com/archestra-ai/archestra/blob/ba98a62945ff23a0d2075dfd415cdd358bd61991/desktop_app/src/backend/server/plugins/ollama/proxy.ts
-   * for how we are handling this in the desktop app ollama proxy
-   */
-  fastify.get(
-    "/api/proxy/openai/models",
-    {
-      schema: {
-        operationId: "listOpenAiModels",
-        description: "List available models for OpenAI",
-        tags: ["llm-proxy"],
-        headers: z.object({
-          authorization: OpenAi.API.ApiKeySchema,
-        }),
-        response: {
-          200: z.array(OpenAi.API.ModelsResponseSchema),
-          400: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-        },
-      },
-    },
-    async ({ headers: { authorization: openAiApiKey } }, reply) => {
-      try {
-        const openAiClient = new OpenAI({ apiKey: openAiApiKey });
-        const models = await openAiClient.models.list();
-        return reply.send(models.data);
-      } catch (error) {
-        fastify.log.error(error);
-        return reply.status(500).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "Internal server error",
             type: "api_error",
           },
         });

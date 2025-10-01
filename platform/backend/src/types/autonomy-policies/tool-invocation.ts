@@ -1,6 +1,9 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "../database";
+import { schema } from "../../database";
+import { SupportedOperatorSchema } from "./operator";
+
+const ToolInvocationPolicyActionSchema = z.enum(["allow", "block"]);
 
 export const SelectToolInvocationPolicySchema = createSelectSchema(
   schema.toolInvocationPoliciesTable,
@@ -8,16 +11,8 @@ export const SelectToolInvocationPolicySchema = createSelectSchema(
 export const InsertToolInvocationPolicySchema = createInsertSchema(
   schema.toolInvocationPoliciesTable,
   {
-    operator: z.enum([
-      "equal",
-      "notEqual",
-      "contains",
-      "notContains",
-      "startsWith",
-      "endsWith",
-      "regex",
-    ]),
-    action: z.enum(["allow", "block"]),
+    operator: SupportedOperatorSchema,
+    action: ToolInvocationPolicyActionSchema,
   },
 );
 
@@ -26,4 +21,8 @@ export type ToolInvocationPolicy = z.infer<
 >;
 export type InsertToolInvocationPolicy = z.infer<
   typeof InsertToolInvocationPolicySchema
+>;
+
+export type ToolInvocationPolicyAction = z.infer<
+  typeof ToolInvocationPolicyActionSchema
 >;

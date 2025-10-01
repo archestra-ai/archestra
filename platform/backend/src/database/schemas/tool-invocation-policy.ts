@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { AutonomyPolicyOperator, ToolInvocation } from "../../types";
 import toolsTable from "./tool";
 
 const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
@@ -8,9 +9,13 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
     .references(() => toolsTable.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   argumentName: text("argument_name").notNull(),
-  operator: text("operator").notNull(),
+  operator: text("operator")
+    .$type<AutonomyPolicyOperator.SupportedOperator>()
+    .notNull(),
   value: text("value").notNull(),
-  action: text("action").$type<"allow" | "block">().notNull(),
+  action: text("action")
+    .$type<ToolInvocation.ToolInvocationPolicyAction>()
+    .notNull(),
   blockPrompt: text("block_prompt"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })

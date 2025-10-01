@@ -11,7 +11,5 @@ export const ChatWithInteractionsSchema = SelectChatSchema.extend({
   interactions: z.array(SelectInteractionSchema),
 });
 
-export const ChatIdSchema = SelectChatSchema.shape.id;
-
 export type Chat = z.infer<typeof SelectChatSchema>;
 export type ChatWithInteractions = z.infer<typeof ChatWithInteractionsSchema>;

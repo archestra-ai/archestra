@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
-import { schema } from "../database";
+import type { z } from "zod";
+import { schema } from "../../database";
+import { SupportedOperatorSchema } from "./operator";
 
 export const SelectTrustedDataPolicySchema = createSelectSchema(
   schema.trustedDataPoliciesTable,
@@ -8,15 +9,7 @@ export const SelectTrustedDataPolicySchema = createSelectSchema(
 export const InsertTrustedDataPolicySchema = createInsertSchema(
   schema.trustedDataPoliciesTable,
   {
-    operator: z.enum([
-      "equal",
-      "notEqual",
-      "contains",
-      "notContains",
-      "startsWith",
-      "endsWith",
-      "regex",
-    ]),
+    operator: SupportedOperatorSchema,
   },
 );
 

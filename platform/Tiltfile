@@ -15,6 +15,8 @@ else:
 helm_remote(
   'postgresql',
   repo_url='https://charts.bitnami.com/bitnami',
+  namespace='archestra-dev',
+  create_namespace=True,
   set=[
     'auth.database=archestra_dev',
     'auth.username=archestra',

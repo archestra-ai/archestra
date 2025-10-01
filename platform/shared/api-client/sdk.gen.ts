@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateChatData, CreateChatResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetToolsData, GetToolsErrors, GetToolsResponses, ListOpenAiModelsData, ListOpenAiModelsErrors, ListOpenAiModelsResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses } from './types.gen';
+import type { AssignToolInvocationPolicyToAgentData, AssignToolInvocationPolicyToAgentErrors, AssignToolInvocationPolicyToAgentResponses, AssignTrustedDataPolicyToAgentData, AssignTrustedDataPolicyToAgentErrors, AssignTrustedDataPolicyToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolInvocationPoliciesData, GetAgentToolInvocationPoliciesErrors, GetAgentToolInvocationPoliciesResponses, GetAgentTrustedDataPoliciesData, GetAgentTrustedDataPoliciesErrors, GetAgentTrustedDataPoliciesResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, UnassignToolInvocationPolicyFromAgentData, UnassignToolInvocationPolicyFromAgentErrors, UnassignToolInvocationPolicyFromAgentResponses, UnassignTrustedDataPolicyFromAgentData, UnassignTrustedDataPolicyFromAgentErrors, UnassignTrustedDataPolicyFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -33,6 +33,124 @@ export const getHealth = <ThrowOnError extends boolean = false>(options?: Option
 };
 
 /**
+ * Get all agents
+ */
+export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({
+        url: '/api/agents',
+        ...options
+    });
+};
+
+/**
+ * Create a new agent
+ */
+export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
+        url: '/api/agents',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete an agent
+ */
+export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get agent by ID
+ */
+export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update an agent
+ */
+export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get tool invocation policies assigned to an agent
+ */
+export const getAgentToolInvocationPolicies = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolInvocationPoliciesData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentToolInvocationPoliciesResponses, GetAgentToolInvocationPoliciesErrors, ThrowOnError>({
+        url: '/api/agents/{id}/tool-invocation-policies',
+        ...options
+    });
+};
+
+/**
+ * Unassign a tool invocation policy from an agent
+ */
+export const unassignToolInvocationPolicyFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolInvocationPolicyFromAgentData, ThrowOnError>) => {
+    return (options.client ?? client).delete<UnassignToolInvocationPolicyFromAgentResponses, UnassignToolInvocationPolicyFromAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}/tool-invocation-policies/{policyId}',
+        ...options
+    });
+};
+
+/**
+ * Assign a tool invocation policy to an agent
+ */
+export const assignToolInvocationPolicyToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolInvocationPolicyToAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<AssignToolInvocationPolicyToAgentResponses, AssignToolInvocationPolicyToAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}/tool-invocation-policies/{policyId}',
+        ...options
+    });
+};
+
+/**
+ * Get trusted data policies assigned to an agent
+ */
+export const getAgentTrustedDataPolicies = <ThrowOnError extends boolean = false>(options: Options<GetAgentTrustedDataPoliciesData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentTrustedDataPoliciesResponses, GetAgentTrustedDataPoliciesErrors, ThrowOnError>({
+        url: '/api/agents/{id}/trusted-data-policies',
+        ...options
+    });
+};
+
+/**
+ * Unassign a trusted data policy from an agent
+ */
+export const unassignTrustedDataPolicyFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignTrustedDataPolicyFromAgentData, ThrowOnError>) => {
+    return (options.client ?? client).delete<UnassignTrustedDataPolicyFromAgentResponses, UnassignTrustedDataPolicyFromAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}/trusted-data-policies/{policyId}',
+        ...options
+    });
+};
+
+/**
+ * Assign a trusted data policy to an agent
+ */
+export const assignTrustedDataPolicyToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignTrustedDataPolicyToAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<AssignTrustedDataPolicyToAgentResponses, AssignTrustedDataPolicyToAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}/trusted-data-policies/{policyId}',
+        ...options
+    });
+};
+
+/**
  * Get all chats
  */
 export const getChats = <ThrowOnError extends boolean = false>(options?: Options<GetChatsData, ThrowOnError>) => {
@@ -45,10 +163,14 @@ export const getChats = <ThrowOnError extends boolean = false>(options?: Options
 /**
  * Create a new chat session
  */
-export const createChat = <ThrowOnError extends boolean = false>(options?: Options<CreateChatData, ThrowOnError>) => {
-    return (options?.client ?? client).post<CreateChatResponses, unknown, ThrowOnError>({
+export const createChat = <ThrowOnError extends boolean = false>(options: Options<CreateChatData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateChatResponses, unknown, ThrowOnError>({
         url: '/api/chats',
-        ...options
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };
 
@@ -77,21 +199,137 @@ export const openAiChatCompletions = <ThrowOnError extends boolean = false>(opti
 };
 
 /**
- * List available models for OpenAI
- */
-export const listOpenAiModels = <ThrowOnError extends boolean = false>(options: Options<ListOpenAiModelsData, ThrowOnError>) => {
-    return (options.client ?? client).get<ListOpenAiModelsResponses, ListOpenAiModelsErrors, ThrowOnError>({
-        url: '/api/proxy/openai/models',
-        ...options
-    });
-};
-
-/**
  * Get all tools
  */
 export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({
         url: '/api/tools',
         ...options
+    });
+};
+
+/**
+ * Get all supported policy operators
+ */
+export const getOperators = <ThrowOnError extends boolean = false>(options?: Options<GetOperatorsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetOperatorsResponses, unknown, ThrowOnError>({
+        url: '/api/autonomy-policies/operators',
+        ...options
+    });
+};
+
+/**
+ * Get all tool invocation policies
+ */
+export const getToolInvocationPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetToolInvocationPoliciesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetToolInvocationPoliciesResponses, GetToolInvocationPoliciesErrors, ThrowOnError>({
+        url: '/api/autonomy-policies/tool-invocation',
+        ...options
+    });
+};
+
+/**
+ * Create a new tool invocation policy
+ */
+export const createToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateToolInvocationPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateToolInvocationPolicyResponses, CreateToolInvocationPolicyErrors, ThrowOnError>({
+        url: '/api/autonomy-policies/tool-invocation',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete a tool invocation policy
+ */
+export const deleteToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteToolInvocationPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteToolInvocationPolicyResponses, DeleteToolInvocationPolicyErrors, ThrowOnError>({
+        url: '/api/autonomy-policies/tool-invocation/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get tool invocation policy by ID
+ */
+export const getToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<GetToolInvocationPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetToolInvocationPolicyResponses, GetToolInvocationPolicyErrors, ThrowOnError>({
+        url: '/api/autonomy-policies/tool-invocation/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update a tool invocation policy
+ */
+export const updateToolInvocationPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateToolInvocationPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateToolInvocationPolicyResponses, UpdateToolInvocationPolicyErrors, ThrowOnError>({
+        url: '/api/autonomy-policies/tool-invocation/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get all trusted data policies
+ */
+export const getTrustedDataPolicies = <ThrowOnError extends boolean = false>(options?: Options<GetTrustedDataPoliciesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetTrustedDataPoliciesResponses, GetTrustedDataPoliciesErrors, ThrowOnError>({
+        url: '/api/trusted-data-policies',
+        ...options
+    });
+};
+
+/**
+ * Create a new trusted data policy
+ */
+export const createTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<CreateTrustedDataPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateTrustedDataPolicyResponses, CreateTrustedDataPolicyErrors, ThrowOnError>({
+        url: '/api/trusted-data-policies',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete a trusted data policy
+ */
+export const deleteTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<DeleteTrustedDataPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteTrustedDataPolicyResponses, DeleteTrustedDataPolicyErrors, ThrowOnError>({
+        url: '/api/trusted-data-policies/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get trusted data policy by ID
+ */
+export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<GetTrustedDataPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetTrustedDataPolicyResponses, GetTrustedDataPolicyErrors, ThrowOnError>({
+        url: '/api/trusted-data-policies/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update a trusted data policy
+ */
+export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateTrustedDataPolicyData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateTrustedDataPolicyResponses, UpdateTrustedDataPolicyErrors, ThrowOnError>({
+        url: '/api/trusted-data-policies/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };

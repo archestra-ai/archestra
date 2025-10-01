@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noConsole: it's fine to use console.log here..
+
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path, { resolve } from "node:path";
@@ -26,47 +28,62 @@ const openai = new OpenAI({
 /**
  * Create a new chat session via the backend API
  */
-const createNewChat = async (): Promise<string> => {
+const createNewChat = async (agentId: string): Promise<string> => {
+  console.log(`Creating new chat session for agent ${agentId}...`);
+
   const response = await fetch(`${BACKEND_URL}/api/chats`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ agentId }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create chat: ${response.statusText}`);
+    console.error(
+      `Failed to create chat session ${response.statusText}. Is the backend is running at ${BACKEND_URL}?`,
+    );
+    process.exit(1);
   }
 
   const data = await response.json();
-  return data.id;
-};
+  const chatId = data.id;
 
-const printHelp = () => {
-  console.log("Usage: pnpm cli-chat-with-guardrails [options]\n");
-  console.log("Options:");
-  console.log(
-    "--include-external-email - Include external email in mock Gmail data",
-  );
-  console.log(
-    "--include-malicious-email - Include malicious email in mock Gmail data",
-  );
-  console.log("--debug - Print debug messages");
-  console.log("--help - Print this help message");
+  console.log(`Chat session created: ${chatId}`);
+
+  return chatId;
 };
 
 const parseArgs = (): {
+  agentId: string;
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
 } => {
   if (process.argv.includes("--help")) {
-    printHelp();
+    console.log(`
+Options:
+--agent-id <agent-id>     The ID of the agent to use for the chat
+--include-external-email  Include external email in mock Gmail data
+--include-malicious-email Include malicious email in mock Gmail data
+--debug                   Print debug messages
+--help                    Print this help message
+    `);
     process.exit(0);
   }
 
+  // Parse --agent-id flag
+  const agentIdIndex = process.argv.indexOf("--agent-id");
+  const agentId = agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null;
+
+  if (!agentId) {
+    console.error("Error: Agent ID is required");
+    console.error("Usage: pnpm cli-chat-with-guardrails --agent-id <agent-id>");
+    process.exit(1);
+  }
+
   return {
+    agentId,
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
@@ -218,7 +235,8 @@ const executeToolCall = async (
 };
 
 const cliChatWithGuardrails = async () => {
-  const { includeExternalEmail, includeMaliciousEmail, debug } = parseArgs();
+  const { agentId, includeExternalEmail, includeMaliciousEmail, debug } =
+    parseArgs();
 
   const terminal = readline.createInterface({
     input: process.stdin,
@@ -226,16 +244,7 @@ const cliChatWithGuardrails = async () => {
   });
 
   // Create initial chat session
-  console.log("Creating new chat session...");
-  let chatId: string;
-  try {
-    chatId = await createNewChat();
-    console.log(`Chat session created: ${chatId}\n`);
-  } catch (error) {
-    console.error("Failed to create chat session:", error);
-    console.error("Make sure the backend is running at", BACKEND_URL);
-    process.exit(1);
-  }
+  let chatId = await createNewChat(agentId);
 
   const systemPromptMessage: ChatCompletionMessageParam = {
     role: "system",
@@ -266,15 +275,8 @@ Some examples:
       console.log("Exiting...");
       process.exit(0);
     } else if (userInput === "/new") {
-      console.log("Starting a new session...");
-
-      try {
-        chatId = await createNewChat();
-        console.log(`Chat session created: ${chatId}\n`);
-        messages = [systemPromptMessage];
-      } catch (error) {
-        console.error("Failed to create chat session:", error);
-      }
+      chatId = await createNewChat(agentId);
+      messages = [systemPromptMessage];
       continue;
     }
 

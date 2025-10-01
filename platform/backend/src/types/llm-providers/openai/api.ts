@@ -96,21 +96,3 @@ export const ChatCompletionResponseSchema = z
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248`,
   );
-
-/**
- * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/models.ts#L38-L61
- */
-export const ModelsResponseSchema = z.object({
-  id: z
-    .string()
-    .describe(
-      "The model identifier, which can be referenced in the API endpoints",
-    ),
-  created: z
-    .number()
-    .describe("The Unix timestamp (in seconds) when the model was created."),
-  object: z
-    .literal("model")
-    .describe("The object type, which is always 'model'"),
-  owned_by: z.string().describe("The organization that owns the model"),
-});

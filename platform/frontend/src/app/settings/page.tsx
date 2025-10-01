@@ -1,7 +1,31 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Trash2, UserPlus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  assignToolInvocationPolicyToAgent,
+  assignTrustedDataPolicyToAgent,
+  createToolInvocationPolicy,
+  createTrustedDataPolicy,
+  deleteToolInvocationPolicy,
+  deleteTrustedDataPolicy,
+  type GetAgentsResponse,
+  type GetAgentToolInvocationPoliciesResponse,
+  type GetAgentTrustedDataPoliciesResponse,
+  type GetOperatorsResponse,
+  type GetToolInvocationPoliciesResponse,
+  type GetToolsResponse,
+  type GetTrustedDataPoliciesResponse,
+  getAgents,
+  getAgentToolInvocationPolicies,
+  getAgentTrustedDataPolicies,
+  getOperators,
+  getToolInvocationPolicies,
+  getTools,
+  getTrustedDataPolicies,
+  unassignToolInvocationPolicyFromAgent,
+  unassignTrustedDataPolicyFromAgent,
+} from "shared/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,65 +39,67 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type Tool = {
-  id: string;
-  name: string;
-  description: string | null;
-};
-
-type ToolInvocationPolicy = {
-  id: string;
-  toolId: string;
-  description: string;
-  argumentName: string;
-  operator: string;
-  value: string;
-  action: "allow" | "block";
-  blockPrompt: string | null;
-};
-
-type TrustedDataPolicy = {
-  id: string;
-  toolId: string;
-  description: string;
-  attributePath: string;
-  operator: string;
-  value: string;
-};
-
-const OPERATORS = [
-  { value: "equal", label: "Equal" },
-  { value: "notEqual", label: "Not Equal" },
-  { value: "contains", label: "Contains" },
-  { value: "notContains", label: "Not Contains" },
-  { value: "startsWith", label: "Starts With" },
-  { value: "endsWith", label: "Ends With" },
-  { value: "regex", label: "Regex" },
-];
+type Tool = GetToolsResponse[number];
+type ToolInvocationPolicy = GetToolInvocationPoliciesResponse[number];
+type TrustedDataPolicy = GetTrustedDataPoliciesResponse[number];
+type Operator = GetOperatorsResponse[number];
+type Agent = GetAgentsResponse[number];
+type OperatorValue =
+  | "equal"
+  | "notEqual"
+  | "contains"
+  | "notContains"
+  | "startsWith"
+  | "endsWith"
+  | "regex";
 
 export default function SettingsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [toolInvocationPolicies, setToolInvocationPolicies] = useState<
     ToolInvocationPolicy[]
   >([]);
   const [trustedDataPolicies, setTrustedDataPolicies] = useState<
     TrustedDataPolicy[]
   >([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Track which agents are assigned to each policy
+  const [tipAgentAssignments, setTipAgentAssignments] = useState<
+    Record<string, string[]>
+  >({});
+  const [tdpAgentAssignments, setTdpAgentAssignments] = useState<
+    Record<string, string[]>
+  >({});
+
   // Tool Invocation Policy Form State
-  const [newToolInvocationPolicy, setNewToolInvocationPolicy] = useState({
+  const [newToolInvocationPolicy, setNewToolInvocationPolicy] = useState<{
+    toolId: string;
+    description: string;
+    argumentName: string;
+    operator: OperatorValue;
+    value: string;
+    action: "allow" | "block";
+    blockPrompt: string;
+  }>({
     toolId: "",
     description: "",
     argumentName: "",
     operator: "equal",
     value: "",
-    action: "block" as "allow" | "block",
+    action: "block",
     blockPrompt: "",
   });
 
   // Trusted Data Policy Form State
-  const [newTrustedDataPolicy, setNewTrustedDataPolicy] = useState({
+  const [newTrustedDataPolicy, setNewTrustedDataPolicy] = useState<{
+    toolId: string;
+    description: string;
+    attributePath: string;
+    operator: OperatorValue;
+    value: string;
+  }>({
     toolId: "",
     description: "",
     attributePath: "",
@@ -81,52 +107,76 @@ export default function SettingsPage() {
     value: "",
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [toolsRes, tipRes, tdpRes] = await Promise.all([
-        fetch("http://localhost:9000/api/tools"),
-        fetch("http://localhost:9000/api/tool-invocation-policies"),
-        fetch("http://localhost:9000/api/trusted-data-policies"),
+      const [toolsRes, tipRes, tdpRes, opsRes, agentsRes] = await Promise.all([
+        getTools(),
+        getToolInvocationPolicies(),
+        getTrustedDataPolicies(),
+        getOperators(),
+        getAgents(),
       ]);
 
-      const [toolsData, tipData, tdpData] = await Promise.all([
-        toolsRes.json(),
-        tipRes.json(),
-        tdpRes.json(),
-      ]);
+      const toolsData = toolsRes.data || [];
+      const tipData = tipRes.data || [];
+      const tdpData = tdpRes.data || [];
+      const agentsData = agentsRes.data || [];
 
       setTools(toolsData);
       setToolInvocationPolicies(tipData);
       setTrustedDataPolicies(tdpData);
+      setOperators(opsRes.data || []);
+      setAgents(agentsData);
+
+      // Fetch agent assignments for each policy
+      const tipAssignments: Record<string, string[]> = {};
+      const tdpAssignments: Record<string, string[]> = {};
+
+      for (const agent of agentsData) {
+        const [agentTipRes, agentTdpRes] = await Promise.all([
+          getAgentToolInvocationPolicies({ path: { id: agent.id } }),
+          getAgentTrustedDataPolicies({ path: { id: agent.id } }),
+        ]);
+
+        // Build reverse mapping: policyId -> agentIds[]
+        for (const policy of agentTipRes.data || []) {
+          if (!tipAssignments[policy.id]) {
+            tipAssignments[policy.id] = [];
+          }
+          tipAssignments[policy.id].push(agent.id);
+        }
+
+        for (const policy of agentTdpRes.data || []) {
+          if (!tdpAssignments[policy.id]) {
+            tdpAssignments[policy.id] = [];
+          }
+          tdpAssignments[policy.id].push(agent.id);
+        }
+      }
+
+      setTipAgentAssignments(tipAssignments);
+      setTdpAgentAssignments(tdpAssignments);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleCreateToolInvocationPolicy = async (
-    e: React.FormEvent<HTMLFormElement>,
-  ) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(
-        "http://localhost:9000/api/tool-invocation-policies",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleCreateToolInvocationPolicy = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      try {
+        await createToolInvocationPolicy({
+          body: {
             ...newToolInvocationPolicy,
             blockPrompt: newToolInvocationPolicy.blockPrompt || null,
-          }),
-        },
-      );
-
-      if (response.ok) {
+          },
+        });
         await fetchData();
         setNewToolInvocationPolicy({
           toolId: "",
@@ -137,38 +187,34 @@ export default function SettingsPage() {
           action: "block",
           blockPrompt: "",
         });
+      } catch (error) {
+        console.error("Failed to create policy:", error);
       }
-    } catch (error) {
-      console.error("Failed to create policy:", error);
-    }
-  };
+    },
+    [fetchData, newToolInvocationPolicy],
+  );
 
-  const handleDeleteToolInvocationPolicy = async (id: string) => {
-    try {
-      await fetch(`http://localhost:9000/api/tool-invocation-policies/${id}`, {
-        method: "DELETE",
-      });
-      await fetchData();
-    } catch (error) {
-      console.error("Failed to delete policy:", error);
-    }
-  };
+  const handleDeleteToolInvocationPolicy = useCallback(
+    async (id: string) => {
+      try {
+        await deleteToolInvocationPolicy({
+          path: { id },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to delete policy:", error);
+      }
+    },
+    [fetchData],
+  );
 
-  const handleCreateTrustedDataPolicy = async (
-    e: React.FormEvent<HTMLFormElement>,
-  ) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(
-        "http://localhost:9000/api/trusted-data-policies",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newTrustedDataPolicy),
-        },
-      );
-
-      if (response.ok) {
+  const handleCreateTrustedDataPolicy = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      try {
+        await createTrustedDataPolicy({
+          body: newTrustedDataPolicy,
+        });
         await fetchData();
         setNewTrustedDataPolicy({
           toolId: "",
@@ -177,26 +223,98 @@ export default function SettingsPage() {
           operator: "equal",
           value: "",
         });
+      } catch (error) {
+        console.error("Failed to create policy:", error);
       }
-    } catch (error) {
-      console.error("Failed to create policy:", error);
-    }
-  };
+    },
+    [fetchData, newTrustedDataPolicy],
+  );
 
-  const handleDeleteTrustedDataPolicy = async (id: string) => {
-    try {
-      await fetch(`http://localhost:9000/api/trusted-data-policies/${id}`, {
-        method: "DELETE",
-      });
-      await fetchData();
-    } catch (error) {
-      console.error("Failed to delete policy:", error);
-    }
-  };
+  const handleDeleteTrustedDataPolicy = useCallback(
+    async (id: string) => {
+      try {
+        await deleteTrustedDataPolicy({
+          path: { id },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to delete policy:", error);
+      }
+    },
+    [fetchData],
+  );
 
-  const getToolName = (toolId: string) => {
-    return tools.find((t) => t.id === toolId)?.name || "Unknown Tool";
-  };
+  // Agent assignment handlers for Tool Invocation Policies
+  const handleAssignAgentToTip = useCallback(
+    async (policyId: string, agentId: string) => {
+      try {
+        await assignToolInvocationPolicyToAgent({
+          path: { id: agentId, policyId },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to assign agent to policy:", error);
+      }
+    },
+    [fetchData],
+  );
+
+  const handleUnassignAgentFromTip = useCallback(
+    async (policyId: string, agentId: string) => {
+      try {
+        await unassignToolInvocationPolicyFromAgent({
+          path: { id: agentId, policyId },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to unassign agent from policy:", error);
+      }
+    },
+    [fetchData],
+  );
+
+  // Agent assignment handlers for Trusted Data Policies
+  const handleAssignAgentToTdp = useCallback(
+    async (policyId: string, agentId: string) => {
+      try {
+        await assignTrustedDataPolicyToAgent({
+          path: { id: agentId, policyId },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to assign agent to policy:", error);
+      }
+    },
+    [fetchData],
+  );
+
+  const handleUnassignAgentFromTdp = useCallback(
+    async (policyId: string, agentId: string) => {
+      try {
+        await unassignTrustedDataPolicyFromAgent({
+          path: { id: agentId, policyId },
+        });
+        await fetchData();
+      } catch (error) {
+        console.error("Failed to unassign agent from policy:", error);
+      }
+    },
+    [fetchData],
+  );
+
+  const getToolName = useCallback(
+    (toolId: string) => {
+      return tools.find((t) => t.id === toolId)?.name || "Unknown Tool";
+    },
+    [tools],
+  );
+
+  const getAgentName = useCallback(
+    (agentId: string) => {
+      return agents.find((a) => a.id === agentId)?.name || "Unknown Agent";
+    },
+    [agents],
+  );
 
   if (loading) {
     return (
@@ -301,7 +419,7 @@ export default function SettingsPage() {
                       onValueChange={(value) =>
                         setNewToolInvocationPolicy({
                           ...newToolInvocationPolicy,
-                          operator: value,
+                          operator: value as OperatorValue,
                         })
                       }
                       required
@@ -310,7 +428,7 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {OPERATORS.map((op) => (
+                        {operators.map((op) => (
                           <SelectItem key={op.value} value={op.value}>
                             {op.label}
                           </SelectItem>
@@ -410,7 +528,7 @@ export default function SettingsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-3 text-sm">
                       <p className="font-medium">{policy.description}</p>
                       <div className="bg-muted p-2 rounded font-mono text-xs">
                         {policy.argumentName} {policy.operator} "{policy.value}"
@@ -420,6 +538,67 @@ export default function SettingsPage() {
                           Block message: {policy.blockPrompt}
                         </p>
                       )}
+
+                      {/* Agent Assignment Section */}
+                      <div className="pt-2 border-t">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs font-semibold">
+                            Assigned Agents
+                          </Label>
+                          <Select
+                            onValueChange={(agentId) =>
+                              handleAssignAgentToTip(policy.id, agentId)
+                            }
+                          >
+                            <SelectTrigger className="w-[180px] h-8">
+                              <SelectValue placeholder="Assign agent..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {agents
+                                .filter(
+                                  (agent) =>
+                                    !tipAgentAssignments[policy.id]?.includes(
+                                      agent.id,
+                                    ),
+                                )
+                                .map((agent) => (
+                                  <SelectItem key={agent.id} value={agent.id}>
+                                    {agent.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {tipAgentAssignments[policy.id]?.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {tipAgentAssignments[policy.id].map((agentId) => (
+                              <div
+                                key={agentId}
+                                className="flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded text-xs"
+                              >
+                                {getAgentName(agentId)}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUnassignAgentFromTip(
+                                      policy.id,
+                                      agentId,
+                                    )
+                                  }
+                                  className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded p-0.5"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            No agents assigned
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -489,7 +668,7 @@ export default function SettingsPage() {
                       onValueChange={(value) =>
                         setNewTrustedDataPolicy({
                           ...newTrustedDataPolicy,
-                          operator: value,
+                          operator: value as OperatorValue,
                         })
                       }
                       required
@@ -498,7 +677,7 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {OPERATORS.map((op) => (
+                        {operators.map((op) => (
                           <SelectItem key={op.value} value={op.value}>
                             {op.label}
                           </SelectItem>
@@ -573,11 +752,72 @@ export default function SettingsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-3 text-sm">
                       <p className="font-medium">{policy.description}</p>
                       <div className="bg-muted p-2 rounded font-mono text-xs">
                         {policy.attributePath} {policy.operator} "{policy.value}
                         "
+                      </div>
+
+                      {/* Agent Assignment Section */}
+                      <div className="pt-2 border-t">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs font-semibold">
+                            Assigned Agents
+                          </Label>
+                          <Select
+                            onValueChange={(agentId) =>
+                              handleAssignAgentToTdp(policy.id, agentId)
+                            }
+                          >
+                            <SelectTrigger className="w-[180px] h-8">
+                              <SelectValue placeholder="Assign agent..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {agents
+                                .filter(
+                                  (agent) =>
+                                    !tdpAgentAssignments[policy.id]?.includes(
+                                      agent.id,
+                                    ),
+                                )
+                                .map((agent) => (
+                                  <SelectItem key={agent.id} value={agent.id}>
+                                    {agent.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {tdpAgentAssignments[policy.id]?.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {tdpAgentAssignments[policy.id].map((agentId) => (
+                              <div
+                                key={agentId}
+                                className="flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded text-xs"
+                              >
+                                {getAgentName(agentId)}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUnassignAgentFromTdp(
+                                      policy.id,
+                                      agentId,
+                                    )
+                                  }
+                                  className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded p-0.5"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">
+                            No agents assigned
+                          </p>
+                        )}
                       </div>
                     </div>
                   </CardContent>

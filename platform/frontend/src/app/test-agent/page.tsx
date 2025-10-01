@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getChats } from "shared/api-client";
 import {
   Card,
   CardContent,
@@ -10,16 +9,6 @@ import {
 } from "@/components/ui/card";
 
 export default async function TestAgentPage() {
-  try {
-    const response = await getChats();
-    // biome-ignore lint/suspicious/noConsole: temp
-    console.log("Chats response:", response);
-    // biome-ignore lint/suspicious/noConsole: temp
-    console.log("Chats data:", response.data);
-  } catch (error) {
-    console.error("Error fetching chats:", error);
-  }
-
   return (
     <div className="flex flex-col gap-20 items-center h-full w-full pt-[20vh]">
       <div>

@@ -1,5 +1,6 @@
 "use client";
 import {
+  Bot,
   FileJson2,
   FlaskConical,
   History,
@@ -25,10 +26,15 @@ import {
 
 const items = [
   {
-    title: "Test Agent",
-    url: "/test-agent",
-    icon: FlaskConical,
+    title: "Agents",
+    url: "/agents",
+    icon: Bot,
     subItems: [
+      {
+        title: "Test Agent",
+        url: "/test-agent",
+        icon: FlaskConical,
+      },
       {
         title: "Lethal Trifecta",
         url: "/test-agent/not-mitigated",

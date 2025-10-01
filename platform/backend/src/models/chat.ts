@@ -1,10 +1,11 @@
 import { desc, eq } from "drizzle-orm";
+import type { z } from "zod";
 import db, { schema } from "../database";
-import type { ChatWithInteractions } from "../types";
+import type { ChatWithInteractions, InsertChatSchema } from "../types";
 
 class ChatModel {
-  static async create() {
-    const [chat] = await db.insert(schema.chatsTable).values({}).returning();
+  static async create(data: z.infer<typeof InsertChatSchema>) {
+    const [chat] = await db.insert(schema.chatsTable).values(data).returning();
     return chat;
   }
 

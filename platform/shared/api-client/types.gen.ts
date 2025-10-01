@@ -32,6 +32,493 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
+export type GetAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents';
+};
+
+export type GetAgentsErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentsError = GetAgentsErrors[keyof GetAgentsErrors];
+
+export type GetAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
+
+export type CreateAgentData = {
+    body: {
+        name: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents';
+};
+
+export type CreateAgentErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateAgentError = CreateAgentErrors[keyof CreateAgentErrors];
+
+export type CreateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type DeleteAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type DeleteAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
+
+export type DeleteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
+
+export type GetAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type GetAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
+
+export type GetAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
+
+export type UpdateAgentData = {
+    body?: {
+        name?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type UpdateAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateAgentError = UpdateAgentErrors[keyof UpdateAgentErrors];
+
+export type UpdateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAgentToolInvocationPoliciesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-invocation-policies';
+};
+
+export type GetAgentToolInvocationPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentToolInvocationPoliciesError = GetAgentToolInvocationPoliciesErrors[keyof GetAgentToolInvocationPoliciesErrors];
+
+export type GetAgentToolInvocationPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: string;
+        value: string;
+        action: string;
+        blockPrompt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentToolInvocationPoliciesResponse = GetAgentToolInvocationPoliciesResponses[keyof GetAgentToolInvocationPoliciesResponses];
+
+export type UnassignToolInvocationPolicyFromAgentData = {
+    body?: never;
+    path: {
+        id: string;
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-invocation-policies/{policyId}';
+};
+
+export type UnassignToolInvocationPolicyFromAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UnassignToolInvocationPolicyFromAgentError = UnassignToolInvocationPolicyFromAgentErrors[keyof UnassignToolInvocationPolicyFromAgentErrors];
+
+export type UnassignToolInvocationPolicyFromAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignToolInvocationPolicyFromAgentResponse = UnassignToolInvocationPolicyFromAgentResponses[keyof UnassignToolInvocationPolicyFromAgentResponses];
+
+export type AssignToolInvocationPolicyToAgentData = {
+    body?: never;
+    path: {
+        id: string;
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-invocation-policies/{policyId}';
+};
+
+export type AssignToolInvocationPolicyToAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AssignToolInvocationPolicyToAgentError = AssignToolInvocationPolicyToAgentErrors[keyof AssignToolInvocationPolicyToAgentErrors];
+
+export type AssignToolInvocationPolicyToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignToolInvocationPolicyToAgentResponse = AssignToolInvocationPolicyToAgentResponses[keyof AssignToolInvocationPolicyToAgentResponses];
+
+export type GetAgentTrustedDataPoliciesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/trusted-data-policies';
+};
+
+export type GetAgentTrustedDataPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentTrustedDataPoliciesError = GetAgentTrustedDataPoliciesErrors[keyof GetAgentTrustedDataPoliciesErrors];
+
+export type GetAgentTrustedDataPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: string;
+        value: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentTrustedDataPoliciesResponse = GetAgentTrustedDataPoliciesResponses[keyof GetAgentTrustedDataPoliciesResponses];
+
+export type UnassignTrustedDataPolicyFromAgentData = {
+    body?: never;
+    path: {
+        id: string;
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/trusted-data-policies/{policyId}';
+};
+
+export type UnassignTrustedDataPolicyFromAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UnassignTrustedDataPolicyFromAgentError = UnassignTrustedDataPolicyFromAgentErrors[keyof UnassignTrustedDataPolicyFromAgentErrors];
+
+export type UnassignTrustedDataPolicyFromAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignTrustedDataPolicyFromAgentResponse = UnassignTrustedDataPolicyFromAgentResponses[keyof UnassignTrustedDataPolicyFromAgentResponses];
+
+export type AssignTrustedDataPolicyToAgentData = {
+    body?: never;
+    path: {
+        id: string;
+        policyId: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/trusted-data-policies/{policyId}';
+};
+
+export type AssignTrustedDataPolicyToAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AssignTrustedDataPolicyToAgentError = AssignTrustedDataPolicyToAgentErrors[keyof AssignTrustedDataPolicyToAgentErrors];
+
+export type AssignTrustedDataPolicyToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignTrustedDataPolicyToAgentResponse = AssignTrustedDataPolicyToAgentResponses[keyof AssignTrustedDataPolicyToAgentResponses];
+
 export type GetChatsData = {
     body?: never;
     path?: never;
@@ -45,6 +532,7 @@ export type GetChatsResponses = {
      */
     200: Array<{
         id: string;
+        agentId: string;
         createdAt: string;
         updatedAt: string;
         interactions: Array<{
@@ -169,7 +657,9 @@ export type GetChatsResponses = {
 export type GetChatsResponse = GetChatsResponses[keyof GetChatsResponses];
 
 export type CreateChatData = {
-    body?: never;
+    body: {
+        agentId: string;
+    };
     path?: never;
     query?: never;
     url: '/api/chats';
@@ -181,6 +671,7 @@ export type CreateChatResponses = {
      */
     200: {
         id: string;
+        agentId: string;
         createdAt: string;
         updatedAt: string;
     };
@@ -217,6 +708,7 @@ export type GetChatResponses = {
      */
     200: {
         id: string;
+        agentId: string;
         createdAt: string;
         updatedAt: string;
         interactions: Array<{
@@ -471,7 +963,16 @@ export type OpenAiChatCompletionsData = {
                 name: string;
                 description?: string;
                 /**
+                 *
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
                  */
                 parameters?: {
                     [key: string]: unknown;
@@ -548,7 +1049,16 @@ export type OpenAiChatCompletionsData = {
                             name: string;
                             description?: string;
                             /**
+                             *
                              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
                              */
                             parameters?: {
                                 [key: string]: unknown;
@@ -735,68 +1245,6 @@ export type OpenAiChatCompletionsResponses = {
 
 export type OpenAiChatCompletionsResponse = OpenAiChatCompletionsResponses[keyof OpenAiChatCompletionsResponses];
 
-export type ListOpenAiModelsData = {
-    body?: never;
-    headers: {
-        /**
-         * Bearer token for OpenAI
-         */
-        authorization: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/proxy/openai/models';
-};
-
-export type ListOpenAiModelsErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type ListOpenAiModelsError = ListOpenAiModelsErrors[keyof ListOpenAiModelsErrors];
-
-export type ListOpenAiModelsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        /**
-         * The model identifier, which can be referenced in the API endpoints
-         */
-        id: string;
-        /**
-         * The Unix timestamp (in seconds) when the model was created.
-         */
-        created: number;
-        /**
-         * The object type, which is always 'model'
-         */
-        object: 'model';
-        /**
-         * The organization that owns the model
-         */
-        owned_by: string;
-    }>;
-};
-
-export type ListOpenAiModelsResponse = ListOpenAiModelsResponses[keyof ListOpenAiModelsResponses];
-
 export type GetToolsData = {
     body?: never;
     path?: never;
@@ -824,12 +1272,524 @@ export type GetToolsResponses = {
      */
     200: Array<{
         id: string;
-        definition: string | number | boolean | null | {
+        agentId: string;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
             [key: string]: unknown;
-        } | Array<unknown>;
+        };
+        description: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetOperatorsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/operators';
+};
+
+export type GetOperatorsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        value: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        label: string;
+    }>;
+};
+
+export type GetOperatorsResponse = GetOperatorsResponses[keyof GetOperatorsResponses];
+
+export type GetToolInvocationPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation';
+};
+
+export type GetToolInvocationPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetToolInvocationPoliciesError = GetToolInvocationPoliciesErrors[keyof GetToolInvocationPoliciesErrors];
+
+export type GetToolInvocationPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: string;
+        value: string;
+        action: string;
+        blockPrompt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesResponses[keyof GetToolInvocationPoliciesResponses];
+
+export type CreateToolInvocationPolicyData = {
+    body: {
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow' | 'block';
+        blockPrompt?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation';
+};
+
+export type CreateToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateToolInvocationPolicyError = CreateToolInvocationPolicyErrors[keyof CreateToolInvocationPolicyErrors];
+
+export type CreateToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: string;
+        value: string;
+        action: string;
+        blockPrompt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateToolInvocationPolicyResponse = CreateToolInvocationPolicyResponses[keyof CreateToolInvocationPolicyResponses];
+
+export type DeleteToolInvocationPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type DeleteToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteToolInvocationPolicyError = DeleteToolInvocationPolicyErrors[keyof DeleteToolInvocationPolicyErrors];
+
+export type DeleteToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteToolInvocationPolicyResponse = DeleteToolInvocationPolicyResponses[keyof DeleteToolInvocationPolicyResponses];
+
+export type GetToolInvocationPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type GetToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetToolInvocationPolicyError = GetToolInvocationPolicyErrors[keyof GetToolInvocationPolicyErrors];
+
+export type GetToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: string;
+        value: string;
+        action: string;
+        blockPrompt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[keyof GetToolInvocationPolicyResponses];
+
+export type UpdateToolInvocationPolicyData = {
+    body?: {
+        toolId?: string;
+        description?: string;
+        argumentName?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+        action?: 'allow' | 'block';
+        blockPrompt?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type UpdateToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateToolInvocationPolicyError = UpdateToolInvocationPolicyErrors[keyof UpdateToolInvocationPolicyErrors];
+
+export type UpdateToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        argumentName: string;
+        operator: string;
+        value: string;
+        action: string;
+        blockPrompt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateToolInvocationPolicyResponse = UpdateToolInvocationPolicyResponses[keyof UpdateToolInvocationPolicyResponses];
+
+export type GetTrustedDataPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies';
+};
+
+export type GetTrustedDataPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTrustedDataPoliciesError = GetTrustedDataPoliciesErrors[keyof GetTrustedDataPoliciesErrors];
+
+export type GetTrustedDataPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: string;
+        value: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[keyof GetTrustedDataPoliciesResponses];
+
+export type CreateTrustedDataPolicyData = {
+    body: {
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies';
+};
+
+export type CreateTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTrustedDataPolicyError = CreateTrustedDataPolicyErrors[keyof CreateTrustedDataPolicyErrors];
+
+export type CreateTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: string;
+        value: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTrustedDataPolicyResponse = CreateTrustedDataPolicyResponses[keyof CreateTrustedDataPolicyResponses];
+
+export type DeleteTrustedDataPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type DeleteTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTrustedDataPolicyError = DeleteTrustedDataPolicyErrors[keyof DeleteTrustedDataPolicyErrors];
+
+export type DeleteTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTrustedDataPolicyResponse = DeleteTrustedDataPolicyResponses[keyof DeleteTrustedDataPolicyResponses];
+
+export type GetTrustedDataPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type GetTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTrustedDataPolicyError = GetTrustedDataPolicyErrors[keyof GetTrustedDataPolicyErrors];
+
+export type GetTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: string;
+        value: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof GetTrustedDataPolicyResponses];
+
+export type UpdateTrustedDataPolicyData = {
+    body?: {
+        toolId?: string;
+        description?: string;
+        attributePath?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type UpdateTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTrustedDataPolicyError = UpdateTrustedDataPolicyErrors[keyof UpdateTrustedDataPolicyErrors];
+
+export type UpdateTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        toolId: string;
+        description: string;
+        attributePath: string;
+        operator: string;
+        value: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];

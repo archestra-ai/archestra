@@ -1,8 +1,12 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "../../types";
+import agentsTable from "./agent";
 
 const toolsTable = pgTable("tools", {
   id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agentsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull().unique(),
   parameters: jsonb("parameters")
     .$type<ToolParametersContent>()

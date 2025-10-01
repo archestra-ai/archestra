@@ -1,28 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type GetToolsResponse, getTools } from "shared/api-client";
 
 export default function ToolMappingPage() {
   const [tools, setTools] = useState<GetToolsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        const { data } = await getTools();
-        if (data) {
-          setTools(data);
-        } else {
-          setError("Failed to fetch tools");
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch tools");
+  const fetchTools = useCallback(async () => {
+    try {
+      const { data } = await getTools();
+      if (data) {
+        setTools(data);
+      } else {
+        setError("Failed to fetch tools");
       }
-    };
-
-    fetchTools();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch tools");
+    }
   }, []);
+
+  useEffect(() => {
+    fetchTools();
+  }, [fetchTools]);
 
   if (error) {
     return <div>Error: {error}</div>;

@@ -8,6 +8,7 @@ import { type Tool, ToolModel } from '@backend/models/tools';
 import PodmanContainer from '@backend/sandbox/podman/container';
 import { type AvailableTool, type SandboxedMcpServerStatusSummary } from '@backend/sandbox/schemas';
 import { areTokensExpired } from '@backend/server/plugins/mcp-oauth';
+import { mcpLogMonitorRegistry } from '@backend/server/plugins/mcp-setup/mcp-setup-registry';
 import { type McpTools } from '@backend/types';
 import log from '@backend/utils/logger';
 import WebSocketService from '@backend/websocket';
@@ -45,6 +46,10 @@ export default class SandboxedMcpServer {
       analyzed_at: string | null;
     }
   > = new Map();
+
+  // A list of cleanup functions added by MCP setup. They should be called when MCP is stopped.
+  // For example, for a custom MCP log poller, a cleanup function would stop polling the logs.
+  private mcpTeardownCallbacks: (() => void)[] = [];
 
   constructor(mcpServer: McpServer, podmanSocketPath?: string) {
     this.mcpServer = mcpServer;
@@ -459,6 +464,24 @@ export default class SandboxedMcpServer {
 
         throw error;
       }
+
+      // Performs additional setup, if specified, after starting the server.
+      const setup = this.mcpServer.serverConfig.setup;
+      if (!setup) {
+        return;
+      }
+      log.info(`Performing MCP server setup: ${this.mcpServer.name}`, setup);
+      setup.forEach((step) => {
+        if (step.type === 'log-monitor' && step.provider in mcpLogMonitorRegistry) {
+          const logMonitor = mcpLogMonitorRegistry[step.provider];
+          log.info(`Initializing log monitor for MCP server: ${this.mcpServer.name}`);
+          const cleanup = logMonitor(this.mcpServer.id, async (lines: number) => {
+            const { logs } = await this.getMcpServerLogs(lines);
+            return logs;
+          });
+          this.mcpTeardownCallbacks.push(cleanup);
+        }
+      });
     }
   }
 
@@ -481,6 +504,12 @@ export default class SandboxedMcpServer {
     }
 
     await this.disconnectMcpClient();
+
+    // Perform custom teardown, if any
+    while (this.mcpTeardownCallbacks.length > 0) {
+      const teardown = this.mcpTeardownCallbacks.pop();
+      teardown?.();
+    }
   }
 
   async delete() {
@@ -504,6 +533,9 @@ export default class SandboxedMcpServer {
 
   /**
    * Get the last N lines of logs from the MCP server
+   * with newest log entries in the bottom, e.g.:
+   * 2025-09-18T20:11:07+02:00 Error accessing keyring
+   * 2025-09-18T22:15:04+02:00 Installed 1 package in 4ms
    */
   async getMcpServerLogs(lines: number = 100) {
     if (this.isRemoteServer) {

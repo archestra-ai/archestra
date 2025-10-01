@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { McpServer } from '@backend/models/mcpServer';
+import { mcpLogMonitorRegistry } from '@backend/server/plugins/mcp-setup/mcp-setup-registry';
 
 import SandboxedMcpServer from './index';
 
@@ -16,6 +17,13 @@ vi.mock('@backend/utils/logger', () => ({
 vi.mock('@backend/websocket', () => ({
   default: {
     broadcast: vi.fn(),
+  },
+}));
+
+// Mock the setup registry at the top level
+vi.mock('@backend/server/plugins/mcp-setup/mcp-setup-registry', () => ({
+  mcpLogMonitorRegistry: {
+    whatsapp: vi.fn(),
   },
 }));
 
@@ -195,6 +203,69 @@ describe('SandboxedMcpServer', () => {
           is_write: null,
         },
       });
+    });
+  });
+
+  describe('custom setup', () => {
+    let mockMcpWithSetup: McpServer;
+    let sandboxedMcpServer: SandboxedMcpServer;
+    beforeEach(() => {
+      vi.clearAllMocks();
+
+      // FIXME Consider extracting the mock into a helper function
+      mockMcpWithSetup = {
+        id: 'mcp_with_custom_setup',
+        name: 'MCPWithCustomSetup',
+        serverType: 'local',
+        state: 'running',
+        serverConfig: {
+          command: 'node',
+          args: ['server.js'],
+          setup: [{ type: 'log-monitor', provider: 'whatsapp' }],
+        },
+        userConfigValues: {},
+        oauthTokens: null,
+        oauthClientInfo: null,
+        oauthServerMetadata: null,
+        oauthResourceMetadata: null,
+        oauthConfig: null,
+        status: 'installed',
+        remoteUrl: null,
+        updatedAt: '2025-09-16T21:00:00.000Z',
+        createdAt: '2025-09-16T21:00:00.000Z',
+      } as McpServer;
+
+      sandboxedMcpServer = new SandboxedMcpServer(mockMcpWithSetup, '/mock/socket/path');
+      vi.spyOn(sandboxedMcpServer as any, 'fetchCachedTools').mockResolvedValue(undefined);
+      vi.spyOn(sandboxedMcpServer as any, 'pingMcpServerContainerUntilHealthy').mockResolvedValue(undefined);
+      vi.spyOn(sandboxedMcpServer as any, 'createMcpClient').mockResolvedValue(undefined);
+      vi.spyOn(sandboxedMcpServer as any, 'fetchTools').mockResolvedValue(undefined);
+      vi.spyOn(sandboxedMcpServer as any, 'stopPeriodicAnalysisUpdates').mockImplementation(() => {});
+    });
+
+    it('should perform custom setup on server start', async () => {
+      const cleanup = () => {};
+      const mockWhatsAppLogMonitor = vi.mocked(mcpLogMonitorRegistry.whatsapp);
+      mockWhatsAppLogMonitor.mockReturnValue(cleanup);
+
+      vi.spyOn(sandboxedMcpServer, 'getMcpServerLogs').mockResolvedValue({
+        logs: 'test logs',
+        containerName: 'test-container',
+      });
+
+      await sandboxedMcpServer.start();
+      expect(sandboxedMcpServer['mcpTeardownCallbacks']).toHaveLength(1);
+      expect(sandboxedMcpServer['mcpTeardownCallbacks'][0]).toBe(cleanup);
+    });
+
+    it('should perform custom teardown on server stop', async () => {
+      const cleanup = vi.fn();
+
+      sandboxedMcpServer['mcpTeardownCallbacks'].push(cleanup);
+      await sandboxedMcpServer.stop();
+
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(sandboxedMcpServer['mcpTeardownCallbacks']).toHaveLength(0);
     });
   });
 });

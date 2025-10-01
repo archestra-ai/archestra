@@ -57,12 +57,18 @@ RUN apk add --no-cache \
    # DNS resolution
    bind-tools \
    # Additional SSL/TLS libraries
-   openssl-dev
+   openssl-dev \
+   # Go runtime for Go-based MCP servers
+   go
 
 # Copy Python environment from builder
 COPY --from=python-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
+
+# Set up Go environment
+ENV GOPATH=/home/mcp/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
 
 # Update CA certificates and configure git to use system certificates
 RUN update-ca-certificates && \
@@ -100,7 +106,7 @@ ENV NODE_ENV=production
 
 # Health check for container monitoring
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-   CMD node -e "process.exit(0)" && python3 -c "exit(0)"
+   CMD node -e "process.exit(0)" && python3 -c "exit(0)" && go version
 
 # Use tini for proper signal handling
 ENTRYPOINT ["/sbin/tini", "--"]

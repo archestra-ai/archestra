@@ -4,6 +4,7 @@ import { AlertCircle, ChevronDown, ChevronRight, Loader2, Plus, PlusCircle } fro
 import { useEffect, useState } from 'react';
 
 import { deconstructToolId } from '@constants';
+import McpServerSetup from '@ui/components/ConnectorCatalog/McpServerSetup';
 import { ToolHoverCard } from '@ui/components/ToolHoverCard';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@ui/components/ui/collapsible';
 import {
@@ -24,10 +25,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
 
   const { availableTools, loadingAvailableTools, selectedToolIds, addSelectedTool, removeSelectedTool } =
     useToolsStore();
-  const { installedMcpServers } = useMcpServersStore();
+  const { installedMcpServers, mcpServerSetup } = useMcpServersStore();
 
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [openSetupServerId, setOpenSetupServerId] = useState<string | null>(null);
 
   // Helper function to check if server is still initializing
   const isServerInitializing = (serverId: string): boolean => {
@@ -43,6 +45,26 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
       mcpServer.state === 'initializing' ||
       mcpServer.state === 'error'
     );
+  };
+
+  // Checks if setup is pending. E.g. UI is waiting for device pair and QR code is ready.
+  const isSetupPending = (serverId: string): boolean => {
+    const setup = mcpServerSetup[serverId];
+    return setup?.status === 'pending';
+  };
+
+  // Checks if there was an error in setup, e.g. pair process timed out
+  const isSetupError = (serverId: string): boolean => {
+    const setup = mcpServerSetup[serverId];
+    return setup?.status === 'error';
+  };
+
+  // Checks if server needs setup but has not received setup info yet
+  const isLoadingSetup = (serverId: string): boolean => {
+    const mcpServer = installedMcpServers.find((s) => s.id === serverId);
+    if (!mcpServer) return false;
+    const needsSetup = (mcpServer.serverConfig.setup?.length ?? 0) > 0;
+    return needsSetup && !mcpServerSetup[serverId];
   };
 
   // Helper function to find common prefix
@@ -260,7 +282,12 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                 const serverState = installedMcpServers.find((s) => s.id === serverData.serverId)?.state;
                 const isError = serverState === 'error';
                 const hasTools = serverData.tools.length > 0;
-
+                const mcpId = `${serverData.serverId}${serverName}`;
+                const setupLoading = isLoadingSetup(mcpId);
+                const setupPending = isSetupPending(mcpId);
+                const setupError = isSetupError(mcpId);
+                const setupIncomplete = setupLoading || setupPending || setupError;
+                const isDisabled = isServerInitializing(serverData.serverId) || setupIncomplete;
                 return (
                   <Collapsible
                     key={serverName}
@@ -268,10 +295,17 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                     onOpenChange={() => toggleServerExpansion(serverName)}
                   >
                     <SidebarMenuItem
-                      className={`flex items-center gap-1 px-2 py-1.5 rounded transition-colors bg-muted/50 ${hasTools ? 'hover:bg-muted/70' : 'opacity-60'}`}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded transition-colors bg-muted/50 ${hasTools && !setupLoading ? 'hover:bg-muted/70' : 'opacity-60'}`}
                     >
                       <CollapsibleTrigger
-                        className={`w-full flex-1 ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                        className={`w-full flex-1 ${hasTools || setupPending || setupError ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                        disabled={!hasTools || setupLoading}
+                        onClick={(e) => {
+                          if (setupPending || setupError) {
+                            e.preventDefault();
+                            setOpenSetupServerId(mcpId);
+                          }
+                        }}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -284,8 +318,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                   server.state === 'created' ||
                                   server.state === 'initializing');
 
-                              if (isError) {
+                              if (isError || setupError) {
                                 return <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />;
+                              }
+                              if (setupPending) {
+                                return <div className="w-3 h-3 bg-orange-500 rounded-full flex-shrink-0" />;
                               }
                               if (hasTools && isActuallyInitializing) {
                                 return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />;
@@ -299,6 +336,12 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                           {(() => {
                             if (isError) {
                               return 'Error';
+                            } else if (setupLoading) {
+                              return 'Loading setup...';
+                            } else if (setupPending) {
+                              return 'Setup required';
+                            } else if (setupError) {
+                              return 'Setup failed';
                             }
 
                             // Check the actual server state to determine what to show
@@ -330,7 +373,7 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (hasTools) {
+                          if (hasTools && !setupIncomplete) {
                             // Add all tools from this server
                             serverData.tools.forEach((tool) => addSelectedTool(tool.id));
                           }
@@ -338,13 +381,20 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                         title={
                           isError
                             ? `${serverName} has an error`
-                            : !hasTools
-                              ? `${serverName} is loading tools`
-                              : `Add all ${serverName} tools`
+                            : setupPending
+                              ? `${serverName} setup is required`
+                              : setupError
+                                ? `${serverName} setup failed`
+                                : !hasTools
+                                  ? `${serverName} is loading tools`
+                                  : `Add all ${serverName} tools`
                         }
-                        disabled={!hasTools}
+                        disabled={!hasTools || setupIncomplete}
+                        className={`${!hasTools || setupIncomplete ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        <PlusCircle className="h-4 w-4 cursor-pointer" />
+                        <PlusCircle
+                          className={`h-4 w-4 ${!hasTools || setupIncomplete ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        />
                       </button>
                       <CollapsibleTrigger className={` ${hasTools ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -361,7 +411,11 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                       {!hasTools && isError ? (
                         <SidebarMenuItem>
                           <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                            Server error - check Settings
+                            {setupError
+                              ? 'Setup failed'
+                              : setupPending
+                                ? 'Setup required'
+                                : 'Server error - check Settings'}
                           </div>
                         </SidebarMenuItem>
                       ) : (
@@ -383,25 +437,45 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
                                 tool={tool}
                                 side="right"
                                 align="start"
-                                showInstructions={!isInitializing}
+                                showInstructions={!isDisabled}
                                 instructionText={
-                                  isInitializing
-                                    ? 'Server is still initializing'
-                                    : 'Click to add this tool to your chat'
+                                  setupLoading
+                                    ? 'Server setup is loading'
+                                    : setupPending
+                                      ? 'Server setup is required'
+                                      : setupError
+                                        ? 'Server setup failed'
+                                        : isInitializing
+                                          ? 'Server is still initializing'
+                                          : 'Click to add this tool to your chat'
                                 }
                               >
                                 <div
-                                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md w-full ${isInitializing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer'}`}
+                                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md w-full ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer'}`}
                                   onClick={() => {
-                                    if (!isInitializing) {
+                                    if (!isDisabled) {
                                       handleToolToggle(id, true);
                                     }
                                   }}
-                                  title={isInitializing ? `${serverName} is still initializing` : fullName}
+                                  title={
+                                    setupPending
+                                      ? `${serverName} setup is required`
+                                      : setupError
+                                        ? `${serverName} setup failed`
+                                        : setupLoading
+                                          ? `${serverName} setup is loading`
+                                          : isInitializing
+                                            ? `${serverName} is still initializing`
+                                            : fullName
+                                  }
                                 >
                                   {status === 'awaiting_ollama_model' || status === 'in_progress' ? (
                                     <div className="w-2 h-2 border border-muted-foreground rounded-full animate-spin border-t-transparent flex-shrink-0" />
                                   ) : status === 'error' ? (
+                                    <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                                  ) : setupPending ? (
+                                    <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />
+                                  ) : setupError ? (
                                     <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
                                   ) : isInitializing ? (
                                     <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0" />
@@ -444,6 +518,22 @@ export default function McpServerWithToolsSidebarSection(_props: McpServerWithTo
           )}
         </SidebarMenu>
       </SidebarGroupContent>
+
+      {/* Setup dialog for pending servers */}
+      {openSetupServerId && mcpServerSetup[openSetupServerId] && (
+        <McpServerSetup
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenSetupServerId(null);
+            }
+          }}
+          provider={mcpServerSetup[openSetupServerId].provider}
+          status={mcpServerSetup[openSetupServerId].status}
+          content={mcpServerSetup[openSetupServerId].content}
+          serverId={openSetupServerId}
+        />
+      )}
     </SidebarGroup>
   );
 }

@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from "ai";
-import InteractionModel from "../models/interaction";
+import { InteractionModel } from "../models";
 import type {
   AutonomyPolicyEvaluator,
   DynamicAutonomyPolicyEvaluatorResult,

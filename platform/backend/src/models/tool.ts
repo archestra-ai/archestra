@@ -1,10 +1,13 @@
 import db, { schema } from "../database";
-import type { Tool } from "../types";
+import type { InsertTool, Tool } from "../types";
 
 class ToolModel {
+  static async createToolIfNotExists(tool: InsertTool) {
+    return db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
+  }
+
   static async findAll(): Promise<Tool[]> {
-    const tools = await db.select().from(schema.toolsTable);
-    return tools;
+    return db.select().from(schema.toolsTable);
   }
 }
 

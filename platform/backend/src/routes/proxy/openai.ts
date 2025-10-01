@@ -2,13 +2,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
 import config from "../../config";
-import db, { schema } from "../../database";
 import ToolInvocationPolicyEvaluator from "../../guardrails/tool-invocation";
 import TrustedDataPolicyEvaluator from "../../guardrails/trusted-data";
-import ChatModel from "../../models/chat";
-import InteractionModel from "../../models/interaction";
-import { ChatIdSchema, ErrorResponseSchema } from "../../types";
-import { OpenAi } from "../../types/llm-providers";
+import { ChatModel, InteractionModel, ToolModel } from "../../models";
+import { ChatIdSchema, ErrorResponseSchema, OpenAi } from "../../types";
 
 const { trustedDataAutonomyPolicies, toolInvocationAutonomyPolicies } = config;
 
@@ -89,10 +86,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Persist tools if present in the request
         if (requestBody.tools && requestBody.tools.length > 0) {
           for (const tool of requestBody.tools) {
-            await db
-              .insert(schema.toolsTable)
-              .values({ definition: tool })
-              .onConflictDoNothing();
+            await ToolModel.createToolIfNotExists({
+              definition: tool,
+            });
           }
         }
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,8 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 type Tool = {
   id: string;
@@ -121,8 +121,7 @@ export default function SettingsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...newToolInvocationPolicy,
-            blockPrompt:
-              newToolInvocationPolicy.blockPrompt || null,
+            blockPrompt: newToolInvocationPolicy.blockPrompt || null,
           }),
         },
       );
@@ -577,8 +576,8 @@ export default function SettingsPage() {
                     <div className="space-y-2 text-sm">
                       <p className="font-medium">{policy.description}</p>
                       <div className="bg-muted p-2 rounded font-mono text-xs">
-                        {policy.attributePath} {policy.operator} "
-                        {policy.value}"
+                        {policy.attributePath} {policy.operator} "{policy.value}
+                        "
                       </div>
                     </div>
                   </CardContent>

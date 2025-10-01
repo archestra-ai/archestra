@@ -28,7 +28,28 @@ const openai = new OpenAI({
 /**
  * Create a new chat session via the backend API
  */
-const createNewChat = async (agentId: string): Promise<string> => {
+const createNewChat = async (
+  agentId: string | null,
+): Promise<string | null> => {
+  /**
+   * If agent ID is specified, create a new chat session that we will then pass along to the
+   * Archestra proxy to explicitly tie our agent's interactions to that chat (and the Archestra agent associated with that chat)
+   *
+   * If agent ID is not specified, the Archestra proxy creates one for us
+   * (and implicitly creates a chat session for us based on the hash of the first message)
+   */
+  if (!agentId) {
+    console.log(`
+⚠️ ⚠️ ⚠️
+No agent ID specified, the Archestra proxy will ensure a default one is created for us.
+
+Additionally, it will implicitly create a chat session for us based on the hash of the first message
+
+These IDs will be used to associate the agent's interactions to that chat/agent.
+`);
+    return null;
+  }
+
   console.log(`Creating new chat session for agent ${agentId}...`);
 
   const response = await fetch(`${BACKEND_URL}/api/chats`, {
@@ -55,7 +76,7 @@ const createNewChat = async (agentId: string): Promise<string> => {
 };
 
 const parseArgs = (): {
-  agentId: string;
+  agentId: string | null;
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
@@ -63,7 +84,7 @@ const parseArgs = (): {
   if (process.argv.includes("--help")) {
     console.log(`
 Options:
---agent-id <agent-id>     The ID of the agent to use for the chat
+--agent-id <agent-id>     The ID of the agent to use for the chat. Optional, if not provided, a new agent will be created.
 --include-external-email  Include external email in mock Gmail data
 --include-malicious-email Include malicious email in mock Gmail data
 --debug                   Print debug messages
@@ -74,16 +95,9 @@ Options:
 
   // Parse --agent-id flag
   const agentIdIndex = process.argv.indexOf("--agent-id");
-  const agentId = agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null;
-
-  if (!agentId) {
-    console.error("Error: Agent ID is required");
-    console.error("Usage: pnpm cli-chat-with-guardrails --agent-id <agent-id>");
-    process.exit(1);
-  }
 
   return {
-    agentId,
+    agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
@@ -243,7 +257,7 @@ const cliChatWithGuardrails = async () => {
     output: process.stdout,
   });
 
-  // Create initial chat session
+  // (conditionally) create new chat session (if agent ID is specified)
   let chatId = await createNewChat(agentId);
 
   const systemPromptMessage: ChatCompletionMessageParam = {
@@ -299,11 +313,13 @@ Some examples:
             tools: getToolDefinitions(),
             tool_choice: "auto",
           },
-          {
-            headers: {
-              "X-Archestra-Chat-Id": chatId,
-            },
-          },
+          chatId
+            ? {
+                headers: {
+                  "X-Archestra-Chat-Id": chatId,
+                },
+              }
+            : undefined,
         );
       } catch (error: any) {
         // Handle backend guardrails errors (403, etc.)

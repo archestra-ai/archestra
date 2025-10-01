@@ -1,14 +1,28 @@
+import crypto from "node:crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
 import {
+  AgentModel,
   ChatModel,
   InteractionModel,
   ToolInvocationPolicyModel,
   ToolModel,
   TrustedDataPolicyModel,
 } from "../../models";
-import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "../../types";
+import {
+  type Chat,
+  ErrorResponseSchema,
+  OpenAi,
+  UuidIdSchema,
+} from "../../types";
+
+const ChatCompletionsHeadersSchema = z.object({
+  "x-archestra-chat-id": UuidIdSchema.optional().describe(
+    "If specified, interactions will be associated with this chat, otherwise a new chat will be created",
+  ),
+  authorization: OpenAi.API.ApiKeySchema,
+});
 
 /**
  * Extract tool name from conversation history by finding the assistant message
@@ -42,6 +56,63 @@ const extractToolNameFromHistory = async (
   return null;
 };
 
+const generateChatIdHashFromRequest = ({
+  messages,
+}: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>) =>
+  crypto
+    .createHash("sha256")
+    .update(JSON.stringify(messages[0].content))
+    .digest("hex");
+
+const getAgentAndChatIdFromRequest = async (
+  request: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,
+  {
+    "x-archestra-chat-id": chatIdHeader,
+  }: z.infer<typeof ChatCompletionsHeadersSchema>,
+): Promise<
+  { chatId: string; agentId: string } | z.infer<typeof ErrorResponseSchema>
+> => {
+  let chatId = chatIdHeader;
+  let agentId: string | undefined;
+  let chat: Chat | null = null;
+
+  if (chatId) {
+    /**
+     * User has specified a particular chat ID, therefore let's first get the chat and then get the agent ID
+     * associated with that chat
+     */
+
+    // Validate chat exists and get agent ID
+    chat = await ChatModel.findById(chatId);
+    if (!chat) {
+      return {
+        error: {
+          message: `Specified chat ID ${chatId} not found`,
+          type: "not_found",
+        },
+      };
+    }
+
+    agentId = chat.agentId;
+  } else {
+    /**
+     * User has not specified a particular chat ID, therefore let's first create or get the
+     * "first" agent, and then we will take a hash of the first chat message to create a new chat ID
+     */
+    const agent = await AgentModel.ensureDefaultAgentExists();
+    agentId = agent.id;
+
+    // Create or get chat
+    chat = await ChatModel.createOrGetByHash({
+      agentId,
+      hashForId: generateChatIdHashFromRequest(request), // Generate chat ID hash from request
+    });
+    chatId = chat.id;
+  }
+
+  return { chatId, agentId };
+};
+
 /**
  * NOTE: we may just want to use something like fastify-http-proxy to proxy ALL openai endpoints
  * except for the ones that we are handling "specially" (ex. chat/completions)
@@ -60,10 +131,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a chat completion with OpenAI",
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
-        headers: z.object({
-          "x-archestra-chat-id": UuidIdSchema,
-          authorization: OpenAi.API.ApiKeySchema,
-        }),
+        headers: ChatCompletionsHeadersSchema,
         response: {
           200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,
@@ -73,24 +141,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async (
-      {
-        body: { ...requestBody },
-        headers: { "x-archestra-chat-id": chatId, authorization: openAiApiKey },
-      },
-      reply,
-    ) => {
-      // Validate chat exists and get agent ID
-      const chat = await ChatModel.findById(chatId);
-      if (!chat) {
-        return reply.status(404).send({
-          error: {
-            message: "Chat not found",
-            type: "invalid_request_error",
-          },
-        });
+    async ({ body: { ...requestBody }, headers }, reply) => {
+      const chatAndAgent = await getAgentAndChatIdFromRequest(
+        requestBody,
+        headers,
+      );
+
+      if ("error" in chatAndAgent) {
+        return reply.status(400).send(chatAndAgent);
       }
-      const agentId = chat.agentId;
+
+      const { chatId, agentId } = chatAndAgent;
+      const { authorization: openAiApiKey } = headers;
 
       const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 

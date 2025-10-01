@@ -532,6 +532,7 @@ export type GetChatsResponses = {
      */
     200: Array<{
         id: string;
+        hashForId: string | null;
         agentId: string;
         createdAt: string;
         updatedAt: string;
@@ -658,6 +659,7 @@ export type GetChatsResponse = GetChatsResponses[keyof GetChatsResponses];
 
 export type CreateChatData = {
     body: {
+        hashForId?: string | null;
         agentId: string;
     };
     path?: never;
@@ -671,6 +673,7 @@ export type CreateChatResponses = {
      */
     200: {
         id: string;
+        hashForId: string | null;
         agentId: string;
         createdAt: string;
         updatedAt: string;
@@ -708,6 +711,7 @@ export type GetChatResponses = {
      */
     200: {
         id: string;
+        hashForId: string | null;
         agentId: string;
         createdAt: string;
         updatedAt: string;
@@ -1115,7 +1119,10 @@ export type OpenAiChatCompletionsData = {
         stream?: boolean | null;
     };
     headers: {
-        'x-archestra-chat-id': string;
+        /**
+         * If specified, interactions will be associated with this chat, otherwise a new chat will be created
+         */
+        'x-archestra-chat-id'?: string;
         /**
          * Bearer token for OpenAI
          */

@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import db, { schema } from "../database";
 import type { Agent, InsertAgent, ToolInvocation, TrustedData } from "../types";
 
+const DEFAULT_AGENT_NAME = "Default Agent";
+
 class AgentModel {
   static async create(agent: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
@@ -21,6 +23,18 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id));
     return agent || null;
+  }
+
+  static async ensureDefaultAgentExists(): Promise<Agent> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.name, DEFAULT_AGENT_NAME));
+
+    if (!agent) {
+      return await AgentModel.create({ name: DEFAULT_AGENT_NAME });
+    }
+    return agent;
   }
 
   static async update(

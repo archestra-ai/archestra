@@ -23,6 +23,10 @@ export type ArchestraMcpServerManifest = {
           [key: string]: string;
         };
         type: 'local';
+        setup?: Array<{
+          type: 'log-monitor';
+          provider: 'whatsapp';
+        }>;
       }
     | {
         type: 'remote';

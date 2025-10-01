@@ -1,15 +1,24 @@
 import { z } from "zod";
 
+export const FunctionDefinitionParametersSchema = z
+  .record(z.string(), z.unknown())
+  .optional()
+  .describe(`
+    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+
+    The parameters the functions accepts, described as a JSON Schema object. See the
+    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+    documentation about the format.
+
+    Omitting parameters defines a function with an empty parameter list.
+  `);
+
 const FunctionDefinitionSchema = z
   .object({
     name: z.string(),
     description: z.string().optional(),
-    parameters: z
-      .record(z.string(), z.any())
-      .optional()
-      .describe(
-        `https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217`,
-      ),
+    parameters: FunctionDefinitionParametersSchema,
     strict: z.boolean().nullable().optional(),
   })
   .describe(

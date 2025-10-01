@@ -133,8 +133,10 @@ The production backend provides:
 - **Chat Management**:
   - `POST /api/chats` - Create new chat session
   - `GET /api/chats/:chatId` - Get chat with all interactions
+  - **Note**: Chat ID is now optional when using the OpenAI proxy - if not provided via `x-archestra-chat-id` header, a chat will be created/retrieved based on the hash of the first message
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
+    - Optional `x-archestra-chat-id` header - if not provided, automatically creates/retrieves default agent and chat based on message content hash
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
 - **Agent Management**:
@@ -205,6 +207,9 @@ The `experiments/` workspace contains prototype features:
 #### CLI Testing
 
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
+  - Supports `--agent-id <agent-id>` flag to specify an agent (optional)
+  - If no agent ID is provided, the backend will create/use a default agent
+  - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`
 - Requires `OPENAI_API_KEY` in `.env` (copy from `.env.example`)
 
 ### Code Quality Tools

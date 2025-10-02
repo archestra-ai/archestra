@@ -1,4 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { tool } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { ErrorResponseSchema, OpenAi } from "../../types";
@@ -67,9 +68,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.trustedData.evaluatePolicies(messages, chatId, agentId);
         await utils.persistUserMessage(messages, chatId);
 
-        let assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessage | null =
-          null;
-
         if (stream) {
           // Handle streaming response
           const stream = await openAiClient.chat.completions.create({
@@ -77,30 +75,23 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stream: true,
           });
 
-          const assistantMessage = await utils.streaming.handleChatCompletions(
+          let assistantMessage = await utils.streaming.handleChatCompletions(
             reply,
             stream,
           );
 
-          const toolInvocationPolicyError =
+          const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
             );
-
-          if (toolInvocationPolicyError) {
-            // When streaming, we can't send a 403 status after headers are sent
-            // Instead, send an error event in SSE format
-            reply.raw.write(
-              `data: ${JSON.stringify({ error: toolInvocationPolicyError })}\n\n`,
-            );
-            reply.raw.write("data: [DONE]\n\n");
-            reply.raw.end();
-            return reply;
+          if (toolInvocationRefusal) {
+            assistantMessage = toolInvocationRefusal.message;
           }
 
           await utils.persistAssistantMessage(assistantMessage, chatId);
 
+          reply.raw.write(`data: ${JSON.stringify(assistantMessage)}\n\n`);
           reply.raw.write("data: [DONE]\n\n");
           reply.raw.end();
           return reply;
@@ -110,15 +101,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stream: false,
           });
 
-          assistantMessage = response.choices[0].message;
+          let assistantMessage = response.choices[0].message;
 
-          const toolInvocationPolicyError =
+          const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
             );
-          if (toolInvocationPolicyError) {
-            return reply.status(403).send(toolInvocationPolicyError);
+          if (toolInvocationRefusal) {
+            assistantMessage = toolInvocationRefusal.message;
+            response.choices = [toolInvocationRefusal];
           }
 
           await utils.persistAssistantMessage(assistantMessage, chatId);

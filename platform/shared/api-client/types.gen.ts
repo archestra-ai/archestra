@@ -1334,6 +1334,10 @@ export type OpenAiChatCompletionsData = {
          */
         'x-archestra-chat-id'?: string;
         /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
          * Bearer token for OpenAI
          */
         authorization: string;

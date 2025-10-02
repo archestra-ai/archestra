@@ -317,210 +317,167 @@ Some examples:
     while (continueLoop && stepCount < maxSteps) {
       stepCount++;
 
-      try {
-        const chatCompletionRequest: OpenAI.Chat.Completions.ChatCompletionCreateParams =
+      const chatCompletionRequest: OpenAI.Chat.Completions.ChatCompletionCreateParams =
+        {
+          model,
+          messages,
+          tools: getToolDefinitions(),
+          tool_choice: "auto",
+          stream,
+        };
+      const chatCompletionRequestOptions: OpenAI.RequestOptions = {
+        headers: {
+          "User-Agent": "Archestra CLI Chat",
+          ...(chatId ? { "X-Archestra-Chat-Id": chatId } : {}),
+        },
+      };
+
+      let assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessage;
+
+      if (stream) {
+        const response = await openai.chat.completions.create(
           {
-            model,
-            messages,
-            tools: getToolDefinitions(),
-            tool_choice: "auto",
-            stream,
-          };
-        const chatCompletionRequestOptions: OpenAI.RequestOptions = chatId
-          ? {
-              headers: {
-                "X-Archestra-Chat-Id": chatId,
-              },
-            }
-          : {};
+            ...chatCompletionRequest,
+            stream: true,
+          },
+          chatCompletionRequestOptions,
+        );
 
-        let assistantMessage;
+        // Accumulate the assistant message from chunks
+        let accumulatedContent = "";
+        const accumulatedToolCalls: any[] = [];
 
-        if (stream) {
-          const response = await openai.chat.completions.create(
-            {
-              ...chatCompletionRequest,
-              stream: true,
-            },
-            chatCompletionRequestOptions,
-          );
+        process.stdout.write("\nAssistant: ");
 
-          // Accumulate the assistant message from chunks
-          let accumulatedContent = "";
-          const accumulatedToolCalls: any[] = [];
-          let streamError = false;
+        for await (const chunk of response) {
+          const delta = chunk.choices[0]?.delta;
 
-          process.stdout.write("\nAssistant: ");
+          if (delta?.content) {
+            accumulatedContent += delta.content;
+            process.stdout.write(delta.content);
+          }
 
-          for await (const chunk of response) {
-            // Check for error events in the stream
-            if ("error" in chunk) {
-              const errorMessage =
-                (chunk.error as any)?.error?.message ||
-                "Tool invocation blocked by security policy";
-              process.stdout.write(
-                `\n[SECURITY POLICY BLOCKED] ${errorMessage}`,
-              );
-              streamError = true;
-              continueLoop = false;
-              break;
-            }
+          if (delta?.tool_calls) {
+            for (const toolCallDelta of delta.tool_calls) {
+              const index = toolCallDelta.index;
 
-            const delta = chunk.choices[0]?.delta;
+              // Initialize tool call if it doesn't exist
+              if (!accumulatedToolCalls[index]) {
+                accumulatedToolCalls[index] = {
+                  id: toolCallDelta.id || "",
+                  type: "function",
+                  function: {
+                    name: "",
+                    arguments: "",
+                  },
+                };
+              }
 
-            if (delta?.content) {
-              accumulatedContent += delta.content;
-              process.stdout.write(delta.content);
-            }
-
-            if (delta?.tool_calls) {
-              for (const toolCallDelta of delta.tool_calls) {
-                const index = toolCallDelta.index;
-
-                // Initialize tool call if it doesn't exist
-                if (!accumulatedToolCalls[index]) {
-                  accumulatedToolCalls[index] = {
-                    id: toolCallDelta.id || "",
-                    type: "function",
-                    function: {
-                      name: "",
-                      arguments: "",
-                    },
-                  };
-                }
-
-                // Accumulate tool call fields
-                if (toolCallDelta.id) {
-                  accumulatedToolCalls[index].id = toolCallDelta.id;
-                }
-                if (toolCallDelta.function?.name) {
-                  accumulatedToolCalls[index].function.name =
-                    toolCallDelta.function.name;
-                }
-                if (toolCallDelta.function?.arguments) {
-                  accumulatedToolCalls[index].function.arguments +=
-                    toolCallDelta.function.arguments;
-                }
+              // Accumulate tool call fields
+              if (toolCallDelta.id) {
+                accumulatedToolCalls[index].id = toolCallDelta.id;
+              }
+              if (toolCallDelta.function?.name) {
+                accumulatedToolCalls[index].function.name =
+                  toolCallDelta.function.name;
+              }
+              if (toolCallDelta.function?.arguments) {
+                accumulatedToolCalls[index].function.arguments +=
+                  toolCallDelta.function.arguments;
               }
             }
           }
-
-          // Only construct message if there was no stream error
-          if (!streamError) {
-            // Construct the complete assistant message
-            assistantMessage = {
-              role: "assistant" as const,
-              content: accumulatedContent || null,
-              tool_calls:
-                accumulatedToolCalls.length > 0
-                  ? accumulatedToolCalls
-                  : undefined,
-            };
-          }
-        } else {
-          const response = await openai.chat.completions.create(
-            {
-              ...chatCompletionRequest,
-              stream: false,
-            },
-            chatCompletionRequestOptions,
-          );
-
-          assistantMessage = response.choices[0].message;
         }
 
-        // Only process message if it exists (might not exist if stream error)
-        if (!assistantMessage) {
-          break;
-        }
+        assistantMessage = {
+          role: "assistant" as const,
+          content: accumulatedContent || null,
+          // TODO: pull refusal from the stream if it exists
+          refusal: null,
+          tool_calls:
+            accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+        };
+      } else {
+        const response = await openai.chat.completions.create(
+          {
+            ...chatCompletionRequest,
+            stream: false,
+          },
+          chatCompletionRequestOptions,
+        );
 
-        messages.push(assistantMessage);
+        assistantMessage = response.choices[0].message;
+      }
 
-        // Check if there are tool calls
-        if (
-          assistantMessage.tool_calls &&
-          assistantMessage.tool_calls.length > 0
-        ) {
-          // Execute each tool call
-          for (const toolCall of assistantMessage.tool_calls) {
-            const toolName = toolCall.function.name;
-            const toolArgs = JSON.parse(toolCall.function.arguments);
+      // Only process message if it exists (might not exist if stream error)
+      if (!assistantMessage) {
+        break;
+      }
 
-            if (debug) {
-              console.log(
-                `\n[DEBUG] Calling tool: ${toolName} with args:`,
-                toolArgs,
-              );
-            }
+      messages.push(assistantMessage);
 
-            try {
-              const toolResult = await executeToolCall(
-                toolName,
-                toolArgs,
-                includeExternalEmail,
-                includeMaliciousEmail,
-              );
+      // Check if there are tool calls
+      if (
+        assistantMessage.tool_calls &&
+        assistantMessage.tool_calls.length > 0
+      ) {
+        // Execute each tool call
+        for (const toolCall of assistantMessage.tool_calls) {
+          let toolName: string;
+          let toolArgs: any;
 
-              messages.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(toolResult),
-              });
-
-              if (debug) {
-                console.log(`[DEBUG] Tool result:`, toolResult);
-              }
-            } catch (error) {
-              const errorMessage =
-                error instanceof Error ? error.message : String(error);
-              messages.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: errorMessage }),
-              });
-
-              if (debug) {
-                console.error(`[DEBUG] Tool error:`, errorMessage);
-              }
-            }
+          if (toolCall.type === "function") {
+            toolName = toolCall.function.name;
+            toolArgs = JSON.parse(toolCall.function.arguments);
+          } else {
+            toolName = toolCall.custom.name;
+            toolArgs = JSON.parse(toolCall.custom.input);
           }
-        } else {
-          // Only print if we're not streaming (streaming already printed the content)
-          if (!stream) {
-            process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
-          }
-          continueLoop = false;
-        }
-      } catch (error: any) {
-        // Handle backend guardrails errors (403, etc.)
-        if (error.status === 403) {
-          const errorMessage =
-            error.error?.message ||
-            error.message ||
-            "Tool invocation blocked by security policy";
 
           if (debug) {
-            console.error(
-              "\n[DEBUG] 403 Error details:",
-              JSON.stringify(error, null, 2),
+            console.log(
+              `\n[DEBUG] Calling tool: ${toolName} with args:`,
+              toolArgs,
             );
           }
 
-          process.stdout.write(`\n[SECURITY POLICY BLOCKED] ${errorMessage}`);
+          try {
+            const toolResult = await executeToolCall(
+              toolName,
+              toolArgs,
+              includeExternalEmail,
+              includeMaliciousEmail,
+            );
 
-          /**
-           * Remove the last user message to prevent the LLM from retrying the same blocked request
-           * The LLM doesn't see that the request was blocked, so it will keep trying
-           *
-           * In a real agentic app, the application would need to handle this case gracefully..
-           */
-          messages.pop();
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(toolResult),
+            });
 
-          continueLoop = false;
-          break;
+            if (debug) {
+              console.log(`[DEBUG] Tool result:`, toolResult);
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: errorMessage }),
+            });
+
+            if (debug) {
+              console.error(`[DEBUG] Tool error:`, errorMessage);
+            }
+          }
         }
-        // Re-throw other errors
-        throw error;
+      } else {
+        // Only print if we're not streaming (streaming already printed the content)
+        if (!stream) {
+          process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
+        }
+        continueLoop = false;
       }
     }
 

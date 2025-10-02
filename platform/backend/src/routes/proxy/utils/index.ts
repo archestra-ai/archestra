@@ -30,6 +30,7 @@ export const getAgentAndChatIdFromRequest = async (
   messages: ChatCompletionRequestMessages,
   {
     "x-archestra-chat-id": chatIdHeader,
+    "user-agent": userAgentHeader,
   }: z.infer<typeof ChatCompletionsHeadersSchema>,
 ): Promise<
   { chatId: string; agentId: string } | z.infer<typeof ErrorResponseSchema>
@@ -61,7 +62,7 @@ export const getAgentAndChatIdFromRequest = async (
      * User has not specified a particular chat ID, therefore let's first create or get the
      * "first" agent, and then we will take a hash of the first chat message to create a new chat ID
      */
-    const agent = await AgentModel.ensureDefaultAgentExists();
+    const agent = await AgentModel.ensureDefaultAgentExists(userAgentHeader);
     agentId = agent.id;
 
     // Create or get chat

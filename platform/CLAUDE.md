@@ -101,7 +101,15 @@ platform/
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
 │           ├── autonomy-policies.ts  # Autonomy policies endpoints
-│           └── chat.ts          # Chat and LLM endpoints
+│           ├── chat.ts          # Chat and LLM endpoints
+│           └── proxy/           # OpenAI proxy with integrated guardrails
+│               ├── openai.ts    # Main proxy route handler
+│               ├── types.ts     # TypeScript types for proxy
+│               └── utils/       # Modular proxy utilities
+│                   ├── index.ts              # Core agent/chat management
+│                   ├── streaming.ts          # SSE streaming handler
+│                   ├── tool-invocation.ts    # Tool invocation policy evaluation
+│                   └── trusted-data.ts       # Trusted data policy evaluation
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages

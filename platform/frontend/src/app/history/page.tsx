@@ -1,30 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { type GetChatsResponse, getChats } from "shared/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-type Chat = GetChatsResponse[number];
+import { useChats } from "@/lib/chat.query";
 
 export default function HistoryPage() {
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchChats = useCallback(async () => {
-    try {
-      const { data } = await getChats();
-      setChats(data || []);
-    } catch (error) {
-      console.error("Failed to fetch chats:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchChats();
-  }, [fetchChats]);
+  const { data: chats = [], isLoading } = useChats();
 
   // biome-ignore lint/suspicious/noExplicitAny: this can legitimately be anything..
   const formatContent = (content: any): string => {
@@ -61,7 +42,7 @@ export default function HistoryPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         Loading...

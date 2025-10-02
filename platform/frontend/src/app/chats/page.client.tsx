@@ -25,7 +25,7 @@ export default function ChatsPage({
   initialData?: GetChatsResponses["200"];
 }) {
   return (
-    <div className="container mx-auto p-6 ">
+    <div className="container mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Chats</h1>
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>

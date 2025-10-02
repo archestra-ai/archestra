@@ -204,6 +204,11 @@ export const evaluateToolInvocationPolicies = async (
 
         const toolInput = JSON.parse(toolCallArgs);
 
+        // biome-ignore lint/suspicious/noConsole: needed
+        console.log(
+          `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
+        );
+
         // Evaluate tool invocation policy
         const { isAllowed, denyReason } =
           await ToolInvocationPolicyModel.evaluateForAgent(
@@ -211,6 +216,11 @@ export const evaluateToolInvocationPolicies = async (
             toolCallName,
             toolInput,
           );
+
+        // biome-ignore lint/suspicious/noConsole: needed
+        console.log(
+          `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
+        );
 
         if (!isAllowed) {
           // Block this tool call

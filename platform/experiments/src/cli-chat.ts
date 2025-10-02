@@ -317,24 +317,158 @@ Some examples:
     while (continueLoop && stepCount < maxSteps) {
       stepCount++;
 
-      let response;
       try {
-        response = await openai.chat.completions.create(
+        const chatCompletionRequest: OpenAI.Chat.Completions.ChatCompletionCreateParams =
           {
             model,
             messages,
             tools: getToolDefinitions(),
             tool_choice: "auto",
             stream,
-          },
-          chatId
-            ? {
-                headers: {
-                  "X-Archestra-Chat-Id": chatId,
-                },
+          };
+        const chatCompletionRequestOptions: OpenAI.RequestOptions = chatId
+          ? {
+              headers: {
+                "X-Archestra-Chat-Id": chatId,
+              },
+            }
+          : {};
+
+        let assistantMessage;
+
+        if (stream) {
+          const response = await openai.chat.completions.create(
+            {
+              ...chatCompletionRequest,
+              stream: true,
+            },
+            chatCompletionRequestOptions,
+          );
+
+          // Accumulate the assistant message from chunks
+          let accumulatedContent = "";
+          const accumulatedToolCalls: any[] = [];
+
+          process.stdout.write("\nAssistant: ");
+
+          for await (const chunk of response) {
+            const delta = chunk.choices[0]?.delta;
+
+            if (delta?.content) {
+              accumulatedContent += delta.content;
+              process.stdout.write(delta.content);
+            }
+
+            if (delta?.tool_calls) {
+              for (const toolCallDelta of delta.tool_calls) {
+                const index = toolCallDelta.index;
+
+                // Initialize tool call if it doesn't exist
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
+                    id: toolCallDelta.id || "",
+                    type: "function",
+                    function: {
+                      name: "",
+                      arguments: "",
+                    },
+                  };
+                }
+
+                // Accumulate tool call fields
+                if (toolCallDelta.id) {
+                  accumulatedToolCalls[index].id = toolCallDelta.id;
+                }
+                if (toolCallDelta.function?.name) {
+                  accumulatedToolCalls[index].function.name =
+                    toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function?.arguments) {
+                  accumulatedToolCalls[index].function.arguments +=
+                    toolCallDelta.function.arguments;
+                }
               }
-            : undefined,
-        );
+            }
+          }
+
+          // Construct the complete assistant message
+          assistantMessage = {
+            role: "assistant" as const,
+            content: accumulatedContent || null,
+            tool_calls:
+              accumulatedToolCalls.length > 0
+                ? accumulatedToolCalls
+                : undefined,
+          };
+        } else {
+          const response = await openai.chat.completions.create(
+            {
+              ...chatCompletionRequest,
+              stream: false,
+            },
+            chatCompletionRequestOptions,
+          );
+
+          assistantMessage = response.choices[0].message;
+        }
+
+        messages.push(assistantMessage);
+
+        // Check if there are tool calls
+        if (
+          assistantMessage.tool_calls &&
+          assistantMessage.tool_calls.length > 0
+        ) {
+          // Execute each tool call
+          for (const toolCall of assistantMessage.tool_calls) {
+            const toolName = toolCall.function.name;
+            const toolArgs = JSON.parse(toolCall.function.arguments);
+
+            if (debug) {
+              console.log(
+                `\n[DEBUG] Calling tool: ${toolName} with args:`,
+                toolArgs,
+              );
+            }
+
+            try {
+              const toolResult = await executeToolCall(
+                toolName,
+                toolArgs,
+                includeExternalEmail,
+                includeMaliciousEmail,
+              );
+
+              messages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(toolResult),
+              });
+
+              if (debug) {
+                console.log(`[DEBUG] Tool result:`, toolResult);
+              }
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
+              messages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({ error: errorMessage }),
+              });
+
+              if (debug) {
+                console.error(`[DEBUG] Tool error:`, errorMessage);
+              }
+            }
+          }
+        } else {
+          // Only print if we're not streaming (streaming already printed the content)
+          if (!stream) {
+            process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
+          }
+          continueLoop = false;
+        }
       } catch (error: any) {
         // Handle backend guardrails errors (403, etc.)
         if (error.status === 403) {
@@ -365,70 +499,6 @@ Some examples:
         }
         // Re-throw other errors
         throw error;
-      }
-
-      if (stream) {
-        for await (const chunk of response) {
-          console.log("chunk", chunk);
-        }
-      } else {
-        const assistantMessage = response.choices[0].message;
-        messages.push(assistantMessage);
-      }
-
-      // Check if there are tool calls
-      if (
-        assistantMessage.tool_calls &&
-        assistantMessage.tool_calls.length > 0
-      ) {
-        // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          // @ts-expect-error - toi be checked
-          const toolName = toolCall.function.name;
-          // @ts-expect-error - to be checked
-          const toolArgs = JSON.parse(toolCall.function.arguments);
-
-          if (debug) {
-            console.log(
-              `\n[DEBUG] Calling tool: ${toolName} with args:`,
-              toolArgs,
-            );
-          }
-
-          try {
-            const toolResult = await executeToolCall(
-              toolName,
-              toolArgs,
-              includeExternalEmail,
-              includeMaliciousEmail,
-            );
-
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(toolResult),
-            });
-
-            if (debug) {
-              console.log(`[DEBUG] Tool result:`, toolResult);
-            }
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: errorMessage }),
-            });
-
-            if (debug) {
-              console.error(`[DEBUG] Tool error:`, errorMessage);
-            }
-          }
-        }
-      } else {
-        process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
-        continueLoop = false;
       }
     }
 

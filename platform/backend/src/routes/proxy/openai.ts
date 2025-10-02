@@ -81,15 +81,71 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stream: true,
           });
 
+          /**
+           * Accumulate the assistant message, and tool calls from chunks
+           *
+           * NOTE: for right now we ignore "custom" tool calls
+           */
+          let accumulatedContent = "";
+          const accumulatedToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall[] =
+            [];
+
           for await (const chunk of stream) {
-            console.log("chunk", chunk);
+            console.log("chunk", JSON.stringify(chunk, null, 2));
+
+            const delta = chunk.choices[0]?.delta;
+
+            // Accumulate content
+            if (delta?.content) {
+              accumulatedContent += delta.content;
+            }
+
+            // Accumulate tool calls
+            if (delta?.tool_calls) {
+              for (const toolCallDelta of delta.tool_calls.filter(
+                (toolCall) => toolCall.type === "function",
+              )) {
+                const index = toolCallDelta.index;
+
+                // Initialize tool call if it doesn't exist
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
+                    id: toolCallDelta.id || "",
+                    type: "function",
+                    function: {
+                      name: "",
+                      arguments: "",
+                    },
+                  };
+                }
+
+                // Accumulate tool call fields
+                if (toolCallDelta.id) {
+                  accumulatedToolCalls[index].id = toolCallDelta.id;
+                }
+                if (toolCallDelta.function?.name) {
+                  accumulatedToolCalls[index].function.name =
+                    toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function?.arguments) {
+                  accumulatedToolCalls[index].function.arguments +=
+                    toolCallDelta.function.arguments;
+                }
+              }
+            }
+
+            // Stream chunk to client
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
 
-          // TODO: assemble the assistant message from the chunks
+          // Construct the complete assistant message
           assistantMessage = {
             role: "assistant",
-            content: "",
+            content: accumulatedContent || null,
+            tool_calls:
+              accumulatedToolCalls.length > 0
+                ? accumulatedToolCalls
+                : undefined,
           } as OpenAI.Chat.Completions.ChatCompletionMessage;
 
           const toolInvocationPolicyError =
@@ -97,6 +153,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               assistantMessage,
               agentId,
             );
+
           if (toolInvocationPolicyError) {
             return reply.status(403).send(toolInvocationPolicyError);
           }

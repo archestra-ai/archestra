@@ -51,7 +51,7 @@ export const evaluatePolicies = async (
             logprobs: null,
             message: {
               role: "assistant",
-              refusal: denyReason,
+              refusal: `I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}. However, I was denied by a tool invocation policy.`,
               content: null,
             },
           };

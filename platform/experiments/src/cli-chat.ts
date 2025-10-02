@@ -345,6 +345,7 @@ Some examples:
 
         // Accumulate the assistant message from chunks
         let accumulatedContent = "";
+        let accumulatedRefusal = "";
         const accumulatedToolCalls: any[] = [];
 
         process.stdout.write("\nAssistant: ");
@@ -355,6 +356,11 @@ Some examples:
           if (delta?.content) {
             accumulatedContent += delta.content;
             process.stdout.write(delta.content);
+          }
+
+          if (delta?.refusal) {
+            accumulatedRefusal += delta.refusal;
+            process.stdout.write(delta.refusal);
           }
 
           if (delta?.tool_calls) {
@@ -392,8 +398,7 @@ Some examples:
         assistantMessage = {
           role: "assistant" as const,
           content: accumulatedContent || null,
-          // TODO: pull refusal from the stream if it exists
-          refusal: null,
+          refusal: accumulatedRefusal || null,
           tool_calls:
             accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
         };
@@ -407,11 +412,12 @@ Some examples:
         );
 
         assistantMessage = response.choices[0].message;
-      }
 
-      // Only process message if it exists (might not exist if stream error)
-      if (!assistantMessage) {
-        break;
+        process.stdout.write(
+          `\nAssistant: ${assistantMessage.content || assistantMessage.refusal}`,
+        );
+
+        continueLoop = false;
       }
 
       messages.push(assistantMessage);
@@ -472,12 +478,6 @@ Some examples:
             }
           }
         }
-      } else {
-        // Only print if we're not streaming (streaming already printed the content)
-        if (!stream) {
-          process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
-        }
-        continueLoop = false;
       }
     }
 

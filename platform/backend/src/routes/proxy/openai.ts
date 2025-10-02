@@ -82,6 +82,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
 
           for await (const chunk of stream) {
+            console.log("chunk", chunk);
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
 

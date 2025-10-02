@@ -80,6 +80,8 @@ const parseArgs = (): {
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
+  stream: boolean;
+  model: string;
 } => {
   if (process.argv.includes("--help")) {
     console.log(`
@@ -87,6 +89,8 @@ Options:
 --agent-id <agent-id>     The ID of the agent to use for the chat. Optional, if not provided, a new agent will be created.
 --include-external-email  Include external email in mock Gmail data
 --include-malicious-email Include malicious email in mock Gmail data
+--stream                  Stream the response
+--model <model>           The model to use for the chat (default: gpt-4o)
 --debug                   Print debug messages
 --help                    Print this help message
     `);
@@ -95,12 +99,15 @@ Options:
 
   // Parse --agent-id flag
   const agentIdIndex = process.argv.indexOf("--agent-id");
+  const modelIndex = process.argv.indexOf("--model");
 
   return {
     agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
+    stream: process.argv.includes("--stream"),
+    model: modelIndex !== -1 ? process.argv[modelIndex + 1] : "gpt-4o",
   };
 };
 
@@ -249,8 +256,14 @@ const executeToolCall = async (
 };
 
 const cliChatWithGuardrails = async () => {
-  const { agentId, includeExternalEmail, includeMaliciousEmail, debug } =
-    parseArgs();
+  const {
+    agentId,
+    includeExternalEmail,
+    includeMaliciousEmail,
+    debug,
+    stream,
+    model,
+  } = parseArgs();
 
   const terminal = readline.createInterface({
     input: process.stdin,
@@ -308,10 +321,11 @@ Some examples:
       try {
         response = await openai.chat.completions.create(
           {
-            model: "gpt-4o",
+            model,
             messages,
             tools: getToolDefinitions(),
             tool_choice: "auto",
+            stream,
           },
           chatId
             ? {
@@ -353,8 +367,14 @@ Some examples:
         throw error;
       }
 
-      const assistantMessage = response.choices[0].message;
-      messages.push(assistantMessage);
+      if (stream) {
+        for await (const chunk of response) {
+          console.log("chunk", chunk);
+        }
+      } else {
+        const assistantMessage = response.choices[0].message;
+        messages.push(assistantMessage);
+      }
 
       // Check if there are tool calls
       if (

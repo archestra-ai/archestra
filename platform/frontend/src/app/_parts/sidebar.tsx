@@ -4,6 +4,8 @@ import {
   FileJson2,
   FlaskConical,
   History,
+  Info,
+  MessagesSquare,
   Settings,
   ShieldCheck,
   TriangleAlert,
@@ -26,15 +28,10 @@ import {
 
 const items = [
   {
-    title: "Agents",
-    url: "/agents",
-    icon: Bot,
+    title: "How it works",
+    url: "/test-agent",
+    icon: Info,
     subItems: [
-      {
-        title: "Test Agent",
-        url: "/test-agent",
-        icon: FlaskConical,
-      },
       {
         title: "Lethal Trifecta",
         url: "/test-agent/not-mitigated",
@@ -48,14 +45,19 @@ const items = [
     ],
   },
   {
+    title: "Agents",
+    url: "/agents",
+    icon: Bot,
+  },
+  {
+    title: "Chats",
+    url: "/history",
+    icon: MessagesSquare,
+  },
+  {
     title: "Tool Mapping",
     url: "/tool-mapping",
     icon: FileJson2,
-  },
-  {
-    title: "History",
-    url: "/history",
-    icon: History,
   },
   {
     title: "Settings",
@@ -114,7 +116,7 @@ export function AppSidebar() {
                             isActive={subItem.url === pathname}
                           >
                             <a href={subItem.url} className="text-xl">
-                              <subItem.icon />
+                              {subItem.icon && <subItem.icon />}
                               <span className="text-base">{subItem.title}</span>
                             </a>
                           </SidebarMenuButton>

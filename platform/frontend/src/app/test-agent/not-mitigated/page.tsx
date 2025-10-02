@@ -1,5 +1,11 @@
-import ChatBotDemo from "../_parts/chatbot-demo";
+"use client";
+
+import ChatBotDemo from "../../../components/chatbot-demo";
+import { useMockedMessages } from "../_parts/chatbot-demo.hooks";
 
 export default function NotMitigatedPage() {
-  return <ChatBotDemo isMitigated={false} />;
+  const { messages, reload, isEnded } = useMockedMessages({
+    isMitigated: false,
+  });
+  return <ChatBotDemo messages={messages} reload={reload} isEnded={isEnded} />;
 }

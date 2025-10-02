@@ -6,6 +6,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
 
 const mainFont = Lato({
   subsets: ["latin"],
@@ -35,13 +36,14 @@ export default function RootLayout({
           <ArchestraQueryClientProvider>
             <SidebarProvider>
               <AppSidebar />
-              <main className="h-[100%] w-full">
+              <main className="h-[100%] w-full overflow-auto">
                 <SidebarTrigger className="cursor-pointer" />
                 <div className="absolute top-2 right-2">
                   <ColorModeToggle />
                 </div>
                 {children}
               </main>
+              <Toaster />
             </SidebarProvider>
           </ArchestraQueryClientProvider>
         </ThemeProvider>

@@ -7,7 +7,7 @@ export function useTools({
   initialData?: GetToolsResponses["200"];
 }) {
   return useSuspenseQuery({
-    queryKey: ["chats"],
+    queryKey: ["tools"],
     queryFn: async () => (await getTools()).data ?? null,
     initialData,
     refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now

@@ -179,7 +179,7 @@ The backend integrates advanced security guardrails:
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
-  - Actions: allow or block with optional custom block prompts
+  - Actions: allow_when_context_is_untrusted or block_always with optional custom block prompts
 - **Trusted Data Policies**: Mark specific data patterns as trusted sources
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies

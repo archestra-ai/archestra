@@ -41,8 +41,6 @@ export function Chat({
     return "Chat not found";
   }
 
-  console.log(chat);
-
   const taintedCount = chat.interactions.filter((i) => i.tainted).length;
 
   return (
@@ -203,12 +201,12 @@ function mapInteractionToUiMessage(
     parts,
     metadata: {
       tainted: interaction.tainted,
-      taintReason: interaction.taintReason,
+      taintReason: interaction.taintReason ?? undefined,
     },
   };
 }
 
-function ChatInteraction({
+function _ChatInteraction({
   interaction,
 }: {
   interaction: GetChatResponses["200"]["interactions"][number];

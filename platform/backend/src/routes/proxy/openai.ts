@@ -68,29 +68,58 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.persistUserMessage(messages, chatId);
 
         if (stream) {
+          reply.header("Content-Type", "text/event-stream");
+          reply.header("Cache-Control", "no-cache");
+          reply.header("Connection", "keep-alive");
+
           // Handle streaming response
           const stream = await openAiClient.chat.completions.create({
             ...body,
             stream: true,
           });
 
-          let assistantMessage = await utils.streaming.handleChatCompletions(
-            reply,
-            stream,
-          );
+          const { message: assistantMessage, chunks } =
+            await utils.streaming.handleChatCompletions(stream);
 
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
             );
+
           if (toolInvocationRefusal) {
-            assistantMessage = toolInvocationRefusal.message;
+            // Tool invocation was blocked - send refusal message instead of original chunks
+            const refusalMessage = toolInvocationRefusal.message;
+            await utils.persistAssistantMessage(refusalMessage, chatId);
+
+            // Send a single chunk with the refusal
+            const refusalChunk: OpenAI.Chat.Completions.ChatCompletionChunk = {
+              id: "chatcmpl-blocked",
+              object: "chat.completion.chunk",
+              created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
+              model: body.model,
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    role: "assistant",
+                    content: null,
+                    refusal: refusalMessage.refusal,
+                  },
+                  finish_reason: "stop",
+                  logprobs: null,
+                },
+              ],
+            };
+            reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+          } else {
+            // Tool invocation was allowed - send original chunks
+            await utils.persistAssistantMessage(assistantMessage, chatId);
+            for (const chunk of chunks) {
+              reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+            }
           }
 
-          await utils.persistAssistantMessage(assistantMessage, chatId);
-
-          reply.raw.write(`data: ${JSON.stringify(assistantMessage)}\n\n`);
           reply.raw.write("data: [DONE]\n\n");
           reply.raw.end();
           return reply;

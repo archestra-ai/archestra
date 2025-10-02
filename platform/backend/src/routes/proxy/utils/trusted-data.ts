@@ -20,11 +20,12 @@ const extractToolNameFromHistory = async (
 
     if (content.role === "assistant" && content.tool_calls) {
       for (const toolCall of content.tool_calls) {
-        /**
-         * TODO: do we need to handle custom tool calls here as well?
-         */
-        if (toolCall.id === toolCallId && toolCall.type === "function") {
-          return toolCall.function.name;
+        if (toolCall.id === toolCallId) {
+          if (toolCall.type === "function") {
+            return toolCall.function.name;
+          } else {
+            return toolCall.custom.name;
+          }
         }
       }
     }

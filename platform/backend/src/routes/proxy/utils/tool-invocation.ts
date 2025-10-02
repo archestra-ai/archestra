@@ -15,47 +15,46 @@ export const evaluatePolicies = async (
   if (toolCalls && toolCalls.length > 0) {
     // Intercept and evaluate tool calls
     for (const toolCall of toolCalls) {
-      // Only process function tool calls (not custom tool calls)
+      let toolCallName = "";
+      let toolCallArgs = "";
+
       if (toolCall.type === "function") {
-        const {
-          function: { arguments: toolCallArgs, name: toolCallName },
-        } = toolCall;
+        toolCallName = toolCall.function.name;
+        toolCallArgs = toolCall.function.arguments;
+      } else {
+        toolCallName = toolCall.custom.name;
+        toolCallArgs = toolCall.custom.input;
+      }
 
-        // Skip if arguments are empty (can happen during streaming assembly)
-        if (!toolCallArgs || toolCallArgs.trim() === "") {
-          continue;
-        }
+      const toolInput = JSON.parse(toolCallArgs);
 
-        const toolInput = JSON.parse(toolCallArgs);
+      console.log(
+        `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
+      );
 
-        console.log(
-          `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
+      // Evaluate tool invocation policy
+      const { isAllowed, denyReason } =
+        await ToolInvocationPolicyModel.evaluateForAgent(
+          agentId,
+          toolCallName,
+          toolInput,
         );
 
-        // Evaluate tool invocation policy
-        const { isAllowed, denyReason } =
-          await ToolInvocationPolicyModel.evaluateForAgent(
-            agentId,
-            toolCallName,
-            toolInput,
-          );
+      console.log(
+        `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
+      );
 
-        console.log(
-          `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
-        );
-
-        if (!isAllowed) {
-          return {
-            finish_reason: "tool_calls",
-            index: 0,
-            logprobs: null,
-            message: {
-              role: "assistant",
-              refusal: `I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}. However, I was denied by a tool invocation policy.`,
-              content: null,
-            },
-          };
-        }
+      if (!isAllowed) {
+        return {
+          finish_reason: "stop",
+          index: 0,
+          logprobs: null,
+          message: {
+            role: "assistant",
+            refusal: `I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}. However, I was denied by a tool invocation policy.`,
+            content: null,
+          },
+        };
       }
     }
   }

@@ -6,6 +6,7 @@ import path, { resolve } from "node:path";
 import * as readline from "node:readline/promises";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import type { Stream } from "openai/core/streaming";
 import type {
   ChatCompletionMessageParam,
   ChatCompletionTool,
@@ -255,6 +256,78 @@ const executeToolCall = async (
   throw new Error(`Unknown tool: ${toolName}`);
 };
 
+const getAssistantMessageFromStream = async (
+  stream: Stream<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  shouldPrintPrefix: boolean,
+): Promise<OpenAI.Chat.Completions.ChatCompletionMessage> => {
+  // Accumulate the assistant message from chunks
+  let accumulatedContent = "";
+  let accumulatedRefusal = "";
+  const accumulatedToolCalls: any[] = [];
+
+  if (shouldPrintPrefix) {
+    process.stdout.write("\nAssistant: ");
+  }
+
+  for await (const chunk of stream) {
+    // Skip chunks without choices (metadata, end markers, etc.)
+    if (!chunk.choices || chunk.choices.length === 0) {
+      continue;
+    }
+
+    const delta = chunk.choices[0]?.delta;
+
+    if (delta?.content) {
+      accumulatedContent += delta.content;
+      process.stdout.write(delta.content);
+    }
+
+    if (delta?.refusal) {
+      accumulatedRefusal += delta.refusal;
+      process.stdout.write(delta.refusal);
+    }
+
+    if (delta?.tool_calls) {
+      for (const toolCallDelta of delta.tool_calls) {
+        const index = toolCallDelta.index;
+
+        // Initialize tool call if it doesn't exist
+        if (!accumulatedToolCalls[index]) {
+          accumulatedToolCalls[index] = {
+            id: toolCallDelta.id || "",
+            type: "function",
+            function: {
+              name: "",
+              arguments: "",
+            },
+          };
+        }
+
+        // Accumulate tool call fields
+        if (toolCallDelta.id) {
+          accumulatedToolCalls[index].id = toolCallDelta.id;
+        }
+        if (toolCallDelta.function?.name) {
+          accumulatedToolCalls[index].function.name =
+            toolCallDelta.function.name;
+        }
+        if (toolCallDelta.function?.arguments) {
+          accumulatedToolCalls[index].function.arguments +=
+            toolCallDelta.function.arguments;
+        }
+      }
+    }
+  }
+
+  return {
+    role: "assistant" as const,
+    content: accumulatedContent || null,
+    refusal: accumulatedRefusal || null,
+    tool_calls:
+      accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+  };
+};
+
 const cliChatWithGuardrails = async () => {
   const {
     agentId,
@@ -343,65 +416,10 @@ Some examples:
           chatCompletionRequestOptions,
         );
 
-        // Accumulate the assistant message from chunks
-        let accumulatedContent = "";
-        let accumulatedRefusal = "";
-        const accumulatedToolCalls: any[] = [];
-
-        process.stdout.write("\nAssistant: ");
-
-        for await (const chunk of response) {
-          const delta = chunk.choices[0]?.delta;
-
-          if (delta?.content) {
-            accumulatedContent += delta.content;
-            process.stdout.write(delta.content);
-          }
-
-          if (delta?.refusal) {
-            accumulatedRefusal += delta.refusal;
-            process.stdout.write(delta.refusal);
-          }
-
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index;
-
-              // Initialize tool call if it doesn't exist
-              if (!accumulatedToolCalls[index]) {
-                accumulatedToolCalls[index] = {
-                  id: toolCallDelta.id || "",
-                  type: "function",
-                  function: {
-                    name: "",
-                    arguments: "",
-                  },
-                };
-              }
-
-              // Accumulate tool call fields
-              if (toolCallDelta.id) {
-                accumulatedToolCalls[index].id = toolCallDelta.id;
-              }
-              if (toolCallDelta.function?.name) {
-                accumulatedToolCalls[index].function.name =
-                  toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                accumulatedToolCalls[index].function.arguments +=
-                  toolCallDelta.function.arguments;
-              }
-            }
-          }
-        }
-
-        assistantMessage = {
-          role: "assistant" as const,
-          content: accumulatedContent || null,
-          refusal: accumulatedRefusal || null,
-          tool_calls:
-            accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
-        };
+        assistantMessage = await getAssistantMessageFromStream(
+          response,
+          stepCount === 1,
+        );
       } else {
         const response = await openai.chat.completions.create(
           {
@@ -413,11 +431,12 @@ Some examples:
 
         assistantMessage = response.choices[0].message;
 
-        process.stdout.write(
-          `\nAssistant: ${assistantMessage.content || assistantMessage.refusal}`,
-        );
-
-        continueLoop = false;
+        // Only print if there's content or refusal to show (not for tool calls)
+        if (assistantMessage.content || assistantMessage.refusal) {
+          process.stdout.write(
+            `\nAssistant: ${assistantMessage.content || assistantMessage.refusal}`,
+          );
+        }
       }
 
       messages.push(assistantMessage);
@@ -478,6 +497,9 @@ Some examples:
             }
           }
         }
+      } else {
+        // No tool calls, stop the loop
+        continueLoop = false;
       }
     }
 
@@ -489,7 +511,8 @@ Some examples:
   }
 };
 
-cliChatWithGuardrails().catch((_error) => {
-  console.log("\n\nBye!");
+cliChatWithGuardrails().catch((error) => {
+  console.error("\n\nError:", error);
+  console.log("Bye!");
   process.exit(0);
 });

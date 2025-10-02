@@ -96,22 +96,31 @@ export const persistAssistantMessage = async (
 
 /**
  * Persist tools if present in the request
- *
- * NOTE: for right now we are only persisting function tools (not custom tools)
  */
 export const persistTools = async (
   tools: ChatCompletionRequestTools,
   agentId: string,
 ) => {
-  const functionTools = tools?.filter((tool) => tool.type === "function") || [];
-  for (const {
-    function: { name, parameters, description },
-  } of functionTools) {
+  for (const tool of tools || []) {
+    let toolName = "";
+    let toolParameters: Record<string, unknown> | undefined;
+    let toolDescription: string | undefined;
+
+    if (tool.type === "function") {
+      toolName = tool.function.name;
+      toolParameters = tool.function.parameters;
+      toolDescription = tool.function.description;
+    } else {
+      toolName = tool.custom.name;
+      toolParameters = tool.custom.format;
+      toolDescription = tool.custom.description;
+    }
+
     await ToolModel.createToolIfNotExists({
       agentId,
-      name,
-      parameters,
-      description,
+      name: toolName,
+      parameters: toolParameters,
+      description: toolDescription,
     });
   }
 };

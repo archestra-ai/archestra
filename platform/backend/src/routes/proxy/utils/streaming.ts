@@ -1,25 +1,23 @@
-import type { FastifyReply } from "fastify";
 import type OpenAI from "openai";
 import type { Stream } from "openai/core/streaming";
 
+/**
+ * Accumulate the assistant message, and tool calls from chunks
+ */
 export const handleChatCompletions = async (
-  reply: FastifyReply,
   stream: Stream<OpenAI.Chat.Completions.ChatCompletionChunk>,
-): Promise<OpenAI.Chat.Completions.ChatCompletionMessage> => {
-  /**
-   * Accumulate the assistant message, and tool calls from chunks
-   *
-   * NOTE: for right now we ignore "custom" tool calls
-   */
+): Promise<{
+  message: OpenAI.Chat.Completions.ChatCompletionMessage;
+  chunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
+}> => {
   let accumulatedContent = "";
+  let accumulatedRefusal = "";
   const accumulatedToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall[] =
     [];
-
-  reply.header("Content-Type", "text/event-stream");
-  reply.header("Cache-Control", "no-cache");
-  reply.header("Connection", "keep-alive");
+  const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
 
   for await (const chunk of stream) {
+    chunks.push(chunk);
     const delta = chunk.choices[0]?.delta;
 
     // Accumulate content
@@ -27,11 +25,13 @@ export const handleChatCompletions = async (
       accumulatedContent += delta.content;
     }
 
+    if (delta?.refusal) {
+      accumulatedRefusal += delta.refusal;
+    }
+
     // Accumulate tool calls
     if (delta?.tool_calls) {
-      for (const toolCallDelta of delta.tool_calls.filter(
-        (toolCall) => toolCall.type === "function",
-      )) {
+      for (const toolCallDelta of delta.tool_calls) {
         const index = toolCallDelta.index;
 
         // Initialize tool call if it doesn't exist
@@ -60,17 +60,16 @@ export const handleChatCompletions = async (
         }
       }
     }
-
-    // Stream chunk to client
-    reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
   }
 
   return {
-    role: "assistant",
-    content: accumulatedContent || null,
-    // TODO: we may need to handle refusal properly here?
-    refusal: null,
-    tool_calls:
-      accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+    message: {
+      role: "assistant",
+      content: accumulatedContent || null,
+      refusal: accumulatedRefusal || null,
+      tool_calls:
+        accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
+    },
+    chunks,
   };
 };

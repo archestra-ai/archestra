@@ -105,11 +105,11 @@ platform/
 │           └── proxy/           # OpenAI proxy with integrated guardrails
 │               ├── openai.ts    # Main proxy route handler
 │               ├── types.ts     # TypeScript types for proxy
-│               └── utils/       # Modular proxy utilities
-│                   ├── index.ts              # Core agent/chat management
-│                   ├── streaming.ts          # SSE streaming handler
+│               └── utils/       # Modular proxy utilities (refactored)
+│                   ├── index.ts              # Core agent/chat management, message persistence
+│                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
-│                   └── trusted-data.ts       # Trusted data policy evaluation
+│                   └── trusted-data.ts       # Trusted data policy evaluation and taint tracking
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages

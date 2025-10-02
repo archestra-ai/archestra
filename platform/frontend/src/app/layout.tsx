@@ -37,9 +37,11 @@ export default function RootLayout({
             <SidebarProvider>
               <AppSidebar />
               <main className="h-[100%] w-full overflow-auto">
-                <SidebarTrigger className="cursor-pointer" />
-                <div className="absolute top-2 right-2">
-                  <ColorModeToggle />
+                <div className="h-8">
+                  <SidebarTrigger className="cursor-pointer" />
+                  <div className="absolute top-0 right-0">
+                    <ColorModeToggle />
+                  </div>
                 </div>
                 {children}
               </main>

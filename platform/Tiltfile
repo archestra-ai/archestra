@@ -88,6 +88,14 @@ local_resource(
 )
 
 local_resource(
+  'lint:fix:unsafe',
+  cmd='pnpm lint:fix:unsafe',
+  labels=['dev'],
+  resource_deps=['pnpm-install'],
+  deps=["./frontend/src", "./backend/src", "./experiments/src", "./biome.json"]
+)
+
+local_resource(
   'codegen:api-client',
   cmd='pnpm codegen:api-client',
   labels=['dev'],

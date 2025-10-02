@@ -1,6 +1,5 @@
 "use client";
 import {
-  Bot,
   FileJson2,
   Info,
   MessagesSquare,
@@ -42,19 +41,19 @@ const items = [
       },
     ],
   },
-  {
-    title: "Agents",
-    url: "/agents",
-    icon: Bot,
-  },
+  // {
+  //   title: "Agents",
+  //   url: "/agents",
+  //   icon: Bot,
+  // },
   {
     title: "Chats",
     url: "/chats",
     icon: MessagesSquare,
   },
   {
-    title: "Tool Mapping",
-    url: "/tool-mapping",
+    title: "Tool Discovery",
+    url: "/tool-discovery",
     icon: FileJson2,
   },
   {

@@ -17,6 +17,7 @@ export const ArchestraQueryClientProvider = ({
             // above 0 to avoid refetching immediately on the client
             staleTime: 60 * 1_000,
             throwOnError: true, // errors to be thrown in the render phase and propagate to the nearest error boundary
+            retry: 2,
           },
         },
       }),

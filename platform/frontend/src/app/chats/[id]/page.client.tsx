@@ -1,45 +1,45 @@
 "use client";
 
 import { Suspense } from "react";
-import type { GetChatsResponses } from "shared/api-client";
+import type { GetChatResponses } from "shared/api-client";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useChats } from "@/lib/chat.query";
-import { ErrorBoundary } from "../_parts/error-boundary";
+import { useChat } from "@/lib/chat.query";
 
-export default function HistoryPage({
+export function ChatPage({
   initialData,
+  id,
 }: {
-  initialData?: GetChatsResponses["200"];
+  initialData?: GetChatResponses["200"];
+  id: string;
 }) {
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <h1 className="text-3xl font-bold mb-6">Chat History</h1>
+      <h1 className="text-3xl font-bold mb-6">Chat: {id}</h1>
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Chats initialData={initialData} />
+          <Chat initialData={initialData} id={id} />
         </Suspense>
       </ErrorBoundary>
     </div>
   );
 }
 
-function Chats({ initialData }: { initialData?: GetChatsResponses["200"] }) {
-  const { data: chats = [] } = useChats({ initialData });
+export function Chat({
+  initialData,
+  id,
+}: {
+  initialData?: GetChatResponses["200"];
+  id: string;
+}) {
+  const { data: chat } = useChat({ id, initialData });
 
-  return chats.length === 0 ? (
-    <p className="text-muted-foreground">No chats found</p>
-  ) : (
-    <div className="space-y-6">
-      {chats.map((chat) => (
-        <ChatCard key={chat.id} chat={chat} />
-      ))}
-    </div>
-  );
-}
+  if (!chat) {
+    return "Chat not found";
+  }
 
-function ChatCard({ chat }: { chat: GetChatsResponses["200"][number] }) {
   const taintedCount = chat.interactions.filter((i) => i.tainted).length;
 
   return (

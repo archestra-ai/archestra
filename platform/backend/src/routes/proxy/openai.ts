@@ -1,5 +1,4 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { tool } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { ErrorResponseSchema, OpenAi } from "../../types";

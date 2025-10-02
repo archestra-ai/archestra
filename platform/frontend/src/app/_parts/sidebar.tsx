@@ -2,8 +2,6 @@
 import {
   Bot,
   FileJson2,
-  FlaskConical,
-  History,
   Info,
   MessagesSquare,
   Settings,

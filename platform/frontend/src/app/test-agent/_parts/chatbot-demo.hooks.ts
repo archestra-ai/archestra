@@ -1,5 +1,5 @@
-import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
+import type { PartialUIMessage } from "@/components/chatbot-demo";
 
 export const useMockedMessages = ({
   isMitigated,
@@ -230,9 +230,4 @@ const mitigatedSteps: Record<
     prevMessages[1].parts = mockedMitigatedMessagesFull[1]?.parts?.slice(0, 6);
     return [...prevMessages];
   },
-};
-
-type PartialUIMessage = Partial<UIMessage> & {
-  role: UIMessage["role"];
-  parts: UIMessage["parts"];
 };

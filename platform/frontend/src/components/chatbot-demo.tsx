@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatStatus } from "ai";
+import type { ChatStatus, UIMessage } from "ai";
 import {
   Check,
   CopyIcon,
@@ -59,7 +59,6 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
-import { useMockedMessages } from "./chatbot-demo.hooks";
 
 const models = [
   {
@@ -72,11 +71,19 @@ const models = [
   },
 ];
 
-const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
+const ChatBotDemo = ({
+  messages,
+  reload,
+  isEnded,
+}: {
+  messages: PartialUIMessage[];
+  reload?: () => void;
+  isEnded?: boolean;
+}) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
   const [webSearch, setWebSearch] = useState(false);
-  const { messages, reload, isEnded } = useMockedMessages({ isMitigated });
+  // const { messages, reload, isEnded } = useMockedMessages({ isMitigated });
   // We are mocking those parts
   // const { messages, sendMessage, status } = useChat({
   //   transport: new DefaultChatTransport({
@@ -140,6 +147,23 @@ const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
                         ))}
                     </Sources>
                   )}
+                {message.metadata?.tainted && (
+                  <div className="mb-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                          Tainted Content
+                        </p>
+                        {message.metadata.taintReason && (
+                          <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                            {message.metadata.taintReason}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {message.parts.map((part, i) => {
                   switch (part.type) {
                     case "text":
@@ -165,7 +189,12 @@ const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
                             )}
                         </Fragment>
                       );
-                    case "tool-invocation": {
+                    case "tool-invocation":
+                    case "dynamic-tool": {
+                      const toolName =
+                        part.type === "dynamic-tool"
+                          ? part.toolName
+                          : part.toolCallId;
                       const isDanger = [
                         "gather_sensitive_data",
                         "send_email",
@@ -202,7 +231,7 @@ const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
                           className={getColorClass()}
                         >
                           <ToolHeader
-                            type={`tool-${part.toolCallId}`}
+                            type={`tool-${toolName}`}
                             state={part.state}
                             icon={getIcon()}
                           />
@@ -244,7 +273,7 @@ const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        {isEnded && (
+        {isEnded && reload && (
           <Button
             onClick={reload}
             variant="ghost"
@@ -311,6 +340,15 @@ const ChatBotDemo = ({ isMitigated }: { isMitigated: boolean }) => {
       </div>
     </div>
   );
+};
+
+export type PartialUIMessage = Partial<UIMessage> & {
+  role: UIMessage["role"];
+  parts: UIMessage["parts"];
+  metadata?: {
+    tainted?: boolean;
+    taintReason?: string;
+  };
 };
 
 export default ChatBotDemo;

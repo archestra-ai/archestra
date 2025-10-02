@@ -1,5 +1,6 @@
 "use client";
 
+import { format } from "date-fns";
 import { Copy } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -16,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useChats } from "@/lib/chat.query";
+import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
 export default function ChatsPage({
@@ -37,8 +39,6 @@ export default function ChatsPage({
 
 function Chats({ initialData }: { initialData?: GetChatsResponses["200"] }) {
   const { data: chats = [] } = useChats({ initialData });
-
-  console.log(chats);
 
   if (chats == null || chats.length === 0) {
     return <p className="text-muted-foreground">No chats found</p>;
@@ -97,8 +97,8 @@ function Chats({ initialData }: { initialData?: GetChatsResponses["200"] }) {
                 </span>
               </TableCell>
               <TableCell>{chat.interactions.length}</TableCell>
-              <TableCell>{chat.createdAt}</TableCell>
-              <TableCell>{chat.updatedAt}</TableCell>
+              <TableCell>{formatDate({ date: chat.createdAt })}</TableCell>
+              <TableCell>{formatDate({ date: chat.updatedAt })}</TableCell>
               <TableCell>
                 <Button variant="outline" asChild>
                   <Link href={`/chats/${chat.id}`}>Details</Link>

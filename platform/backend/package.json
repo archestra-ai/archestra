@@ -11,6 +11,7 @@
     "dev": "nodemon src/server.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
+    "lint:fix:unsafe": "biome check --write --unsafe",
     "check:ci": "pnpm type-check && biome ci",
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

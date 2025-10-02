@@ -204,10 +204,6 @@ export const evaluateToolInvocationPolicies = async (
 
         const toolInput = JSON.parse(toolCallArgs);
 
-        console.log(
-          `Evaluating tool call: ${toolCallName} with input: ${JSON.stringify(toolInput)}`,
-        );
-
         // Evaluate tool invocation policy
         const { isAllowed, denyReason } =
           await ToolInvocationPolicyModel.evaluateForAgent(
@@ -215,10 +211,6 @@ export const evaluateToolInvocationPolicies = async (
             toolCallName,
             toolInput,
           );
-
-        console.log(
-          `Tool evaluation result: ${isAllowed} with deny reason: ${denyReason}`,
-        );
 
         if (!isAllowed) {
           // Block this tool call

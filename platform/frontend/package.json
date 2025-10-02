@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "biome check",
     "lint:fix": "biome check --write",
+    "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
     "check:ci": "pnpm type-check && biome ci"
   },

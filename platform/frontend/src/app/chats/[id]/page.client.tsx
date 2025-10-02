@@ -7,7 +7,6 @@ import ChatBotDemo, { type PartialUIMessage } from "@/components/chatbot-demo";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useChat } from "@/lib/chat.query";
 
 export function ChatPage({

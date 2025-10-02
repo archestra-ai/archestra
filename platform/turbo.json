@@ -14,6 +14,9 @@
     "lint:fix": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },
+    "lint:fix:unsafe": {
+      "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
+    },
     "check:ci": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },

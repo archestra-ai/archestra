@@ -1,6 +1,5 @@
 "use client";
 import {
-  Bot,
   FileJson2,
   Info,
   MessagesSquare,

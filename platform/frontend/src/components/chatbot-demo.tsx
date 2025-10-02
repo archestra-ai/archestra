@@ -59,6 +59,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const models = [
   {
@@ -75,10 +76,14 @@ const ChatBotDemo = ({
   messages,
   reload,
   isEnded,
+  showPromptInput,
+  containerClassName,
 }: {
   messages: PartialUIMessage[];
   reload?: () => void;
   isEnded?: boolean;
+  showPromptInput?: boolean;
+  containerClassName?: string;
 }) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
@@ -117,7 +122,12 @@ const ChatBotDemo = ({
   const status: ChatStatus = "streaming" as ChatStatus;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 relative size-full h-screen">
+    <div
+      className={cn(
+        "max-w-4xl mx-auto relative size-full h-screen",
+        containerClassName,
+      )}
+    >
       <div className="flex flex-col h-full">
         <Conversation className="h-full">
           <ConversationContent>
@@ -147,23 +157,7 @@ const ChatBotDemo = ({
                         ))}
                     </Sources>
                   )}
-                {message.metadata?.tainted && (
-                  <div className="mb-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                          Tainted Content
-                        </p>
-                        {message.metadata.taintReason && (
-                          <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                            {message.metadata.taintReason}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+
                 {message.parts.map((part, i) => {
                   switch (part.type) {
                     case "text":
@@ -226,10 +220,26 @@ const ChatBotDemo = ({
 
                       return (
                         <Tool
-                          defaultOpen={true}
                           key={`${message.id}-${part.toolCallId}`}
                           className={getColorClass()}
                         >
+                          {message.metadata?.tainted && (
+                            <div className="m-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                                    Tainted Content
+                                  </p>
+                                  {message.metadata.taintReason && (
+                                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                                      {message.metadata.taintReason}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           <ToolHeader
                             type={`tool-${toolName}`}
                             state={part.state}
@@ -282,61 +292,63 @@ const ChatBotDemo = ({
             <RefreshCcwIcon /> Start again
           </Button>
         )}
-        <PromptInput
-          onSubmit={handleSubmit}
-          className="mt-4"
-          globalDrop
-          multiple
-        >
-          <PromptInputBody>
-            <PromptInputAttachments>
-              {(attachment) => <PromptInputAttachment data={attachment} />}
-            </PromptInputAttachments>
-            <PromptInputTextarea
-              onChange={(e) => setInput(e.target.value)}
-              value={input}
-              disabled
-            />
-          </PromptInputBody>
-          <PromptInputToolbar>
-            <PromptInputTools>
-              <PromptInputActionMenu>
-                <PromptInputActionMenuTrigger />
-                <PromptInputActionMenuContent>
-                  <PromptInputActionAddAttachments />
-                </PromptInputActionMenuContent>
-              </PromptInputActionMenu>
-              <PromptInputButton
-                variant={webSearch ? "default" : "ghost"}
-                onClick={() => setWebSearch(!webSearch)}
-              >
-                <GlobeIcon size={16} />
-                <span>Search</span>
-              </PromptInputButton>
-              <PromptInputModelSelect
-                onValueChange={(value) => {
-                  setModel(value);
-                }}
-                value={model}
-              >
-                <PromptInputModelSelectTrigger>
-                  <PromptInputModelSelectValue />
-                </PromptInputModelSelectTrigger>
-                <PromptInputModelSelectContent>
-                  {models.map((model) => (
-                    <PromptInputModelSelectItem
-                      key={model.value}
-                      value={model.value}
-                    >
-                      {model.name}
-                    </PromptInputModelSelectItem>
-                  ))}
-                </PromptInputModelSelectContent>
-              </PromptInputModelSelect>
-            </PromptInputTools>
-            <PromptInputSubmit disabled status="ready" />
-          </PromptInputToolbar>
-        </PromptInput>
+        {showPromptInput && (
+          <PromptInput
+            onSubmit={handleSubmit}
+            className="mt-4"
+            globalDrop
+            multiple
+          >
+            <PromptInputBody>
+              <PromptInputAttachments>
+                {(attachment) => <PromptInputAttachment data={attachment} />}
+              </PromptInputAttachments>
+              <PromptInputTextarea
+                onChange={(e) => setInput(e.target.value)}
+                value={input}
+                disabled
+              />
+            </PromptInputBody>
+            <PromptInputToolbar>
+              <PromptInputTools>
+                <PromptInputActionMenu>
+                  <PromptInputActionMenuTrigger />
+                  <PromptInputActionMenuContent>
+                    <PromptInputActionAddAttachments />
+                  </PromptInputActionMenuContent>
+                </PromptInputActionMenu>
+                <PromptInputButton
+                  variant={webSearch ? "default" : "ghost"}
+                  onClick={() => setWebSearch(!webSearch)}
+                >
+                  <GlobeIcon size={16} />
+                  <span>Search</span>
+                </PromptInputButton>
+                <PromptInputModelSelect
+                  onValueChange={(value) => {
+                    setModel(value);
+                  }}
+                  value={model}
+                >
+                  <PromptInputModelSelectTrigger>
+                    <PromptInputModelSelectValue />
+                  </PromptInputModelSelectTrigger>
+                  <PromptInputModelSelectContent>
+                    {models.map((model) => (
+                      <PromptInputModelSelectItem
+                        key={model.value}
+                        value={model.value}
+                      >
+                        {model.name}
+                      </PromptInputModelSelectItem>
+                    ))}
+                  </PromptInputModelSelectContent>
+                </PromptInputModelSelect>
+              </PromptInputTools>
+              <PromptInputSubmit disabled status="ready" />
+            </PromptInputToolbar>
+          </PromptInput>
+        )}
       </div>
     </div>
   );

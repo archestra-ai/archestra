@@ -30,6 +30,6 @@ export function useChat({
     queryKey: ["chat", id],
     queryFn: async () => (await getChat({ path: { chatId: id } })).data ?? null,
     initialData,
-    // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
+    refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
   });
 }

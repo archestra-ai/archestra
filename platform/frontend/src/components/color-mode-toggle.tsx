@@ -11,7 +11,7 @@ export function ColorModeToggle() {
   return (
     <>
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         className="dark:hidden cursor-pointer"
         onClick={() => setTheme("dark")}
@@ -19,7 +19,7 @@ export function ColorModeToggle() {
         <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all" />
       </Button>
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         className="hidden dark:block cursor-pointer"
         onClick={() => setTheme("light")}

@@ -7,5 +7,12 @@ export default function NotMitigatedPage() {
   const { messages, reload, isEnded } = useMockedMessages({
     isMitigated: false,
   });
-  return <ChatBotDemo messages={messages} reload={reload} isEnded={isEnded} />;
+  return (
+    <ChatBotDemo
+      messages={messages}
+      reload={reload}
+      isEnded={isEnded}
+      showPromptInput
+    />
+  );
 }

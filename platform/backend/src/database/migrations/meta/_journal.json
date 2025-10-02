@@ -15,6 +15,13 @@
       "when": 1759350301277,
       "tag": "0001_jittery_union_jack",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759431831339,
+      "tag": "0002_update_tool_invocation_policy_actions",
+      "breakpoints": true
     }
   ]
 }

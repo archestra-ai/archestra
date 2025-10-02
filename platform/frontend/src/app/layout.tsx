@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
-
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
@@ -32,16 +32,18 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SidebarProvider>
-            <AppSidebar />
-            <main className="h-[100%] w-full">
-              <SidebarTrigger className="cursor-pointer" />
-              <div className="absolute top-2 right-2">
-                <ColorModeToggle />
-              </div>
-              {children}
-            </main>
-          </SidebarProvider>
+          <ArchestraQueryClientProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <main className="h-[100%] w-full">
+                <SidebarTrigger className="cursor-pointer" />
+                <div className="absolute top-2 right-2">
+                  <ColorModeToggle />
+                </div>
+                {children}
+              </main>
+            </SidebarProvider>
+          </ArchestraQueryClientProvider>
         </ThemeProvider>
       </body>
     </html>

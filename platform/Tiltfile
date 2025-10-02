@@ -58,7 +58,7 @@ local_resource(
 
 # dev
 local_resource(
-  'pnpm dev',
+  'pnpm-dev',
   serve_cmd='pnpm dev',
   labels=['dev'],
   resource_deps=['db-migrate']
@@ -91,5 +91,5 @@ local_resource(
   'codegen:api-client',
   cmd='pnpm codegen:api-client',
   labels=['dev'],
-  resource_deps=['pnpm-install']
+  resource_deps=['pnpm-install', 'pnpm-dev']
 )

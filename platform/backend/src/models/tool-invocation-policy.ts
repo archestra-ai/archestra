@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "../database";
 import type { ToolInvocation } from "../types";
+import InteractionModel from "./interaction";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -62,14 +63,18 @@ class ToolInvocationPolicyModel {
   }
 
   /**
-   * Evaluate tool invocation policies for an agent
+   * Evaluate tool invocation policies for a given agent/chat
    */
-  static async evaluateForAgent(
+  static async evaluate(
+    chatId: string,
     agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
   ): Promise<EvaluationResult> {
+    const isContextTainted =
+      await InteractionModel.checkIfChatIsTainted(chatId);
+
     /**
      * Get policies assigned to this agent that also match the tool name
      */
@@ -97,6 +102,9 @@ class ToolInvocationPolicyModel {
         ),
       );
 
+    // Track if we found an explicit allow rule for this tool call
+    let hasExplicitAllowRule = false;
+
     // Evaluate each policy
     for (const { policy } of applicablePoliciesForAgent) {
       const {
@@ -113,7 +121,7 @@ class ToolInvocationPolicyModel {
 
       if (argumentValue === undefined) {
         // If the argument doesn't exist and we have a block policy, that's okay
-        if (action === "block") {
+        if (action === "block_always") {
           continue;
         }
         // If it's an allow policy and the argument is missing, that's a problem
@@ -161,15 +169,12 @@ class ToolInvocationPolicyModel {
       }
 
       // Apply the allow/block logic
-      if (action === "allow") {
-        // Policy says "allow" when condition is met
-        if (!conditionMet) {
-          return {
-            isAllowed: false,
-            denyReason: blockPrompt || `Policy violation: ${description}`,
-          };
+      if (action === "allow_when_context_is_untrusted") {
+        // If condition is met, this is an explicit allow rule
+        if (conditionMet) {
+          hasExplicitAllowRule = true;
         }
-      } else {
+      } else if (action === "block_always") {
         // Policy says "block" when condition is met
         if (conditionMet) {
           return {
@@ -178,6 +183,15 @@ class ToolInvocationPolicyModel {
           };
         }
       }
+    }
+
+    // If context is tainted and we don't have an explicit allow rule, block
+    if (isContextTainted && !hasExplicitAllowRule) {
+      return {
+        isAllowed: false,
+        denyReason:
+          "Tool invocation blocked: context has been tainted by untrusted data",
+      };
     }
 
     // All policies passed

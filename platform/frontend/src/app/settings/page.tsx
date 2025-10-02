@@ -71,7 +71,7 @@ export default function SettingsPage() {
     argumentName: string;
     operator: OperatorValue;
     value: string;
-    action: "allow" | "block";
+    action: "allow_when_context_is_untrusted" | "block_always";
     blockPrompt: string;
   }>({
     toolId: "",
@@ -79,7 +79,7 @@ export default function SettingsPage() {
     argumentName: "",
     operator: "equal",
     value: "",
-    action: "block",
+    action: "block_always",
     blockPrompt: "",
   });
 
@@ -175,7 +175,7 @@ export default function SettingsPage() {
           argumentName: "",
           operator: "equal",
           value: "",
-          action: "block",
+          action: "block_always",
           blockPrompt: "",
         });
       } catch (error) {
@@ -369,7 +369,11 @@ export default function SettingsPage() {
                     <Label htmlFor="tip-action">Action</Label>
                     <Select
                       value={newToolInvocationPolicy.action}
-                      onValueChange={(value: "allow" | "block") =>
+                      onValueChange={(
+                        value:
+                          | "allow_when_context_is_untrusted"
+                          | "block_always",
+                      ) =>
                         setNewToolInvocationPolicy({
                           ...newToolInvocationPolicy,
                           action: value,
@@ -381,8 +385,12 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="block">Block</SelectItem>
-                        <SelectItem value="allow">Allow</SelectItem>
+                        <SelectItem value="block_always">
+                          Block Always
+                        </SelectItem>
+                        <SelectItem value="allow_when_context_is_untrusted">
+                          Allow When Context Is Untrusted
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -500,12 +508,14 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2">
                       <span
                         className={`text-xs px-2 py-1 rounded ${
-                          policy.action === "block"
+                          policy.action === "block_always"
                             ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
                             : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                         }`}
                       >
-                        {policy.action}
+                        {policy.action === "block_always"
+                          ? "Block Always"
+                          : "Allow When Context Is Untrusted"}
                       </span>
                       <Button
                         variant="ghost"

@@ -89,6 +89,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
+              chatId,
             );
 
           if (toolInvocationRefusal) {
@@ -148,6 +149,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
+              chatId,
             );
           if (toolInvocationRefusal) {
             assistantMessage = toolInvocationRefusal.message;

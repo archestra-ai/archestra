@@ -1585,7 +1585,7 @@ export type CreateToolInvocationPolicyData = {
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'allow' | 'block';
+        action: 'allow_when_context_is_untrusted' | 'block_always';
         blockPrompt?: string | null;
     };
     path?: never;
@@ -1729,7 +1729,7 @@ export type UpdateToolInvocationPolicyData = {
         argumentName?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
-        action?: 'allow' | 'block';
+        action?: 'allow_when_context_is_untrusted' | 'block_always';
         blockPrompt?: string | null;
     };
     path: {

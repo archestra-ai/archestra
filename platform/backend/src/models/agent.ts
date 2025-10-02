@@ -58,7 +58,6 @@ class AgentModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  // Tool Invocation Policy Assignment Methods
   static async assignToolInvocationPolicy(
     agentId: string,
     policyId: string,

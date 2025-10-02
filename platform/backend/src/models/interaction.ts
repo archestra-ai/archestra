@@ -30,8 +30,11 @@ class InteractionModel {
       .orderBy(asc(schema.interactionsTable.createdAt));
   }
 
-  static async findTaintedByChatId(chatId: string) {
-    return await db
+  /**
+   * Check if context is tainted by querying for tainted interactions
+   */
+  static async checkIfChatIsTainted(chatId: string) {
+    const taintedInteractions = await db
       .select()
       .from(schema.interactionsTable)
       .where(
@@ -39,8 +42,8 @@ class InteractionModel {
           eq(schema.interactionsTable.chatId, chatId),
           eq(schema.interactionsTable.tainted, true),
         ),
-      )
-      .orderBy(asc(schema.interactionsTable.createdAt));
+      );
+    return taintedInteractions.length > 0;
   }
 }
 

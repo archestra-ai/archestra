@@ -196,6 +196,12 @@ export const evaluateToolInvocationPolicies = async (
         const {
           function: { arguments: toolCallArgs, name: toolCallName },
         } = toolCall;
+
+        // Skip if arguments are empty (can happen during streaming assembly)
+        if (!toolCallArgs || toolCallArgs.trim() === "") {
+          continue;
+        }
+
         const toolInput = JSON.parse(toolCallArgs);
 
         console.log(

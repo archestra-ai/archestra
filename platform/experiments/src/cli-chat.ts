@@ -348,10 +348,24 @@ Some examples:
           // Accumulate the assistant message from chunks
           let accumulatedContent = "";
           const accumulatedToolCalls: any[] = [];
+          let streamError = false;
 
           process.stdout.write("\nAssistant: ");
 
           for await (const chunk of response) {
+            // Check for error events in the stream
+            if ("error" in chunk) {
+              const errorMessage =
+                (chunk.error as any)?.error?.message ||
+                "Tool invocation blocked by security policy";
+              process.stdout.write(
+                `\n[SECURITY POLICY BLOCKED] ${errorMessage}`,
+              );
+              streamError = true;
+              continueLoop = false;
+              break;
+            }
+
             const delta = chunk.choices[0]?.delta;
 
             if (delta?.content) {
@@ -391,15 +405,18 @@ Some examples:
             }
           }
 
-          // Construct the complete assistant message
-          assistantMessage = {
-            role: "assistant" as const,
-            content: accumulatedContent || null,
-            tool_calls:
-              accumulatedToolCalls.length > 0
-                ? accumulatedToolCalls
-                : undefined,
-          };
+          // Only construct message if there was no stream error
+          if (!streamError) {
+            // Construct the complete assistant message
+            assistantMessage = {
+              role: "assistant" as const,
+              content: accumulatedContent || null,
+              tool_calls:
+                accumulatedToolCalls.length > 0
+                  ? accumulatedToolCalls
+                  : undefined,
+            };
+          }
         } else {
           const response = await openai.chat.completions.create(
             {
@@ -410,6 +427,11 @@ Some examples:
           );
 
           assistantMessage = response.choices[0].message;
+        }
+
+        // Only process message if it exists (might not exist if stream error)
+        if (!assistantMessage) {
+          break;
         }
 
         messages.push(assistantMessage);

@@ -155,14 +155,21 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationPolicyError) {
-            return reply.status(403).send(toolInvocationPolicyError);
+            // When streaming, we can't send a 403 status after headers are sent
+            // Instead, send an error event in SSE format
+            reply.raw.write(
+              `data: ${JSON.stringify({ error: toolInvocationPolicyError })}\n\n`,
+            );
+            reply.raw.write("data: [DONE]\n\n");
+            reply.raw.end();
+            return reply;
           }
 
           await utils.persistAssistantMessage(assistantMessage, chatId);
 
           reply.raw.write("data: [DONE]\n\n");
           reply.raw.end();
-          return;
+          return reply;
         } else {
           const response = await openAiClient.chat.completions.create({
             ...body,

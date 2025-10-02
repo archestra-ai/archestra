@@ -92,12 +92,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationRefusal) {
-            assistantMessage = toolInvocationRefusal.message;
-
             /**
-             * Tool invocation was blocked - send a single chunk, representing the
-             * refusal message instead of original chunks
+             * Tool invocation was blocked
+             *
+             * Overwrite the assistant message that will be persisted
+             * Plus send a single chunk, representing the refusal message instead of original chunks
              */
+            assistantMessage = toolInvocationRefusal.message;
             chunks = [
               {
                 id: "chatcmpl-blocked",
@@ -123,7 +124,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await utils.persistAssistantMessage(assistantMessage, chatId);
 
           for (const chunk of chunks) {
+            /**
+             * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
+             */
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.random() * 10),
+            );
           }
 
           reply.raw.write("data: [DONE]\n\n");

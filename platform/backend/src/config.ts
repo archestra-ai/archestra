@@ -7,7 +7,7 @@ import packageJson from "../package.json";
  *
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");

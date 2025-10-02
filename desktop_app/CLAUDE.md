@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **ALWAYS run all commands from the `desktop_app/` directory unless specifically instructed otherwise.**
 
 **Exceptions:**
+
 - When working on experiments, run commands from the `platform/experiments/` directory.
 - When working on the platform backend, run commands from the `platform/` directory.
 
@@ -88,14 +89,12 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
 ### Process Architecture
 
 1. **Main Process** (`src/main.ts`):
-
    - Electron main process handling windows and IPC
    - Hosts the Fastify backend server
    - Manages Ollama server lifecycle
    - Handles OAuth flows and external URL opening
 
 2. **Renderer Process** (`src/renderer.tsx`):
-
    - React UI application
    - Communicates with backend via HTTP/WebSocket
 
@@ -108,13 +107,11 @@ Archestra is an enterprise-grade Model Context Protocol (MCP) platform built as 
 #### MCP Server Management
 
 - **McpServerSandboxManager**: Orchestrates multiple MCP servers
-
   - Base image: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - WebSocket broadcasting for real-time status updates
   - Tool discovery and management across all servers
 
 - **SandboxedMcpServer**: Individual MCP server instances
-
   - Uses AI SDK's `experimental_createMCPClient` for MCP protocol
   - Tool ID format: `{mcp_server_id}__{tool_name}` (double underscore)
   - Container-based isolation with Podman
@@ -227,13 +224,13 @@ Archestra supports deep linking for OAuth authentication flows:
   - Handles OAuth authorization codes from external providers
   - Forwards the code to backend server for token exchange via `/api/oauth/store-code` endpoint
   - Sends to backend on port 54587 (configurable via `ARCHESTRA_API_SERVER_PORT`)
-  
 - **Auth Success**: `archestra-ai://auth-success?token=<auth_token>`
   - Stores authentication tokens in the CloudProvider model for 'archestra' provider
   - Broadcasts `user-authenticated` events via WebSocket
   - Automatically focuses the application window
 
 **Implementation Notes**:
+
 - Deep link handler is in `src/deep-linking.ts`
 - Auth tokens are stored in the `cloud_providers` table (not user table)
 - WebSocket broadcasts notify UI of authentication status changes
@@ -243,6 +240,7 @@ Archestra supports deep linking for OAuth authentication flows:
 The `platform/experiments/` directory contains experimental features and prototypes:
 
 #### OpenAI Proxy Server
+
 - Development proxy server for intercepting and logging LLM API calls
 - Located in `src/main.ts`
 - Runs on port 9000 by default
@@ -251,6 +249,7 @@ The `platform/experiments/` directory contains experimental features and prototy
 - **Tool Mapping Page**: View all persisted tools at `/tool-mapping` route
 
 #### Security Guardrails
+
 - Advanced security features in `src/guardrails/`:
   - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
   - **Tool Invocation Policies**: Fine-grained control over tool usage
@@ -258,6 +257,7 @@ The `platform/experiments/` directory contains experimental features and prototy
 - CLI testing interface: `pnpm cli-chat-with-guardrails`
 
 #### Running Experiments
+
 ```bash
 cd platform/experiments
 pnpm install
@@ -278,6 +278,7 @@ tilt up
 ```
 
 **Development Features:**
+
 - **Tilt Integration**: Manages PostgreSQL, migrations, and dev servers
 - **Auto-linting**: The `lint:fix` resource watches files and auto-fixes issues
 - **VS Code Support**: Platform has its own VS Code settings for optimal DX
@@ -296,6 +297,7 @@ pnpm codegen:api-client  # Regenerate client from OpenAPI spec
 ```
 
 **API Client Features:**
+
 - Generated from backend OpenAPI spec at `http://localhost:9000/openapi.json`
 - Type-safe client code in `platform/shared/api-client/`
 - Automatic regeneration when backend API changes

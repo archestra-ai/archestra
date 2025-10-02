@@ -1,5 +1,5 @@
-import { config, validateConfig } from './config/index.js';
 import { buildApp } from './app.js';
+import { config, validateConfig } from './config/index.js';
 
 async function start() {
   // Validate configuration
@@ -14,14 +14,13 @@ async function start() {
       port: config.server.port,
       host: config.server.host,
     });
-    
+
     const baseUrl = `http://localhost:${config.server.port}`;
-    
+
     console.log('\n🚀 OAuth Proxy Server is running');
     console.log(`📍 ${baseUrl}`);
     console.log(`📍 Health check: ${baseUrl}/health`);
     console.log(`📍 API docs: ${baseUrl}/`);
-    
   } catch (err) {
     app.log.error(err);
     process.exit(1);

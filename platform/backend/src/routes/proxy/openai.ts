@@ -78,8 +78,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             stream: true,
           });
 
-          const { message: assistantMessage, chunks } =
+          const chatCompletionChunksAndMessage =
             await utils.streaming.handleChatCompletions(stream);
+
+          let assistantMessage = chatCompletionChunksAndMessage.message;
+          let chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+            chatCompletionChunksAndMessage.chunks;
 
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
@@ -88,36 +92,38 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationRefusal) {
-            // Tool invocation was blocked - send refusal message instead of original chunks
-            const refusalMessage = toolInvocationRefusal.message;
-            await utils.persistAssistantMessage(refusalMessage, chatId);
+            assistantMessage = toolInvocationRefusal.message;
 
-            // Send a single chunk with the refusal
-            const refusalChunk: OpenAI.Chat.Completions.ChatCompletionChunk = {
-              id: "chatcmpl-blocked",
-              object: "chat.completion.chunk",
-              created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
-              model: body.model,
-              choices: [
-                {
-                  index: 0,
-                  delta: {
-                    role: "assistant",
-                    content: null,
-                    refusal: refusalMessage.refusal,
+            /**
+             * Tool invocation was blocked - send a single chunk, representing the
+             * refusal message instead of original chunks
+             */
+            chunks = [
+              {
+                id: "chatcmpl-blocked",
+                object: "chat.completion.chunk",
+                created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
+                model: body.model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: "assistant",
+                      content: null,
+                      refusal: toolInvocationRefusal.message.refusal,
+                    },
+                    finish_reason: "stop",
+                    logprobs: null,
                   },
-                  finish_reason: "stop",
-                  logprobs: null,
-                },
-              ],
-            };
-            reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-          } else {
-            // Tool invocation was allowed - send original chunks
-            await utils.persistAssistantMessage(assistantMessage, chatId);
-            for (const chunk of chunks) {
-              reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-            }
+                ],
+              },
+            ];
+          }
+
+          await utils.persistAssistantMessage(assistantMessage, chatId);
+
+          for (const chunk of chunks) {
+            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
 
           reply.raw.write("data: [DONE]\n\n");

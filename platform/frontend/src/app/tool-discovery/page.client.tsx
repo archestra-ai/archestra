@@ -104,7 +104,7 @@ function ToolCard({ tool }: { tool: GetToolsResponses["200"][number] }) {
                         {isRequired && (
                           <Badge
                             variant="destructive"
-                            className="text-[10px] h-4 px-1"
+                            className="text-[12px] h-4 px-1"
                           >
                             required
                           </Badge>

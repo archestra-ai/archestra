@@ -51,11 +51,7 @@ export const evaluatePolicies = async (
       if (toolName) {
         // Evaluate trusted data policy
         const { isTrusted, trustReason } =
-          await TrustedDataPolicyModel.evaluateForAgent(
-            agentId,
-            toolName,
-            toolResult,
-          );
+          await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
 
         // Store tool result as interaction (tainted if not trusted)
         await InteractionModel.create({

@@ -123,7 +123,7 @@ class TrustedDataPolicyModel {
    * - If no policy matches, the data is considered tainted
    * - This implements an allowlist approach for maximum security
    */
-  static async evaluateForAgent(
+  static async evaluate(
     agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape

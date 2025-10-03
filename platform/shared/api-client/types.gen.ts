@@ -423,7 +423,7 @@ export type GetAgentTrustedDataPoliciesResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: string;
+        action: 'block_always' | 'mark_as_trusted';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -1901,7 +1901,7 @@ export type GetTrustedDataPoliciesResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: string;
+        action: 'block_always' | 'mark_as_trusted';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -1916,7 +1916,7 @@ export type CreateTrustedDataPolicyData = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'allow';
+        action: 'block_always' | 'mark_as_trusted';
     };
     path?: never;
     query?: never;
@@ -1948,7 +1948,7 @@ export type CreateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: string;
+        action: 'block_always' | 'mark_as_trusted';
         createdAt: string;
         updatedAt: string;
     };
@@ -2042,7 +2042,7 @@ export type GetTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: string;
+        action: 'block_always' | 'mark_as_trusted';
         createdAt: string;
         updatedAt: string;
     };
@@ -2057,7 +2057,7 @@ export type UpdateTrustedDataPolicyData = {
         attributePath?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
-        action?: 'block_always' | 'allow';
+        action?: 'block_always' | 'mark_as_trusted';
     };
     path: {
         id: string;
@@ -2100,7 +2100,7 @@ export type UpdateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: string;
+        action: 'block_always' | 'mark_as_trusted';
         createdAt: string;
         updatedAt: string;
     };

@@ -141,12 +141,12 @@ export function ToolResultPolicies({
                 }
               />
               <ArrowRightIcon className="w-4 h-4 shrink-0" />
-              {/* <Select
-                defaultValue={policy.}
+              <Select
+                defaultValue={policy.action}
                 onValueChange={(
-                  value: GetToolInvocationPoliciesResponse["200"]["action"],
+                  value: GetTrustedDataPoliciesResponse["200"]["action"],
                 ) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
+                  toolResultPoliciesUpdateMutation.mutate({
                     ...policy,
                     action: value,
                   })
@@ -158,8 +158,8 @@ export function ToolResultPolicies({
                 <SelectContent>
                   {[
                     {
-                      value: "allow_when_context_is_untrusted",
-                      label: "Allow usage when untrusted data is present",
+                      value: "mark_as_trusted",
+                      label: "Mark as trusted",
                     },
                     { value: "block_always", label: "Block always" },
                   ].map(({ value, label }) => (
@@ -168,7 +168,7 @@ export function ToolResultPolicies({
                     </SelectItem>
                   ))}
                 </SelectContent>
-              </Select> */}
+              </Select>
             </div>
             <Button
               variant="ghost"

@@ -16,7 +16,7 @@ const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
   action: text("action")
     .$type<TrustedData.TrustedDataPolicyAction>()
     .notNull()
-    .default("allow"),
+    .default("mark_as_trusted"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

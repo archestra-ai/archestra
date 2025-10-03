@@ -237,7 +237,7 @@ class TrustedDataPolicyModel {
       description,
       action,
     } of applicablePoliciesForAgent) {
-      if (action === "allow") {
+      if (action === "mark_as_trusted") {
         // Extract values from the tool output using the attribute path
         const outputValue = toolOutput?.value || toolOutput;
         const values = TrustedDataPolicyModel.extractValuesFromPath(

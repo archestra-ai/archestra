@@ -210,7 +210,7 @@ The backend integrates advanced security guardrails:
   - Links to tools and agents
   - Stores argument path, operator, value, action, and reason
 - **TrustedDataPolicy**: Policies for marking data as trusted or blocked
-  - Stores attribute path, operator, value, and action ("allow" or "block_always")
+  - Stores attribute path, operator, value, and action ("mark_as_trusted" or "block_always")
 - **AgentToolInvocationPolicy**: Junction table linking agents to their policies
 - Supports trust tracking and data blocking for security analysis
 

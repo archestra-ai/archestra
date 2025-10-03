@@ -3,12 +3,16 @@ import { z } from "zod";
 import { schema } from "../../database";
 import { SupportedOperatorSchema } from "./operator";
 
-export const TrustedDataPolicyActionSchema = z.enum(["block_always", "allow"]);
+export const TrustedDataPolicyActionSchema = z.enum([
+  "block_always",
+  "mark_as_trusted",
+]);
 
 export const SelectTrustedDataPolicySchema = createSelectSchema(
   schema.trustedDataPoliciesTable,
   {
     operator: SupportedOperatorSchema,
+    action: TrustedDataPolicyActionSchema,
   },
 );
 export const InsertTrustedDataPolicySchema = createInsertSchema(

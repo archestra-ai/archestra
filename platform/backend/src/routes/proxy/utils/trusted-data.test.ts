@@ -46,7 +46,7 @@ describe("trusted-data utils", () => {
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
-        action: "allow",
+        action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
 
@@ -172,7 +172,7 @@ describe("trusted-data utils", () => {
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
-        action: "allow",
+        action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
 
@@ -234,7 +234,7 @@ describe("trusted-data utils", () => {
         attributePath: "source",
         operator: "equal",
         value: "trusted",
-        action: "allow",
+        action: "mark_as_trusted",
         description: "Allow trusted source",
       });
 

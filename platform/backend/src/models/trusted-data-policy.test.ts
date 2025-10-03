@@ -53,7 +53,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "trusted-api",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Trusted API source",
         });
 
@@ -75,7 +75,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "trusted-api",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Trusted API source",
         });
 
@@ -135,7 +135,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "special",
           operator: "equal",
           value: "magic",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Special case",
         });
 
@@ -174,7 +174,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Verified data",
         });
 
@@ -199,7 +199,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "status",
           operator: "equal",
           value: "verified",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Verified status",
         });
 
@@ -226,7 +226,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "notEqual",
           value: "untrusted",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Not from untrusted source",
         });
 
@@ -253,7 +253,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "url",
           operator: "contains",
           value: "trusted-domain.com",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "From trusted domain",
         });
 
@@ -280,7 +280,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "content",
           operator: "notContains",
           value: "malicious",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "No malicious content",
         });
 
@@ -307,7 +307,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "path",
           operator: "startsWith",
           value: "/trusted/",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Trusted path",
         });
 
@@ -334,7 +334,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "email",
           operator: "endsWith",
           value: "@company.com",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Company email",
         });
 
@@ -361,7 +361,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "id",
           operator: "regex",
           value: "^[A-Z]{3}-[0-9]{5}$",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Valid ID format",
         });
 
@@ -390,7 +390,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "emails[*].from",
           operator: "endsWith",
           value: "@trusted.com",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Emails from trusted domain",
         });
 
@@ -433,7 +433,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "items[*].verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "All items verified",
         });
 
@@ -452,7 +452,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "items[*].verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "All items verified",
         });
 
@@ -473,7 +473,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "response.data.user.verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "User is verified",
         });
 
@@ -522,7 +522,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "response.data.user.verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "User is verified",
         });
 
@@ -571,7 +571,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "type",
           operator: "equal",
           value: "email",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Allow email data",
         });
 
@@ -638,7 +638,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "trusted",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Allow trusted sources",
         });
 
@@ -729,7 +729,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "api-v1",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "API v1 source",
         });
 
@@ -738,7 +738,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "api-v2",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "API v2 source",
         });
 
@@ -779,7 +779,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "source",
           operator: "equal",
           value: "trusted",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Trusted source",
         });
 
@@ -788,7 +788,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "verified",
           operator: "equal",
           value: "true",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Verified data",
         });
 
@@ -820,7 +820,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "status",
           operator: "equal",
           value: "success",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Successful response",
         });
 
@@ -840,7 +840,7 @@ describe("TrustedDataPolicyModel", async () => {
           attributePath: "status",
           operator: "equal",
           value: "success",
-          action: "allow",
+          action: "mark_as_trusted",
           description: "Successful response",
         });
 

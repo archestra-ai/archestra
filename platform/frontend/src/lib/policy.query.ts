@@ -125,6 +125,7 @@ export function useToolResultPoliciesCreateMutation() {
           attributePath: "",
           operator: "equal",
           value: "",
+          action: "mark_as_trusted",
         },
       }),
     onSuccess: () => {

@@ -23,6 +23,9 @@
     "type-check": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts"]
     },
+    "test": {
+      "cache": false
+    },
     "codegen:api-client": {
       "cache": false
     },

@@ -64,11 +64,10 @@ class ToolInvocationPolicyModel {
   }
 
   /**
-   * Evaluate tool invocation policies for a given agent/chat
+   * Evaluate tool invocation policies for a given chat
    */
   static async evaluate(
     chatId: string,
-    agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
@@ -77,7 +76,7 @@ class ToolInvocationPolicyModel {
       await InteractionModel.checkIfChatIsTainted(chatId);
 
     /**
-     * Get policies assigned to this agent that also match the tool name,
+     * Get policies assigned to this chat's agent that also match the tool name,
      * along with the tool's configuration
      */
     const applicablePoliciesForAgent = await db
@@ -86,7 +85,14 @@ class ToolInvocationPolicyModel {
         allowUsageWhenUntrustedDataIsPresent:
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
       })
-      .from(schema.agentToolInvocationPoliciesTable)
+      .from(schema.chatsTable)
+      .innerJoin(
+        schema.agentToolInvocationPoliciesTable,
+        eq(
+          schema.chatsTable.agentId,
+          schema.agentToolInvocationPoliciesTable.agentId,
+        ),
+      )
       .innerJoin(
         schema.toolInvocationPoliciesTable,
         eq(
@@ -99,9 +105,9 @@ class ToolInvocationPolicyModel {
         eq(schema.toolInvocationPoliciesTable.toolId, schema.toolsTable.id),
       )
       .where(
-        // Filter to policies that match the tool id
+        // Filter to policies that match the chat and tool
         and(
-          eq(schema.agentToolInvocationPoliciesTable.agentId, agentId),
+          eq(schema.chatsTable.id, chatId),
           eq(schema.toolsTable.name, toolName),
         ),
       );
@@ -112,6 +118,23 @@ class ToolInvocationPolicyModel {
       applicablePoliciesForAgent.length > 0
         ? applicablePoliciesForAgent[0].allowUsageWhenUntrustedDataIsPresent
         : null;
+
+    // If we don't have the tool config from policies, fetch it directly
+    if (allowUsageWhenUntrustedDataIsPresent === null) {
+      const tool = await ToolModel.findByName(toolName);
+      if (tool) {
+        allowUsageWhenUntrustedDataIsPresent =
+          tool.allowUsageWhenUntrustedDataIsPresent;
+      }
+    }
+
+    // If context is tainted and tool allows usage with untrusted data, allow immediately
+    if (isContextTainted && allowUsageWhenUntrustedDataIsPresent) {
+      return {
+        isAllowed: true,
+        reason: "",
+      };
+    }
 
     // Evaluate each policy
     for (const {
@@ -190,27 +213,13 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is tainted and we don't have an explicit allow rule, check the tool's configuration
+    // If context is tainted and we don't have an explicit allow rule, block
     if (isContextTainted && !hasExplicitAllowRule) {
-      // If we don't have the tool config from policies, fetch it directly
-      if (allowUsageWhenUntrustedDataIsPresent === null) {
-        // No policies defined for this tool, fetch the tool directly
-        const tool = await ToolModel.findByName(toolName);
-
-        if (tool) {
-          allowUsageWhenUntrustedDataIsPresent =
-            tool.allowUsageWhenUntrustedDataIsPresent;
-        }
-      }
-
-      // If the tool doesn't allow usage when untrusted data is present, block
-      if (!allowUsageWhenUntrustedDataIsPresent) {
-        return {
-          isAllowed: false,
-          reason:
-            "Tool invocation blocked: context has been tainted by untrusted data",
-        };
-      }
+      return {
+        isAllowed: false,
+        reason:
+          "Tool invocation blocked: context has been tainted by untrusted data",
+      };
     }
 
     // All policies passed

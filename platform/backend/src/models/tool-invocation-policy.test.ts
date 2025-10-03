@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
+import type { Tool } from "../types";
 import AgentModel from "./agent";
 import ChatModel from "./chat";
 import InteractionModel from "./interaction";
@@ -6,6 +7,8 @@ import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 
 describe("ToolInvocationPolicyModel", () => {
+  const toolName = "test-tool";
+
   let agentId: string;
   let chatId: string;
   let toolId: string;
@@ -22,15 +25,15 @@ describe("ToolInvocationPolicyModel", () => {
     // Create test tool
     await ToolModel.createToolIfNotExists({
       agentId,
-      name: "test-tool",
+      name: toolName,
       parameters: {},
       description: "Test tool",
       allowUsageWhenUntrustedDataIsPresent: false,
       dataIsTrustedByDefault: false,
     });
 
-    const tools = await ToolModel.findAll();
-    toolId = tools.find((t) => t.name === "test-tool")?.id;
+    const tool = await ToolModel.findByName(toolName);
+    toolId = (tool as Tool).id;
   });
 
   describe("evaluate", () => {
@@ -38,8 +41,7 @@ describe("ToolInvocationPolicyModel", () => {
       test("allows tool invocation when no policies exist and context is clean", async () => {
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { arg1: "value1" },
         );
 
@@ -59,12 +61,11 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Link policy to agent
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "hacker@evil.com" },
         );
 
@@ -84,12 +85,11 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Link policy to agent
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "user@good.com" },
         );
 
@@ -112,8 +112,7 @@ describe("ToolInvocationPolicyModel", () => {
       test("blocks tool invocation when context is tainted and no explicit allow rule exists", async () => {
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { arg1: "value1" },
         );
 
@@ -133,12 +132,11 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Link policy to agent
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { path: "/safe/file.txt" },
         );
 
@@ -158,12 +156,11 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Link policy to agent
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { path: "/unsafe/file.txt" },
         );
 
@@ -184,7 +181,6 @@ describe("ToolInvocationPolicyModel", () => {
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
           "permissive-tool",
           { arg1: "value1" },
         );
@@ -204,10 +200,10 @@ describe("ToolInvocationPolicyModel", () => {
           dataIsTrustedByDefault: false,
         });
 
-        const tools = await ToolModel.findAll();
-        const permissiveToolId = tools.find(
-          (t) => t.name === "permissive-tool-with-policies",
-        )?.id;
+        const tool = await ToolModel.findByName(
+          "permissive-tool-with-policies",
+        );
+        const permissiveToolId = (tool as Tool).id;
 
         // Create a policy that doesn't match
         const policy = await ToolInvocationPolicyModel.create({
@@ -220,13 +216,12 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         // Link policy to agent
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         // Even though the allow policy doesn't match, the tool should still be allowed
         // because allowUsageWhenUntrustedDataIsPresent is true
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
           "permissive-tool-with-policies",
           { arg1: "value1" },
         );
@@ -247,20 +242,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Active status blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { status: "active" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { status: "inactive" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -276,20 +269,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Non-production blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { env: "development" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { env: "production" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -305,20 +296,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Secret content blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { message: "This contains a secret value" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { message: "This is safe content" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -334,20 +323,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Unapproved content blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { message: "This is not yet ready" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { message: "This is approved content" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -363,20 +350,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Temp paths blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { path: "/tmp/file.txt" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { path: "/home/file.txt" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -392,20 +377,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Executable files blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { file: "malware.exe" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { file: "document.pdf" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -421,20 +404,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Example.com emails blocked",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "user@example.com" },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "user@other.com" },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -452,20 +433,18 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Blocked domain",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { user: { email: "hacker@blocked.com", name: "Hacker" } },
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { user: { email: "user@allowed.com", name: "User" } },
         );
         expect(allowedResult.isAllowed).toBe(true);
@@ -483,12 +462,11 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Required argument",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { other: "value" },
         );
 
@@ -506,12 +484,11 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Bad value",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, policy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { other: "value" },
         );
 
@@ -541,14 +518,13 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Override allowed",
         });
 
-        await AgentModel.addToolInvocationPolicy(agentId, blockPolicy.id);
-        await AgentModel.addToolInvocationPolicy(agentId, allowPolicy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, blockPolicy.id);
+        await AgentModel.assignToolInvocationPolicy(agentId, allowPolicy.id);
 
         // Test that block policy is evaluated first
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "user@blocked.com", override: "false" },
         );
         expect(blockedResult.isAllowed).toBe(false);
@@ -556,8 +532,7 @@ describe("ToolInvocationPolicyModel", () => {
         // Test that both policies are evaluated
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
-          agentId,
-          "test-tool",
+          toolName,
           { email: "user@allowed.com", override: "true" },
         );
         expect(allowedResult.isAllowed).toBe(true);

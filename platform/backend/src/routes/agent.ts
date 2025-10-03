@@ -213,7 +213,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Tool Invocation Policy Assignment Endpoints
   fastify.get(
     "/api/agents/:id/tool-invocation-policies",
     {

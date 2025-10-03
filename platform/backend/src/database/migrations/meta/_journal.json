@@ -29,6 +29,13 @@
       "when": 1759500339382,
       "tag": "0003_peaceful_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1759501175084,
+      "tag": "0004_secret_inertia",
+      "breakpoints": true
     }
   ]
 }

@@ -73,7 +73,6 @@ export function useToolInvocationPolicyCreateMutation() {
 }
 
 export function useToolInvocationPolicyUpdateMutation() {
-  console.error("heeeere");
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (

@@ -237,12 +237,12 @@ function ToolCallPolicies({
               If
               <Select
                 defaultValue={policy.argumentName}
-                // onValueChange={(value) => {
-                //   toolInvocationPolicyUpdateMutation.mutate({
-                //     ...policy,
-                //     argumentName: value,
-                //   });
-                // }}
+                onValueChange={(value) => {
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    argumentName: value,
+                  });
+                }}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="parameter" />

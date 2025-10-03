@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db, { schema } from "../database";
-import type { Agent, InsertAgent, ToolInvocation, TrustedData } from "../types";
+import type { Agent, InsertAgent } from "../types";
 
 class AgentModel {
   static async create(agent: InsertAgent): Promise<Agent> {
@@ -56,97 +56,6 @@ class AgentModel {
       .delete(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id));
     return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  static async assignToolInvocationPolicy(
-    agentId: string,
-    policyId: string,
-  ): Promise<void> {
-    await db
-      .insert(schema.agentToolInvocationPoliciesTable)
-      .values({ agentId, policyId })
-      .onConflictDoNothing();
-  }
-
-  static async unassignToolInvocationPolicy(
-    agentId: string,
-    policyId: string,
-  ): Promise<boolean> {
-    const result = await db
-      .delete(schema.agentToolInvocationPoliciesTable)
-      .where(
-        and(
-          eq(schema.agentToolInvocationPoliciesTable.agentId, agentId),
-          eq(schema.agentToolInvocationPoliciesTable.policyId, policyId),
-        ),
-      );
-    return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  static async getToolInvocationPolicies(
-    agentId: string,
-  ): Promise<ToolInvocation.ToolInvocationPolicy[]> {
-    const results = await db
-      .select({
-        policy: schema.toolInvocationPoliciesTable,
-      })
-      .from(schema.agentToolInvocationPoliciesTable)
-      .innerJoin(
-        schema.toolInvocationPoliciesTable,
-        eq(
-          schema.agentToolInvocationPoliciesTable.policyId,
-          schema.toolInvocationPoliciesTable.id,
-        ),
-      )
-      .where(eq(schema.agentToolInvocationPoliciesTable.agentId, agentId));
-
-    return results.map((r) => r.policy);
-  }
-
-  // Trusted Data Policy Assignment Methods
-  static async assignTrustedDataPolicy(
-    agentId: string,
-    policyId: string,
-  ): Promise<void> {
-    await db
-      .insert(schema.agentTrustedDataPoliciesTable)
-      .values({ agentId, policyId })
-      .onConflictDoNothing();
-  }
-
-  static async unassignTrustedDataPolicy(
-    agentId: string,
-    policyId: string,
-  ): Promise<boolean> {
-    const result = await db
-      .delete(schema.agentTrustedDataPoliciesTable)
-      .where(
-        and(
-          eq(schema.agentTrustedDataPoliciesTable.agentId, agentId),
-          eq(schema.agentTrustedDataPoliciesTable.policyId, policyId),
-        ),
-      );
-    return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  static async getTrustedDataPolicies(
-    agentId: string,
-  ): Promise<TrustedData.TrustedDataPolicy[]> {
-    const results = await db
-      .select({
-        policy: schema.trustedDataPoliciesTable,
-      })
-      .from(schema.agentTrustedDataPoliciesTable)
-      .innerJoin(
-        schema.trustedDataPoliciesTable,
-        eq(
-          schema.agentTrustedDataPoliciesTable.policyId,
-          schema.trustedDataPoliciesTable.id,
-        ),
-      )
-      .where(eq(schema.agentTrustedDataPoliciesTable.agentId, agentId));
-
-    return results.map((r) => r.policy);
   }
 }
 

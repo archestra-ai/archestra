@@ -51,7 +51,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("blocks tool invocation when block_always policy matches", async () => {
         // Create a block policy
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "email",
           operator: "endsWith",
@@ -59,9 +59,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Blocked domain",
         });
-
-        // Link policy to agent
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -75,7 +72,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("allows tool invocation when block_always policy doesn't match", async () => {
         // Create a block policy
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "email",
           operator: "endsWith",
@@ -83,9 +80,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Blocked domain",
         });
-
-        // Link policy to agent
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -122,7 +116,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("allows tool invocation when context is untrusted but explicit allow rule matches", async () => {
         // Create an allow policy
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "path",
           operator: "startsWith",
@@ -130,9 +124,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "allow_when_context_is_untrusted",
           reason: "Safe path allowed",
         });
-
-        // Link policy to agent
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -146,7 +137,7 @@ describe("ToolInvocationPolicyModel", () => {
 
       test("blocks tool invocation when context is untrusted and allow rule doesn't match", async () => {
         // Create an allow policy
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "path",
           operator: "startsWith",
@@ -154,9 +145,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "allow_when_context_is_untrusted",
           reason: "Safe path allowed",
         });
-
-        // Link policy to agent
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -206,7 +194,7 @@ describe("ToolInvocationPolicyModel", () => {
         const permissiveToolId = (tool as Tool).id;
 
         // Create a policy that doesn't match
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId: permissiveToolId,
           argumentName: "special",
           operator: "equal",
@@ -214,9 +202,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "allow_when_context_is_untrusted",
           reason: "Special case",
         });
-
-        // Link policy to agent
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         // Even though the allow policy doesn't match, the tool should still be allowed
         // because allowUsageWhenUntrustedDataIsPresent is true
@@ -233,7 +218,7 @@ describe("ToolInvocationPolicyModel", () => {
 
     describe("operator evaluation", () => {
       test("equal operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "status",
           operator: "equal",
@@ -241,8 +226,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Active status blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -260,7 +243,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("notEqual operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "env",
           operator: "notEqual",
@@ -268,8 +251,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Non-production blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -287,7 +268,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("contains operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "message",
           operator: "contains",
@@ -295,8 +276,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Secret content blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -314,7 +293,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("notContains operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "message",
           operator: "notContains",
@@ -322,8 +301,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Unapproved content blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -341,7 +318,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("startsWith operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "path",
           operator: "startsWith",
@@ -349,8 +326,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Temp paths blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -368,7 +343,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("endsWith operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "file",
           operator: "endsWith",
@@ -376,8 +351,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Executable files blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -395,7 +368,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("regex operator works correctly", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "email",
           operator: "regex",
@@ -403,8 +376,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Example.com emails blocked",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -424,7 +395,7 @@ describe("ToolInvocationPolicyModel", () => {
 
     describe("nested argument paths", () => {
       test("evaluates nested paths using lodash get", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "user.email",
           operator: "endsWith",
@@ -432,8 +403,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Blocked domain",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -453,7 +422,7 @@ describe("ToolInvocationPolicyModel", () => {
 
     describe("missing arguments", () => {
       test("returns error for missing argument with allow policy", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "required",
           operator: "equal",
@@ -461,8 +430,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "allow_when_context_is_untrusted",
           reason: "Required argument",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -475,7 +442,7 @@ describe("ToolInvocationPolicyModel", () => {
       });
 
       test("continues evaluation for missing argument with block policy", async () => {
-        const policy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "optional",
           operator: "equal",
@@ -483,8 +450,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "block_always",
           reason: "Bad value",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, policy.id);
 
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
@@ -500,7 +465,7 @@ describe("ToolInvocationPolicyModel", () => {
     describe("multiple policies", () => {
       test("evaluates multiple policies in order", async () => {
         // Create multiple policies
-        const blockPolicy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "email",
           operator: "endsWith",
@@ -509,7 +474,7 @@ describe("ToolInvocationPolicyModel", () => {
           reason: "Blocked domain",
         });
 
-        const allowPolicy = await ToolInvocationPolicyModel.create({
+        await ToolInvocationPolicyModel.create({
           toolId,
           argumentName: "override",
           operator: "equal",
@@ -517,9 +482,6 @@ describe("ToolInvocationPolicyModel", () => {
           action: "allow_when_context_is_untrusted",
           reason: "Override allowed",
         });
-
-        await AgentModel.assignToolInvocationPolicy(agentId, blockPolicy.id);
-        await AgentModel.assignToolInvocationPolicy(agentId, allowPolicy.id);
 
         // Test that block policy is evaluated first
         const blockedResult = await ToolInvocationPolicyModel.evaluate(

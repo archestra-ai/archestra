@@ -91,22 +91,12 @@ class ToolInvocationPolicyModel {
       })
       .from(schema.chatsTable)
       .innerJoin(
-        schema.agentToolInvocationPoliciesTable,
-        eq(
-          schema.chatsTable.agentId,
-          schema.agentToolInvocationPoliciesTable.agentId,
-        ),
+        schema.toolsTable,
+        eq(schema.chatsTable.agentId, schema.toolsTable.agentId),
       )
       .innerJoin(
         schema.toolInvocationPoliciesTable,
-        eq(
-          schema.agentToolInvocationPoliciesTable.policyId,
-          schema.toolInvocationPoliciesTable.id,
-        ),
-      )
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.toolInvocationPoliciesTable.toolId, schema.toolsTable.id),
+        eq(schema.toolsTable.id, schema.toolInvocationPoliciesTable.toolId),
       )
       .where(
         // Filter to policies that match the chat and tool

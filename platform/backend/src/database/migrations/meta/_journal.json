@@ -50,6 +50,13 @@
       "when": 1759518255860,
       "tag": "0006_military_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1759532187556,
+      "tag": "0007_smart_hemingway",
+      "breakpoints": true
     }
   ]
 }

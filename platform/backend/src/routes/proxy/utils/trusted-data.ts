@@ -12,7 +12,7 @@ const extractToolNameFromHistory = async (
   chatId: string,
   toolCallId: string,
 ): Promise<string | null> => {
-  const interactions = await InteractionModel.findByChatId(chatId);
+  const interactions = await InteractionModel.getAllInteractionsForChat(chatId);
 
   // Find the most recent assistant message with tool_calls
   for (let i = interactions.length - 1; i >= 0; i--) {
@@ -66,29 +66,41 @@ export const evaluatePolicies = async (
 };
 
 /**
- * Filter out blocked tool results from the context
+ * "Redact" blocked tool result data from showing up in the context
  *
- * This function removes tool response messages that have been marked as blocked
+ * This function redacts tool response messages that have been marked as blocked,
  * by trusted data policies, preventing the LLM from seeing potentially malicious data
+ *
+ * NOTE: we cannot simply remove these messages because OpenAI makes certain assumptions, for example:
+ *
+ * HTTP 400 An assistant message with 'tool_calls' must be followed by tool messages responding to each
+ * 'tool_call_id'. The following tool_call_ids did not have response messages: call_snkylRZezUUhqjex9BGwBRMb
  */
-export const filterOutBlockedData = async (
+export const redactBlockedToolResultData = async (
   chatId: string,
   messages: ChatCompletionRequestMessages,
 ): Promise<ChatCompletionRequestMessages> => {
-  // Get blocked tool call IDs from interactions
-  const blockedToolCallIds =
-    await InteractionModel.getBlockedToolCallIds(chatId);
+  // Get blocked tool calls
+  const blockedToolCalls = await InteractionModel.getBlockedToolCalls(chatId);
 
-  // If no blocked interactions, return messages as-is
-  if (blockedToolCallIds.size === 0) {
+  // If no blocked tool calls, return messages as-is
+  if (blockedToolCalls.length === 0) {
     return messages;
   }
 
-  // Filter out messages with blocked tool_call_ids
-  return messages.filter((message) => {
+  // Redact content of blocked tool call messages
+  return messages.map((message) => {
     if (message.role === "tool" && message.tool_call_id) {
-      return !blockedToolCallIds.has(message.tool_call_id);
+      const blockedToolCall = blockedToolCalls.find(
+        (call) => call.toolCallId === message.tool_call_id,
+      );
+      if (blockedToolCall) {
+        return {
+          ...message,
+          content: `[REDACTED: Data blocked by policy: ${blockedToolCall?.reason}]`,
+        };
+      }
     }
-    return true;
+    return message;
   });
 };

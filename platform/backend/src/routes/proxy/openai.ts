@@ -67,11 +67,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.trustedData.evaluatePolicies(messages, chatId);
         await utils.persistUserMessage(messages[messages.length - 1], chatId);
 
-        // Filter out blocked tool messages before sending to OpenAI
-        const filteredMessages = await utils.trustedData.filterOutBlockedData(
-          chatId,
-          messages,
-        );
+        // Redact blocked tool result data before sending to OpenAI
+        const filteredMessages =
+          await utils.trustedData.redactBlockedToolResultData(chatId, messages);
 
         if (stream) {
           reply.header("Content-Type", "text/event-stream");

@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AssignToolInvocationPolicyToAgentData, AssignToolInvocationPolicyToAgentErrors, AssignToolInvocationPolicyToAgentResponses, AssignTrustedDataPolicyToAgentData, AssignTrustedDataPolicyToAgentErrors, AssignTrustedDataPolicyToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteApiProxyOpenaiBy__Data, DeleteApiProxyOpenaiBy__Responses, DeleteApiProxyOpenaiData, DeleteApiProxyOpenaiResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolInvocationPoliciesData, GetAgentToolInvocationPoliciesErrors, GetAgentToolInvocationPoliciesResponses, GetAgentTrustedDataPoliciesData, GetAgentTrustedDataPoliciesErrors, GetAgentTrustedDataPoliciesResponses, GetApiProxyOpenaiBy__Data, GetApiProxyOpenaiBy__Responses, GetApiProxyOpenaiData, GetApiProxyOpenaiResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, HeadApiProxyOpenaiBy__Data, HeadApiProxyOpenaiBy__Responses, HeadApiProxyOpenaiData, HeadApiProxyOpenaiResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsApiProxyOpenaiBy__Data, OptionsApiProxyOpenaiBy__Responses, OptionsApiProxyOpenaiData, OptionsApiProxyOpenaiResponses, PatchApiProxyOpenaiBy__Data, PatchApiProxyOpenaiBy__Responses, PatchApiProxyOpenaiData, PatchApiProxyOpenaiResponses, PostApiProxyOpenaiBy__Data, PostApiProxyOpenaiBy__Responses, PostApiProxyOpenaiData, PostApiProxyOpenaiResponses, PutApiProxyOpenaiBy__Data, PutApiProxyOpenaiBy__Responses, PutApiProxyOpenaiData, PutApiProxyOpenaiResponses, UnassignToolInvocationPolicyFromAgentData, UnassignToolInvocationPolicyFromAgentErrors, UnassignToolInvocationPolicyFromAgentResponses, UnassignTrustedDataPolicyFromAgentData, UnassignTrustedDataPolicyFromAgentErrors, UnassignTrustedDataPolicyFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteApiProxyOpenaiBy__Data, DeleteApiProxyOpenaiBy__Responses, DeleteApiProxyOpenaiData, DeleteApiProxyOpenaiResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetApiProxyOpenaiBy__Data, GetApiProxyOpenaiBy__Responses, GetApiProxyOpenaiData, GetApiProxyOpenaiResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, HeadApiProxyOpenaiBy__Data, HeadApiProxyOpenaiBy__Responses, HeadApiProxyOpenaiData, HeadApiProxyOpenaiResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsApiProxyOpenaiBy__Data, OptionsApiProxyOpenaiBy__Responses, OptionsApiProxyOpenaiData, OptionsApiProxyOpenaiResponses, PatchApiProxyOpenaiBy__Data, PatchApiProxyOpenaiBy__Responses, PatchApiProxyOpenaiData, PatchApiProxyOpenaiResponses, PostApiProxyOpenaiBy__Data, PostApiProxyOpenaiBy__Responses, PostApiProxyOpenaiData, PostApiProxyOpenaiResponses, PutApiProxyOpenaiBy__Data, PutApiProxyOpenaiBy__Responses, PutApiProxyOpenaiData, PutApiProxyOpenaiResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -87,66 +87,6 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
             'Content-Type': 'application/json',
             ...options.headers
         }
-    });
-};
-
-/**
- * Get tool invocation policies assigned to an agent
- */
-export const getAgentToolInvocationPolicies = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolInvocationPoliciesData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentToolInvocationPoliciesResponses, GetAgentToolInvocationPoliciesErrors, ThrowOnError>({
-        url: '/api/agents/{id}/tool-invocation-policies',
-        ...options
-    });
-};
-
-/**
- * Unassign a tool invocation policy from an agent
- */
-export const unassignToolInvocationPolicyFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolInvocationPolicyFromAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<UnassignToolInvocationPolicyFromAgentResponses, UnassignToolInvocationPolicyFromAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}/tool-invocation-policies/{policyId}',
-        ...options
-    });
-};
-
-/**
- * Assign a tool invocation policy to an agent
- */
-export const assignToolInvocationPolicyToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolInvocationPolicyToAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AssignToolInvocationPolicyToAgentResponses, AssignToolInvocationPolicyToAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}/tool-invocation-policies/{policyId}',
-        ...options
-    });
-};
-
-/**
- * Get trusted data policies assigned to an agent
- */
-export const getAgentTrustedDataPolicies = <ThrowOnError extends boolean = false>(options: Options<GetAgentTrustedDataPoliciesData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentTrustedDataPoliciesResponses, GetAgentTrustedDataPoliciesErrors, ThrowOnError>({
-        url: '/api/agents/{id}/trusted-data-policies',
-        ...options
-    });
-};
-
-/**
- * Unassign a trusted data policy from an agent
- */
-export const unassignTrustedDataPolicyFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignTrustedDataPolicyFromAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<UnassignTrustedDataPolicyFromAgentResponses, UnassignTrustedDataPolicyFromAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}/trusted-data-policies/{policyId}',
-        ...options
-    });
-};
-
-/**
- * Assign a trusted data policy to an agent
- */
-export const assignTrustedDataPolicyToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignTrustedDataPolicyToAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AssignTrustedDataPolicyToAgentResponses, AssignTrustedDataPolicyToAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}/trusted-data-policies/{policyId}',
-        ...options
     });
 };
 

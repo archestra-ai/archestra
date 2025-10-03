@@ -48,7 +48,7 @@ describe("TrustedDataPolicyModel", async () => {
 
       test("marks data as trusted when policy matches", async () => {
         // Create a trust policy
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -56,9 +56,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Trusted API source",
         });
-
-        // Link policy to agent
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
           value: { source: "trusted-api", data: "some data" },
@@ -70,7 +67,7 @@ describe("TrustedDataPolicyModel", async () => {
 
       test("marks data as untrusted when policy doesn't match", async () => {
         // Create a trust policy
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -78,9 +75,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Trusted API source",
         });
-
-        // Link policy to agent
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
           value: { source: "untrusted-api", data: "some data" },
@@ -130,7 +124,7 @@ describe("TrustedDataPolicyModel", async () => {
         )?.id;
 
         // Create a policy that doesn't match
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId: trustedToolId as string,
           attributePath: "special",
           operator: "equal",
@@ -138,9 +132,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Special case",
         });
-
-        // Link policy to agent
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -169,7 +160,7 @@ describe("TrustedDataPolicyModel", async () => {
         )?.id;
 
         // Create a policy that matches
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId: trustedToolId as string,
           attributePath: "verified",
           operator: "equal",
@@ -177,9 +168,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Verified data",
         });
-
-        // Link policy to agent
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -194,7 +182,7 @@ describe("TrustedDataPolicyModel", async () => {
 
     describe("operator evaluation", () => {
       test("equal operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "status",
           operator: "equal",
@@ -202,8 +190,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Verified status",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -221,7 +207,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("notEqual operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "notEqual",
@@ -229,8 +215,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Not from untrusted source",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -248,7 +232,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("contains operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "url",
           operator: "contains",
@@ -256,8 +240,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "From trusted domain",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -275,7 +257,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("notContains operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "content",
           operator: "notContains",
@@ -283,8 +265,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "No malicious content",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -302,7 +282,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("startsWith operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "path",
           operator: "startsWith",
@@ -310,8 +290,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Trusted path",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -329,7 +307,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("endsWith operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "email",
           operator: "endsWith",
@@ -337,8 +315,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Company email",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -356,7 +332,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("regex operator works correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "id",
           operator: "regex",
@@ -364,8 +340,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Valid ID format",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -385,7 +359,7 @@ describe("TrustedDataPolicyModel", async () => {
 
     describe("wildcard path evaluation", () => {
       test("evaluates wildcard paths correctly", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "emails[*].from",
           operator: "endsWith",
@@ -393,8 +367,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Emails from trusted domain",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // All emails from trusted domain - should be trusted
         const trustedResult = await TrustedDataPolicyModel.evaluate(
@@ -428,7 +400,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("handles empty arrays in wildcard paths", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "items[*].verified",
           operator: "equal",
@@ -436,8 +408,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "All items verified",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Empty array - should be untrusted (no values to verify)
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
@@ -447,7 +417,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("handles non-array values in wildcard paths", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "items[*].verified",
           operator: "equal",
@@ -455,8 +425,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "All items verified",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Non-array value - should be untrusted
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
@@ -468,7 +436,7 @@ describe("TrustedDataPolicyModel", async () => {
 
     describe("nested path evaluation", () => {
       test("evaluates deeply nested paths", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "response.data.user.verified",
           operator: "equal",
@@ -476,8 +444,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "User is verified",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -517,7 +483,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("handles missing nested paths", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "response.data.user.verified",
           operator: "equal",
@@ -525,8 +491,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "User is verified",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Missing path - should be untrusted
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
@@ -544,7 +508,7 @@ describe("TrustedDataPolicyModel", async () => {
 
     describe("blocked action", () => {
       test("blocks data when a block_always policy matches", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -552,8 +516,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "block_always",
           description: "Block malicious sources",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
           value: { source: "malicious", data: "some data" },
@@ -566,7 +528,7 @@ describe("TrustedDataPolicyModel", async () => {
 
       test("blocked policies take precedence over allow policies", async () => {
         // Create an allow policy
-        const allowPolicy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "type",
           operator: "equal",
@@ -576,7 +538,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Create a block policy for malicious content
-        const blockPolicy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "from",
           operator: "contains",
@@ -584,9 +546,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "block_always",
           description: "Block hacker emails",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, allowPolicy.id);
-        await AgentModel.assignTrustedDataPolicy(agentId, blockPolicy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
           value: { type: "email", from: "hacker@evil.com" },
@@ -598,7 +557,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("blocked policies work with wildcard paths", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "emails[*].from",
           operator: "contains",
@@ -606,8 +565,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "block_always",
           description: "Block spam emails",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Should block if ANY email matches the condition
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
@@ -624,7 +581,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("data passes when no blocked policy matches", async () => {
-        const blockPolicy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -633,7 +590,7 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Block malicious sources",
         });
 
-        const allowPolicy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -641,9 +598,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Allow trusted sources",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, blockPolicy.id);
-        await AgentModel.assignTrustedDataPolicy(agentId, allowPolicy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
           value: { source: "trusted" },
@@ -655,7 +609,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("blocked policies work with different operators", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "domain",
           operator: "endsWith",
@@ -663,8 +617,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "block_always",
           description: "Block blacklisted domains",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const blockedResult = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -698,7 +650,7 @@ describe("TrustedDataPolicyModel", async () => {
         )?.id;
 
         // Create a block policy
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId: trustedToolId as string,
           attributePath: "dangerous",
           operator: "equal",
@@ -706,8 +658,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "block_always",
           description: "Block dangerous data",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         const result = await TrustedDataPolicyModel.evaluate(
           chatId,
@@ -724,7 +674,7 @@ describe("TrustedDataPolicyModel", async () => {
     describe("multiple policies", () => {
       test("trusts data when any policy matches", async () => {
         // Create multiple policies
-        const policy1 = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -733,7 +683,7 @@ describe("TrustedDataPolicyModel", async () => {
           description: "API v1 source",
         });
 
-        const policy2 = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -741,9 +691,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "API v2 source",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy1.id);
-        await AgentModel.assignTrustedDataPolicy(agentId, policy2.id);
 
         // Test first policy match
         const result1 = await TrustedDataPolicyModel.evaluate(
@@ -774,7 +721,7 @@ describe("TrustedDataPolicyModel", async () => {
 
       test("evaluates policies for different attributes", async () => {
         // Create policies for different attributes
-        const policy1 = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "source",
           operator: "equal",
@@ -783,7 +730,7 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Trusted source",
         });
 
-        const policy2 = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "verified",
           operator: "equal",
@@ -791,9 +738,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Verified data",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy1.id);
-        await AgentModel.assignTrustedDataPolicy(agentId, policy2.id);
 
         // Only first attribute matches - should be trusted
         const result1 = await TrustedDataPolicyModel.evaluate(
@@ -815,7 +759,7 @@ describe("TrustedDataPolicyModel", async () => {
 
     describe("tool output structure handling", () => {
       test("handles direct value in tool output", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "status",
           operator: "equal",
@@ -823,8 +767,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Successful response",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Direct object (no value wrapper)
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
@@ -835,7 +777,7 @@ describe("TrustedDataPolicyModel", async () => {
       });
 
       test("handles value wrapper in tool output", async () => {
-        const policy = await TrustedDataPolicyModel.create({
+        await TrustedDataPolicyModel.create({
           toolId,
           attributePath: "status",
           operator: "equal",
@@ -843,8 +785,6 @@ describe("TrustedDataPolicyModel", async () => {
           action: "mark_as_trusted",
           description: "Successful response",
         });
-
-        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
         // Wrapped in value property
         const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {

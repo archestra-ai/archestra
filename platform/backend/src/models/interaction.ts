@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 import db, { schema } from "../database";
 import type { InsertInteraction } from "../types";
 
@@ -12,11 +12,16 @@ class InteractionModel {
     return interaction;
   }
 
-  static async findByChatId(chatId: string) {
-    return await db
+  static async getAllInteractionsForChat(chatId: string, whereClauses?: SQL[]) {
+    return db
       .select()
       .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.chatId, chatId))
+      .where(
+        and(
+          eq(schema.interactionsTable.chatId, chatId),
+          ...(whereClauses ?? []),
+        ),
+      )
       .orderBy(asc(schema.interactionsTable.createdAt));
   }
 
@@ -37,26 +42,30 @@ class InteractionModel {
   }
 
   /**
-   * Get all blocked tool call IDs for a chat
+   * Get all blocked tool calls for a chat
    *
-   * Returns a Set of tool_call_ids that have been marked as blocked
-   * by trusted data policies
+   * Returns a list of interactions that have been marked as blocked by trusted data policies
    */
-  static async getBlockedToolCallIds(chatId: string): Promise<Set<string>> {
-    const interactions = await InteractionModel.findByChatId(chatId);
+  static async getBlockedToolCalls(
+    chatId: string,
+  ): Promise<{ toolCallId: string; reason: string | null }[]> {
+    const interactions = await InteractionModel.getAllInteractionsForChat(
+      chatId,
+      [eq(schema.interactionsTable.blocked, true)],
+    );
 
-    const blockedToolCallIds = new Set<string>();
+    const data: { toolCallId: string; reason: string | null }[] = [];
 
     for (const interaction of interactions) {
-      if (interaction.blocked && interaction.content.role === "tool") {
+      if (interaction.content.role === "tool") {
         const toolCallId = interaction.content.tool_call_id;
         if (toolCallId) {
-          blockedToolCallIds.add(toolCallId);
+          data.push({ toolCallId, reason: interaction.reason });
         }
       }
     }
 
-    return blockedToolCallIds;
+    return data;
   }
 }
 

@@ -134,7 +134,7 @@ class TrustedDataPolicyModel {
     reason: string;
   }> {
     /**
-     * Get policies assigned to the agent (via chat) that also match the tool name,
+     * Get policies for the agent's tools that match the tool name,
      * along with the tool's configuration
      */
     const applicablePoliciesForAgent = await db
@@ -144,22 +144,12 @@ class TrustedDataPolicyModel {
       })
       .from(schema.chatsTable)
       .innerJoin(
-        schema.agentTrustedDataPoliciesTable,
-        eq(
-          schema.chatsTable.agentId,
-          schema.agentTrustedDataPoliciesTable.agentId,
-        ),
+        schema.toolsTable,
+        eq(schema.chatsTable.agentId, schema.toolsTable.agentId),
       )
       .innerJoin(
         schema.trustedDataPoliciesTable,
-        eq(
-          schema.agentTrustedDataPoliciesTable.policyId,
-          schema.trustedDataPoliciesTable.id,
-        ),
-      )
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.trustedDataPoliciesTable.toolId, schema.toolsTable.id),
+        eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
       )
       .where(
         and(

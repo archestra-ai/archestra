@@ -8,7 +8,7 @@ import {
 } from "../../../models";
 import type { Tool } from "../../../types";
 import type { ChatCompletionRequestMessages } from "../types";
-import { evaluatePolicies, filterOutBlockedData } from "./trusted-data";
+import { evaluatePolicies, redactBlockedToolResultData } from "./trusted-data";
 
 describe("trusted-data utils", () => {
   let agentId: string;
@@ -41,7 +41,7 @@ describe("trusted-data utils", () => {
   describe("evaluatePolicies", () => {
     test("creates trusted interaction for tool messages matching allow policies", async () => {
       // Create an allow policy
-      const policy = await TrustedDataPolicyModel.create({
+      await TrustedDataPolicyModel.create({
         toolId,
         attributePath: "emails[*].from",
         operator: "endsWith",
@@ -49,8 +49,6 @@ describe("trusted-data utils", () => {
         action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
-
-      await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
       // First, persist an assistant message with tool call
       await InteractionModel.create({
@@ -90,7 +88,8 @@ describe("trusted-data utils", () => {
       await evaluatePolicies(messages, chatId);
 
       // Check that interaction was created with trusted=true
-      const interactions = await InteractionModel.findByChatId(chatId);
+      const interactions =
+        await InteractionModel.getAllInteractionsForChat(chatId);
       const toolInteraction = interactions.find(
         (i) =>
           i.content.role === "tool" && i.content.tool_call_id === "call_123",
@@ -104,7 +103,7 @@ describe("trusted-data utils", () => {
 
     test("creates blocked interaction for tool messages matching block_always policies", async () => {
       // Create a block policy
-      const policy = await TrustedDataPolicyModel.create({
+      await TrustedDataPolicyModel.create({
         toolId,
         attributePath: "emails[*].from",
         operator: "contains",
@@ -112,8 +111,6 @@ describe("trusted-data utils", () => {
         action: "block_always",
         description: "Block hacker emails",
       });
-
-      await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
       // First, persist an assistant message with tool call
       await InteractionModel.create({
@@ -153,7 +150,8 @@ describe("trusted-data utils", () => {
       await evaluatePolicies(messages, chatId);
 
       // Check that interaction was created with blocked=true
-      const interactions = await InteractionModel.findByChatId(chatId);
+      const interactions =
+        await InteractionModel.getAllInteractionsForChat(chatId);
       const toolInteraction = interactions.find(
         (i) =>
           i.content.role === "tool" && i.content.tool_call_id === "call_456",
@@ -167,7 +165,7 @@ describe("trusted-data utils", () => {
 
     test("creates untrusted interaction when no policies match", async () => {
       // Create a policy that won't match
-      const policy = await TrustedDataPolicyModel.create({
+      await TrustedDataPolicyModel.create({
         toolId,
         attributePath: "emails[*].from",
         operator: "endsWith",
@@ -175,8 +173,6 @@ describe("trusted-data utils", () => {
         action: "mark_as_trusted",
         description: "Allow trusted emails",
       });
-
-      await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
 
       // First, persist an assistant message with tool call
       await InteractionModel.create({
@@ -213,7 +209,8 @@ describe("trusted-data utils", () => {
       await evaluatePolicies(messages, chatId);
 
       // Check that interaction was created with trusted=false, blocked=false
-      const interactions = await InteractionModel.findByChatId(chatId);
+      const interactions =
+        await InteractionModel.getAllInteractionsForChat(chatId);
       const toolInteraction = interactions.find(
         (i) =>
           i.content.role === "tool" && i.content.tool_call_id === "call_789",
@@ -229,7 +226,7 @@ describe("trusted-data utils", () => {
 
     test("handles multiple tool messages in sequence", async () => {
       // Create policies
-      const allowPolicy = await TrustedDataPolicyModel.create({
+      await TrustedDataPolicyModel.create({
         toolId,
         attributePath: "source",
         operator: "equal",
@@ -238,7 +235,7 @@ describe("trusted-data utils", () => {
         description: "Allow trusted source",
       });
 
-      const blockPolicy = await TrustedDataPolicyModel.create({
+      await TrustedDataPolicyModel.create({
         toolId,
         attributePath: "source",
         operator: "equal",
@@ -246,9 +243,6 @@ describe("trusted-data utils", () => {
         action: "block_always",
         description: "Block malicious source",
       });
-
-      await AgentModel.assignTrustedDataPolicy(agentId, allowPolicy.id);
-      await AgentModel.assignTrustedDataPolicy(agentId, blockPolicy.id);
 
       // Persist assistant messages with tool calls
       await InteractionModel.create({
@@ -308,7 +302,8 @@ describe("trusted-data utils", () => {
       await evaluatePolicies(messages, chatId);
 
       // Check interactions
-      const interactions = await InteractionModel.findByChatId(chatId);
+      const interactions =
+        await InteractionModel.getAllInteractionsForChat(chatId);
 
       const trustedInteraction = interactions.find(
         (i) =>
@@ -340,13 +335,14 @@ describe("trusted-data utils", () => {
       // Should not throw and not create any interactions
       await evaluatePolicies(messages, chatId);
 
-      const interactions = await InteractionModel.findByChatId(chatId);
+      const interactions =
+        await InteractionModel.getAllInteractionsForChat(chatId);
       expect(interactions.length).toBe(0);
     });
   });
 
-  describe("filterOutBlockedData", () => {
-    test("filters out blocked tool messages", async () => {
+  describe("redactBlockedToolResultData", () => {
+    test("redacts blocked tool messages", async () => {
       // Create some interactions, including blocked ones
       await InteractionModel.create({
         chatId,
@@ -380,16 +376,16 @@ describe("trusted-data utils", () => {
         { role: "assistant", content: "Here are your emails" },
       ];
 
-      const filtered = await filterOutBlockedData(chatId, messages);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
 
-      // Should have all messages except the blocked tool message
-      expect(filtered.length).toBe(4);
-      expect(filtered).not.toContainEqual({
+      // Should have all messages, but blocked tool message content is redacted
+      expect(redacted.length).toBe(5);
+      expect(redacted).toContainEqual({
         role: "tool",
         tool_call_id: "blocked_call",
-        content: "blocked data",
+        content: "[REDACTED: Data blocked by policy: Blocked by policy]",
       });
-      expect(filtered).toContainEqual({
+      expect(redacted).toContainEqual({
         role: "tool",
         tool_call_id: "trusted_call",
         content: "trusted data",
@@ -426,17 +422,17 @@ describe("trusted-data utils", () => {
         { role: "tool", tool_call_id: "call_2", content: "data 2" },
       ];
 
-      const filtered = await filterOutBlockedData(chatId, messages);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
 
       // Should return all messages unchanged
-      expect(filtered).toEqual(messages);
-      expect(filtered.length).toBe(3);
+      expect(redacted).toEqual(messages);
+      expect(redacted.length).toBe(3);
     });
 
     test("handles empty messages array", async () => {
       const messages: ChatCompletionRequestMessages = [];
-      const filtered = await filterOutBlockedData(chatId, messages);
-      expect(filtered).toEqual([]);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
+      expect(redacted).toEqual([]);
     });
 
     test("handles chat with no interactions", async () => {
@@ -445,11 +441,11 @@ describe("trusted-data utils", () => {
         { role: "assistant", content: "Hi!" },
       ];
 
-      const filtered = await filterOutBlockedData(chatId, messages);
-      expect(filtered).toEqual(messages);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
+      expect(redacted).toEqual(messages);
     });
 
-    test("filters multiple blocked tool messages", async () => {
+    test("redacts multiple blocked tool messages", async () => {
       // Create multiple blocked interactions
       await InteractionModel.create({
         chatId,
@@ -480,17 +476,27 @@ describe("trusted-data utils", () => {
         { role: "tool", tool_call_id: "allowed", content: "allowed data" },
       ];
 
-      const filtered = await filterOutBlockedData(chatId, messages);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
 
-      // Should filter out both blocked messages
-      expect(filtered.length).toBe(2);
-      expect(filtered).toEqual([
+      // Should redact both blocked messages but keep all messages
+      expect(redacted.length).toBe(4);
+      expect(redacted).toEqual([
         { role: "user", content: "Get data" },
+        {
+          role: "tool",
+          tool_call_id: "blocked_1",
+          content: "[REDACTED: Data blocked by policy: null]",
+        },
+        {
+          role: "tool",
+          tool_call_id: "blocked_2",
+          content: "[REDACTED: Data blocked by policy: null]",
+        },
         { role: "tool", tool_call_id: "allowed", content: "allowed data" },
       ]);
     });
 
-    test("preserves non-tool messages even with blocked interactions", async () => {
+    test("preserves all messages but redacts blocked tool messages", async () => {
       // Create a blocked interaction
       await InteractionModel.create({
         chatId,
@@ -511,13 +517,18 @@ describe("trusted-data utils", () => {
         { role: "user", content: "Thanks" },
       ];
 
-      const filtered = await filterOutBlockedData(chatId, messages);
+      const redacted = await redactBlockedToolResultData(chatId, messages);
 
-      // Should keep all non-tool messages
-      expect(filtered.length).toBe(4);
-      expect(filtered).toEqual([
+      // Should keep all messages but redact blocked tool message
+      expect(redacted.length).toBe(5);
+      expect(redacted).toEqual([
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Processing..." },
+        {
+          role: "tool",
+          tool_call_id: "blocked_call",
+          content: "[REDACTED: Data blocked by policy: null]",
+        },
         { role: "assistant", content: "Done" },
         { role: "user", content: "Thanks" },
       ]);

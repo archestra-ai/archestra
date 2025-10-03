@@ -90,7 +90,7 @@ export const ChatCompletionResponseSchema = z
     model: z.string(),
     object: z.literal("chat.completion"),
     server_tier: z.string().optional(),
-    system_fingerprint: z.string().optional(),
+    system_fingerprint: z.string().nullable().optional(),
     usage: ChatCompletionUsageSchema.optional(),
   })
   .describe(

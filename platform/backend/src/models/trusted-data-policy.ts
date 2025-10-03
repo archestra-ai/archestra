@@ -1,7 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "../database";
 import type { AutonomyPolicyOperator, TrustedData } from "../types";
+import ToolModel from "./tool";
 
 type EvaluationResult = {
   isTrusted: boolean;
@@ -130,11 +131,13 @@ class TrustedDataPolicyModel {
     toolOutput: any,
   ): Promise<EvaluationResult> {
     /**
-     * Get policies assigned to this agent that also match the tool name
+     * Get policies assigned to this agent that also match the tool name,
+     * along with the tool's configuration
      */
     const applicablePoliciesForAgent = await db
       .select({
-        policy: schema.trustedDataPoliciesTable,
+        ...getTableColumns(schema.trustedDataPoliciesTable),
+        dataIsTrustedByDefault: schema.toolsTable.dataIsTrustedByDefault,
       })
       .from(schema.agentTrustedDataPoliciesTable)
       .innerJoin(
@@ -155,8 +158,24 @@ class TrustedDataPolicyModel {
         ),
       );
 
-    // If no policies exist for this tool, the data is UNTRUSTED by default
-    if (applicablePoliciesForAgent.length === 0) {
+    // Extract tool configuration (will be the same for all policies since they're for the same tool)
+    const dataIsTrustedByDefault =
+      applicablePoliciesForAgent.length > 0
+        ? applicablePoliciesForAgent[0].dataIsTrustedByDefault
+        : null;
+
+    // If no policies exist for this tool, check if data is trusted by default
+    if (dataIsTrustedByDefault === null) {
+      // Fetch the tool directly to check dataIsTrustedByDefault
+      const tool = await ToolModel.findByName(toolName);
+
+      if (tool?.dataIsTrustedByDefault) {
+        return {
+          isTrusted: true,
+          trustReason: `Tool ${toolName} is configured to trust data by default`,
+        };
+      }
+
       return {
         isTrusted: false,
         trustReason: `No trust policy defined for tool ${toolName} - data is untrusted by default`,
@@ -164,14 +183,12 @@ class TrustedDataPolicyModel {
     }
 
     // Check if ANY policy marks this data as trusted
-    for (const { policy } of applicablePoliciesForAgent) {
-      const {
-        attributePath,
-        operator,
-        value: policyValue,
-        description,
-      } = policy;
-
+    for (const {
+      attributePath,
+      operator,
+      value: policyValue,
+      description,
+    } of applicablePoliciesForAgent) {
       // Extract values from the tool output using the attribute path
       const outputValue = toolOutput?.value || toolOutput;
       const values = TrustedDataPolicyModel.extractValuesFromPath(
@@ -203,7 +220,14 @@ class TrustedDataPolicyModel {
       }
     }
 
-    // No policies trust this data
+    // No policies trust this data, check if the tool trusts data by default
+    if (dataIsTrustedByDefault) {
+      return {
+        isTrusted: true,
+        trustReason: `Tool ${toolName} is configured to trust data by default`,
+      };
+    }
+
     return {
       isTrusted: false,
       trustReason:

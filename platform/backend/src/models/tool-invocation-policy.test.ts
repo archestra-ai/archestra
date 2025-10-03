@@ -117,7 +117,7 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context is untrusted");
+        expect(result.reason).toContain("context contains untrusted data");
       });
 
       test("allows tool invocation when context is untrusted but explicit allow rule matches", async () => {
@@ -165,7 +165,7 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context is untrusted");
+        expect(result.reason).toContain("context contains untrusted data");
       });
 
       test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async () => {

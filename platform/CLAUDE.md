@@ -238,15 +238,21 @@ The `experiments/` workspace contains prototype features:
 - Git integration for change detection
 - Scope: All `**/src/**/*.{ts,tsx}` files
 
-### Testing
+### Testing Infrastructure
 
 **Backend Testing** uses Vitest with PGLite for in-memory database testing:
 
-- Test files should be colocated with source files (`.test.ts` extension)
-- Uses PGLite for in-memory PostgreSQL during tests (no real database needed)
-- Run with `pnpm test` from the backend directory or root
-- Test setup automatically runs migrations on the in-memory database
-- Global test utilities are available via `vitest` globals
+- **Test Runner**: Vitest configured with Node environment
+- **Database**: PGLite for in-memory PostgreSQL (no real database needed)
+- **Setup**: `test-setup.ts` automatically runs migrations on each test
+- **Location**: Test files should be colocated with source files (`.test.ts` extension)
+- **Commands**: Run with `pnpm test` from the backend directory or root
+- **Globals**: Test utilities are available via `vitest` globals
+
+**Test Examples**:
+- `agent.test.ts`: Simple agent CRUD operations
+- `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
+- `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
 
 ### Development Best Practices
 

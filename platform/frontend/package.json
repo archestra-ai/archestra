@@ -31,6 +31,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@tanstack/react-query": "^5.90.2",
+    "@uidotdev/usehooks": "^2.4.1",
     "ai": "^5.0.57",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

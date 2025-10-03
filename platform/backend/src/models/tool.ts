@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import db, { schema } from "../database";
 import type { InsertTool, Tool, UpdateTool } from "../types";
 
@@ -8,7 +8,10 @@ class ToolModel {
   }
 
   static async findAll(): Promise<Tool[]> {
-    return db.select().from(schema.toolsTable);
+    return db
+      .select()
+      .from(schema.toolsTable)
+      .orderBy(desc(schema.toolsTable.createdAt));
   }
 
   static async findByName(name: string): Promise<Tool | null> {

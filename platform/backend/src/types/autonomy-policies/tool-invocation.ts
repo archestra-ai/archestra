@@ -10,6 +10,10 @@ const ToolInvocationPolicyActionSchema = z.enum([
 
 export const SelectToolInvocationPolicySchema = createSelectSchema(
   schema.toolInvocationPoliciesTable,
+  {
+    operator: SupportedOperatorSchema,
+    action: ToolInvocationPolicyActionSchema,
+  },
 );
 export const InsertToolInvocationPolicySchema = createInsertSchema(
   schema.toolInvocationPoliciesTable,

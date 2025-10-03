@@ -9,6 +9,8 @@ import {
   type GetToolInvocationPoliciesResponse,
   getOperators,
   getToolInvocationPolicies,
+  type UpdateToolInvocationPolicyData,
+  updateToolInvocationPolicy,
 } from "shared/api-client";
 
 export function useToolInvocationPolicies() {
@@ -28,6 +30,7 @@ export function useToolInvocationPolicies() {
         byToolId,
       };
     },
+    staleTime: 60 * 1_000,
   });
 }
 
@@ -63,6 +66,23 @@ export function useToolInvocationPolicyCreateMutation() {
           reason: null,
         },
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+    },
+  });
+}
+
+export function useToolInvocationPolicyUpdateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      updatedPolicy: UpdateToolInvocationPolicyData["body"] & { id: string },
+    ) => {
+      return await updateToolInvocationPolicy({
+        body: updatedPolicy,
+        path: { id: updatedPolicy.id },
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
     },

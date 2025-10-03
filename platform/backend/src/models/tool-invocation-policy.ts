@@ -1,4 +1,5 @@
-import { and, eq, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
+
 import _ from "lodash";
 import db, { schema } from "../database";
 import type { ToolInvocation } from "../types";
@@ -22,7 +23,10 @@ class ToolInvocationPolicyModel {
   }
 
   static async findAll(): Promise<ToolInvocation.ToolInvocationPolicy[]> {
-    return db.select().from(schema.toolInvocationPoliciesTable);
+    return db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .orderBy(desc(schema.toolInvocationPoliciesTable.createdAt));
   }
 
   static async findById(

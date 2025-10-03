@@ -145,7 +145,7 @@ export function ToolCallPolicies({
                   })
                 }
               />
-              <ArrowRightIcon className="w-4 h-4" />
+              <ArrowRightIcon className="w-4 h-4 shrink-0" />
               <Select
                 defaultValue={policy.action}
                 onValueChange={(

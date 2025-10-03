@@ -2,13 +2,19 @@ import { useDebounce } from "@uidotdev/usehooks";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "./ui/input";
 
+type DebouncedInputProps = Omit<
+  React.ComponentProps<typeof Input>,
+  "onChange"
+> & {
+  initialValue: string;
+  onChange: (value: string) => void;
+};
+
 export function DebouncedInput({
   initialValue,
   onChange,
-}: {
-  initialValue: string;
-  onChange: (value: string) => void;
-}) {
+  ...props
+}: DebouncedInputProps) {
   const [value, setValue] = useState(initialValue);
   const isFirstRender = useRef(true);
 
@@ -23,5 +29,11 @@ export function DebouncedInput({
     onChange(debouncedValue);
   }, [debouncedValue]);
 
-  return <Input value={value} onChange={(e) => setValue(e.target.value)} />;
+  return (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      {...props}
+    />
+  );
 }

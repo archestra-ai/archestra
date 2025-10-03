@@ -7,6 +7,9 @@ export const TrustedDataPolicyActionSchema = z.enum(["block_always", "allow"]);
 
 export const SelectTrustedDataPolicySchema = createSelectSchema(
   schema.trustedDataPoliciesTable,
+  {
+    operator: SupportedOperatorSchema,
+  },
 );
 export const InsertTrustedDataPolicySchema = createInsertSchema(
   schema.trustedDataPoliciesTable,

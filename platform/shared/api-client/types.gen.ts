@@ -421,7 +421,7 @@ export type GetAgentTrustedDataPoliciesResponses = {
         toolId: string;
         description: string;
         attributePath: string;
-        operator: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: string;
         createdAt: string;
@@ -1899,7 +1899,7 @@ export type GetTrustedDataPoliciesResponses = {
         toolId: string;
         description: string;
         attributePath: string;
-        operator: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: string;
         createdAt: string;
@@ -1946,7 +1946,7 @@ export type CreateTrustedDataPolicyResponses = {
         toolId: string;
         description: string;
         attributePath: string;
-        operator: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: string;
         createdAt: string;
@@ -2040,7 +2040,7 @@ export type GetTrustedDataPolicyResponses = {
         toolId: string;
         description: string;
         attributePath: string;
-        operator: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: string;
         createdAt: string;
@@ -2098,7 +2098,7 @@ export type UpdateTrustedDataPolicyResponses = {
         toolId: string;
         description: string;
         attributePath: string;
-        operator: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: string;
         createdAt: string;

@@ -5,12 +5,18 @@ import {
 } from "@tanstack/react-query";
 import {
   createToolInvocationPolicy,
+  createTrustedDataPolicy,
   deleteToolInvocationPolicy,
+  deleteTrustedDataPolicy,
   type GetToolInvocationPoliciesResponse,
+  type GetTrustedDataPoliciesResponse,
   getOperators,
   getToolInvocationPolicies,
+  getTrustedDataPolicies,
   type UpdateToolInvocationPolicyData,
+  type UpdateTrustedDataPolicyData,
   updateToolInvocationPolicy,
+  updateTrustedDataPolicy,
 } from "shared/api-client";
 
 export function useToolInvocationPolicies() {
@@ -30,7 +36,6 @@ export function useToolInvocationPolicies() {
         byToolId,
       };
     },
-    staleTime: 60 * 1_000,
   });
 }
 
@@ -85,6 +90,73 @@ export function useToolInvocationPolicyUpdateMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-invocation-policies"] });
+    },
+  });
+}
+
+export function useToolResultPolicies() {
+  return useSuspenseQuery({
+    queryKey: ["tool-result-policies"],
+    queryFn: async () => {
+      const all = (await getTrustedDataPolicies()).data ?? [];
+      const byToolId = all.reduce(
+        (acc, policy) => {
+          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          return acc;
+        },
+        {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
+      );
+      return {
+        all,
+        byToolId,
+      };
+    },
+  });
+}
+
+export function useToolResultPoliciesCreateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ toolId }: { toolId: string }) =>
+      await createTrustedDataPolicy({
+        body: {
+          toolId,
+          description: "",
+          attributePath: "",
+          operator: "equal",
+          value: "",
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+    },
+  });
+}
+
+export function useToolResultPoliciesUpdateMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      updatedPolicy: UpdateTrustedDataPolicyData["body"] & { id: string },
+    ) => {
+      return await updateTrustedDataPolicy({
+        body: updatedPolicy,
+        path: { id: updatedPolicy.id },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+    },
+  });
+}
+
+export function useToolResultPoliciesDeleteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      await deleteTrustedDataPolicy({ path: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
     },
   });
 }

@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/card";
 import { useTools } from "@/lib/tool.query";
 import { ErrorBoundary } from "../_parts/error-boundary";
-import { ToolCallPolicies } from "./_parts/test-call-policies";
-import { ToolReadonlyDetails } from "./_parts/test-readonly-details";
-import { ToolResultPolicies } from "./_parts/test-result-policies";
+import { ToolCallPolicies } from "./_parts/tool-call-policies";
+import { ToolReadonlyDetails } from "./_parts/tool-readonly-details";
+import { ToolResultPolicies } from "./_parts/tool-result-policies";
 
 export function ToolsPage({
   initialData,
@@ -71,7 +71,7 @@ function ToolCard({ tool }: { tool: GetToolsResponses["200"][number] }) {
       <CardContent className="flex flex-col gap-4">
         <ToolReadonlyDetails tool={tool} />
         <ToolCallPolicies tool={tool} />
-        <ToolResultPolicies />
+        <ToolResultPolicies tool={tool} />
       </CardContent>
     </Card>
   );

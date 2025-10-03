@@ -14,6 +14,14 @@ class ToolModel {
       .orderBy(desc(schema.toolsTable.createdAt));
   }
 
+  static async findByName(name: string): Promise<Tool | null> {
+    const [tool] = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, name));
+    return tool || null;
+  }
+
   static async update(toolId: string, tool: UpdateTool) {
     const [updatedTool] = await db
       .update(schema.toolsTable)

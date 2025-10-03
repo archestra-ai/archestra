@@ -10,7 +10,6 @@ import { ToolInvocationPolicyModel } from "../../../models";
  */
 export const evaluatePolicies = async (
   { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
-  agentId: string,
   chatId: string,
 ): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
   for (const toolCall of toolCalls || []) {
@@ -39,7 +38,6 @@ export const evaluatePolicies = async (
 
     const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
       chatId,
-      agentId,
       toolCallName,
       toolInput,
     );

@@ -13,13 +13,14 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "incremental": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
+    "rootDir": ".",
+    "types": ["vitest/globals"],
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test-setup.ts"],
   "exclude": ["node_modules", "test", "**/*spec.ts"]
 }

@@ -1,8 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
+
 import _ from "lodash";
 import db, { schema } from "../database";
 import type { ToolInvocation } from "../types";
 import InteractionModel from "./interaction";
+import ToolModel from "./tool";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -66,11 +68,10 @@ class ToolInvocationPolicyModel {
   }
 
   /**
-   * Evaluate tool invocation policies for a given agent/chat
+   * Evaluate tool invocation policies for a given chat
    */
   static async evaluate(
     chatId: string,
-    agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
@@ -79,13 +80,23 @@ class ToolInvocationPolicyModel {
       await InteractionModel.checkIfChatIsTainted(chatId);
 
     /**
-     * Get policies assigned to this agent that also match the tool name
+     * Get policies assigned to this chat's agent that also match the tool name,
+     * along with the tool's configuration
      */
     const applicablePoliciesForAgent = await db
       .select({
-        policy: schema.toolInvocationPoliciesTable,
+        ...getTableColumns(schema.toolInvocationPoliciesTable),
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
       })
-      .from(schema.agentToolInvocationPoliciesTable)
+      .from(schema.chatsTable)
+      .innerJoin(
+        schema.agentToolInvocationPoliciesTable,
+        eq(
+          schema.chatsTable.agentId,
+          schema.agentToolInvocationPoliciesTable.agentId,
+        ),
+      )
       .innerJoin(
         schema.toolInvocationPoliciesTable,
         eq(
@@ -98,26 +109,45 @@ class ToolInvocationPolicyModel {
         eq(schema.toolInvocationPoliciesTable.toolId, schema.toolsTable.id),
       )
       .where(
-        // Filter to policies that match the tool id
+        // Filter to policies that match the chat and tool
         and(
-          eq(schema.agentToolInvocationPoliciesTable.agentId, agentId),
+          eq(schema.chatsTable.id, chatId),
           eq(schema.toolsTable.name, toolName),
         ),
       );
 
     // Track if we found an explicit allow rule for this tool call
     let hasExplicitAllowRule = false;
+    let allowUsageWhenUntrustedDataIsPresent =
+      applicablePoliciesForAgent.length > 0
+        ? applicablePoliciesForAgent[0].allowUsageWhenUntrustedDataIsPresent
+        : null;
+
+    // If we don't have the tool config from policies, fetch it directly
+    if (allowUsageWhenUntrustedDataIsPresent === null) {
+      const tool = await ToolModel.findByName(toolName);
+      if (tool) {
+        allowUsageWhenUntrustedDataIsPresent =
+          tool.allowUsageWhenUntrustedDataIsPresent;
+      }
+    }
+
+    // If context is tainted and tool allows usage with untrusted data, allow immediately
+    if (isContextTainted && allowUsageWhenUntrustedDataIsPresent) {
+      return {
+        isAllowed: true,
+        reason: "",
+      };
+    }
 
     // Evaluate each policy
-    for (const { policy } of applicablePoliciesForAgent) {
-      const {
-        argumentName,
-        operator,
-        value: policyValue,
-        action,
-        reason,
-      } = policy;
-
+    for (const {
+      argumentName,
+      operator,
+      value: policyValue,
+      action,
+      reason,
+    } of applicablePoliciesForAgent) {
       // Extract the argument value using lodash
       const argumentValue = _.get(toolInput, argumentName);
 

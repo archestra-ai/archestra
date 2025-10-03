@@ -21,8 +21,8 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Generate prisma client
-        run: pnpm db:generate
+      - name: Setup environment variables
+        run: cp .env.example .env
 
       - name: Type checking, linting, formatting checks
         run: pnpm check:ci

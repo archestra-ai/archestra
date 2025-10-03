@@ -9,6 +9,7 @@
     "lint:fix": "turbo lint:fix",
     "lint:fix:unsafe": "turbo lint:fix:unsafe",
     "type-check": "turbo type-check",
+    "test": "turbo test",
     "check:ci": "turbo check:ci",
     "codegen:api-client": "turbo codegen:api-client",
     "db:generate": "turbo db:generate",

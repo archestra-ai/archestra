@@ -188,9 +188,10 @@ The backend integrates advanced security guardrails:
   - Tools can be configured with:
     - `allow_usage_when_untrusted_data_is_present`: Allow tool to run with untrusted data
     - `data_is_trusted_by_default`: Mark tool outputs as trusted by default
-- **Trusted Data Policies**: Mark specific data patterns as trusted sources
+- **Trusted Data Policies**: Mark specific data patterns as trusted or blocked
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
+  - Actions: allow (mark data as trusted) or block_always (prevent data from reaching LLM)
 - **Taint Analysis**: Tracks untrusted data through the system
 - **Database Persistence**: All chats and interactions stored in PostgreSQL
 
@@ -198,7 +199,7 @@ The backend integrates advanced security guardrails:
 
 - **Agent**: Stores AI agents with name and timestamps
 - **Chat**: Stores chat sessions with timestamps and agent reference
-- **Interaction**: Stores messages with taint status and reasoning
+- **Interaction**: Stores messages with trust status, blocked flag, and reasoning
 - **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents

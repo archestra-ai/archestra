@@ -280,12 +280,11 @@ export type GetAgentToolInvocationPoliciesResponses = {
     200: Array<{
         id: string;
         toolId: string;
-        description: string;
         argumentName: string;
         operator: string;
         value: string;
         action: string;
-        blockPrompt: string | null;
+        reason: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -1565,12 +1564,11 @@ export type GetToolInvocationPoliciesResponses = {
     200: Array<{
         id: string;
         toolId: string;
-        description: string;
         argumentName: string;
         operator: string;
         value: string;
         action: string;
-        blockPrompt: string | null;
+        reason: string | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -1581,12 +1579,11 @@ export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesRespons
 export type CreateToolInvocationPolicyData = {
     body: {
         toolId: string;
-        description: string;
         argumentName: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
         action: 'allow_when_context_is_untrusted' | 'block_always';
-        blockPrompt?: string | null;
+        reason?: string | null;
     };
     path?: never;
     query?: never;
@@ -1614,12 +1611,11 @@ export type CreateToolInvocationPolicyResponses = {
     200: {
         id: string;
         toolId: string;
-        description: string;
         argumentName: string;
         operator: string;
         value: string;
         action: string;
-        blockPrompt: string | null;
+        reason: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -1709,12 +1705,11 @@ export type GetToolInvocationPolicyResponses = {
     200: {
         id: string;
         toolId: string;
-        description: string;
         argumentName: string;
         operator: string;
         value: string;
         action: string;
-        blockPrompt: string | null;
+        reason: string | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -1725,12 +1720,11 @@ export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[k
 export type UpdateToolInvocationPolicyData = {
     body?: {
         toolId?: string;
-        description?: string;
         argumentName?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
         action?: 'allow_when_context_is_untrusted' | 'block_always';
-        blockPrompt?: string | null;
+        reason?: string | null;
     };
     path: {
         id: string;
@@ -1769,12 +1763,11 @@ export type UpdateToolInvocationPolicyResponses = {
     200: {
         id: string;
         toolId: string;
-        description: string;
         argumentName: string;
         operator: string;
         value: string;
         action: string;
-        blockPrompt: string | null;
+        reason: string | null;
         createdAt: string;
         updatedAt: string;
     };

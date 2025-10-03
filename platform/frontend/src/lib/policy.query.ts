@@ -56,12 +56,11 @@ export function useToolInvocationPolicyCreateMutation() {
       await createToolInvocationPolicy({
         body: {
           toolId,
-          description: "",
           argumentName: "",
           operator: "equal",
           value: "",
           action: "allow_when_context_is_untrusted",
-          blockPrompt: null,
+          reason: null,
         },
       }),
     onSuccess: () => {

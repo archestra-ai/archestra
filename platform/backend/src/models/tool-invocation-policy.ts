@@ -6,7 +6,7 @@ import InteractionModel from "./interaction";
 
 type EvaluationResult = {
   isAllowed: boolean;
-  denyReason: string;
+  reason: string;
 };
 
 class ToolInvocationPolicyModel {
@@ -112,8 +112,7 @@ class ToolInvocationPolicyModel {
         operator,
         value: policyValue,
         action,
-        description,
-        blockPrompt,
+        reason,
       } = policy;
 
       // Extract the argument value using lodash
@@ -127,7 +126,7 @@ class ToolInvocationPolicyModel {
         // If it's an allow policy and the argument is missing, that's a problem
         return {
           isAllowed: false,
-          denyReason: `Missing required argument: ${argumentName}`,
+          reason: `Missing required argument: ${argumentName}`,
         };
       }
 
@@ -179,7 +178,7 @@ class ToolInvocationPolicyModel {
         if (conditionMet) {
           return {
             isAllowed: false,
-            denyReason: blockPrompt || `Policy violation: ${description}`,
+            reason: reason || `Policy violation: ${reason}`,
           };
         }
       }
@@ -189,7 +188,7 @@ class ToolInvocationPolicyModel {
     if (isContextTainted && !hasExplicitAllowRule) {
       return {
         isAllowed: false,
-        denyReason:
+        reason:
           "Tool invocation blocked: context has been tainted by untrusted data",
       };
     }
@@ -197,7 +196,7 @@ class ToolInvocationPolicyModel {
     // All policies passed
     return {
       isAllowed: true,
-      denyReason: "",
+      reason: "",
     };
   }
 }

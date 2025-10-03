@@ -7,7 +7,6 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
   toolId: uuid("tool_id")
     .notNull()
     .references(() => toolsTable.id, { onDelete: "cascade" }),
-  description: text("description").notNull(),
   argumentName: text("argument_name").notNull(),
   operator: text("operator")
     .$type<AutonomyPolicyOperator.SupportedOperator>()
@@ -16,7 +15,7 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
   action: text("action")
     .$type<ToolInvocation.ToolInvocationPolicyAction>()
     .notNull(),
-  blockPrompt: text("block_prompt"),
+  reason: text("reason"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

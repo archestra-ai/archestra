@@ -37,7 +37,7 @@ export const evaluatePolicies = async (
      */
     const toolInput = JSON.parse(toolCallArgs);
 
-    const { isAllowed, denyReason } = await ToolInvocationPolicyModel.evaluate(
+    const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
       chatId,
       agentId,
       toolCallName,
@@ -56,7 +56,7 @@ I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.
 
 However, I was denied by a tool invocation policy:
 
-${denyReason}`,
+${reason}`,
           content: null,
         },
       };

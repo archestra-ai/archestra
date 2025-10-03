@@ -163,7 +163,8 @@ function ToolCallPolicies({
 }: {
   tool: GetToolsResponses["200"][number];
 }) {
-  const [allowUntrusted, setAllowUntrusted] = useState(false);
+  const [allowWhenUntrustedDataIsPresent, setAllowWhenUntrustedDataIsPresent] =
+    useState(false);
   const {
     data: { byToolId },
   } = useToolInvocationPolicies();
@@ -198,11 +199,13 @@ function ToolCallPolicies({
           >
             Default
           </Badge>
-          <span>Allowed for untrusted</span>
+          <span>Allow usage when untrusted data is present</span>
         </div>
         <Switch
-          checked={allowUntrusted}
-          onCheckedChange={() => setAllowUntrusted(!allowUntrusted)}
+          checked={allowWhenUntrustedDataIsPresent}
+          onCheckedChange={() =>
+            setAllowWhenUntrustedDataIsPresent(!allowWhenUntrustedDataIsPresent)
+          }
         />
       </PolicyCard>
       {policies.map((policy) => (
@@ -231,8 +234,11 @@ function ToolCallPolicies({
                 </SelectTrigger>
                 <SelectContent>
                   {[
-                    { value: "true", label: "Allowed for untrusted: True" },
-                    { value: "false", label: "Allowed for untrusted: False" },
+                    {
+                      value: "true",
+                      label: "Allow usage when untrusted data is present",
+                    },
+                    { value: "false", label: "Block always" },
                   ].map(({ value, label }) => (
                     <SelectItem key={label} value={value}>
                       {label}
@@ -240,6 +246,7 @@ function ToolCallPolicies({
                   ))}
                 </SelectContent>
               </Select>
+              <Input defaultValue={policy.reason || ""} placeholder="Reason" />
             </div>
             <Button
               variant="ghost"

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import type {
   GetToolInvocationPoliciesResponse,
   GetToolsResponses,
@@ -168,10 +168,6 @@ function ToolCallPolicies({
 }: {
   tool: GetToolsResponses["200"][number];
 }) {
-  const [
-    _allowWhenUntrustedDataIsPresent,
-    _setAllowWhenUntrustedDataIsPresent,
-  ] = useState(false);
   const {
     data: { byToolId },
   } = useToolInvocationPolicies();

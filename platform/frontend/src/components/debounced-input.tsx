@@ -23,7 +23,5 @@ export function DebouncedInput({
     onChange(debouncedValue);
   }, [debouncedValue]);
 
-  return (
-    <Input defaultValue={value} onChange={(e) => setValue(e.target.value)} />
-  );
+  return <Input value={value} onChange={(e) => setValue(e.target.value)} />;
 }

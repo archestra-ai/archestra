@@ -30,6 +30,7 @@ export function useToolInvocationPolicies() {
         byToolId,
       };
     },
+    staleTime: 60 * 1_000,
   });
 }
 
@@ -72,6 +73,7 @@ export function useToolInvocationPolicyCreateMutation() {
 }
 
 export function useToolInvocationPolicyUpdateMutation() {
+  console.error("heeeere");
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (

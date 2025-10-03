@@ -33,7 +33,7 @@ import {
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
-import { useTools } from "@/lib/tool.query";
+import { useToolPatchMutation, useTools } from "@/lib/tool.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
@@ -168,11 +168,14 @@ function ToolCallPolicies({
 }: {
   tool: GetToolsResponses["200"][number];
 }) {
-  const [allowWhenUntrustedDataIsPresent, setAllowWhenUntrustedDataIsPresent] =
-    useState(false);
+  const [
+    _allowWhenUntrustedDataIsPresent,
+    _setAllowWhenUntrustedDataIsPresent,
+  ] = useState(false);
   const {
     data: { byToolId },
   } = useToolInvocationPolicies();
+  const toolPatchMutation = useToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
@@ -217,9 +220,13 @@ function ToolCallPolicies({
           <span>Allow usage when untrusted data is present</span>
         </div>
         <Switch
-          checked={allowWhenUntrustedDataIsPresent}
+          checked={tool.allowUsageWhenUntrustedDataIsPresent}
           onCheckedChange={() =>
-            setAllowWhenUntrustedDataIsPresent(!allowWhenUntrustedDataIsPresent)
+            toolPatchMutation.mutate({
+              id: tool.id,
+              allowUsageWhenUntrustedDataIsPresent:
+                !tool.allowUsageWhenUntrustedDataIsPresent,
+            })
           }
         />
       </PolicyCard>
@@ -230,12 +237,12 @@ function ToolCallPolicies({
               If
               <Select
                 defaultValue={policy.argumentName}
-                onValueChange={(value) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
-                    ...policy,
-                    argumentName: value,
-                  })
-                }
+                // onValueChange={(value) => {
+                //   toolInvocationPolicyUpdateMutation.mutate({
+                //     ...policy,
+                //     argumentName: value,
+                //   });
+                // }}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="parameter" />

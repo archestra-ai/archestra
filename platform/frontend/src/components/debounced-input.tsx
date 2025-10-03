@@ -1,5 +1,5 @@
 import { useDebounce } from "@uidotdev/usehooks";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "./ui/input";
 
 export function DebouncedInput({
@@ -10,11 +10,16 @@ export function DebouncedInput({
   onChange: (value: string) => void;
 }) {
   const [value, setValue] = useState(initialValue);
+  const isFirstRender = useRef(true);
 
   const debouncedValue = useDebounce(value, 800);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's ok here
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     onChange(debouncedValue);
   }, [debouncedValue]);
 

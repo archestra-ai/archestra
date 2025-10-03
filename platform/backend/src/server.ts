@@ -41,7 +41,7 @@ const start = async () => {
     // Register CORS plugin to allow cross-origin requests from frontend
     await fastify.register(fastifyCors, {
       origin: ["http://localhost:3000"],
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
     });
 

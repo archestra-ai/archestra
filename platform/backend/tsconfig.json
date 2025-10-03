@@ -19,6 +19,7 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
+    "types": ["vitest/globals", "vitest/client"],
   },
   "include": ["src/**/*", "test-setup.ts"],
   "exclude": ["node_modules", "test", "**/*spec.ts"]

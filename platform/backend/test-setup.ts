@@ -4,17 +4,19 @@
  * See this blog post for more details:
  * https://dev.to/benjamindaniel/how-to-test-your-nodejs-postgres-app-using-drizzle-pglite-4fb3
  */
-
-import { beforeEach } from 'vitest';
+import { vi } from 'vitest';
 import { drizzle } from "drizzle-orm/pglite";
 import path from "node:path";
 import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
+let pgliteClient: PGlite | null = null;
+let testDb: any = null;
+
 beforeEach(async () => {
-  const pgliteClient = new PGlite();
+  pgliteClient = new PGlite('memory://');
   // Create an in-memory database for tests
-  const testDb = drizzle({ client: pgliteClient });
+  testDb = drizzle({ client: pgliteClient });
 
   /**
    * Run migrations on test database, we could simply use the migrate function that is
@@ -28,9 +30,25 @@ beforeEach(async () => {
   for (const migrationFile of migrationFiles) {
     await pgliteClient.exec(fs.readFileSync(path.join(__dirname, './src/database/migrations', migrationFile), 'utf8'));
   }
-  // await migrate(testDb, { migrationsFolder: path.join(__dirname, './src/database/migrations') });
 
-  // Set the test database in the mock
-  const { setMockDb } = await import('./src/database/__mocks__/index.js');
-  setMockDb(testDb);
+  // Replace the mocked database module with our test database
+  const dbModule = await import('./src/database/index.js');
+
+  // Replace the default export with our test database
+  Object.defineProperty(dbModule, 'default', {
+    value: testDb,
+    writable: true,
+    configurable: true,
+  });
+});
+
+afterEach(async () => {
+  if (pgliteClient) {
+    await pgliteClient.close();
+    pgliteClient = null;
+  }
+  testDb = null;
+
+  // Clear all mocks
+  vi.clearAllMocks();
 });

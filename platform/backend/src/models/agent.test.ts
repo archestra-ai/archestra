@@ -1,5 +1,10 @@
-import { expect, test } from "vitest";
+import AgentModel from "./agent";
 
-test("agent", () => {
-  expect(1).toBe(1);
+describe("AgentModel", () => {
+  test("can create an agent", async () => {
+    await AgentModel.create({ name: "Test Agent" });
+    await AgentModel.create({ name: "Test Agent 2" });
+
+    expect(await AgentModel.findAll()).toHaveLength(2);
+  });
 });

@@ -18,8 +18,9 @@ const interactionsTable = pgTable(
       .notNull()
       .references(() => chatsTable.id, { onDelete: "cascade" }),
     content: jsonb("content").$type<InteractionContent>().notNull(),
-    tainted: boolean("tainted").notNull().default(false),
-    taintReason: text("taint_reason"),
+    trusted: boolean("trusted").notNull().default(true),
+    blocked: boolean("blocked").notNull().default(false),
+    reason: text("reason"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

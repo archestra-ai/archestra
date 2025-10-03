@@ -37,7 +37,6 @@ const extractToolNameFromHistory = async (
 export const evaluatePolicies = async (
   messages: ChatCompletionRequestMessages,
   chatId: string,
-  agentId: string,
 ) => {
   for (const message of messages) {
     if (message.role === "tool") {
@@ -50,17 +49,20 @@ export const evaluatePolicies = async (
 
       if (toolName) {
         // Evaluate trusted data policy
-        const { isTrusted, trustReason } =
-          await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
+        const { isTrusted, isBlocked, reason } =
+          await TrustedDataPolicyModel.evaluate(chatId, toolName, toolResult);
 
-        // Store tool result as interaction (tainted if not trusted)
+        // Store tool result as interaction
         await InteractionModel.create({
           chatId,
           content: message,
-          tainted: !isTrusted,
-          taintReason: trustReason,
+          trusted: isTrusted,
+          blocked: isBlocked,
+          reason,
         });
       }
     }
   }
 };
+
+// export const filterOutBlockedData = messages;

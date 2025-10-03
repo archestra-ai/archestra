@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { AutonomyPolicyOperator } from "../../types";
+import type { AutonomyPolicyOperator, TrustedData } from "../../types";
 import toolsTable from "./tool";
 
 const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
@@ -13,6 +13,10 @@ const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
     .$type<AutonomyPolicyOperator.SupportedOperator>()
     .notNull(),
   value: text("value").notNull(),
+  action: text("action")
+    .$type<TrustedData.TrustedDataPolicyAction>()
+    .notNull()
+    .default("allow"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

@@ -40,7 +40,7 @@ export function Chat({
     return "Chat not found";
   }
 
-  const taintedCount = chat.interactions.filter((i) => i.tainted).length;
+  const untrustedCount = chat.interactions.filter((i) => !i.trusted).length;
 
   return (
     <>
@@ -56,8 +56,8 @@ export function Chat({
             </p>
           </div>
         </div>
-        {taintedCount > 0 && (
-          <Badge variant="destructive">{taintedCount} Tainted</Badge>
+        {untrustedCount > 0 && (
+          <Badge variant="destructive">{untrustedCount} Untrusted</Badge>
         )}
       </div>
       <Divider />
@@ -198,8 +198,9 @@ function mapInteractionToUiMessage(
     role,
     parts,
     metadata: {
-      tainted: interaction.tainted,
-      taintReason: interaction.taintReason ?? undefined,
+      trusted: interaction.trusted,
+      blocked: interaction.blocked,
+      reason: interaction.reason ?? undefined,
     },
   };
 }

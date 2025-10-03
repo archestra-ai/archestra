@@ -1,22 +1,12 @@
 import { and, asc, eq } from "drizzle-orm";
 import db, { schema } from "../database";
-import type { InteractionContent } from "../types";
+import type { InsertInteraction } from "../types";
 
 class InteractionModel {
-  static async create(data: {
-    chatId: string;
-    content: InteractionContent;
-    tainted?: boolean;
-    taintReason?: string;
-  }) {
+  static async create(data: InsertInteraction) {
     const [interaction] = await db
       .insert(schema.interactionsTable)
-      .values({
-        chatId: data.chatId,
-        content: data.content,
-        tainted: data.tainted ?? false,
-        taintReason: data.taintReason,
-      })
+      .values(data)
       .returning();
 
     return interaction;
@@ -31,19 +21,19 @@ class InteractionModel {
   }
 
   /**
-   * Check if context is tainted by querying for tainted interactions
+   * Check if context is trusted by querying for non-trusted interactions
    */
-  static async checkIfChatIsTainted(chatId: string) {
-    const taintedInteractions = await db
+  static async checkIfChatIsTrusted(chatId: string) {
+    const untrustedInteractions = await db
       .select()
       .from(schema.interactionsTable)
       .where(
         and(
           eq(schema.interactionsTable.chatId, chatId),
-          eq(schema.interactionsTable.tainted, true),
+          eq(schema.interactionsTable.trusted, false),
         ),
       );
-    return taintedInteractions.length > 0;
+    return untrustedInteractions.length === 0;
   }
 }
 

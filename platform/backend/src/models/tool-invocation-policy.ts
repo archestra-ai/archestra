@@ -72,8 +72,8 @@ class ToolInvocationPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
   ): Promise<EvaluationResult> {
-    const isContextTainted =
-      await InteractionModel.checkIfChatIsTainted(chatId);
+    const isContextTrusted =
+      await InteractionModel.checkIfChatIsTrusted(chatId);
 
     /**
      * Get policies assigned to this chat's agent that also match the tool name,
@@ -128,8 +128,8 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is tainted and tool allows usage with untrusted data, allow immediately
-    if (isContextTainted && allowUsageWhenUntrustedDataIsPresent) {
+    // If context is untrusted and tool allows usage with untrusted data, allow immediately
+    if (!isContextTrusted && allowUsageWhenUntrustedDataIsPresent) {
       return {
         isAllowed: true,
         reason: "",
@@ -213,12 +213,11 @@ class ToolInvocationPolicyModel {
       }
     }
 
-    // If context is tainted and we don't have an explicit allow rule, block
-    if (isContextTainted && !hasExplicitAllowRule) {
+    // If context is untrusted and we don't have an explicit allow rule, block
+    if (!isContextTrusted && !hasExplicitAllowRule) {
       return {
         isAllowed: false,
-        reason:
-          "Tool invocation blocked: context has been tainted by untrusted data",
+        reason: "Tool invocation blocked: context contains untrusted data",
       };
     }
 

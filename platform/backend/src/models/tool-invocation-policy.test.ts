@@ -98,18 +98,18 @@ describe("ToolInvocationPolicyModel", () => {
       });
     });
 
-    describe("tainted context handling", () => {
+    describe("untrusted context handling", () => {
       beforeEach(async () => {
-        // Taint the chat context
+        // Chat contains an untrusted interaction
         await InteractionModel.create({
           chatId,
           content: { role: "user", content: "malicious input" },
-          tainted: true,
-          taintReason: "Untrusted user input",
+          trusted: false,
+          reason: "Untrusted user input",
         });
       });
 
-      test("blocks tool invocation when context is tainted and no explicit allow rule exists", async () => {
+      test("blocks tool invocation when context is untrusted and no explicit allow rule exists", async () => {
         const result = await ToolInvocationPolicyModel.evaluate(
           chatId,
           toolName,
@@ -117,10 +117,10 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context has been tainted");
+        expect(result.reason).toContain("context is untrusted");
       });
 
-      test("allows tool invocation when context is tainted but explicit allow rule matches", async () => {
+      test("allows tool invocation when context is untrusted but explicit allow rule matches", async () => {
         // Create an allow policy
         const policy = await ToolInvocationPolicyModel.create({
           toolId,
@@ -144,7 +144,7 @@ describe("ToolInvocationPolicyModel", () => {
         expect(result.reason).toBe("");
       });
 
-      test("blocks tool invocation when context is tainted and allow rule doesn't match", async () => {
+      test("blocks tool invocation when context is untrusted and allow rule doesn't match", async () => {
         // Create an allow policy
         const policy = await ToolInvocationPolicyModel.create({
           toolId,
@@ -165,10 +165,10 @@ describe("ToolInvocationPolicyModel", () => {
         );
 
         expect(result.isAllowed).toBe(false);
-        expect(result.reason).toContain("context has been tainted");
+        expect(result.reason).toContain("context is untrusted");
       });
 
-      test("allows tool invocation when context is tainted but tool allows usage with untrusted data", async () => {
+      test("allows tool invocation when context is untrusted but tool allows usage with untrusted data", async () => {
         // Create a tool that allows usage when untrusted data is present
         await ToolModel.createToolIfNotExists({
           agentId,

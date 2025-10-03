@@ -36,6 +36,20 @@
       "when": 1759501175084,
       "tag": "0004_secret_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1759517523441,
+      "tag": "0005_stormy_hammerhead",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1759518255860,
+      "tag": "0006_military_electro",
+      "breakpoints": true
     }
   ]
 }

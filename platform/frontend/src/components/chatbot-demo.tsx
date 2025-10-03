@@ -223,17 +223,17 @@ const ChatBotDemo = ({
                           key={`${message.id}-${part.toolCallId}`}
                           className={getColorClass()}
                         >
-                          {message.metadata?.tainted && (
+                          {!message.metadata?.trusted && (
                             <div className="m-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
                               <div className="flex items-start gap-2">
                                 <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
                                 <div className="flex-1">
                                   <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                    Tainted Content
+                                    Untrusted Content
                                   </p>
-                                  {message.metadata.taintReason && (
+                                  {message.metadata?.reason && (
                                     <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                                      {message.metadata.taintReason}
+                                      {message.metadata.reason}
                                     </p>
                                   )}
                                 </div>
@@ -358,8 +358,9 @@ export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
   parts: UIMessage["parts"];
   metadata?: {
-    tainted?: boolean;
-    taintReason?: string;
+    trusted?: boolean;
+    blocked?: boolean;
+    reason?: string;
   };
 };
 

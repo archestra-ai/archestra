@@ -64,7 +64,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         await utils.persistTools(tools, agentId);
-        await utils.trustedData.evaluatePolicies(messages, chatId, agentId);
+        await utils.trustedData.evaluatePolicies(messages, chatId);
         await utils.persistUserMessage(messages, chatId);
 
         if (stream) {

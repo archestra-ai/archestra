@@ -121,6 +121,7 @@ class TrustedDataPolicyModel {
    * - Only data that explicitly matches a trusted data policy is considered safe
    * - If no policy matches, the data is considered untrusted
    * - This implements an allowlist approach for maximum security
+   * - Policies with action='block_always' take precedence and mark data as blocked
    */
   static async evaluate(
     chatId: string,
@@ -193,42 +194,80 @@ class TrustedDataPolicyModel {
       };
     }
 
-    // Check if ANY policy marks this data as trusted
+    // First, check if ANY policy blocks this data (blocked policies take precedence)
     for (const {
       attributePath,
       operator,
       value: policyValue,
       description,
+      action,
     } of applicablePoliciesForAgent) {
-      // Extract values from the tool output using the attribute path
-      const outputValue = toolOutput?.value || toolOutput;
-      const values = TrustedDataPolicyModel.extractValuesFromPath(
-        outputValue,
-        attributePath,
-      );
+      if (action === "block_always") {
+        // Extract values from the tool output using the attribute path
+        const outputValue = toolOutput?.value || toolOutput;
+        const values = TrustedDataPolicyModel.extractValuesFromPath(
+          outputValue,
+          attributePath,
+        );
 
-      // For trusted data policies, ALL extracted values must meet the condition
-      let allValuesTrusted = values.length > 0;
-      for (const value of values) {
-        if (
-          !TrustedDataPolicyModel.evaluateCondition(
-            value,
-            operator,
-            policyValue,
-          )
-        ) {
-          allValuesTrusted = false;
-          break;
+        // For blocked policies, if ANY extracted value meets the condition, data is blocked
+        for (const value of values) {
+          if (
+            TrustedDataPolicyModel.evaluateCondition(
+              value,
+              operator,
+              policyValue,
+            )
+          ) {
+            return {
+              isTrusted: false,
+              isBlocked: true,
+              reason: `Data blocked by policy: ${description}`,
+            };
+          }
         }
       }
+    }
 
-      if (allValuesTrusted) {
-        // At least one policy trusts this data
-        return {
-          isTrusted: true,
-          isBlocked: false,
-          reason: `Data trusted by policy: ${description}`,
-        };
+    // Check if ANY policy marks this data as trusted (only if not blocked)
+    for (const {
+      attributePath,
+      operator,
+      value: policyValue,
+      description,
+      action,
+    } of applicablePoliciesForAgent) {
+      if (action === "allow") {
+        // Extract values from the tool output using the attribute path
+        const outputValue = toolOutput?.value || toolOutput;
+        const values = TrustedDataPolicyModel.extractValuesFromPath(
+          outputValue,
+          attributePath,
+        );
+
+        // For trusted data policies, ALL extracted values must meet the condition
+        let allValuesTrusted = values.length > 0;
+        for (const value of values) {
+          if (
+            !TrustedDataPolicyModel.evaluateCondition(
+              value,
+              operator,
+              policyValue,
+            )
+          ) {
+            allValuesTrusted = false;
+            break;
+          }
+        }
+
+        if (allValuesTrusted) {
+          // At least one policy trusts this data
+          return {
+            isTrusted: true,
+            isBlocked: false,
+            reason: `Data trusted by policy: ${description}`,
+          };
+        }
       }
     }
 

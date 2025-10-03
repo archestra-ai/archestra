@@ -35,6 +35,29 @@ class InteractionModel {
       );
     return untrustedInteractions.length === 0;
   }
+
+  /**
+   * Get all blocked tool call IDs for a chat
+   *
+   * Returns a Set of tool_call_ids that have been marked as blocked
+   * by trusted data policies
+   */
+  static async getBlockedToolCallIds(chatId: string): Promise<Set<string>> {
+    const interactions = await InteractionModel.findByChatId(chatId);
+
+    const blockedToolCallIds = new Set<string>();
+
+    for (const interaction of interactions) {
+      if (interaction.blocked && interaction.content.role === "tool") {
+        const toolCallId = interaction.content.tool_call_id;
+        if (toolCallId) {
+          blockedToolCallIds.add(toolCallId);
+        }
+      }
+    }
+
+    return blockedToolCallIds;
+  }
 }
 
 export default InteractionModel;

@@ -542,6 +542,185 @@ describe("TrustedDataPolicyModel", async () => {
       });
     });
 
+    describe("blocked action", () => {
+      test("blocks data when a block_always policy matches", async () => {
+        const policy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "source",
+          operator: "equal",
+          value: "malicious",
+          action: "block_always",
+          description: "Block malicious sources",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
+
+        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
+          value: { source: "malicious", data: "some data" },
+        });
+
+        expect(result.isTrusted).toBe(false);
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Data blocked by policy");
+      });
+
+      test("blocked policies take precedence over allow policies", async () => {
+        // Create an allow policy
+        const allowPolicy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "type",
+          operator: "equal",
+          value: "email",
+          action: "allow",
+          description: "Allow email data",
+        });
+
+        // Create a block policy for malicious content
+        const blockPolicy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "from",
+          operator: "contains",
+          value: "hacker",
+          action: "block_always",
+          description: "Block hacker emails",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, allowPolicy.id);
+        await AgentModel.assignTrustedDataPolicy(agentId, blockPolicy.id);
+
+        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
+          value: { type: "email", from: "hacker@evil.com" },
+        });
+
+        expect(result.isTrusted).toBe(false);
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Block hacker emails");
+      });
+
+      test("blocked policies work with wildcard paths", async () => {
+        const policy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "emails[*].from",
+          operator: "contains",
+          value: "spam",
+          action: "block_always",
+          description: "Block spam emails",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
+
+        // Should block if ANY email matches the condition
+        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
+          value: {
+            emails: [
+              { from: "user@company.com", subject: "Work" },
+              { from: "spam@spammer.com", subject: "Buy now" },
+            ],
+          },
+        });
+
+        expect(result.isTrusted).toBe(false);
+        expect(result.isBlocked).toBe(true);
+      });
+
+      test("data passes when no blocked policy matches", async () => {
+        const blockPolicy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "source",
+          operator: "equal",
+          value: "malicious",
+          action: "block_always",
+          description: "Block malicious sources",
+        });
+
+        const allowPolicy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "source",
+          operator: "equal",
+          value: "trusted",
+          action: "allow",
+          description: "Allow trusted sources",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, blockPolicy.id);
+        await AgentModel.assignTrustedDataPolicy(agentId, allowPolicy.id);
+
+        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
+          value: { source: "trusted" },
+        });
+
+        expect(result.isTrusted).toBe(true);
+        expect(result.isBlocked).toBe(false);
+        expect(result.reason).toContain("Allow trusted sources");
+      });
+
+      test("blocked policies work with different operators", async () => {
+        const policy = await TrustedDataPolicyModel.create({
+          toolId,
+          attributePath: "domain",
+          operator: "endsWith",
+          value: ".blocked.com",
+          action: "block_always",
+          description: "Block blacklisted domains",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
+
+        const blockedResult = await TrustedDataPolicyModel.evaluate(
+          chatId,
+          toolName,
+          { value: { domain: "evil.blocked.com" } },
+        );
+        expect(blockedResult.isBlocked).toBe(true);
+
+        const allowedResult = await TrustedDataPolicyModel.evaluate(
+          chatId,
+          toolName,
+          { value: { domain: "safe.com" } },
+        );
+        expect(allowedResult.isBlocked).toBe(false);
+      });
+
+      test("blocked policies override dataIsTrustedByDefault", async () => {
+        // Create a tool with dataIsTrustedByDefault
+        await ToolModel.createToolIfNotExists({
+          agentId,
+          name: "default-trusted-tool",
+          parameters: {},
+          description: "Tool that trusts data by default",
+          allowUsageWhenUntrustedDataIsPresent: false,
+          dataIsTrustedByDefault: true,
+        });
+
+        const tools = await ToolModel.findAll();
+        const trustedToolId = tools.find(
+          (t) => t.name === "default-trusted-tool",
+        )?.id;
+
+        // Create a block policy
+        const policy = await TrustedDataPolicyModel.create({
+          toolId: trustedToolId as string,
+          attributePath: "dangerous",
+          operator: "equal",
+          value: "true",
+          action: "block_always",
+          description: "Block dangerous data",
+        });
+
+        await AgentModel.assignTrustedDataPolicy(agentId, policy.id);
+
+        const result = await TrustedDataPolicyModel.evaluate(
+          chatId,
+          "default-trusted-tool",
+          { value: { dangerous: "true", other: "data" } },
+        );
+
+        expect(result.isTrusted).toBe(false);
+        expect(result.isBlocked).toBe(true);
+        expect(result.reason).toContain("Block dangerous data");
+      });
+    });
+
     describe("multiple policies", () => {
       test("trusts data when any policy matches", async () => {
         // Create multiple policies

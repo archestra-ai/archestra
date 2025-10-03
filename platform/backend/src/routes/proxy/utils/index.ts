@@ -77,13 +77,15 @@ export const getAgentAndChatIdFromRequest = async (
 };
 
 export const persistUserMessage = async (
-  messages: ChatCompletionRequestMessages,
+  message: ChatCompletionRequestMessages[number],
   chatId: string,
 ) => {
-  const lastMessage = messages[messages.length - 1];
-
-  if (lastMessage.role === "user") {
-    await InteractionModel.create({ chatId, content: lastMessage });
+  if (message.role === "user") {
+    await InteractionModel.create({
+      chatId,
+      content: message,
+      trusted: true,
+    });
   }
 };
 
@@ -91,7 +93,7 @@ export const persistAssistantMessage = async (
   message: OpenAI.Chat.Completions.ChatCompletionMessage,
   chatId: string,
 ) => {
-  await InteractionModel.create({ chatId, content: message });
+  await InteractionModel.create({ chatId, content: message, trusted: true });
 };
 
 /**

@@ -41,8 +41,17 @@ export const evaluatePolicies = async (
   for (const message of messages) {
     if (message.role === "tool") {
       const { tool_call_id: toolCallId, content } = message;
-      const toolResult =
-        typeof content === "string" ? JSON.parse(content) : content;
+      let toolResult: unknown;
+      if (typeof content === "string") {
+        try {
+          toolResult = JSON.parse(content);
+        } catch {
+          // If content is not valid JSON, use it as-is
+          toolResult = content;
+        }
+      } else {
+        toolResult = content;
+      }
 
       // Extract tool name from conversation history
       const toolName = await extractToolNameFromHistory(chatId, toolCallId);

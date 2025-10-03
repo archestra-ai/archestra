@@ -1,7 +1,7 @@
 import { type GetToolsResponses, getTools } from "shared/api-client";
-import { ToolDiscoveryPage } from "./page.client";
+import { ToolsPage } from "./page.client";
 
-export default async function ToolDiscoveryPageServer() {
+export default async function ToolsPageServer() {
   let initialData: GetToolsResponses["200"] | undefined;
   try {
     initialData = (await getTools()).data;
@@ -9,5 +9,5 @@ export default async function ToolDiscoveryPageServer() {
     console.error(error);
   }
 
-  return <ToolDiscoveryPage initialData={initialData} />;
+  return <ToolsPage initialData={initialData} />;
 }

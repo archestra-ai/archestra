@@ -52,8 +52,8 @@ const items = [
     icon: MessagesSquare,
   },
   {
-    title: "Tool Discovery",
-    url: "/tool-discovery",
+    title: "Tools",
+    url: "/tools",
     icon: FileJson2,
   },
   {

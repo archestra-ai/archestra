@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "../database";
 import type { AutonomyPolicyOperator, TrustedData } from "../types";
@@ -20,7 +20,10 @@ class TrustedDataPolicyModel {
   }
 
   static async findAll(): Promise<TrustedData.TrustedDataPolicy[]> {
-    return db.select().from(schema.trustedDataPoliciesTable);
+    return db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .orderBy(desc(schema.trustedDataPoliciesTable.createdAt));
   }
 
   static async findById(

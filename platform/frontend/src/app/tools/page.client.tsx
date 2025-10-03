@@ -2,7 +2,12 @@
 
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { Suspense, useState } from "react";
-import type { GetToolsResponses } from "shared/api-client";
+import type {
+  GetToolInvocationPoliciesResponse,
+  GetToolsResponses,
+} from "shared/api-client";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { DebouncedInput } from "@/components/debounced-input";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,6 +31,7 @@ import {
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
+  useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
 import { useTools } from "@/lib/tool.query";
 import { formatDate } from "@/lib/utils";
@@ -172,25 +177,35 @@ function ToolCallPolicies({
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
     useToolInvocationPolicyDeleteMutation();
+  const toolInvocationPolicyUpdateMutation =
+    useToolInvocationPolicyUpdateMutation();
   const { data: operators } = useOperators();
 
   const policies = byToolId[tool.id] || [];
 
+  const argumentNames = Object.keys(tool.parameters?.properties || []);
+
   return (
     <div className="mt-4">
-      <CardTitle className="mb-2 flex flex-row items-center justify-between">
+      <CardTitle className="flex flex-row items-center justify-between">
         <span>Tool Call Policies (before call)</span>
-        <Button
+        <ButtonWithTooltip
           variant="outline"
           size="sm"
           className="bg-accent"
           onClick={() =>
             toolInvocationPolicyCreateMutation.mutate({ toolId: tool.id })
           }
+          disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
+          disabledText="Custom policies require parameters"
         >
           <Plus /> Add
-        </Button>
+        </ButtonWithTooltip>
       </CardTitle>
+      <CardDescription className="mb-4">
+        Decide whether to allow or block tool calling when untrusted data is
+        present
+      </CardDescription>
       <PolicyCard>
         <div className="flex flex-row items-center gap-4">
           <Badge
@@ -213,8 +228,37 @@ function ToolCallPolicies({
           <div className="flex flex-row gap-4 justify-between w-full">
             <div className="flex flex-row items-center gap-4">
               If
-              <Input defaultValue={policy.argumentName} />
-              <Select defaultValue={policy.operator}>
+              <Select
+                defaultValue={policy.argumentName}
+                onValueChange={(value) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    argumentName: value,
+                  })
+                }
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="parameter" />
+                </SelectTrigger>
+                <SelectContent>
+                  {argumentNames.map((argumentName) => (
+                    <SelectItem key={argumentName} value={argumentName}>
+                      {argumentName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                defaultValue={policy.operator}
+                onValueChange={(
+                  value: GetToolInvocationPoliciesResponse["200"]["operator"],
+                ) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    operator: value,
+                  })
+                }
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Operator" />
                 </SelectTrigger>
@@ -226,19 +270,37 @@ function ToolCallPolicies({
                   ))}
                 </SelectContent>
               </Select>
-              <Input defaultValue={policy.value} />
+              <DebouncedInput
+                initialValue={policy.value}
+                onChange={(value) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    value,
+                  })
+                }
+              />
               <ArrowRightIcon className="w-14 h-4" />
-              <Select defaultValue={"false"}>
+              <Select
+                defaultValue={policy.action}
+                onValueChange={(
+                  value: GetToolInvocationPoliciesResponse["200"]["action"],
+                ) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    action: value,
+                  })
+                }
+              >
                 <SelectTrigger className="w-[240px]">
                   <SelectValue placeholder="Allowed for" />
                 </SelectTrigger>
                 <SelectContent>
                   {[
                     {
-                      value: "true",
+                      value: "allow_when_context_is_untrusted",
                       label: "Allow usage when untrusted data is present",
                     },
-                    { value: "false", label: "Block always" },
+                    { value: "block_always", label: "Block always" },
                   ].map(({ value, label }) => (
                     <SelectItem key={label} value={value}>
                       {label}
@@ -246,7 +308,15 @@ function ToolCallPolicies({
                   ))}
                 </SelectContent>
               </Select>
-              <Input defaultValue={policy.reason || ""} placeholder="Reason" />
+              <DebouncedInput
+                initialValue={policy.reason || ""}
+                onChange={(value) =>
+                  toolInvocationPolicyUpdateMutation.mutate({
+                    ...policy,
+                    reason: value,
+                  })
+                }
+              />
             </div>
             <Button
               variant="ghost"
@@ -268,12 +338,16 @@ function ToolCallPolicies({
 function ToolResultPolicies() {
   return (
     <div className="mt-4">
-      <CardTitle className="mb-2 flex flex-row items-center justify-between">
+      <CardTitle className="flex flex-row items-center justify-between">
         <span>Tool Result Policies (after call)</span>
         <Button variant="outline" size="sm" className="bg-accent">
           <Plus /> Add
         </Button>
       </CardTitle>
+      <CardDescription className="mb-4">
+        Decide when to mark tool output as trusted or untrusted and whether to
+        block it from further processing
+      </CardDescription>
       <PolicyCard>
         <div className="flex flex-row items-center gap-4">
           <Badge

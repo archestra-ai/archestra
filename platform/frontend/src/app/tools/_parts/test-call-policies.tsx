@@ -1,11 +1,3 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@radix-ui/react-select";
-import { Switch } from "@radix-ui/react-switch";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import type {
   GetToolInvocationPoliciesResponse,
@@ -16,6 +8,14 @@ import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardDescription, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   useOperators,
   useToolInvocationPolicies,
@@ -145,7 +145,7 @@ export function ToolCallPolicies({
                   })
                 }
               />
-              <ArrowRightIcon className="w-14 h-4" />
+              <ArrowRightIcon className="w-4 h-4" />
               <Select
                 defaultValue={policy.action}
                 onValueChange={(

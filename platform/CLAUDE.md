@@ -30,6 +30,7 @@ cd backend
 pnpm dev             # Start backend in watch mode
 pnpm build           # Compile TypeScript to dist/
 pnpm start           # Run compiled backend
+pnpm test            # Run tests with Vitest
 pnpm db:migrate      # Run database migrations
 pnpm db:migrate:dev  # Run migrations in dev mode
 pnpm db:studio       # Open Drizzle Studio for database inspection
@@ -52,6 +53,7 @@ pnpm cli-chat-with-guardrails  # Test guardrails CLI
 pnpm type-check      # Check TypeScript types across all workspaces
 pnpm lint            # Lint and auto-fix with Biome
 pnpm format          # Format code with Biome
+pnpm test            # Run tests with Vitest (backend only for now)
 ```
 
 ## High-Level Architecture
@@ -235,6 +237,16 @@ The `experiments/` workspace contains prototype features:
 - Recommended rules for React and Next.js
 - Git integration for change detection
 - Scope: All `**/src/**/*.{ts,tsx}` files
+
+### Testing
+
+**Backend Testing** uses Vitest with PGLite for in-memory database testing:
+
+- Test files should be colocated with source files (`.test.ts` extension)
+- Uses PGLite for in-memory PostgreSQL during tests (no real database needed)
+- Run with `pnpm test` from the backend directory or root
+- Test setup automatically runs migrations on the in-memory database
+- Global test utilities are available via `vitest` globals
 
 ### Development Best Practices
 

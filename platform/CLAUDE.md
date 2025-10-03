@@ -170,6 +170,9 @@ The production backend provides:
     - `GET /api/trusted-data-policies/:id` - Get policy
     - `PUT /api/trusted-data-policies/:id` - Update policy
     - `DELETE /api/trusted-data-policies/:id` - Delete policy
+- **Tool Management**:
+  - `GET /api/tools` - List all tools with trust settings
+  - `PATCH /api/tools/:id` - Update tool configuration including trust policies
 
 #### Security Features (Production-Ready)
 
@@ -179,7 +182,10 @@ The backend integrates advanced security guardrails:
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
-  - Actions: allow_when_context_is_untrusted or block_always with optional custom block prompts
+  - Actions: allow_when_context_is_untrusted or block_always with custom reason text
+  - Tools can be configured with:
+    - `allow_usage_when_untrusted_data_is_present`: Allow tool to run with untrusted data
+    - `data_is_trusted_by_default`: Mark tool outputs as trusted by default
 - **Trusted Data Policies**: Mark specific data patterns as trusted sources
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
@@ -191,10 +197,10 @@ The backend integrates advanced security guardrails:
 - **Agent**: Stores AI agents with name and timestamps
 - **Chat**: Stores chat sessions with timestamps and agent reference
 - **Interaction**: Stores messages with taint status and reasoning
-- **Tool**: Stores available tools with metadata
+- **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents
-  - Stores argument path, operator, value, and action
+  - Stores argument path, operator, value, action, and reason
 - **TrustedDataPolicy**: Policies for marking data as trusted
   - Stores attribute path, operator, and value
 - **AgentToolInvocationPolicy**: Junction table linking agents to their policies

@@ -317,4 +317,201 @@ describe("InteractionModel", () => {
       ).toBeUndefined();
     });
   });
+
+  describe("getUntrustedInteractions", () => {
+    test("returns empty array when no untrusted interactions exist", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        } as InteractionContent,
+        trusted: true,
+        blocked: false,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(0);
+    });
+
+    test("returns untrusted tool calls with content", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted_1",
+          content: "untrusted data 1",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted_2",
+          content: "untrusted data 2",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(2);
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_untrusted_1",
+        ),
+      ).toEqual({
+        toolCallId: "call_untrusted_1",
+        content: "untrusted data 1",
+      });
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_untrusted_2",
+        ),
+      ).toEqual({
+        toolCallId: "call_untrusted_2",
+        content: "untrusted data 2",
+      });
+    });
+
+    test("only returns untrusted tool calls, not other untrusted interactions", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "user",
+          content: "untrusted user message",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted tool result",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(1);
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_untrusted",
+        ),
+      ).toBeDefined();
+    });
+
+    test("does not include trusted tool calls", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        } as InteractionContent,
+        trusted: true,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(1);
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_untrusted",
+        ),
+      ).toBeDefined();
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_trusted",
+        ),
+      ).toBeUndefined();
+    });
+
+    test("only returns untrusted interactions for specified chat", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_chat1_untrusted",
+          content: "untrusted in chat 1",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      const otherChat = await ChatModel.create({ agentId });
+      await InteractionModel.create({
+        chatId: otherChat.id,
+        content: {
+          role: "tool",
+          tool_call_id: "call_chat2_untrusted",
+          content: "untrusted in chat 2",
+        } as InteractionContent,
+        trusted: false,
+        blocked: false,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(1);
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_chat1_untrusted",
+        ),
+      ).toBeDefined();
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_chat2_untrusted",
+        ),
+      ).toBeUndefined();
+    });
+
+    test("includes blocked untrusted tool calls", async () => {
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_blocked_untrusted",
+          content: "blocked untrusted data",
+        } as InteractionContent,
+        trusted: false,
+        blocked: true,
+      });
+
+      const untrustedInteractions =
+        await InteractionModel.getUntrustedInteractions(chatId);
+      expect(untrustedInteractions.length).toBe(1);
+      expect(
+        untrustedInteractions.find(
+          (interaction) => interaction.toolCallId === "call_blocked_untrusted",
+        ),
+      ).toEqual({
+        toolCallId: "call_blocked_untrusted",
+        content: "blocked untrusted data",
+      });
+    });
+  });
 });

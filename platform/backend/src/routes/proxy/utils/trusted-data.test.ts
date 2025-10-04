@@ -7,7 +7,13 @@ import {
 } from "@models";
 import type { Tool } from "@types";
 import type { ChatCompletionRequestMessages } from "../types";
-import { evaluatePolicies, redactBlockedToolResultData } from "./trusted-data";
+import {
+  evaluatePolicies,
+  modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData,
+  prepareContextForLLM,
+  redactBlockedToolResultData,
+  substituteUntrustedDataWithVariables,
+} from "./trusted-data";
 
 describe("trusted-data utils", () => {
   let agentId: string;
@@ -531,6 +537,595 @@ describe("trusted-data utils", () => {
         { role: "assistant", content: "Done" },
         { role: "user", content: "Thanks" },
       ]);
+    });
+  });
+
+  describe("modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData", () => {
+    test("appends instructions to existing system prompt", () => {
+      const messages: ChatCompletionRequestMessages = [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: "Hello" },
+      ];
+
+      const modified =
+        modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(
+          messages,
+        );
+
+      expect(modified.length).toBe(2);
+      expect(modified[0].role).toBe("system");
+      expect(modified[0].content).toContain("You are a helpful assistant.");
+      expect(modified[0].content).toContain("$ARCHESTRA_");
+      expect(modified[0].content).toContain("marked as untrusted");
+      expect(modified[1]).toEqual({ role: "user", content: "Hello" });
+    });
+
+    test("creates new system prompt when none exists", () => {
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi there!" },
+      ];
+
+      const modified =
+        modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(
+          messages,
+        );
+
+      expect(modified.length).toBe(3);
+      expect(modified[0].role).toBe("system");
+      expect(modified[0].content).toContain("$ARCHESTRA_");
+      expect(modified[0].content).toContain("marked as untrusted");
+      expect(modified[1]).toEqual({ role: "user", content: "Hello" });
+      expect(modified[2]).toEqual({ role: "assistant", content: "Hi there!" });
+    });
+
+    test("handles empty messages array", () => {
+      const messages: ChatCompletionRequestMessages = [];
+
+      const modified =
+        modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(
+          messages,
+        );
+
+      expect(modified.length).toBe(1);
+      expect(modified[0].role).toBe("system");
+      expect(modified[0].content).toContain("$ARCHESTRA_");
+    });
+
+    test("preserves non-system messages unchanged", () => {
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi!" },
+        { role: "tool", tool_call_id: "call_123", content: "data" },
+      ];
+
+      const modified =
+        modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(
+          messages,
+        );
+
+      // Should add system prompt at beginning
+      expect(modified.length).toBe(4);
+      expect(modified[0].role).toBe("system");
+      expect(modified[1]).toEqual({ role: "user", content: "Hello" });
+      expect(modified[2]).toEqual({ role: "assistant", content: "Hi!" });
+      expect(modified[3]).toEqual({
+        role: "tool",
+        tool_call_id: "call_123",
+        content: "data",
+      });
+    });
+
+    test("only modifies first system prompt when multiple exist", () => {
+      const messages: ChatCompletionRequestMessages = [
+        { role: "system", content: "First system prompt." },
+        { role: "user", content: "Hello" },
+        { role: "system", content: "Second system prompt." },
+        { role: "assistant", content: "Hi!" },
+      ];
+
+      const modified =
+        modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(
+          messages,
+        );
+
+      expect(modified.length).toBe(4);
+      expect(modified[0].role).toBe("system");
+      expect(modified[0].content).toContain("First system prompt.");
+      expect(modified[0].content).toContain("$ARCHESTRA_");
+      expect(modified[1]).toEqual({ role: "user", content: "Hello" });
+      expect(modified[2].role).toBe("system");
+      expect(modified[2].content).toBe("Second system prompt.");
+      expect(modified[3]).toEqual({ role: "assistant", content: "Hi!" });
+    });
+  });
+
+  describe("substituteUntrustedDataWithVariables", () => {
+    test("substitutes untrusted tool messages with variables", async () => {
+      // Create untrusted tool interaction
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "sensitive data",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Get data" },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "sensitive data",
+        },
+        { role: "assistant", content: "Here is the data" },
+      ];
+
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+
+      expect(substituted.length).toBe(3);
+      expect(substituted[0]).toEqual({ role: "user", content: "Get data" });
+      expect(substituted[1]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted",
+        content: "$ARCHESTRA_call_untrusted",
+      });
+      expect(substituted[2]).toEqual({
+        role: "assistant",
+        content: "Here is the data",
+      });
+    });
+
+    test("returns messages unchanged when no untrusted interactions", async () => {
+      // Create trusted tool interaction
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        },
+        trusted: true,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Get data" },
+        { role: "tool", tool_call_id: "call_trusted", content: "trusted data" },
+      ];
+
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+
+      expect(substituted).toEqual(messages);
+    });
+
+    test("handles empty messages array", async () => {
+      const messages: ChatCompletionRequestMessages = [];
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+      expect(substituted).toEqual([]);
+    });
+
+    test("only substitutes untrusted tool messages, not other roles", async () => {
+      // Create untrusted tool interaction
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "untrusted data" },
+        { role: "assistant", content: "untrusted data" },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+      ];
+
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+
+      expect(substituted.length).toBe(3);
+      // User and assistant messages unchanged
+      expect(substituted[0]).toEqual({
+        role: "user",
+        content: "untrusted data",
+      });
+      expect(substituted[1]).toEqual({
+        role: "assistant",
+        content: "untrusted data",
+      });
+      // Tool message substituted
+      expect(substituted[2]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted",
+        content: "$ARCHESTRA_call_untrusted",
+      });
+    });
+
+    test("handles multiple untrusted tool messages", async () => {
+      // Create multiple untrusted tool interactions
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "data 1",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_2",
+          content: "data 2",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "tool", tool_call_id: "call_1", content: "data 1" },
+        { role: "tool", tool_call_id: "call_2", content: "data 2" },
+      ];
+
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+
+      expect(substituted.length).toBe(2);
+      expect(substituted[0]).toEqual({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: "$ARCHESTRA_call_1",
+      });
+      expect(substituted[1]).toEqual({
+        role: "tool",
+        tool_call_id: "call_2",
+        content: "$ARCHESTRA_call_2",
+      });
+    });
+
+    test("substitutes untrusted but not trusted tool messages", async () => {
+      // Create both trusted and untrusted tool interactions
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        },
+        trusted: true,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "tool", tool_call_id: "call_trusted", content: "trusted data" },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+      ];
+
+      const substituted = await substituteUntrustedDataWithVariables(
+        chatId,
+        messages,
+      );
+
+      expect(substituted.length).toBe(2);
+      expect(substituted[0]).toEqual({
+        role: "tool",
+        tool_call_id: "call_trusted",
+        content: "trusted data",
+      });
+      expect(substituted[1]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted",
+        content: "$ARCHESTRA_call_untrusted",
+      });
+    });
+  });
+
+  describe("prepareContextForLLM", () => {
+    test("applies all three transformations in correct order", async () => {
+      // Create untrusted and blocked tool interactions
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_blocked",
+          content: "blocked data",
+        },
+        trusted: false,
+        blocked: true,
+        reason: "Blocked by policy",
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Get data" },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted",
+          content: "untrusted data",
+        },
+        { role: "tool", tool_call_id: "call_blocked", content: "blocked data" },
+      ];
+
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      // Should have system prompt added
+      expect(prepared.length).toBe(4);
+      expect(prepared[0].role).toBe("system");
+      expect(prepared[0].content).toContain("$ARCHESTRA_");
+
+      // Should have untrusted data substituted
+      expect(prepared[2]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted",
+        content: "$ARCHESTRA_call_untrusted",
+      });
+
+      // Should have blocked data redacted
+      expect(prepared[3]).toEqual({
+        role: "tool",
+        tool_call_id: "call_blocked",
+        content: "[REDACTED: Data blocked by policy: Blocked by policy]",
+      });
+    });
+
+    test("handles empty messages array", async () => {
+      const messages: ChatCompletionRequestMessages = [];
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      // Should only have system prompt
+      expect(prepared.length).toBe(1);
+      expect(prepared[0].role).toBe("system");
+      expect(prepared[0].content).toContain("$ARCHESTRA_");
+    });
+
+    test("handles messages with no untrusted or blocked data", async () => {
+      // Create trusted interaction
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        },
+        trusted: true,
+        blocked: false,
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Hello" },
+        { role: "tool", tool_call_id: "call_trusted", content: "trusted data" },
+        { role: "assistant", content: "Here is the data" },
+      ];
+
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      // Should have system prompt added and other messages unchanged
+      expect(prepared.length).toBe(4);
+      expect(prepared[0].role).toBe("system");
+      expect(prepared[1]).toEqual({ role: "user", content: "Hello" });
+      expect(prepared[2]).toEqual({
+        role: "tool",
+        tool_call_id: "call_trusted",
+        content: "trusted data",
+      });
+      expect(prepared[3]).toEqual({
+        role: "assistant",
+        content: "Here is the data",
+      });
+    });
+
+    test("appends to existing system prompt", async () => {
+      const messages: ChatCompletionRequestMessages = [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: "Hello" },
+      ];
+
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      expect(prepared.length).toBe(2);
+      expect(prepared[0].role).toBe("system");
+      expect(prepared[0].content).toContain("You are a helpful assistant.");
+      expect(prepared[0].content).toContain("$ARCHESTRA_");
+      expect(prepared[1]).toEqual({ role: "user", content: "Hello" });
+    });
+
+    test("handles complex scenario with multiple types of data", async () => {
+      // Create multiple interactions with different trust levels
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_trusted",
+          content: "trusted data",
+        },
+        trusted: true,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted_1",
+          content: "untrusted data 1",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_untrusted_2",
+          content: "untrusted data 2",
+        },
+        trusted: false,
+        blocked: false,
+      });
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_blocked",
+          content: "blocked data",
+        },
+        trusted: false,
+        blocked: true,
+        reason: "Contains malicious content",
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "user", content: "Get all data" },
+        { role: "tool", tool_call_id: "call_trusted", content: "trusted data" },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted_1",
+          content: "untrusted data 1",
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_untrusted_2",
+          content: "untrusted data 2",
+        },
+        { role: "tool", tool_call_id: "call_blocked", content: "blocked data" },
+        { role: "assistant", content: "Here are all results" },
+      ];
+
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      // Should have system prompt + original messages
+      expect(prepared.length).toBe(7);
+
+      // System prompt should be added
+      expect(prepared[0].role).toBe("system");
+      expect(prepared[0].content).toContain("$ARCHESTRA_");
+
+      // User message unchanged
+      expect(prepared[1]).toEqual({ role: "user", content: "Get all data" });
+
+      // Trusted data unchanged
+      expect(prepared[2]).toEqual({
+        role: "tool",
+        tool_call_id: "call_trusted",
+        content: "trusted data",
+      });
+
+      // Untrusted data substituted with variables
+      expect(prepared[3]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted_1",
+        content: "$ARCHESTRA_call_untrusted_1",
+      });
+      expect(prepared[4]).toEqual({
+        role: "tool",
+        tool_call_id: "call_untrusted_2",
+        content: "$ARCHESTRA_call_untrusted_2",
+      });
+
+      // Blocked data redacted
+      expect(prepared[5]).toEqual({
+        role: "tool",
+        tool_call_id: "call_blocked",
+        content:
+          "[REDACTED: Data blocked by policy: Contains malicious content]",
+      });
+
+      // Assistant message unchanged
+      expect(prepared[6]).toEqual({
+        role: "assistant",
+        content: "Here are all results",
+      });
+    });
+
+    test("applies transformations in correct order: system prompt, substitution, redaction", async () => {
+      // This test verifies the order matters - we should:
+      // 1. Add system prompt instructions
+      // 2. Substitute untrusted data with variables
+      // 3. Redact blocked data
+      // The order ensures the LLM gets proper instructions before seeing substituted/redacted data
+
+      await InteractionModel.create({
+        chatId,
+        content: {
+          role: "tool",
+          tool_call_id: "call_data",
+          content: "some data",
+        },
+        trusted: false,
+        blocked: true,
+        reason: "Test reason",
+      });
+
+      const messages: ChatCompletionRequestMessages = [
+        { role: "tool", tool_call_id: "call_data", content: "some data" },
+      ];
+
+      const prepared = await prepareContextForLLM(chatId, messages);
+
+      // System prompt should be first
+      expect(prepared[0].role).toBe("system");
+
+      // Data should be both untrusted (normally substituted) BUT also blocked (so redacted instead)
+      // Since redaction happens last, blocked data should be redacted, not substituted
+      expect(prepared[1]).toEqual({
+        role: "tool",
+        tool_call_id: "call_data",
+        content: "[REDACTED: Data blocked by policy: Test reason]",
+      });
     });
   });
 });

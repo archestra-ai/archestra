@@ -1,5 +1,5 @@
 import db, { schema } from "@database";
-import type { InsertInteraction } from "@types";
+import type { InsertInteraction, InteractionContent } from "@types";
 import { and, asc, eq, type SQL } from "drizzle-orm";
 
 class InteractionModel {
@@ -61,6 +61,36 @@ class InteractionModel {
         const toolCallId = interaction.content.tool_call_id;
         if (toolCallId) {
           data.push({ toolCallId, reason: interaction.reason });
+        }
+      }
+    }
+
+    return data;
+  }
+
+  /**
+   * Get all blocked tool calls for a chat
+   *
+   * Returns a list of interactions that have been marked as blocked by trusted data policies
+   */
+  static async getUntrustedInteractions(
+    chatId: string,
+  ): Promise<{ toolCallId: string; content: InteractionContent["content"] }[]> {
+    const interactions = await InteractionModel.getAllInteractionsForChat(
+      chatId,
+      [eq(schema.interactionsTable.trusted, false)],
+    );
+
+    const data: {
+      toolCallId: string;
+      content: InteractionContent["content"];
+    }[] = [];
+
+    for (const { content } of interactions) {
+      if (content.role === "tool") {
+        const toolCallId = content.tool_call_id;
+        if (toolCallId) {
+          data.push({ toolCallId, content: content.content });
         }
       }
     }

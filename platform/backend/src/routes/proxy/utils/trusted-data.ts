@@ -1,6 +1,24 @@
 import { InteractionModel, TrustedDataPolicyModel } from "@models";
 import type { ChatCompletionRequestMessages } from "../types";
 
+const DATA_VARIABLE_PREFIX = "$ARCHESTRA_";
+
+const AKINATOR_SYSTEM_PROMPT_INSTRUCTIONS = `
+You may receive data from tool calls which is "marked as untrusted" and mentions that it is referenced by a variable
+that will start with ${DATA_VARIABLE_PREFIX}. This means that you will not have the full/unredacted view of that data.
+
+However, you may need to use this data in subsequent tool calls or responses. If you would like to better understand
+this data, you can ask a question about it, which you should expect yes/no answers to, wrapped in
+<archestra_data_question>...</archestra_data_question> blocks.
+
+Example:
+<archestra_data_question>
+Is this data about X?
+</archestra_data_question>
+
+You should respond with your question, which you should expect yes/no answers to, wrapped in <archestra_data_question>...</archestra_data_question> blocks.
+`;
+
 /**
  * Extract tool name from conversation history by finding the assistant message
  * that contains the tool_call_id
@@ -112,4 +130,102 @@ export const redactBlockedToolResultData = async (
     }
     return message;
   });
+};
+
+/**
+ * if a system prompt message already exists, append our instructions to it, otherwise,
+ * create a new system prompt message as the first message in the messages array
+ */
+export const modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData =
+  (messages: ChatCompletionRequestMessages): ChatCompletionRequestMessages => {
+    let systemPromptModified = false;
+
+    const modifiedMessages = messages.map((message) => {
+      if (message.role === "system" && !systemPromptModified) {
+        systemPromptModified = true;
+
+        if (typeof message.content === "string") {
+          return {
+            ...message,
+            content: `${message.content}\n\n${AKINATOR_SYSTEM_PROMPT_INSTRUCTIONS}`,
+          };
+        } else {
+          return {
+            ...message,
+            content: [
+              ...message.content,
+              {
+                type: "text" as const,
+                text: AKINATOR_SYSTEM_PROMPT_INSTRUCTIONS,
+              },
+            ],
+          };
+        }
+      }
+      return message;
+    });
+
+    if (!systemPromptModified) {
+      modifiedMessages.unshift({
+        role: "system",
+        content: AKINATOR_SYSTEM_PROMPT_INSTRUCTIONS,
+      });
+    }
+    return modifiedMessages;
+  };
+
+export const substituteUntrustedDataWithVariables = async (
+  chatId: string,
+  messages: ChatCompletionRequestMessages,
+): Promise<ChatCompletionRequestMessages> => {
+  const untrustedInteractions =
+    await InteractionModel.getUntrustedInteractions(chatId);
+
+  // If no untrusted interactions, return messages as-is
+  if (untrustedInteractions.length === 0) {
+    return messages;
+  }
+
+  console.info("original messages", messages);
+
+  const modifiedMessages = messages.map((message) => {
+    if (message.role === "tool" && message.tool_call_id) {
+      const untrustedInteraction = untrustedInteractions.find(
+        (interaction) => interaction.toolCallId === message.tool_call_id,
+      );
+      if (untrustedInteraction) {
+        return {
+          ...message,
+          content: `$ARCHESTRA_${message.tool_call_id}`,
+        };
+      }
+    }
+    return message;
+  });
+
+  console.info("modified messages", modifiedMessages);
+
+  return modifiedMessages;
+};
+
+export const prepareContextForLLM = async (
+  chatId: string,
+  messages: ChatCompletionRequestMessages,
+): Promise<ChatCompletionRequestMessages> => {
+  const messagesWithModifiedSystemPrompt =
+    modifySystemPromptToIncludeInstructionsAboutHowToUseUntrustedData(messages);
+
+  const messagesWithUntrustedDataSubstituted =
+    await substituteUntrustedDataWithVariables(
+      chatId,
+      messagesWithModifiedSystemPrompt,
+    );
+
+  const messagesWithRedactedBlockedToolResultData =
+    await redactBlockedToolResultData(
+      chatId,
+      messagesWithUntrustedDataSubstituted,
+    );
+
+  return messagesWithRedactedBlockedToolResultData;
 };

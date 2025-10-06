@@ -280,6 +280,7 @@ The platform uses [release-please](https://github.com/googleapis/release-please)
   2. Helm chart is published to Google Artifact Registry
 - **Changelog**: Maintained in `platform/CHANGELOG.md`
 - **Release Configuration**: See `.github/release-please/release-please-config.json`
+- **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
 
 #### Release Workflow Details
 
@@ -291,10 +292,26 @@ The release process is triggered automatically when:
    - Image is pushed to DockerHub with the new version tag
    - Helm chart (from `platform/helm/`) is packaged and pushed to GAR
 
+The release workflow (`release-please.yml`) monitors both `desktop_app` and `platform` packages:
+- Outputs separate release states: `platform_release_created` and `desktop_release_created`
+- Platform releases trigger:
+  - `build-and-push-platform-docker-image-to-dockerhub` job
+  - `publish-platform-helm-chart` job
+- Desktop releases remain unchanged
+
 #### Helm Chart
 
 The platform includes a production-ready Helm chart for Kubernetes deployments:
 - **Location**: `platform/helm/`
-- **Features**: Ingress, HPA, ServiceAccount, customizable resource limits
+- **Chart Name**: archestra-platform
+- **Features**: 
+  - Deployment with configurable replicas
+  - Service (ClusterIP by default)
+  - Optional Ingress with TLS support
+  - Optional HorizontalPodAutoscaler
+  - ServiceAccount with annotations support
+  - Configurable resource limits and requests
+  - Liveness and readiness probes
 - **Values**: Configurable via `values.yaml`
 - **Release**: Published to `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
+- **Testing**: Basic Helm unit tests included in `tests/`

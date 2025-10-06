@@ -1,0 +1,9 @@
+services:
+  platform:
+    image: archestra/platform:latest
+    container_name: archestra-platform
+    ports:
+      - "3000:3000"
+      - "9000:9000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}

@@ -35,7 +35,6 @@ fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
-  console.info("Starting server", process.env.NODE_ENV);
   if (isDevEnv()) {
     console.info("Running migrations on dev env");
     await runPgLiteMigrationsOnDevEnv();

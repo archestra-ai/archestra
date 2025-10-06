@@ -268,3 +268,15 @@ The `experiments/` workspace contains prototype features:
 - Use workspace-relative imports within each workspace
 - Run `pnpm type-check` before committing to catch type errors
 - Use `tilt up` for the best development experience with hot reload
+
+### Release Process
+
+The platform uses [release-please](https://github.com/googleapis/release-please) for automated release management:
+
+- **Version**: Currently at v0.0.0 (initial version)
+- **Release PRs**: Automatically created when conventional commits are merged
+- **Platform Releases**: When a platform release is merged:
+  1. Docker image is built and published to DockerHub
+  2. Helm chart is published for Kubernetes deployments
+- **Changelog**: Maintained in `platform/CHANGELOG.md`
+- **Release Configuration**: See `.github/release-please/release-please-config.json`

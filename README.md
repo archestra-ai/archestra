@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="https://www.archestra.ai/docs/getting-started-desktop">Getting Started</a>
+  <a href="https://www.archestra.ai/docs/platfrom-quickstart">Getting Started</a>
   - <a href="https://github.com/archestra-ai/archestra/releases">Releases</a>
   - <a href="https://github.com/archestra-ai/archestra/issues">Bug reports</a>
   - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Commuity</a>

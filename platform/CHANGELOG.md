@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.2](https://github.com/archestra-ai/archestra/compare/platform-v0.0.1...platform-v0.0.2) (2025-10-06)
+
+
+### Bug Fixes
+
+* tweak platform dockerhub image tags ([#636](https://github.com/archestra-ai/archestra/issues/636)) ([9fd9959](https://github.com/archestra-ai/archestra/commit/9fd9959fe0c0e586c05bea34737d76b04b07abde))
+
 ## 0.0.1 (2025-10-06)
 
 

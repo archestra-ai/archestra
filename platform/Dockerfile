@@ -124,6 +124,11 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Set defaults for database credentials
+POSTGRES_USER=${POSTGRES_USER:-archestra}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
+POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
+
 # Initialize PostgreSQL if data directory is empty
 if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
     echo "Initializing PostgreSQL database..."
@@ -138,9 +143,9 @@ if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
 
     # Create user and database
     psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
-        CREATE USER archestra WITH PASSWORD 'archestra_dev_password';
-        CREATE DATABASE archestra_dev OWNER archestra;
-        GRANT ALL PRIVILEGES ON DATABASE archestra_dev TO archestra;
+        CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
+        CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
+        GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
 EOSQL
 
     # Stop PostgreSQL
@@ -148,6 +153,10 @@ EOSQL
 
     echo "PostgreSQL initialized successfully"
 fi
+
+# Update supervisord config with actual DATABASE_URL
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
 
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisord.conf

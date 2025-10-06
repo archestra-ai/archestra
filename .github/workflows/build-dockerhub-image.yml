@@ -1,0 +1,79 @@
+# https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images#publishing-images-to-docker-hub
+name: Build Docker Hub image
+
+on:
+  workflow_call:
+    inputs:
+      image_directory:
+        description: "Directory containing the Dockerfile"
+        required: true
+        type: string
+      org_namespace:
+        description: "Organization namespace for the Docker image"
+        required: false
+        type: string
+        # TODO: replace with actual org namespace once we have one
+        default: archestra
+      image_name:
+        description: "Name of the Docker image"
+        required: true
+        type: string
+      version:
+        description: "Version tag for the Docker image"
+        required: true
+        type: string
+      push_image:
+        description: "Whether to push the image to Docker Hub"
+        required: true
+        type: boolean
+    secrets:
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
+
+jobs:
+  build-dockerhub-image:
+    name: Build Docker Hub image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Log in to Docker Hub
+        if: inputs.push_image
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: ${{ inputs.org_namespace }}/${{ inputs.image_name }}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
+          file: ${{ inputs.image_directory }}/Dockerfile
+          push: ${{ inputs.push_image }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: index.docker.io/${{ inputs.org_namespace }}/${{ inputs.image_name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: ${{ inputs.push_image }}

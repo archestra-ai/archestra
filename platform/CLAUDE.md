@@ -276,7 +276,25 @@ The platform uses [release-please](https://github.com/googleapis/release-please)
 - **Version**: Currently at v0.0.0 (initial version)
 - **Release PRs**: Automatically created when conventional commits are merged
 - **Platform Releases**: When a platform release is merged:
-  1. Docker image is built and published to DockerHub
-  2. Helm chart is published for Kubernetes deployments
+  1. Docker image is built and published to DockerHub (archestra/platform)
+  2. Helm chart is published to Google Artifact Registry
 - **Changelog**: Maintained in `platform/CHANGELOG.md`
 - **Release Configuration**: See `.github/release-please/release-please-config.json`
+
+#### Release Workflow Details
+
+The release process is triggered automatically when:
+1. Conventional commits are merged to main
+2. Release-please creates a PR with version bumps
+3. When the release PR is merged, the following happens:
+   - Platform Docker image is built from `platform/` directory
+   - Image is pushed to DockerHub with the new version tag
+   - Helm chart (from `platform/helm/`) is packaged and pushed to GAR
+
+#### Helm Chart
+
+The platform includes a production-ready Helm chart for Kubernetes deployments:
+- **Location**: `platform/helm/`
+- **Features**: Ingress, HPA, ServiceAccount, customizable resource limits
+- **Values**: Configurable via `values.yaml`
+- **Release**: Published to `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`

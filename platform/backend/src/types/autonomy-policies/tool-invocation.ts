@@ -1,6 +1,6 @@
-import { schema } from "@database";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
+import { schema } from "@/database";
 import { SupportedOperatorSchema } from "./operator";
 
 const ToolInvocationPolicyActionSchema = z.enum([

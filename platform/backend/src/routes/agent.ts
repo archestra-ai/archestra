@@ -1,12 +1,12 @@
-import { AgentModel } from "@models";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { AgentModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertAgentSchema,
   SelectAgentSchema,
   UuidIdSchema,
-} from "@types";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
+} from "@/types";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

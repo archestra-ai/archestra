@@ -1,13 +1,13 @@
-import { ChatModel } from "@models";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { ChatModel } from "@/models";
 import {
   ChatWithInteractionsSchema,
   ErrorResponseSchema,
   InsertChatSchema,
   SelectChatSchema,
   UuidIdSchema,
-} from "@types";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
+} from "@/types";
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(

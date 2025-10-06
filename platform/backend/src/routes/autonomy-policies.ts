@@ -1,13 +1,13 @@
-import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@models";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
 import {
   AutonomyPolicyOperator,
   ErrorResponseSchema,
   ToolInvocation,
   TrustedData,
   UuidIdSchema,
-} from "@types";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
+} from "@/types";
 
 const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

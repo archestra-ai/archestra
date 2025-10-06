@@ -1,4 +1,3 @@
-import config from "@config";
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
@@ -9,6 +8,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import config from "@/config";
 import * as routes from "./routes";
 
 const {

@@ -1,6 +1,6 @@
-import db, { schema } from "@database";
-import type { InsertInteraction } from "@types";
 import { and, asc, eq, type SQL } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { InsertInteraction } from "@/types";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {

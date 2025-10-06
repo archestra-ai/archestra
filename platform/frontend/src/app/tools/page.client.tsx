@@ -1,7 +1,7 @@
 "use client";
 
+import type { GetToolsResponses } from "@shared/api-client";
 import { Suspense } from "react";
-import type { GetToolsResponses } from "shared/api-client";
 import { LoadingSpinner } from "@/components/loading";
 import {
   Card,

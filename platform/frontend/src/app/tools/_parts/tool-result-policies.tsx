@@ -1,9 +1,9 @@
-import { toPath } from "lodash-es";
-import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import type {
   GetToolsResponse,
   GetTrustedDataPoliciesResponse,
-} from "shared/api-client";
+} from "@shared/api-client";
+import { toPath } from "lodash-es";
+import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

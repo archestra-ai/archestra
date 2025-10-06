@@ -1,7 +1,7 @@
-import db, { schema } from "@database";
-import type { ChatWithInteractions, InsertChatSchema } from "@types";
 import { desc, eq } from "drizzle-orm";
 import type { z } from "zod";
+import db, { schema } from "@/database";
+import type { ChatWithInteractions, InsertChatSchema } from "@/types";
 
 class ChatModel {
   static async create(data: z.infer<typeof InsertChatSchema>) {

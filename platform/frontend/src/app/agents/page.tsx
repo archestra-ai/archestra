@@ -1,14 +1,14 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
 import {
   createAgent,
   deleteAgent,
   type GetAgentsResponse,
   getAgents,
   updateAgent,
-} from "shared/api-client";
+} from "@shared/api-client";
+import { Pencil, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

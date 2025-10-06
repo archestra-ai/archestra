@@ -1,7 +1,7 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { ErrorResponseSchema, OpenAi } from "@types";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
+import { ErrorResponseSchema, OpenAi } from "@/types";
 import { ChatCompletionsHeadersSchema } from "./types";
 import * as utils from "./utils";
 

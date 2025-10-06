@@ -1,5 +1,5 @@
-import { ToolInvocationPolicyModel } from "@models";
 import type OpenAI from "openai";
+import { ToolInvocationPolicyModel } from "@/models";
 
 /**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,

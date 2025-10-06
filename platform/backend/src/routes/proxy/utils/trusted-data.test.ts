@@ -4,8 +4,8 @@ import {
   InteractionModel,
   ToolModel,
   TrustedDataPolicyModel,
-} from "@models";
-import type { Tool } from "@types";
+} from "@/models";
+import type { Tool } from "@/types";
 import type { ChatCompletionRequestMessages } from "../types";
 import { evaluatePolicies, redactBlockedToolResultData } from "./trusted-data";
 

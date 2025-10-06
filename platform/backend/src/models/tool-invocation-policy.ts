@@ -1,7 +1,7 @@
-import db, { schema } from "@database";
-import type { ToolInvocation } from "@types";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
+import db, { schema } from "@/database";
+import type { ToolInvocation } from "@/types";
 import InteractionModel from "./interaction";
 import ToolModel from "./tool";
 

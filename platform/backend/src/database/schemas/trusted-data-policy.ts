@@ -1,5 +1,5 @@
-import type { AutonomyPolicyOperator, TrustedData } from "@types";
 import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 import toolsTable from "./tool";
 
 const trustedDataPoliciesTable = pgTable("trusted_data_policies", {

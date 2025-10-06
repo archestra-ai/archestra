@@ -1,4 +1,4 @@
-import type { GetToolsResponses } from "shared/api-client";
+import type { GetToolsResponses } from "@shared/api-client";
 import { Badge } from "@/components/ui/badge";
 import { CardDescription, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";

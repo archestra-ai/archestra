@@ -1,13 +1,13 @@
 {
-  "name": "backend",
+  "name": "@backend",
   "version": "0.0.1",
   "description": "",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "tsc --project ./tsconfig.build.json",
-    "start": "node dist/server.js",
+    "build": "tsc && tsc-alias",
+    "start": " node dist/server.js",
     "dev": "tsx --watch src/server.ts",
     "test": "vitest",
     "lint": "biome check",
@@ -25,6 +25,7 @@
     "@fastify/swagger": "^9.5.2",
     "ai": "^5.0.57",
     "dotenv": "^17.2.2",
+    "drizzle-kit": "^0.31.5",
     "drizzle-orm": "^0.44.5",
     "drizzle-zod": "^0.8.3",
     "fastify": "^5.6.1",
@@ -32,6 +33,7 @@
     "lodash": "^4.17.21",
     "openai": "^6.0.0",
     "pg": "^8.16.3",
+    "pino-pretty": "^13.1.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.11"
   },
@@ -41,8 +43,7 @@
     "@types/node": "^20.0.0",
     "@types/pg": "^8.15.5",
     "@types/uuid": "^11.0.0",
-    "drizzle-kit": "^0.31.5",
-    "pino-pretty": "^13.1.1",
+    "tsc-alias": "^1.8.10",
     "tsx": "^4.20.6",
     "typescript": "^5.9.0",
     "vitest": "^3.2.4"

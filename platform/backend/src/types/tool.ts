@@ -1,10 +1,11 @@
-import { schema } from "@database";
 import {
   createInsertSchema,
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
 import { z } from "zod";
+import { schema } from "@/database";
+
 import { OpenAi } from "./llm-providers";
 
 /**

@@ -1,10 +1,10 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   type GetChatResponses,
   type GetChatsResponses,
   getChat,
   getChats,
-} from "shared/api-client";
+} from "@shared/api-client";
+import { useSuspenseQuery } from "@tanstack/react-query";
 
 export function useChats({
   initialData,

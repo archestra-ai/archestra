@@ -1,8 +1,8 @@
-import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import type {
   GetToolInvocationPoliciesResponse,
   GetToolsResponses,
-} from "shared/api-client";
+} from "@shared/api-client";
+import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";

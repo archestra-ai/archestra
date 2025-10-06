@@ -1,4 +1,4 @@
-import { type GetChatResponses, getChat } from "shared/api-client";
+import { type GetChatResponses, getChat } from "@shared/api-client";
 import { ChatPage } from "./page.client";
 
 export default async function ChatPageServer({

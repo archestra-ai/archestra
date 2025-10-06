@@ -5,6 +5,7 @@
   "author": "Archestra",
   "scripts": {
     "dev": "turbo dev",
+    "build": "turbo build",
     "lint": "turbo lint",
     "lint:fix": "turbo lint:fix",
     "lint:fix:unsafe": "turbo lint:fix:unsafe",

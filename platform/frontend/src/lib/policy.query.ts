@@ -1,9 +1,4 @@
 import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
-import {
   createToolInvocationPolicy,
   createTrustedDataPolicy,
   deleteToolInvocationPolicy,
@@ -17,7 +12,12 @@ import {
   type UpdateTrustedDataPolicyData,
   updateToolInvocationPolicy,
   updateTrustedDataPolicy,
-} from "shared/api-client";
+} from "@shared/api-client";
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 
 export function useToolInvocationPolicies() {
   return useSuspenseQuery({

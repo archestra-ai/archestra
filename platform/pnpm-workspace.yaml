@@ -1,5 +1,4 @@
 packages:
   - "backend"
-  - "experiments"
   - "frontend"
   - "shared"

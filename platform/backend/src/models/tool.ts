@@ -1,6 +1,6 @@
-import db, { schema } from "@database";
-import type { InsertTool, Tool, UpdateTool } from "@types";
 import { desc, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { InsertTool, Tool, UpdateTool } from "@/types";
 
 class ToolModel {
   static async createToolIfNotExists(tool: InsertTool) {

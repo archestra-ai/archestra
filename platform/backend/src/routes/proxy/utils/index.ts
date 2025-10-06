@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
-import { AgentModel, ChatModel, InteractionModel, ToolModel } from "@models";
-import type { Chat, ErrorResponseSchema } from "@types";
 import type OpenAI from "openai";
 import type { z } from "zod";
+import { AgentModel, ChatModel, InteractionModel, ToolModel } from "@/models";
+import type { Chat, ErrorResponseSchema } from "@/types";
 import type {
   ChatCompletionRequestMessages,
   ChatCompletionRequestTools,

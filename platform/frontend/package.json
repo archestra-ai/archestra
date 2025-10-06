@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "@frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.59",
+    "@shared": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -47,7 +48,6 @@
     "react-error-boundary": "^6.0.0",
     "react-hook-form": "^7.63.0",
     "react-syntax-highlighter": "^15.6.6",
-    "shared": "workspace:*",
     "sonner": "^2.0.7",
     "streamdown": "^1.3.0",
     "tailwind-merge": "^3.3.1",

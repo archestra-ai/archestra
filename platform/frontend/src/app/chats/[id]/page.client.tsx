@@ -1,7 +1,7 @@
 "use client";
 
+import type { GetChatResponses } from "@shared/api-client";
 import { Suspense } from "react";
-import type { GetChatResponses } from "shared/api-client";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo, { type PartialUIMessage } from "@/components/chatbot-demo";
 import Divider from "@/components/divider";

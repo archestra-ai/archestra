@@ -1,5 +1,5 @@
-import { OpenAi, UuidIdSchema } from "@types";
 import { z } from "zod";
+import { OpenAi, UuidIdSchema } from "@/types";
 
 export const ChatCompletionsHeadersSchema = z.object({
   "x-archestra-chat-id": UuidIdSchema.optional().describe(

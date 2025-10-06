@@ -18,15 +18,12 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
-    "rootDir": ".",
+    "rootDir": "./src",
     "types": ["vitest/globals"],
     "paths": {
-      "@config": ["./src/config.ts"],
-      "@database": ["./src/database"],
-      "@models": ["./src/models"],
-      "@types": ["./src/types"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "test-setup.ts"],
-  "exclude": ["node_modules", "test", "**/*spec.ts"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "test", "**/*spec.ts", "src/test-setup.ts"]
 }

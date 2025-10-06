@@ -1,6 +1,6 @@
-import db, { schema } from "@database";
-import type { Agent, InsertAgent } from "@types";
 import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { Agent, InsertAgent } from "@/types";
 
 class AgentModel {
   static async create(agent: InsertAgent): Promise<Agent> {

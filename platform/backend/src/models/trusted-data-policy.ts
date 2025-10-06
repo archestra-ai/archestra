@@ -1,7 +1,7 @@
-import db, { schema } from "@database";
-import type { AutonomyPolicyOperator, TrustedData } from "@types";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
+import db, { schema } from "@/database";
+import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 import ToolModel from "./tool";
 
 class TrustedDataPolicyModel {

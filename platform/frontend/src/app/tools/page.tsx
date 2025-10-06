@@ -1,5 +1,7 @@
-import { type GetToolsResponses, getTools } from "shared/api-client";
+import { type GetToolsResponses, getTools } from "@shared/api-client";
 import { ToolsPage } from "./page.client";
+
+export const dynamic = "force-dynamic";
 
 export default async function ToolsPageServer() {
   let initialData: GetToolsResponses["200"] | undefined;

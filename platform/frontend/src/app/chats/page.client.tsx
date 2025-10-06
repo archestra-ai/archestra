@@ -1,9 +1,9 @@
 "use client";
 
+import type { GetChatsResponses } from "@shared/api-client";
 import { Copy } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import type { GetChatsResponses } from "shared/api-client";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";

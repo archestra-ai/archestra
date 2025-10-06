@@ -12,7 +12,6 @@ on:
         description: "Organization namespace for the Docker image"
         required: false
         type: string
-        # TODO: replace with actual org namespace once we have one
         default: archestra
       image_name:
         description: "Name of the Docker image"

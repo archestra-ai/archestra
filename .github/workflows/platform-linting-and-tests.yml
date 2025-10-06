@@ -40,7 +40,6 @@ jobs:
       image_name: platform
       version: ${{ github.sha }}
       # TODO: remove this when done testing..
-      org_namespace: joeyarchestra
       push_image: true
 
   helm-chart-linting-and-tests:

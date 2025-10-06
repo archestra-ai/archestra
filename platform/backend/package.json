@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
-    "dev": "tsx --watch src/server.ts",
+    "dev": "NODE_ENV=development tsx --watch src/server.ts",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",

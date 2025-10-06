@@ -60,10 +60,11 @@ class ToolInvocationPolicyModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const [deletedPolicy] = await db
       .delete(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.toolInvocationPoliciesTable.id, id))
+      .returning();
+    return Boolean(deletedPolicy);
   }
 
   /**

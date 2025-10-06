@@ -61,7 +61,7 @@ RUN chmod +x ./backend/start.sh
 
 EXPOSE 9000
 
-CMD ["sh", "backend/start.sh"]
+CMD ["sh", "backend/start-prod.sh"]
 
 # <----- Frontend runner stage ----->
 FROM base AS frontend

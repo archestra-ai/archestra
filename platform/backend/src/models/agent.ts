@@ -52,10 +52,11 @@ class AgentModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const [deletedAgent] = await db
       .delete(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.agentsTable.id, id))
+      .returning();
+    return Boolean(deletedAgent);
   }
 }
 

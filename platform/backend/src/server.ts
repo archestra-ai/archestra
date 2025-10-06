@@ -9,7 +9,9 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { runPgLiteMigrationsOnDevEnv } from "./database";
 import * as routes from "./routes";
+import { isDevEnv } from "./utils";
 
 const {
   api: { port, name, version, host },
@@ -33,6 +35,11 @@ fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
+  console.info("Starting server", process.env.NODE_ENV);
+  if (isDevEnv()) {
+    console.info("Running migrations on dev env");
+    await runPgLiteMigrationsOnDevEnv();
+  }
   try {
     // Register CORS plugin to allow cross-origin requests from frontend
     await fastify.register(fastifyCors, {

@@ -54,10 +54,11 @@ class TrustedDataPolicyModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const result = await db
+    const [deletedPolicy] = await db
       .delete(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+      .where(eq(schema.trustedDataPoliciesTable.id, id))
+      .returning();
+    return Boolean(deletedPolicy);
   }
 
   /**

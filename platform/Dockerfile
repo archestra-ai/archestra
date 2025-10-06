@@ -48,18 +48,20 @@ ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
 
-# Install production dependencies only
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter=@backend
+# Install dependencies
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend
 
 # Copy built backend and migrations
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
+COPY --from=builder /app/backend/start.sh ./backend/start.sh
+
+RUN chmod +x ./backend/start.sh
 
 EXPOSE 9000
 
-# Migrations are run via docker-compose command, not in the image build
-CMD ["node", "backend/dist/server.js"]
+CMD ["sh", "backend/start.sh"]
 
 # <----- Frontend runner stage ----->
 FROM base AS frontend

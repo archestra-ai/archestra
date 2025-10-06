@@ -11,7 +11,7 @@ services:
       - POSTGRES_PASSWORD=archestra_dev_password
       - POSTGRES_DB=archestra_dev
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U archestra']
+      test: ['CMD-SHELL', 'pg_isready -U archestra -d archestra_dev']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,7 +34,6 @@ services:
     volumes:
       # Mount migrations for runtime access
       - ./backend/src/database/migrations:/app/backend/src/database/migrations:ro
-    command: sh -c "cd /app/backend && npx drizzle-kit migrate && cd /app && node backend/dist/server.js"
 
   frontend:
     build:

@@ -307,12 +307,19 @@ The platform Docker image is published to DockerHub:
 - **Triggered by**: Platform releases from release-please
 - **Version Tags**: Uses the platform version from release-please output
 - **Workflow**: `.github/workflows/build-dockerhub-image.yml`
+- **Authentication**: Requires `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets
+- **Build Features**:
+  - Multi-stage builds supported via Dockerfile
+  - Metadata extraction for tags and labels
+  - Artifact attestation for provenance tracking
+  - Optional push based on workflow inputs
 
 #### Helm Chart
 
 The platform includes a production-ready Helm chart for Kubernetes deployments:
 - **Location**: `platform/helm/`
 - **Chart Name**: archestra-platform
+- **Version**: Automatically set from release-please output
 - **Features**: 
   - Deployment with configurable replicas
   - Service (ClusterIP by default)
@@ -321,6 +328,15 @@ The platform includes a production-ready Helm chart for Kubernetes deployments:
   - ServiceAccount with annotations support
   - Configurable resource limits and requests
   - Liveness and readiness probes
+  - Environment variables and secrets management
+  - Security context configuration
+  - Node selector and tolerations support
 - **Values**: Configurable via `values.yaml`
-- **Release**: Published to `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
-- **Testing**: Basic Helm unit tests included in `tests/`
+- **Publishing**:
+  - **Repository**: `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
+  - **Authentication**: Google Artifact Registry via Workload Identity Federation
+  - **Workflow**: `.github/workflows/publish-platform-helm-chart.yml`
+- **Testing**: 
+  - Helm lint validation in CI
+  - Helm unit tests via helm-unittest plugin
+  - Basic connectivity test included in `tests/`

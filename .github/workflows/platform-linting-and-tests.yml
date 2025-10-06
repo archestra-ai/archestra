@@ -65,4 +65,4 @@ jobs:
         # NOTE: can't use ${{ github.sha }} for version here because it's not a valid version number
         # and helm package explicitly checks this
         run: |
-          helm package . --version v0.0.1
+          helm package . --version v0.0.1 --app-version v0.0.1

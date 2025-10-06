@@ -47,7 +47,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ inputs.version }}
         run: |
-          helm package . --version $IMAGE_TAG
+          helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
 
       - name: helm push
         if: inputs.push_chart

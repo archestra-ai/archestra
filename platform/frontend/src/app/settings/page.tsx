@@ -29,7 +29,7 @@ export default function SettingsPage() {
       <CardContent className="px-0">
         <Card>
           <CardContent>
-            <code className="text-sm">http://localhost:9000</code>
+            <code className="text-sm">http://localhost:9000/v1</code>
           </CardContent>
         </Card>
       </CardContent>

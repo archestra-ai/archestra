@@ -23,7 +23,7 @@ const BACKEND_URL = "http://localhost:9000";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "dummy-key",
-  baseURL: `${BACKEND_URL}/api/proxy/openai`,
+  baseURL: `${BACKEND_URL}/v1`,
 });
 
 /**

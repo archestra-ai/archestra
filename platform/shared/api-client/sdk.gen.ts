@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteApiProxyOpenaiBy__Data, DeleteApiProxyOpenaiBy__Responses, DeleteApiProxyOpenaiData, DeleteApiProxyOpenaiResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetApiProxyOpenaiBy__Data, GetApiProxyOpenaiBy__Responses, GetApiProxyOpenaiData, GetApiProxyOpenaiResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, HeadApiProxyOpenaiBy__Data, HeadApiProxyOpenaiBy__Responses, HeadApiProxyOpenaiData, HeadApiProxyOpenaiResponses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsApiProxyOpenaiBy__Data, OptionsApiProxyOpenaiBy__Responses, OptionsApiProxyOpenaiData, OptionsApiProxyOpenaiResponses, PatchApiProxyOpenaiBy__Data, PatchApiProxyOpenaiBy__Responses, PatchApiProxyOpenaiData, PatchApiProxyOpenaiResponses, PostApiProxyOpenaiBy__Data, PostApiProxyOpenaiBy__Responses, PostApiProxyOpenaiData, PostApiProxyOpenaiResponses, PutApiProxyOpenaiBy__Data, PutApiProxyOpenaiBy__Responses, PutApiProxyOpenaiData, PutApiProxyOpenaiResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1By__Data, DeleteV1By__Responses, DeleteV1Data, DeleteV1Responses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1By__Data, GetV1By__Responses, GetV1Data, GetV1Responses, HeadV1By__Data, HeadV1By__Responses, HeadV1Data, HeadV1Responses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsV1By__Data, OptionsV1By__Responses, OptionsV1Data, OptionsV1Responses, PatchV1By__Data, PatchV1By__Responses, PatchV1Data, PatchV1Responses, PostV1By__Data, PostV1By__Responses, PostV1Data, PostV1Responses, PutV1By__Data, PutV1By__Responses, PutV1Data, PutV1Responses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -124,100 +124,100 @@ export const getChat = <ThrowOnError extends boolean = false>(options: Options<G
     });
 };
 
-export const deleteApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<DeleteApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).delete<DeleteApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const deleteV1 = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).delete<DeleteV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const getApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<GetApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const getV1 = <ThrowOnError extends boolean = false>(options?: Options<GetV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const headApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<HeadApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).head<HeadApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const headV1 = <ThrowOnError extends boolean = false>(options?: Options<HeadV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).head<HeadV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const optionsApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<OptionsApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).options<OptionsApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const optionsV1 = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).options<OptionsV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const patchApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<PatchApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).patch<PatchApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const patchV1 = <ThrowOnError extends boolean = false>(options?: Options<PatchV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).patch<PatchV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const postApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<PostApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const postV1 = <ThrowOnError extends boolean = false>(options?: Options<PostV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).post<PostV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const putApiProxyOpenai = <ThrowOnError extends boolean = false>(options?: Options<PutApiProxyOpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).put<PutApiProxyOpenaiResponses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/',
+export const putV1 = <ThrowOnError extends boolean = false>(options?: Options<PutV1Data, ThrowOnError>) => {
+    return (options?.client ?? client).put<PutV1Responses, unknown, ThrowOnError>({
+        url: '/v1/',
         ...options
     });
 };
 
-export const deleteApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const deleteV1By__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const getApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const getV1By__ = <ThrowOnError extends boolean = false>(options: Options<GetV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).get<GetV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const headApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const headV1By__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).head<HeadV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const optionsApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const optionsV1By__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).options<OptionsV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const patchApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const patchV1By__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).patch<PatchV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const postApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PostApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const postV1By__ = <ThrowOnError extends boolean = false>(options: Options<PostV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
 
-export const putApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PutApiProxyOpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).put<PutApiProxyOpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/api/proxy/openai/{*}',
+export const putV1By__ = <ThrowOnError extends boolean = false>(options: Options<PutV1By__Data, ThrowOnError>) => {
+    return (options.client ?? client).put<PutV1By__Responses, unknown, ThrowOnError>({
+        url: '/v1/{*}',
         ...options
     });
 };
@@ -227,7 +227,7 @@ export const putApiProxyOpenaiBy__ = <ThrowOnError extends boolean = false>(opti
  */
 export const openAiChatCompletions = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsData, ThrowOnError>) => {
     return (options.client ?? client).post<OpenAiChatCompletionsResponses, OpenAiChatCompletionsErrors, ThrowOnError>({
-        url: '/api/proxy/openai/chat/completions',
+        url: '/v1/chat/completions',
         ...options,
         headers: {
             'Content-Type': 'application/json',

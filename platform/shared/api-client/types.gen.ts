@@ -560,210 +560,210 @@ export type GetChatResponses = {
 
 export type GetChatResponse = GetChatResponses[keyof GetChatResponses];
 
-export type DeleteApiProxyOpenaiData = {
+export type DeleteV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type DeleteApiProxyOpenaiResponses = {
+export type DeleteV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetApiProxyOpenaiData = {
+export type GetV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type GetApiProxyOpenaiResponses = {
+export type GetV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadApiProxyOpenaiData = {
+export type HeadV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type HeadApiProxyOpenaiResponses = {
+export type HeadV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OptionsApiProxyOpenaiData = {
+export type OptionsV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type OptionsApiProxyOpenaiResponses = {
+export type OptionsV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PatchApiProxyOpenaiData = {
+export type PatchV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type PatchApiProxyOpenaiResponses = {
+export type PatchV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PostApiProxyOpenaiData = {
+export type PostV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type PostApiProxyOpenaiResponses = {
+export type PostV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PutApiProxyOpenaiData = {
+export type PutV1Data = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/';
+    url: '/v1/';
 };
 
-export type PutApiProxyOpenaiResponses = {
+export type PutV1Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type DeleteApiProxyOpenaiBy__Data = {
+export type DeleteV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type DeleteApiProxyOpenaiBy__Responses = {
+export type DeleteV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetApiProxyOpenaiBy__Data = {
+export type GetV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type GetApiProxyOpenaiBy__Responses = {
+export type GetV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadApiProxyOpenaiBy__Data = {
+export type HeadV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type HeadApiProxyOpenaiBy__Responses = {
+export type HeadV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OptionsApiProxyOpenaiBy__Data = {
+export type OptionsV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type OptionsApiProxyOpenaiBy__Responses = {
+export type OptionsV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PatchApiProxyOpenaiBy__Data = {
+export type PatchV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type PatchApiProxyOpenaiBy__Responses = {
+export type PatchV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PostApiProxyOpenaiBy__Data = {
+export type PostV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type PostApiProxyOpenaiBy__Responses = {
+export type PostV1By__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PutApiProxyOpenaiBy__Data = {
+export type PutV1By__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/api/proxy/openai/{*}';
+    url: '/v1/{*}';
 };
 
-export type PutApiProxyOpenaiBy__Responses = {
+export type PutV1By__Responses = {
     /**
      * Default Response
      */
@@ -1068,7 +1068,7 @@ export type OpenAiChatCompletionsData = {
     };
     path?: never;
     query?: never;
-    url: '/api/proxy/openai/chat/completions';
+    url: '/v1/chat/completions';
 };
 
 export type OpenAiChatCompletionsErrors = {
@@ -1168,7 +1168,7 @@ export type OpenAiChatCompletionsResponses = {
         model: string;
         object: 'chat.completion';
         server_tier?: string;
-        system_fingerprint?: string;
+        system_fingerprint?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
          */

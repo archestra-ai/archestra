@@ -6,12 +6,12 @@ import { ChatCompletionsHeadersSchema } from "./types";
 import * as utils from "./utils";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = "/api/proxy/openai";
+  const API_PREFIX = "/v1";
   const CHAT_COMPLETIONS_ROUTE = `${API_PREFIX}/chat/completions`;
 
   /**
    * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
-   * This will proxy routes like /api/proxy/openai/models to https://api.openai.com/v1/models
+   * This will proxy routes like /v1/models to https://api.openai.com/v1/models
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.openai.com/v1",

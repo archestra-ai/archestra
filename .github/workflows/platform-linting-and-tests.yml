@@ -39,7 +39,9 @@ jobs:
       image_directory: ./platform
       image_name: platform
       version: ${{ github.sha }}
-      push_image: false
+      # TODO: remove this when done testing..
+      org_namespace: joeyarchestra
+      push_image: true
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
@@ -66,3 +68,17 @@ jobs:
         # and helm package explicitly checks this
         run: |
           helm package . --version v0.0.1
+
+  # TODO: remove this when done testing..
+  publish-platform-helm-chart:
+    name: Publish platform Helm chart
+    uses: ./.github/workflows/publish-platform-helm-chart.yml
+    permissions:
+      contents: write
+      id-token: write # Required for Workload Identity Federation
+    with:
+      version: v0.0.1
+      push_chart: true
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

@@ -299,6 +299,15 @@ The release workflow (`release-please.yml`) monitors both `desktop_app` and `pla
   - `publish-platform-helm-chart` job
 - Desktop releases remain unchanged
 
+#### Docker Image Publishing
+
+The platform Docker image is published to DockerHub:
+- **Repository**: `archestra/platform`
+- **Build Context**: `./platform` directory
+- **Triggered by**: Platform releases from release-please
+- **Version Tags**: Uses the platform version from release-please output
+- **Workflow**: `.github/workflows/build-dockerhub-image.yml`
+
 #### Helm Chart
 
 The platform includes a production-ready Helm chart for Kubernetes deployments:

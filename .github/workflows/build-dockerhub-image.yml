@@ -28,8 +28,17 @@ on:
 
 jobs:
   build-dockerhub-image:
-    name: Build Docker Hub image
-    runs-on: ubuntu-latest
+    name: Build Docker Hub image (${{ matrix.os_and_arch }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+        include:
+          - platform: ubuntu-latest
+            os_and_arch: linux/amd64
+          - platform: ubuntu-24.04-arm
+            os_and_arch: linux/arm64
     permissions:
       contents: read
       id-token: write
@@ -47,20 +56,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Build and push Docker image
-        id: push
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
           file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.os_and_arch }}
           tags: |
             docker.io/archestra/${{ inputs.image_name }}:${{ inputs.version }}
             docker.io/archestra/${{ inputs.image_name }}:latest

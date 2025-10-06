@@ -4,7 +4,7 @@ import type { InsertTool, Tool, UpdateTool } from "@/types";
 
 class ToolModel {
   static async createToolIfNotExists(tool: InsertTool) {
-    return await db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
+    await db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
   }
 
   static async findAll(): Promise<Tool[]> {

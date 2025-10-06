@@ -73,9 +73,9 @@
       "include-component-in-tag": false,
       "initial-version": "0.0.1"
     },
-    "mcp_server_docker_image": {
-      "component": "mcp_server_docker_image",
-      "release-type": "simple",
+    "platform": {
+      "component": "platform",
+      "release-type": "node",
       "prerelease": false,
       "initial-version": "0.0.1"
     }

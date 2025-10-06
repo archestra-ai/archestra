@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   release-please:
+    name: Release Please
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,8 +27,9 @@ jobs:
       id-token: write
     outputs:
       desktop_release_created: ${{ steps.release-please.outputs['desktop_app--release_created'] }}
-      mcp_server_docker_image_release_created: ${{ steps.release-please.outputs['mcp_server_docker_image--release_created'] }}
-      mcp_server_docker_image_version: ${{ steps.release-please.outputs['mcp_server_docker_image--version'] }}
+      platform_release_created: ${{ steps.release-please.outputs['platform--release_created'] }}
+      mcp_server_docker_image_version: ${{ steps.release-please.outputs['desktop_app--version'] }}
+      platform_version: ${{ steps.release-please.outputs['platform--version'] }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -82,8 +84,8 @@ jobs:
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image
+    if: needs.release-please.outputs.desktop_release_created
     uses: ./.github/workflows/build-base-mcp-server-docker-image.yml
-    if: needs.release-please.outputs.mcp_server_docker_image_release_created
     needs:
       - release-please
     permissions:
@@ -95,3 +97,35 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  build-and-push-platform-docker-image:
+    name: Publish platform Docker image
+    runs-on: ubuntu-latest
+    if: needs.release-please.outputs.platform_release_created
+    needs:
+      - release-please
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build and push platform Docker image
+        run: echo "Building and pushing platform Docker image"
+
+  publish-platform-helm-chart:
+    name: Publish platform Helm chart
+    runs-on: ubuntu-latest
+    if: needs.release-please.outputs.platform_release_created
+    needs:
+      - release-please
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Publish platform Helm chart
+        run: echo "Publishing platform Helm chart"

@@ -2,6 +2,11 @@ name: Platform Linting and Tests
 
 on:
   workflow_call:
+    secrets:
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
 
 jobs:
   platform-linting-and-tests:
@@ -40,6 +45,9 @@ jobs:
       # version: ${{ github.sha }}
       version: v0.0.1
       push_image: true
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

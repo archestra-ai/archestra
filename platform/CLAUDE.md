@@ -22,6 +22,16 @@ tilt up              # Start full development environment (recommended)
 pnpm dev             # Manually start all workspaces in dev mode
 ```
 
+### Docker Compose Development
+
+```bash
+# Run platform standalone
+docker-compose -f docker-compose-platform.yml up
+
+# Run platform with Open WebUI integration
+docker-compose -f docker-compose-openwebui.yml up
+```
+
 ### Individual Workspace Commands
 
 ```bash

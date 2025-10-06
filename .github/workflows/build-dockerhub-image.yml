@@ -31,9 +31,7 @@ jobs:
     name: Build Docker Hub image
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
-      attestations: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -49,11 +47,8 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-        with:
-          images: archestra/${{ inputs.image_name }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Build and push Docker image
         id: push
@@ -62,12 +57,9 @@ jobs:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
           file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
-        with:
-          subject-name: index.docker.io/archestra/${{ inputs.image_name }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: ${{ inputs.push_image }}
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            docker.io/archestra/${{ inputs.image_name }}:${{ inputs.version }}
+            docker.io/archestra/${{ inputs.image_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

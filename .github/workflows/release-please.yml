@@ -105,9 +105,7 @@ jobs:
     needs:
       - release-please
     permissions:
-      packages: write
       contents: read
-      attestations: write
       id-token: write
     with:
       image_directory: ./platform

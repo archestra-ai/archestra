@@ -31,15 +31,15 @@ jobs:
     name: Build platform Docker image
     uses: ./.github/workflows/build-dockerhub-image.yml
     permissions:
-      packages: write
       contents: read
-      attestations: write
       id-token: write
     with:
       image_directory: ./platform
       image_name: platform
-      version: ${{ github.sha }}
-      push_image: false
+      # TODO: remove this when done testing..
+      # version: ${{ github.sha }}
+      version: v0.0.1
+      push_image: true
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

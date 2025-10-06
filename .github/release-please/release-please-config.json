@@ -76,7 +76,7 @@
     "platform": {
       "component": "platform",
       "release-type": "node",
-      "prerelease": false,
+      "prerelease": true,
       "initial-version": "0.0.1"
     }
   },

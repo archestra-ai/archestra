@@ -120,16 +120,16 @@ jobs:
 
   publish-platform-helm-chart:
     name: Publish platform Helm chart
-    runs-on: ubuntu-latest
     if: needs.release-please.outputs.platform_release_created
+    uses: ./.github/workflows/publish-platform-helm-chart.yml
     needs:
       - release-please
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Publish platform Helm chart
-        run: echo "Publishing platform Helm chart"
+    permissions:
+      contents: write
+      id-token: write # Required for Workload Identity Federation
+    with:
+      version: ${{ needs.release-please.outputs.platform_version }}
+      push_chart: true
+    secrets:
+      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

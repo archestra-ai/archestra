@@ -31,11 +31,11 @@ jobs:
           persist-credentials: false
 
       - name: Authenticate to Google Artifact Registry
+        if: inputs.push_to_gcr
         uses: ./.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-          skip_auth: ${{ !inputs.push_to_gcr }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1

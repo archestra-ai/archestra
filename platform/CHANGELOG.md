@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/archestra-ai/archestra/compare/platform-v0.0.2...platform-v0.0.3) (2025-10-06)
+
+
+### Features
+
+* allow running platform as single container ([b354fbf](https://github.com/archestra-ai/archestra/commit/b354fbf4e0f1a435864e1a9e1f2623450818bc46))
+
 ## [0.0.2](https://github.com/archestra-ai/archestra/compare/platform-v0.0.1...platform-v0.0.2) (2025-10-06)
 
 

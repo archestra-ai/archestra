@@ -33,8 +33,6 @@ jobs:
       contents: write
       security-events: write
       id-token: write # Required for Workload Identity Federation
-      packages: write
-      attestations: write
     uses: ./.github/workflows/platform-linting-and-tests.yml
 
   package-and-test-desktop-application:

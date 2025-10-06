@@ -191,7 +191,7 @@ The backend integrates advanced security guardrails:
 - **Trusted Data Policies**: Mark specific data patterns as trusted or blocked
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
-  - Actions: 
+  - Actions:
     - `allow`: Mark data as trusted
     - `block_always`: Prevent data from reaching LLM (blocked data is filtered out before sending to the model)
 - **Taint Analysis**: Tracks untrusted data through the system
@@ -256,6 +256,7 @@ The `experiments/` workspace contains prototype features:
 - **Globals**: Test utilities are available via `vitest` globals
 
 **Test Examples**:
+
 - `agent.test.ts`: Simple agent CRUD operations
 - `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
 - `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
@@ -285,6 +286,7 @@ The platform uses [release-please](https://github.com/googleapis/release-please)
 #### Release Workflow Details
 
 The release process is triggered automatically when:
+
 1. Conventional commits are merged to main
 2. Release-please creates a PR with version bumps
 3. When the release PR is merged, the following happens:
@@ -293,6 +295,7 @@ The release process is triggered automatically when:
    - Helm chart (from `platform/helm/`) is packaged and pushed to GAR
 
 The release workflow (`release-please.yml`) monitors both `desktop_app` and `platform` packages:
+
 - Outputs separate release states: `platform_release_created` and `desktop_release_created`
 - Platform releases trigger:
   - `build-and-push-platform-docker-image-to-dockerhub` job
@@ -302,6 +305,7 @@ The release workflow (`release-please.yml`) monitors both `desktop_app` and `pla
 #### Docker Image Publishing
 
 The platform Docker image is published to DockerHub:
+
 - **Repository**: `archestra/platform`
 - **Build Context**: `./platform` directory
 - **Triggered by**: Platform releases from release-please
@@ -310,17 +314,16 @@ The platform Docker image is published to DockerHub:
 - **Authentication**: Requires `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets
 - **Build Features**:
   - Multi-stage builds supported via Dockerfile
-  - Metadata extraction for tags and labels
-  - Artifact attestation for provenance tracking
   - Optional push based on workflow inputs
 
 #### Helm Chart
 
 The platform includes a production-ready Helm chart for Kubernetes deployments:
+
 - **Location**: `platform/helm/`
 - **Chart Name**: archestra-platform
 - **Version**: Automatically set from release-please output
-- **Features**: 
+- **Features**:
   - Deployment with configurable replicas
   - Service (ClusterIP by default)
   - Optional Ingress with TLS support
@@ -336,7 +339,7 @@ The platform includes a production-ready Helm chart for Kubernetes deployments:
   - **Repository**: `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
   - **Authentication**: Google Artifact Registry via Workload Identity Federation
   - **Workflow**: `.github/workflows/publish-platform-helm-chart.yml`
-- **Testing**: 
+- **Testing**:
   - Helm lint validation in CI
   - Helm unit tests via helm-unittest plugin
   - Basic connectivity test included in `tests/`

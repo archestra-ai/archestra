@@ -31,9 +31,7 @@ jobs:
     name: Build platform Docker image
     uses: ./.github/workflows/build-dockerhub-image.yml
     permissions:
-      packages: write
       contents: read
-      attestations: write
       id-token: write
     with:
       image_directory: ./platform

@@ -27,13 +27,23 @@ on:
         required: false
 
 jobs:
+  # This workflow was inspired by https://medium.com/neudesic-innovation/building-multi-platform-container-images-with-github-actions-e495f9441ad3
+  # Basically we build the image for each Linux architecture on separate GitHub runners
+  # (to avoid emulation which is very slow), then we publish a single "multi-arch" image to Docker Hub.
   build-dockerhub-image:
-    name: Build Docker Hub image
-    runs-on: ubuntu-latest
+    name: Build Docker Hub image (${{ matrix.os_and_arch }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+        include:
+          - platform: ubuntu-latest
+            os_and_arch: linux/amd64
+          - platform: ubuntu-24.04-arm
+            os_and_arch: linux/arm64
     permissions:
-      packages: write
       contents: read
-      attestations: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -49,25 +59,79 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
-        with:
-          images: archestra/${{ inputs.image_name }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Build and push Docker image
-        id: push
+        id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
           file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ matrix.os_and_arch }}
+          outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+      - name: Export digest
+        if: inputs.push_image
+        run: |
+          mkdir -p /tmp/digests
+          digest="${DIGEST}"
+          touch "/tmp/digests/${digest#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        if: inputs.push_image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          subject-name: index.docker.io/archestra/${{ inputs.image_name }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: ${{ inputs.push_image }}
+          name: digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-manifests:
+    name: Create multi-arch manifest
+    if: inputs.push_image
+    runs-on: ubuntu-latest
+    needs:
+      - build-dockerhub-image
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "docker.io/archestra/${IMAGE_NAME}:${VERSION}" \
+            -t "docker.io/archestra/${IMAGE_NAME}:latest" \
+            $(printf "docker.io/archestra/${IMAGE_NAME}@sha256:%s " *)
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "docker.io/archestra/${IMAGE_NAME}:${VERSION}"
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ inputs.version }}

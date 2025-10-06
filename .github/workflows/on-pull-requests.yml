@@ -34,9 +34,6 @@ jobs:
       security-events: write
       id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/platform-linting-and-tests.yml
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
   package-and-test-desktop-application:
     name: Package and test desktop application

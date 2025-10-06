@@ -124,10 +124,19 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
-# Set defaults for database credentials
-POSTGRES_USER=${POSTGRES_USER:-archestra}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
-POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
+# Parse DATABASE_URL or use defaults
+if [ -n "$DATABASE_URL" ]; then
+    # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
+    POSTGRES_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    POSTGRES_PASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    POSTGRES_DB=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+else
+    # Use defaults
+    POSTGRES_USER=${POSTGRES_USER:-archestra}
+    POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
+    POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
+    DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+fi
 
 # Initialize PostgreSQL if data directory is empty
 if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
@@ -155,7 +164,6 @@ EOSQL
 fi
 
 # Update supervisord config with actual DATABASE_URL
-DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
 
 # Start supervisord

@@ -1,18 +1,18 @@
 services:
   postgres:
-    image: bitnamisecure/postgresql:latest
-    container_name: archestra-postgres
-    environment:
-      - POSTGRESQL_DATABASE=archestra_dev
-      - POSTGRESQL_USERNAME=archestra
-      - POSTGRESQL_PASSWORD=archestra_dev_password
-    ports:
-      - "5432:5432"
+    image: postgres:17
+    command: '-d 1'
     volumes:
-      - postgres_data:/bitnami/postgresql
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=archestra
+      - POSTGRES_PASSWORD=archestra_dev_password
+      - POSTGRES_DB=archestra_dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U archestra -d archestra_dev"]
-      interval: 5s
+      test: ['CMD-SHELL', 'pg_isready -U archestra']
+      interval: 10s
       timeout: 5s
       retries: 5
 

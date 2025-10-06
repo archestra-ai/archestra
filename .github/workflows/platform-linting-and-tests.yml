@@ -2,6 +2,16 @@ name: Platform Linting and Tests
 
 on:
   workflow_call:
+    # TODO: remove this when done testing..
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+      DOCKER_USERNAME:
+        required: false
+      DOCKER_PASSWORD:
+        required: false
 
 jobs:
   platform-linting-and-tests:
@@ -41,6 +51,10 @@ jobs:
       version: ${{ github.sha }}
       # TODO: remove this when done testing..
       push_image: true
+    # TODO: remove this when done testing..
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

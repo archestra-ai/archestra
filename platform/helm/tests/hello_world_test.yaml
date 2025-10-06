@@ -1,0 +1,13 @@
+suite: test deployment
+templates:
+  - deployment.yaml
+tests:
+  - it: should work
+    set:
+      image.tag: latest
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform$

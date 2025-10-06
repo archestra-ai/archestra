@@ -30,20 +30,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Authenticate to Google Cloud
-        if: inputs.push_to_gcr
-        uses: google-github-actions/auth@6fc4af4b145ae7821d527454aa9bd537d1f2dc5f # v2.1.7
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-      - name: Set up Google Cloud
-        if: inputs.push_to_gcr
-        uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
-
-      - name: Configure Docker for Artifact Registry
-        if: inputs.push_to_gcr
-        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+          skip_auth: ${{ !inputs.push_to_gcr }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1

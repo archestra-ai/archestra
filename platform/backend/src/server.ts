@@ -34,9 +34,12 @@ fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
   try {
-    // Register CORS plugin to allow cross-origin requests from frontend
+    /**
+     * Register CORS plugin to allow cross-origin requests from frontend
+     * (running on any port in case the default (3000) is taken)
+     */
     await fastify.register(fastifyCors, {
-      origin: ["http://localhost:3000"],
+      origin: [/http:\/\/localhost:\d+/],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
     });

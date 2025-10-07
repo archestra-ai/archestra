@@ -270,6 +270,15 @@ The `experiments/` workspace contains prototype features:
 - `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
 - `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
 
+### Examples
+
+The `platform/examples/` directory contains example integrations:
+
+- **ai-sdk-express**: Express.js server demonstrating integration with AI SDK and Archestra Platform
+- **pydantic-ai**: Python CLI chat agent showing Pydantic AI integration with Archestra's security layer
+
+Each example includes a README with setup instructions and demonstrates how to use Archestra Platform as a security proxy for LLM applications.
+
 ### Development Best Practices
 
 - Use existing patterns and libraries - check neighboring files for examples

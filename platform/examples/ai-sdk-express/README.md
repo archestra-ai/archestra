@@ -1,6 +1,8 @@
 # Archestra + Express.js + AI SDK Example
 
-You can use the AI SDK in an [Express.js](https://expressjs.com/) server to generate and stream text and objects.
+An example used by Archestra's guid on how to integrate with Vercel AI / AI SDK: https://www.archestra.ai/docs/platform-vercel-ai-example .
+
+It demonstrates how to use AI SDK in an [Express.js](https://expressjs.com/) server to generate and stream text and objects and connect Archestra as a security layer.
 
 ## Usage
 

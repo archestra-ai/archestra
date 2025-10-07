@@ -318,28 +318,30 @@ The platform Docker image is published to DockerHub:
 
 #### Helm Chart
 
-The platform includes a production-ready Helm chart for Kubernetes deployments:
+The platform includes a simplified Helm chart for Kubernetes deployments:
 
 - **Location**: `platform/helm/`
 - **Chart Name**: archestra-platform
-- **Version**: Automatically set from release-please output
-- **Features**:
-  - Deployment with configurable replicas
-  - Service (ClusterIP by default)
-  - Optional Ingress with TLS support
-  - Optional HorizontalPodAutoscaler
-  - ServiceAccount with annotations support
-  - Configurable resource limits and requests
-  - Liveness and readiness probes
-  - Environment variables and secrets management
-  - Security context configuration
-  - Node selector and tolerations support
-- **Values**: Configurable via `values.yaml`
+- **Version**: 0.0.1 (managed by release-please)
+- **Architecture**:
+  - Single consolidated template (`archestra-platform.yaml`) containing both Service and Deployment
+  - Simplified values structure focused on essential configuration
+  - Supports both internal PostgreSQL deployment (via Bitnami chart) or external database
+- **Core Features**:
+  - Single container deployment running both backend (port 9000) and frontend (port 3000)
+  - ClusterIP Service exposing both ports
+  - PostgreSQL dependency with option for external database
+  - Environment variable injection for database connectivity
+  - Default image: `archestra/platform:0.0.1`
+- **Configuration**:
+  - `archestra.image`: Docker image to deploy
+  - `postgresql.external_database_url`: Optional external database URL
+  - `postgresql.*`: Bitnami PostgreSQL chart configuration when using internal database
 - **Publishing**:
   - **Repository**: `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
   - **Authentication**: Google Artifact Registry via Workload Identity Federation
   - **Workflow**: `.github/workflows/publish-platform-helm-chart.yml`
 - **Testing**:
   - Helm lint validation in CI
-  - Helm unit tests via helm-unittest plugin
-  - Basic connectivity test included in `tests/`
+  - Comprehensive helm-unittest tests in `tests/archestra_platform_test.yaml`
+  - Tests validate container configuration, ports, environment variables, and service setup

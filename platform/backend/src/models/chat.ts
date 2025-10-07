@@ -53,7 +53,15 @@ class ChatModel {
       }
     }
 
-    return Array.from(chatMap.values());
+    // Sort interactions by createdAt for each chat
+    const result = Array.from(chatMap.values());
+    for (const chat of result) {
+      chat.interactions.sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+      );
+    }
+
+    return result;
   }
 
   static async findById(id: string): Promise<ChatWithInteractions | null> {
@@ -75,6 +83,9 @@ class ChatModel {
       .filter((row) => row.interactions !== null)
       .map((row) => row.interactions)
       .filter((interaction) => interaction !== null);
+
+    // Sort interactions by createdAt
+    interactions.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return {
       ...chat,

@@ -132,6 +132,14 @@ function mapInteractionToUiMessage(
       }
     }
   }
+  // Handle assistant messages with refusals (but no tool calls)
+  else if (
+    interaction.content.role === "assistant" &&
+    "refusal" in interaction.content &&
+    interaction.content.refusal
+  ) {
+    parts.push({ type: "text", text: interaction.content.refusal });
+  }
   // Handle tool response messages
   else if (interaction.content.role === "tool") {
     const toolContent = interaction.content.content;

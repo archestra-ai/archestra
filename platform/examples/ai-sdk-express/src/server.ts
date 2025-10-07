@@ -1,7 +1,9 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { streamText, CoreMessage } from 'ai';
-import 'dotenv/config';
-import * as readline from 'node:readline';
+import { createOpenAI } from "@ai-sdk/openai";
+import { type CoreMessage, stepCountIs, streamText, tool } from "ai";
+import "dotenv/config";
+import { readFileSync } from "node:fs";
+import * as readline from "node:readline";
+import { z } from "zod";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -12,7 +14,7 @@ const conversationHistory: CoreMessage[] = [];
 
 async function chat(userMessage: string) {
   conversationHistory.push({
-    role: 'user',
+    role: "user",
     content: userMessage,
   });
 
@@ -22,33 +24,45 @@ async function chat(userMessage: string) {
   }).chat; // Archestra supports Chat Completions API
 
   const result = streamText({
-    model: customOpenAI('gpt-4o'),
+    model: customOpenAI("gpt-4o"),
     messages: conversationHistory,
+    stopWhen: stepCountIs(5),
+    tools: {
+      get_file: tool({
+        description: "Get the file test.txt.",
+        inputSchema: z.object({
+          file_path: z.string().describe("The path to the file to get"),
+        }),
+        execute: async ({ file_path }) => ({
+          content: readFileSync(file_path, "utf8"),
+        }),
+      }),
+    },
   });
 
-  process.stdout.write('\nAssistant: ');
+  process.stdout.write("\nAssistant: ");
 
-  let fullResponse = '';
+  let fullResponse = "";
   for await (const textPart of result.textStream) {
     process.stdout.write(textPart);
     fullResponse += textPart;
   }
 
   conversationHistory.push({
-    role: 'assistant',
+    role: "assistant",
     content: fullResponse,
   });
 
-  process.stdout.write('\n\n');
+  process.stdout.write("\n\n");
   promptUser();
 }
 
 function promptUser() {
-  rl.question('You: ', (input) => {
+  rl.question("You: ", (input) => {
     const message = input.trim();
 
-    if (message.toLowerCase() === 'exit' || message.toLowerCase() === 'quit') {
-      console.log('Goodbye!');
+    if (message.toLowerCase() === "exit" || message.toLowerCase() === "quit") {
+      console.log("Goodbye!");
       rl.close();
       process.exit(0);
     }
@@ -61,5 +75,7 @@ function promptUser() {
   });
 }
 
-console.log('CLI Chat started. Type "exit" or "quit" to end the conversation.\n');
+console.log(
+  'CLI Chat started. Type "exit" or "quit" to end the conversation.\n',
+);
 promptUser();

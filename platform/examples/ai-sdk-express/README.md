@@ -15,13 +15,13 @@ OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 2. Run the following commands from the root directory of the AI SDK repo:
 
 ```sh
-pnpm install
+npm install
 ```
 
 3. Run the following command:
 
 ```sh
-pnpm dev
+npm run dev
 ```
 
 4. Chat with assistant through CLI and check that Archestra Platform handles 

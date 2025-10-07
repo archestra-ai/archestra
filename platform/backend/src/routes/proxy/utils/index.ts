@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 import type { z } from "zod";
 import { AgentModel, ChatModel, InteractionModel, ToolModel } from "@/models";
@@ -9,17 +9,50 @@ import type {
   ChatCompletionsHeadersSchema,
 } from "../types";
 
+const CHAT_ID_TAG_REGEX = /<archestra_chat_id>([\w-]+)<\/archestra_chat_id>/;
+
 /**
- * We need to explicitly get the first user message
- * (because if there is a system message it may be consistent across multiple chats and we'll end up with the same hash)
+ * Extracts chat ID from system message content if it exists
  */
-const generateChatIdHashFromRequest = (
-  messages: ChatCompletionRequestMessages,
-) =>
-  crypto
-    .createHash("sha256")
-    .update(JSON.stringify(messages.find((message) => message.role === "user")))
-    .digest("hex");
+const extractChatIdFromSystemMessage = (
+  content: string | Array<{ type: string; text: string }>,
+): string | null => {
+  const contentStr =
+    typeof content === "string"
+      ? content
+      : content.find((c) => c.type === "text")?.text || "";
+  const match = contentStr.match(CHAT_ID_TAG_REGEX);
+  return match ? match[1] : null;
+};
+
+/**
+ * Embeds chat ID into system message content
+ */
+const embedChatIdIntoContent = (
+  content: string | Array<{ type: string; text: string }>,
+  chatId: string,
+): string | Array<{ type: "text"; text: string }> => {
+  const tag = `<archestra_chat_id>${chatId}</archestra_chat_id>`;
+
+  if (typeof content === "string") {
+    return `${content}\n\n${tag}`;
+  }
+
+  // For array content, append to the first text part or add a new text part
+  const textPart = content.find((c) => c.type === "text");
+  if (textPart) {
+    return content.map((c) =>
+      c.type === "text" && c === textPart
+        ? { type: "text" as const, text: `${c.text}\n\n${tag}` }
+        : { type: "text" as const, text: c.text },
+    );
+  }
+
+  return [
+    ...content.map((c) => ({ type: "text" as const, text: c.text })),
+    { type: "text" as const, text: tag },
+  ];
+};
 
 export const getAgentAndChatIdFromRequest = async (
   messages: ChatCompletionRequestMessages,
@@ -54,18 +87,52 @@ export const getAgentAndChatIdFromRequest = async (
     agentId = chat.agentId;
   } else {
     /**
-     * User has not specified a particular chat ID, therefore let's first create or get the
-     * "first" agent, and then we will take a hash of the first chat message to create a new chat ID
+     * User has not specified a particular chat ID, therefore we'll use system message tagging
+     * to track the chat ID across requests
      */
     const agent = await AgentModel.ensureDefaultAgentExists(userAgentHeader);
     agentId = agent.id;
 
-    // Create or get chat
-    chat = await ChatModel.createOrGetByHash({
-      agentId,
-      hashForId: generateChatIdHashFromRequest(messages), // Generate chat ID hash from request
-    });
-    chatId = chat.id;
+    // Find or create system message
+    const systemMessage = messages.find((m) => m.role === "system");
+
+    if (systemMessage) {
+      // Extract chat ID from existing system message if present
+      const extractedChatId = extractChatIdFromSystemMessage(
+        systemMessage.content,
+      );
+
+      if (extractedChatId) {
+        // Chat ID found in system message - verify it exists
+        chat = await ChatModel.findById(extractedChatId);
+        if (chat) {
+          chatId = extractedChatId;
+        } else {
+          // Chat ID in message but chat doesn't exist - create new chat with that ID
+          chat = await ChatModel.create({ id: extractedChatId, agentId });
+          chatId = extractedChatId;
+        }
+      } else {
+        // System message exists but no chat ID - create new chat and embed ID
+        chatId = randomUUID();
+        chat = await ChatModel.create({ id: chatId, agentId });
+        systemMessage.content = embedChatIdIntoContent(
+          systemMessage.content,
+          chatId,
+        );
+      }
+    } else {
+      // No system message - create one with new chat ID
+      chatId = randomUUID();
+      chat = await ChatModel.create({ id: chatId, agentId });
+
+      const newSystemMessage = {
+        role: "system" as const,
+        content: `<archestra_chat_id>${chatId}</archestra_chat_id>`,
+      };
+
+      messages.unshift(newSystemMessage);
+    }
   }
 
   return { chatId, agentId };

@@ -57,6 +57,13 @@
       "when": 1759532187556,
       "tag": "0007_smart_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1759860550941,
+      "tag": "0008_closed_hardball",
+      "breakpoints": true
     }
   ]
 }

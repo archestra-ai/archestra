@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.6](https://github.com/archestra-ai/archestra/compare/platform-v0.0.5...platform-v0.0.6) (2025-10-07)
+
+
+### Bug Fixes
+
+* solve chat ID grouping ([#653](https://github.com/archestra-ai/archestra/issues/653)) ([deb400d](https://github.com/archestra-ai/archestra/commit/deb400dbc73c2f4ca0c7e0c1fc2a32f54df2c5d0))
+
 ## [0.0.5](https://github.com/archestra-ai/archestra/compare/platform-v0.0.4...platform-v0.0.5) (2025-10-07)
 
 

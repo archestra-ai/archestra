@@ -103,3 +103,31 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[0].value
           value: postgresql://external:pass@external-host:5432/externaldb
+
+  - it: should have init container to wait for PostgreSQL
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: busybox:1.36
+
+  - it: should configure init container to wait for internal postgres
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: null
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*-archestra-platform-postgresql.*5432.*"
+
+  - it: should configure init container to wait for external postgres
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*external-db.example.com.*5432.*"

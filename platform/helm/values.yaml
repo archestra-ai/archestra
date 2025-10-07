@@ -1,7 +1,7 @@
 archestra:
   # The Docker image to use for the Archestra Platform
-  # This image contains both the backend API (port 9000) and frontend (port 3000)
-  image: archestra/platform:0.0.1
+  # This image contains both the backend API and frontend
+  image: archestra/platform:latest
 
 # PostgreSQL configuration
 postgresql:

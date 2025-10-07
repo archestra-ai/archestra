@@ -13,8 +13,10 @@ Then visit:
   - Frontend: http://localhost:3000
 
 {{- if .Values.postgresql.external_database_url }}
+
 Using external PostgreSQL database: {{ .Values.postgresql.external_database_url }}
 {{- else }}
+
 Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}

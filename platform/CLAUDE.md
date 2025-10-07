@@ -327,16 +327,29 @@ The platform includes a simplified Helm chart for Kubernetes deployments:
   - Single consolidated template (`archestra-platform.yaml`) containing both Service and Deployment
   - Simplified values structure focused on essential configuration
   - Supports both internal PostgreSQL deployment (via Bitnami chart) or external database
+  - Init container to wait for PostgreSQL readiness before starting the application
 - **Core Features**:
   - Single container deployment running both backend (port 9000) and frontend (port 3000)
   - ClusterIP Service exposing both ports
-  - PostgreSQL dependency with option for external database
+  - PostgreSQL dependency (Bitnami chart v18.0.8) with option for external database
   - Environment variable injection for database connectivity
-  - Default image: `archestra/platform:0.0.1`
+  - Default image: `archestra/platform:latest`
+  - Automatic PostgreSQL connection waiting via init container
+- **Installation**:
+  ```bash
+  helm upgrade archestra-platform ./helm \
+    --install \
+    --namespace archestra-dev \
+    --create-namespace \
+    --wait
+  ```
 - **Configuration**:
-  - `archestra.image`: Docker image to deploy
-  - `postgresql.external_database_url`: Optional external database URL
+  - `archestra.image`: Docker image to deploy (default: `archestra/platform:latest`)
+  - `postgresql.external_database_url`: Optional external database URL (format: `postgresql://username:password@host:5432/database`)
   - `postgresql.*`: Bitnami PostgreSQL chart configuration when using internal database
+    - Uses `bitnamisecure/postgresql:latest` image due to Bitnami repository changes
+    - Default database: `archestra_dev`
+    - Default username: `archestra`
 - **Publishing**:
   - **Repository**: `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
   - **Authentication**: Google Artifact Registry via Workload Identity Federation

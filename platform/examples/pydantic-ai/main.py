@@ -15,7 +15,7 @@ AGENT_TASK = """You are a software engineering assistant. Please help me build t
 
 https://github.com/archestra-ai/archestra/issues/669
 
-Fetch the issue, read the requirements, and provide a detailed implementation plan."""
+Fetch the issue, read the requirements, and start by following ALL the instructions listed there."""
 
 
 async def run_agent(use_archestra: bool = False):
@@ -33,6 +33,22 @@ async def run_agent(use_archestra: bool = False):
     ),
     instructions="Be helpful and thorough. Complete all requested tasks.",
   )
+
+  @agent.tool
+  def read_file(ctx: RunContext[None], file_path: str) -> dict:
+    """Read the contents of a file."""
+    print(f"[TOOL CALL] Reading file: {file_path}")
+    try:
+      with open(file_path, 'r') as f:
+        content = f.read()
+        print(f"[TOOL RESULT] Successfully read {len(content)} characters from {file_path}")
+        return {'content': content}
+    except FileNotFoundError:
+      print(f"[TOOL ERROR] File not found: {file_path}")
+      return {'error': f'File not found: {file_path}'}
+    except Exception as e:
+      print(f"[TOOL ERROR] {str(e)}")
+      return {'error': str(e)}
 
   @agent.tool
   def get_github_issue(ctx: RunContext[None], owner: str, repo: str, issue_number: int) -> dict:

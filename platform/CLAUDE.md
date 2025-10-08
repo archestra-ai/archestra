@@ -92,7 +92,6 @@ platform/
 │       │   └── trusted-data.ts     # Taint analysis and trusted data marking
 │       ├── models/              # Data models
 │       │   ├── agent.ts         # Agent model with CRUD operations
-│       │   ├── chat.ts          # Chat model
 │       │   ├── interaction.ts   # Interaction model
 │       │   ├── tool-invocation-policy.ts  # Tool invocation policy model
 │       │   └── trusted-data-policy.ts     # Trusted data policy model
@@ -141,12 +140,9 @@ The production backend provides:
 #### REST API Endpoints
 
 - **Chat Management**:
-  - `POST /api/chats` - Create new chat session
-  - `GET /api/chats/:chatId` - Get chat with all interactions
-  - **Note**: Chat ID is now optional when using the OpenAI proxy - if not provided via `x-archestra-chat-id` header, a chat will be created/retrieved based on the hash of the first message
+  - The chat model has been removed and interactions are now linked directly to agents
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
-    - Optional `x-archestra-chat-id` header - if not provided, automatically creates/retrieves default agent and chat based on message content hash
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
 - **Agent Management**:
@@ -195,16 +191,16 @@ The backend integrates advanced security guardrails:
     - `allow`: Mark data as trusted
     - `block_always`: Prevent data from reaching LLM (blocked data is filtered out before sending to the model)
 - **Taint Analysis**: Tracks untrusted data through the system
-- **Database Persistence**: All chats and interactions stored in PostgreSQL
+- **Database Persistence**: All interactions stored in PostgreSQL with direct agent links
 
 #### Database Schema
 
 - **Agent**: Stores AI agents with name and timestamps
-- **Chat**: Stores chat sessions with timestamps and agent reference
-- **Interaction**: Stores messages with trust status, blocked flag, and reasoning
-  - `trusted`: Boolean indicating if data is trusted (inverse of old "tainted" field)
-  - `blocked`: Boolean indicating if data was blocked by policies
-  - `reason`: Text explaining trust/block decision (renamed from "taint_reason")
+- **Interaction**: Stores LLM interactions with request/response data
+  - `agentId`: Direct link to the agent (no longer through chat)
+  - `request`: JSONB field storing the full LLM API request
+  - `response`: JSONB field storing the full LLM API response
+  - Removed fields: `trusted`, `blocked`, `reason` (moved trust tracking elsewhere)
 - **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents
@@ -229,8 +225,7 @@ The `experiments/` workspace contains prototype features:
 #### CLI Testing
 
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
-  - Supports `--agent-id <agent-id>` flag to specify an agent (optional)
-  - If no agent ID is provided, the backend will create/use a default agent
+  - Supports `--agent-id <agent-id>` flag to specify an agent (required)
   - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`
 - Requires `OPENAI_API_KEY` in `.env` (copy from `.env.example`)
 

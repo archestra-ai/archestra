@@ -124,7 +124,7 @@ class TrustedDataPolicyModel {
    * - Policies with action='block_always' take precedence and mark data as blocked
    */
   static async evaluate(
-    chatId: string,
+    agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
@@ -142,18 +142,14 @@ class TrustedDataPolicyModel {
         ...getTableColumns(schema.trustedDataPoliciesTable),
         dataIsTrustedByDefault: schema.toolsTable.dataIsTrustedByDefault,
       })
-      .from(schema.chatsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.chatsTable.agentId, schema.toolsTable.agentId),
-      )
+      .from(schema.toolsTable)
       .innerJoin(
         schema.trustedDataPoliciesTable,
         eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
       )
       .where(
         and(
-          eq(schema.chatsTable.id, chatId),
+          eq(schema.toolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
         ),
       );

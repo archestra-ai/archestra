@@ -1,6 +1,7 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
+import { InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi } from "@/types";
 import { ChatCompletionsHeadersSchema } from "./types";
 import * as utils from "./utils";
@@ -49,27 +50,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, headers }, reply) => {
       const { messages, tools, stream } = body;
 
-      const chatAndAgent = await utils.getAgentAndChatIdFromRequest(
-        messages,
-        headers,
-      );
-
-      if ("error" in chatAndAgent) {
-        return reply.status(400).send(chatAndAgent);
-      }
-
-      const { chatId, agentId } = chatAndAgent;
+      const agentId = await utils.getAgentIdFromRequest(headers);
       const { authorization: openAiApiKey } = headers;
       const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
       try {
         await utils.persistTools(tools, agentId);
-        await utils.trustedData.evaluatePolicies(messages, chatId);
-        await utils.persistUserMessage(messages[messages.length - 1], chatId);
 
-        // Redact blocked tool result data before sending to OpenAI
-        const filteredMessages =
-          await utils.trustedData.redactBlockedToolResultData(chatId, messages);
+        // Process messages with trusted data policies dynamically
+        const { filteredMessages, contextIsTrusted } =
+          await utils.trustedData.evaluateIfContextIsTrusted(messages, agentId);
 
         if (stream) {
           reply.header("Content-Type", "text/event-stream");
@@ -90,10 +80,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           let chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
             chatCompletionChunksAndMessage.chunks;
 
+          // Evaluate tool invocation policies dynamically
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
-              chatId,
+              agentId,
+              contextIsTrusted,
             );
 
           if (toolInvocationRefusal) {
@@ -123,7 +115,25 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ];
           }
 
-          await utils.persistAssistantMessage(assistantMessage, chatId);
+          // Store the complete interaction
+          await InteractionModel.create({
+            agentId,
+            request: body,
+            response: {
+              id: chunks[0]?.id || "chatcmpl-unknown",
+              object: "chat.completion",
+              created: chunks[0]?.created || Date.now() / 1000,
+              model: body.model,
+              choices: [
+                {
+                  index: 0,
+                  message: assistantMessage,
+                  finish_reason: "stop",
+                  logprobs: null,
+                },
+              ],
+            },
+          });
 
           for (const chunk of chunks) {
             /**
@@ -147,17 +157,24 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           let assistantMessage = response.choices[0].message;
 
+          // Evaluate tool invocation policies dynamically
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
-              chatId,
+              agentId,
+              contextIsTrusted,
             );
           if (toolInvocationRefusal) {
             assistantMessage = toolInvocationRefusal.message;
             response.choices = [toolInvocationRefusal];
           }
 
-          await utils.persistAssistantMessage(assistantMessage, chatId);
+          // Store the complete interaction
+          await InteractionModel.create({
+            agentId,
+            request: body,
+            response,
+          });
 
           return reply.send(response);
         }

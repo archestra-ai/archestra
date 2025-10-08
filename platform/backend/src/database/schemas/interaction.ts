@@ -1,30 +1,20 @@
-import {
-  boolean,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import type { InteractionContent } from "@/types";
-import chatsTable from "./chat";
+import { index, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { InteractionRequest, InteractionResponse } from "@/types";
+import agentsTable from "./agent";
 
 const interactionsTable = pgTable(
   "interactions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    chatId: uuid("chat_id")
+    agentId: uuid("agent_id")
       .notNull()
-      .references(() => chatsTable.id, { onDelete: "cascade" }),
-    content: jsonb("content").$type<InteractionContent>().notNull(),
-    trusted: boolean("trusted").notNull().default(true),
-    blocked: boolean("blocked").notNull().default(false),
-    reason: text("reason"),
+      .references(() => agentsTable.id, { onDelete: "cascade" }),
+    request: jsonb("request").$type<InteractionRequest>().notNull(),
+    response: jsonb("response").$type<InteractionResponse>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
-    chatIdIdx: index("interactions_chat_id_idx").on(table.chatId),
+    agentIdIdx: index("interactions_agent_id_idx").on(table.agentId),
   }),
 );
 

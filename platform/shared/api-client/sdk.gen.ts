@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateChatData, CreateChatResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1By__Data, DeleteV1By__Responses, DeleteV1Data, DeleteV1Responses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetChatData, GetChatErrors, GetChatResponses, GetChatsData, GetChatsResponses, GetHealthData, GetHealthResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1By__Data, GetV1By__Responses, GetV1Data, GetV1Responses, HeadV1By__Data, HeadV1By__Responses, HeadV1Data, HeadV1Responses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsV1By__Data, OptionsV1By__Responses, OptionsV1Data, OptionsV1Responses, PatchV1By__Data, PatchV1By__Responses, PatchV1Data, PatchV1Responses, PostV1By__Data, PostV1By__Responses, PostV1Data, PostV1Responses, PutV1By__Data, PutV1By__Responses, PutV1Data, PutV1Responses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1By__Data, DeleteV1By__Responses, DeleteV1Data, DeleteV1Responses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1By__Data, GetV1By__Responses, GetV1Data, GetV1Responses, HeadV1By__Data, HeadV1By__Responses, HeadV1Data, HeadV1Responses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsV1By__Data, OptionsV1By__Responses, OptionsV1Data, OptionsV1Responses, PatchV1By__Data, PatchV1By__Responses, PatchV1Data, PatchV1Responses, PostV1By__Data, PostV1By__Responses, PostV1Data, PostV1Responses, PutV1By__Data, PutV1By__Responses, PutV1Data, PutV1Responses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -91,35 +91,21 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 };
 
 /**
- * Get all chats
+ * Get all interactions
  */
-export const getChats = <ThrowOnError extends boolean = false>(options?: Options<GetChatsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetChatsResponses, unknown, ThrowOnError>({
-        url: '/api/chats',
+export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetInteractionsResponses, unknown, ThrowOnError>({
+        url: '/api/interactions',
         ...options
     });
 };
 
 /**
- * Create a new chat session
+ * Get interaction by ID
  */
-export const createChat = <ThrowOnError extends boolean = false>(options: Options<CreateChatData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateChatResponses, unknown, ThrowOnError>({
-        url: '/api/chats',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Get chat by ID
- */
-export const getChat = <ThrowOnError extends boolean = false>(options: Options<GetChatData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetChatResponses, GetChatErrors, ThrowOnError>({
-        url: '/api/chats/{chatId}',
+export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({
+        url: '/api/interactions/{interactionId}',
         ...options
     });
 };

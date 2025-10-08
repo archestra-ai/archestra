@@ -10,7 +10,8 @@ import { ToolInvocationPolicyModel } from "@/models";
  */
 export const evaluatePolicies = async (
   { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
-  chatId: string,
+  agentId: string,
+  contextIsTrusted: boolean,
 ): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
   for (const toolCall of toolCalls || []) {
     let toolCallName = "";
@@ -37,17 +38,25 @@ export const evaluatePolicies = async (
     const toolInput = JSON.parse(toolCallArgs);
 
     const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
-      chatId,
+      agentId,
       toolCallName,
       toolInput,
+      contextIsTrusted,
     );
 
-    const refusalMessage = `
+    const archestraMetadata = `
+<archestra-tool-name>${toolCallName}</archestra-tool-name>
+<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>`;
+
+    const contentMessage = `
 I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
 
 However, I was denied by a tool invocation policy:
 
 ${reason}`;
+
+    const refusalMessage = `${archestraMetadata}
+${contentMessage}`;
 
     if (!isAllowed) {
       return {
@@ -64,7 +73,7 @@ ${reason}`;
            * message, but also show some special UI to indicate that the tool call was blocked.
            */
           refusal: refusalMessage,
-          content: refusalMessage,
+          content: contentMessage,
         },
       };
     }

@@ -47,8 +47,8 @@ const items = [
   //   icon: Bot,
   // },
   {
-    title: "Chats",
-    url: "/chats",
+    title: "Logs",
+    url: "/logs",
     icon: MessagesSquare,
   },
   {

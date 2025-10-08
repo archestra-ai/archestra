@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.59",
-    "@shared": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -31,6 +31,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@shared": "workspace:*",
     "@tanstack/react-query": "^5.90.2",
     "@uidotdev/usehooks": "^2.4.1",
     "ai": "^5.0.57",

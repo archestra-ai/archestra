@@ -2,7 +2,6 @@ import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
-import InteractionModel from "./interaction";
 import ToolModel from "./tool";
 
 type EvaluationResult = {
@@ -70,16 +69,14 @@ class ToolInvocationPolicyModel {
    * Evaluate tool invocation policies for a given chat
    */
   static async evaluate(
-    chatId: string,
+    agentId: string,
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
+    isContextTrusted: boolean,
   ): Promise<EvaluationResult> {
-    const isContextTrusted =
-      await InteractionModel.checkIfChatIsTrusted(chatId);
-
     /**
-     * Get policies assigned to this chat's agent that also match the tool name,
+     * Get policies assigned to this agent that also match the tool name,
      * along with the tool's configuration
      */
     const applicablePoliciesForAgent = await db
@@ -88,19 +85,15 @@ class ToolInvocationPolicyModel {
         allowUsageWhenUntrustedDataIsPresent:
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
       })
-      .from(schema.chatsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.chatsTable.agentId, schema.toolsTable.agentId),
-      )
+      .from(schema.toolsTable)
       .innerJoin(
         schema.toolInvocationPoliciesTable,
         eq(schema.toolsTable.id, schema.toolInvocationPoliciesTable.toolId),
       )
       .where(
-        // Filter to policies that match the chat and tool
+        // Filter to policies that match the agent and tool
         and(
-          eq(schema.chatsTable.id, chatId),
+          eq(schema.toolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
         ),
       );

@@ -19,65 +19,16 @@ import type {
  */
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-const BACKEND_URL = "http://localhost:9000";
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error("OPENAI_API_KEY is not set");
+}
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "dummy-key",
-  baseURL: `${BACKEND_URL}/v1`,
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "http://localhost:9000/v1",
 });
 
-/**
- * Create a new chat session via the backend API
- */
-const createNewChat = async (
-  agentId: string | null,
-): Promise<string | null> => {
-  /**
-   * If agent ID is specified, create a new chat session that we will then pass along to the
-   * Archestra proxy to explicitly tie our agent's interactions to that chat (and the Archestra agent associated with that chat)
-   *
-   * If agent ID is not specified, the Archestra proxy creates one for us
-   * (and implicitly creates a chat session for us based on the hash of the first message)
-   */
-  if (!agentId) {
-    console.log(`
-⚠️ ⚠️ ⚠️
-No agent ID specified, the Archestra proxy will ensure a default one is created for us.
-
-Additionally, it will implicitly create a chat session for us based on the hash of the first message
-
-These IDs will be used to associate the agent's interactions to that chat/agent.
-`);
-    return null;
-  }
-
-  console.log(`Creating new chat session for agent ${agentId}...`);
-
-  const response = await fetch(`${BACKEND_URL}/api/chats`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ agentId }),
-  });
-
-  if (!response.ok) {
-    console.error(
-      `Failed to create chat session ${response.statusText}. Is the backend is running at ${BACKEND_URL}?`,
-    );
-    process.exit(1);
-  }
-
-  const data = await response.json();
-  const chatId = data.id;
-
-  console.log(`Chat session created: ${chatId}`);
-
-  return chatId;
-};
-
 const parseArgs = (): {
-  agentId: string | null;
   includeExternalEmail: boolean;
   includeMaliciousEmail: boolean;
   debug: boolean;
@@ -87,7 +38,6 @@ const parseArgs = (): {
   if (process.argv.includes("--help")) {
     console.log(`
 Options:
---agent-id <agent-id>     The ID of the agent to use for the chat. Optional, if not provided, a new agent will be created.
 --include-external-email  Include external email in mock Gmail data
 --include-malicious-email Include malicious email in mock Gmail data
 --stream                  Stream the response
@@ -98,12 +48,9 @@ Options:
     process.exit(0);
   }
 
-  // Parse --agent-id flag
-  const agentIdIndex = process.argv.indexOf("--agent-id");
   const modelIndex = process.argv.indexOf("--model");
 
   return {
-    agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
@@ -262,7 +209,6 @@ const getAssistantMessageFromStream = async (
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessage> => {
   // Accumulate the assistant message from chunks
   let accumulatedContent = "";
-  let accumulatedRefusal = "";
   const accumulatedToolCalls: any[] = [];
 
   if (shouldPrintPrefix) {
@@ -280,11 +226,6 @@ const getAssistantMessageFromStream = async (
     if (delta?.content) {
       accumulatedContent += delta.content;
       process.stdout.write(delta.content);
-    }
-
-    if (delta?.refusal) {
-      accumulatedRefusal += delta.refusal;
-      process.stdout.write(delta.refusal);
     }
 
     if (delta?.tool_calls) {
@@ -322,29 +263,19 @@ const getAssistantMessageFromStream = async (
   return {
     role: "assistant" as const,
     content: accumulatedContent || null,
-    refusal: accumulatedRefusal || null,
     tool_calls:
       accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
   };
 };
 
 const cliChatWithGuardrails = async () => {
-  const {
-    agentId,
-    includeExternalEmail,
-    includeMaliciousEmail,
-    debug,
-    stream,
-    model,
-  } = parseArgs();
+  const { includeExternalEmail, includeMaliciousEmail, debug, stream, model } =
+    parseArgs();
 
   const terminal = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
-
-  // (conditionally) create new chat session (if agent ID is specified)
-  let chatId = await createNewChat(agentId);
 
   const systemPromptMessage: ChatCompletionMessageParam = {
     role: "system",
@@ -355,11 +286,11 @@ Some examples:
 - if the user asks you to read Desktop, you should read ~/Desktop.`,
   };
 
-  let messages: ChatCompletionMessageParam[] = [systemPromptMessage];
+  const messages: ChatCompletionMessageParam[] = [systemPromptMessage];
 
   console.log("Type /help to see the available commands");
   console.log("Type /exit to exit");
-  console.log("Type /new to start a new session\n");
+  console.log("\n");
 
   while (true) {
     const userInput = await terminal.question("You: ");
@@ -368,16 +299,11 @@ Some examples:
       console.log("Available commands:");
       console.log("/help - Show this help message");
       console.log("/exit - Exit the program");
-      console.log("/new - Start a new session");
       console.log("\n");
       continue;
     } else if (userInput === "/exit") {
       console.log("Exiting...");
       process.exit(0);
-    } else if (userInput === "/new") {
-      chatId = await createNewChat(agentId);
-      messages = [systemPromptMessage];
-      continue;
     }
 
     messages.push({ role: "user", content: userInput });
@@ -401,7 +327,6 @@ Some examples:
       const chatCompletionRequestOptions: OpenAI.RequestOptions = {
         headers: {
           "User-Agent": "Archestra CLI Chat",
-          ...(chatId ? { "X-Archestra-Chat-Id": chatId } : {}),
         },
       };
 
@@ -431,11 +356,9 @@ Some examples:
 
         assistantMessage = response.choices[0].message;
 
-        // Only print if there's content or refusal to show (not for tool calls)
-        if (assistantMessage.content || assistantMessage.refusal) {
-          process.stdout.write(
-            `\nAssistant: ${assistantMessage.content || assistantMessage.refusal}`,
-          );
+        // Only print if there's content to show (not for tool calls)
+        if (assistantMessage.content) {
+          process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
         }
       }
 

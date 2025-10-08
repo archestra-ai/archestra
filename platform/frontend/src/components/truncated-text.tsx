@@ -43,7 +43,7 @@ export function TruncatedText({
         <Tooltip open={isOpen} onOpenChange={handleOpenChange}>
           <TooltipTrigger asChild>
             <AlignLeft
-              className={`w-4 h-4 absolute top-1/2 right-4 -translate-y-1/2 ${shouldShowIcon ? "block" : "hidden group-hover:block"}`}
+              className={`w-4 h-4 absolute top-1/2 right-2 -translate-y-1/2 ${shouldShowIcon ? "block" : "hidden group-hover:block"}`}
             />
           </TooltipTrigger>
           <TooltipContent className="max-w-md whitespace-pre-wrap break-words">

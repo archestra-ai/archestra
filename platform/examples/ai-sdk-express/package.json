@@ -16,7 +16,7 @@
   "devDependencies": {
     "@types/express": "5.0.0",
     "@types/node": "20.17.24",
-    "tsx": "4.19.2",
+    "tsx": "4.20.6",
     "typescript": "5.8.3"
   }
 }

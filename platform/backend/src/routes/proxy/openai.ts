@@ -113,11 +113,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 choices: [
                   {
                     index: 0,
-                    delta: {
-                      role: "assistant",
-                      content: null,
-                      refusal: toolInvocationRefusal.message.refusal,
-                    },
+                    delta:
+                      toolInvocationRefusal.message as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
                     finish_reason: "stop",
                     logprobs: null,
                   },

@@ -143,10 +143,10 @@ The production backend provides:
 - **Chat Management**:
   - `POST /api/chats` - Create new chat session
   - `GET /api/chats/:chatId` - Get chat with all interactions
-  - **Note**: Chat ID is now optional when using the OpenAI proxy - if not provided via `x-archestra-chat-id` header, a chat will be created/retrieved based on the hash of the first message
+  - **Note**: Chat ID is now optional when using the OpenAI proxy - if not provided via `x-archestra-chat-id` header, a chat will be created/tracked using system message embedding
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
-    - Optional `x-archestra-chat-id` header - if not provided, automatically creates/retrieves default agent and chat based on message content hash
+    - Optional `x-archestra-chat-id` header - if not provided, automatically creates/retrieves default agent and uses system message embedding for chat continuity
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
 - **Agent Management**:
@@ -197,7 +197,16 @@ The backend integrates advanced security guardrails:
 - **Taint Analysis**: Tracks untrusted data through the system
 - **Database Persistence**: All chats and interactions stored in PostgreSQL
 
-#### Database Schema
+##### Chat ID Tracking
+
+The platform supports two methods for chat ID tracking:
+1. **Header-based**: Explicit `x-archestra-chat-id` header in the request
+2. **System message embedding**: Automatic embedding of chat IDs in system messages using XML tags (`<archestra_chat_id>`)
+   - When no header is provided, the system creates/retrieves chats by embedding IDs in system messages
+   - Supports both string and array-based system message content
+   - Maintains chat continuity across API calls without requiring client-side tracking
+
+### Database Schema
 
 - **Agent**: Stores AI agents with name and timestamps
 - **Chat**: Stores chat sessions with timestamps and agent reference

@@ -1,1 +1,0 @@
-ALTER TABLE "chats" DROP COLUMN "hash_for_id";

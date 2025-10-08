@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.7](https://github.com/archestra-ai/archestra/compare/platform-v0.0.6...platform-v0.0.7) (2025-10-08)
+
+
+### Features
+
+* add docker-compose for openwebui example ([#642](https://github.com/archestra-ai/archestra/issues/642)) ([4c3806d](https://github.com/archestra-ai/archestra/commit/4c3806dda5b5d2b27ec8165d4f0c62085cb7c3ec))
+
+
+### Bug Fixes
+
+* update interactions data-model ([#660](https://github.com/archestra-ai/archestra/issues/660)) ([b226b84](https://github.com/archestra-ai/archestra/commit/b226b84a882a8d9482e945edb0df34083400a579))
+
 ## [0.0.6](https://github.com/archestra-ai/archestra/compare/platform-v0.0.5...platform-v0.0.6) (2025-10-07)
 
 

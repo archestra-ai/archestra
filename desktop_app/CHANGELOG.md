@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.14](https://github.com/archestra-ai/archestra/compare/v0.0.13...v0.0.14) (2025-10-06)
+
+
+### Features
+
+* platform release-please dockerhub + helm-chart release workflow ([#631](https://github.com/archestra-ai/archestra/issues/631)) ([22d068a](https://github.com/archestra-ai/archestra/commit/22d068ab65b48890db08264ffd77a9014c6c4395))
+
 ## [0.0.13](https://github.com/archestra-ai/archestra/compare/v0.0.12...v0.0.13) (2025-10-01)
 
 

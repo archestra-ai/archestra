@@ -34,61 +34,149 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared
 
-# Build all workspaces
+# Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
-# <----- Backend runner stage ----->
-FROM base AS backend
+# <----- Final unified stage ----->
+FROM base AS unified
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Install PostgreSQL 17 and supervisord
+RUN apk add --no-cache \
+    postgresql17 \
+    postgresql17-contrib \
+    supervisor \
+    su-exec \
+    && mkdir -p /var/log/supervisor
+
+# Create postgres directories (user already exists from postgresql package)
+RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
+    chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json backend/
+COPY frontend/package.json frontend/
 
-# Install dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend
+# Install production dependencies for both workspaces
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false --filter=@backend --filter=@frontend
 
-# Copy built backend and migrations
+# Copy built backend
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/drizzle.config.ts ./backend/
 COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/migrations
-COPY --from=builder /app/backend/start.sh ./backend/start.sh
 
-RUN chmod +x ./backend/start.sh
-
-EXPOSE 9000
-
-CMD ["sh", "backend/start.sh"]
-
-# <----- Frontend runner stage ----->
-FROM base AS frontend
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy built frontend files
+# Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public
+COPY --from=builder /app/frontend/.next/standalone ./
+COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
 
-# Set correct permissions for Next.js cache
-RUN mkdir -p ./frontend/.next
-RUN chown nextjs:nodejs ./frontend/.next
+# Create supervisord configuration
+RUN cat > /etc/supervisord.conf <<'EOF'
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
 
-# Copy standalone build
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./frontend/.next/static
+[program:postgres]
+user=postgres
+command=postgres -D /var/lib/postgresql/data
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=1
 
-USER nextjs
+[program:backend]
+directory=/app/backend
+command=/bin/sh -c "sleep 5 && pnpm db:migrate && node dist/server.js"
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=10
+environment=NODE_ENV="production",DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
-EXPOSE 3000
+[program:frontend]
+directory=/app/frontend
+command=/bin/sh -c "sleep 8 && node server.js"
+autostart=true
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=20
+environment=NODE_ENV="production",NEXT_PUBLIC_BACKEND_URL="http://localhost:9000",HOSTNAME="0.0.0.0",PORT="3000"
+EOF
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+# Create initialization script
+RUN cat > /docker-entrypoint.sh <<'EOF'
+#!/bin/sh
+set -e
 
-CMD ["node", "frontend/server.js"]
+# Parse DATABASE_URL or use defaults
+if [ -n "$DATABASE_URL" ]; then
+    # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
+    POSTGRES_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    POSTGRES_PASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    POSTGRES_DB=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+else
+    # Use defaults
+    POSTGRES_USER=${POSTGRES_USER:-archestra}
+    POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
+    POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
+    DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+fi
+
+# Initialize PostgreSQL if data directory is empty
+if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+    echo "Initializing PostgreSQL database..."
+    su-exec postgres initdb -D /var/lib/postgresql/data
+
+    # Configure PostgreSQL
+    echo "host all all all md5" >> /var/lib/postgresql/data/pg_hba.conf
+    echo "listen_addresses='*'" >> /var/lib/postgresql/data/postgresql.conf
+
+    # Start PostgreSQL temporarily to create user and database
+    su-exec postgres pg_ctl -D /var/lib/postgresql/data -o "-c listen_addresses=''" -w start
+
+    # Create user and database
+    psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+        CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';
+        CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};
+        GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB} TO ${POSTGRES_USER};
+EOSQL
+
+    # Stop PostgreSQL
+    su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
+
+    echo "PostgreSQL initialized successfully"
+fi
+
+# Update supervisord config with actual DATABASE_URL
+sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
+
+# Start supervisord
+exec /usr/bin/supervisord -c /etc/supervisord.conf
+EOF
+
+RUN chmod +x /docker-entrypoint.sh
+
+# Expose ports
+EXPOSE 5432 9000 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

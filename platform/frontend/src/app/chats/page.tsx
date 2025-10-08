@@ -1,12 +1,25 @@
-import { type GetChatsResponses, getChats } from "@shared/api-client";
+import {
+  type GetAgentsResponses,
+  type GetChatsResponses,
+  getAgents,
+  getChats,
+} from "@shared/api-client";
 import ChatsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChatsPageServer() {
-  let initialData: GetChatsResponses["200"] | undefined;
+  let initialData:
+    | {
+        chats: GetChatsResponses["200"];
+        agents: GetAgentsResponses["200"];
+      }
+    | undefined;
   try {
-    initialData = (await getChats()).data;
+    initialData = {
+      chats: (await getChats()).data ?? [],
+      agents: (await getAgents()).data ?? [],
+    };
   } catch (error) {
     console.error(error);
   }

@@ -1,0 +1,24 @@
+name: Authenticate to Google Artifact Registry
+description: Authenticate to Google Cloud and configure Docker for Artifact Registry
+inputs:
+  service_account:
+    description: The GCP service account name
+    required: true
+  workload_identity_provider:
+    description: The GCP Workload Identity Provider identifier
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@6fc4af4b145ae7821d527454aa9bd537d1f2dc5f # v2.1.7
+      with:
+        service_account: ${{ inputs.service_account }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+
+    - name: Set up Google Cloud
+      uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
+
+    - name: Configure Docker for Artifact Registry
+      shell: bash
+      run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet

@@ -201,7 +201,7 @@ The backend integrates advanced security guardrails:
 - **Trusted Data Policies**: Mark specific data patterns as trusted or blocked
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
-  - Actions: 
+  - Actions:
     - `allow`: Mark data as trusted
     - `block_always`: Prevent data from reaching LLM (blocked data is filtered out before sending to the model)
 - **Taint Analysis**: Tracks untrusted data through the system
@@ -266,6 +266,7 @@ The `experiments/` workspace contains prototype features:
 - **Globals**: Test utilities are available via `vitest` globals
 
 **Test Examples**:
+
 - `agent.test.ts`: Simple agent CRUD operations
 - `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
 - `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
@@ -278,3 +279,92 @@ The `experiments/` workspace contains prototype features:
 - Use workspace-relative imports within each workspace
 - Run `pnpm type-check` before committing to catch type errors
 - Use `tilt up` for the best development experience with hot reload
+
+### Release Process
+
+The platform uses [release-please](https://github.com/googleapis/release-please) for automated release management:
+
+- **Version**: Currently at v0.0.0 (initial version)
+- **Release PRs**: Automatically created when conventional commits are merged
+- **Platform Releases**: When a platform release is merged:
+  1. Docker image is built and published to DockerHub (archestra/platform)
+  2. Helm chart is published to Google Artifact Registry
+- **Changelog**: Maintained in `platform/CHANGELOG.md`
+- **Release Configuration**: See `.github/release-please/release-please-config.json`
+- **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
+
+#### Release Workflow Details
+
+The release process is triggered automatically when:
+
+1. Conventional commits are merged to main
+2. Release-please creates a PR with version bumps
+3. When the release PR is merged, the following happens:
+   - Platform Docker image is built from `platform/` directory
+   - Image is pushed to DockerHub with the new version tag
+   - Helm chart (from `platform/helm/`) is packaged and pushed to GAR
+
+The release workflow (`release-please.yml`) monitors both `desktop_app` and `platform` packages:
+
+- Outputs separate release states: `platform_release_created` and `desktop_release_created`
+- Platform releases trigger:
+  - `build-and-push-platform-docker-image-to-dockerhub` job
+  - `publish-platform-helm-chart` job
+- Desktop releases remain unchanged
+
+#### Docker Image Publishing
+
+The platform Docker image is published to DockerHub:
+
+- **Repository**: `archestra/platform`
+- **Build Context**: `./platform` directory
+- **Triggered by**: Platform releases from release-please
+- **Version Tags**: Uses the platform version from release-please output
+- **Workflow**: `.github/workflows/build-dockerhub-image.yml`
+- **Authentication**: Requires `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets
+- **Build Features**:
+  - Multi-stage builds supported via Dockerfile
+  - Optional push based on workflow inputs
+
+#### Helm Chart
+
+The platform includes a simplified Helm chart for Kubernetes deployments:
+
+- **Location**: `platform/helm/`
+- **Chart Name**: archestra-platform
+- **Version**: 0.0.1 (managed by release-please)
+- **Architecture**:
+  - Single consolidated template (`archestra-platform.yaml`) containing both Service and Deployment
+  - Simplified values structure focused on essential configuration
+  - Supports both internal PostgreSQL deployment (via Bitnami chart) or external database
+  - Init container to wait for PostgreSQL readiness before starting the application
+- **Core Features**:
+  - Single container deployment running both backend (port 9000) and frontend (port 3000)
+  - ClusterIP Service exposing both ports
+  - PostgreSQL dependency (Bitnami chart v18.0.8) with option for external database
+  - Environment variable injection for database connectivity
+  - Default image: `archestra/platform:latest`
+  - Automatic PostgreSQL connection waiting via init container
+- **Installation**:
+  ```bash
+  helm upgrade archestra-platform ./helm \
+    --install \
+    --namespace archestra-dev \
+    --create-namespace \
+    --wait
+  ```
+- **Configuration**:
+  - `archestra.image`: Docker image to deploy (default: `archestra/platform:latest`)
+  - `postgresql.external_database_url`: Optional external database URL (format: `postgresql://username:password@host:5432/database`)
+  - `postgresql.*`: Bitnami PostgreSQL chart configuration when using internal database
+    - Uses `bitnamisecure/postgresql:latest` image due to Bitnami repository changes
+    - Default database: `archestra_dev`
+    - Default username: `archestra`
+- **Publishing**:
+  - **Repository**: `oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts`
+  - **Authentication**: Google Artifact Registry via Workload Identity Federation
+  - **Workflow**: `.github/workflows/publish-platform-helm-chart.yml`
+- **Testing**:
+  - Helm lint validation in CI
+  - Comprehensive helm-unittest tests in `tests/archestra_platform_test.yaml`
+  - Tests validate container configuration, ports, environment variables, and service setup

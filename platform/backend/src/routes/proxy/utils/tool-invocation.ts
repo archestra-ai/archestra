@@ -42,6 +42,20 @@ export const evaluatePolicies = async (
       toolInput,
     );
 
+    const archestraMetadata = `
+<archestra-tool-name>${toolCallName}</archestra-tool-name>
+<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>`;
+
+    const contentMessage = `
+I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
+
+However, I was denied by a tool invocation policy:
+
+${reason}`;
+
+    const refusalMessage = `${archestraMetadata}
+${contentMessage}`;
+
     if (!isAllowed) {
       return {
         finish_reason: "stop",
@@ -49,13 +63,15 @@ export const evaluatePolicies = async (
         logprobs: null,
         message: {
           role: "assistant",
-          refusal: `
-I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
-
-However, I was denied by a tool invocation policy:
-
-${reason}`,
-          content: null,
+          /**
+           * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+           * is that most clients expect to see the content field, and don't conditionally render the refusal field
+           *
+           * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+           * message, but also show some special UI to indicate that the tool call was blocked.
+           */
+          refusal: refusalMessage,
+          content: contentMessage,
         },
       };
     }

@@ -1,3 +1,7 @@
 {
-  "recommendations": ["biomejs.biome", "Tchoupinax.tilt"]
+  "recommendations": [
+    "biomejs.biome",
+    "Tchoupinax.tilt",
+    "ms-kubernetes-tools.vscode-kubernetes-tools"
+  ]
 }

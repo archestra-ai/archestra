@@ -1,0 +1,133 @@
+suite: test archestra platform
+templates:
+  - archestra-platform.yaml
+tests:
+  - it: should create a Service with correct metadata
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Service
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform$
+
+  - it: should be ClusterIP type
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should expose backend port 9000
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: backend
+            port: 9000
+            targetPort: backend
+            protocol: TCP
+
+  - it: should expose frontend port 3000
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: frontend
+            port: 3000
+            targetPort: frontend
+            protocol: TCP
+
+  - it: should create a Deployment with correct metadata
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform$
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should configure container with correct image
+    documentIndex: 1
+    set:
+      archestra.image: archestra/platform:test-version
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: archestra/platform:test-version
+
+  - it: should expose both backend and frontend ports
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: backend
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 9000
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].name
+          value: frontend
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 3000
+
+  - it: should set DATABASE_URL to internal postgres when external_database_url is null
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: null
+      postgresql.auth.username: testuser
+      postgresql.auth.password: testpass
+      postgresql.auth.database: testdb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: DATABASE_URL
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[0].value
+          pattern: ^postgresql://testuser:testpass@.*-archestra-platform-postgresql:5432/testdb$
+
+  - it: should set DATABASE_URL to external postgres when external_database_url is provided
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: DATABASE_URL
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: postgresql://external:pass@external-host:5432/externaldb
+
+  - it: should have init container to wait for PostgreSQL
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: busybox:1.36
+
+  - it: should configure init container to wait for internal postgres
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: null
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*-archestra-platform-postgresql.*5432.*"
+
+  - it: should configure init container to wait for external postgres
+    documentIndex: 1
+    set:
+      postgresql.external_database_url: postgresql://user:pass@external-db.example.com:5432/mydb
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*external-db.example.com.*5432.*"

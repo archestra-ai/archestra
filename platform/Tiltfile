@@ -22,7 +22,9 @@ helm_remote(
     'auth.username=archestra',
     'auth.password=archestra_dev_password',
 
-    # Bitnami is archiving their image.. see this github comment for details
+    # NOTE: Bitnami is archiving their image.. see these github comments for details
+    # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
+    #
     # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
     # https://github.com/bitnami/containers/issues/83267
     'image.repository=bitnamisecure/postgresql',

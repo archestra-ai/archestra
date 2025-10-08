@@ -1,0 +1,57 @@
+name: Publish platform Helm chart
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version tag for the Helm chart"
+        required: true
+        type: string
+      push_chart:
+        description: "Whether to push the Helm chart to the repository"
+        required: true
+        type: boolean
+    secrets:
+      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
+        required: false
+      GCP_SERVICE_ACCOUNT_NAME:
+        required: false
+
+jobs:
+  # See here for inspiration on how this was put together:
+  # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
+  publish-platform-helm-chart:
+    name: Publish platform Helm chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # Required for Workload Identity Federation
+    defaults:
+      run:
+        working-directory: ./platform/helm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authenticate to Google Artifact Registry
+        if: inputs.push_chart
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: helm package
+        env:
+          IMAGE_TAG: ${{ inputs.version }}
+        run: |
+          helm package . --version $IMAGE_TAG --app-version $IMAGE_TAG
+
+      - name: helm push
+        if: inputs.push_chart
+        env:
+          IMAGE_TAG: ${{ inputs.version }}
+        run: |
+          helm push archestra-platform-$IMAGE_TAG.tgz oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts

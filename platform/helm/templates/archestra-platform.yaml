@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: backend
+      protocol: TCP
+      name: backend
+    - port: 3000
+      targetPort: frontend
+      protocol: TCP
+      name: frontend
+  selector:
+    {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.labels" . | nindent 8 }}
+    spec:
+      # Init container to wait for PostgreSQL to be ready before starting the application
+      # This prevents the application from crashing when PostgreSQL is still starting up
+      # and the application tries to run database migrations (in which it assumes that the database is already ready)
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z {{ include "archestra-platform.postgresql.host" . }} {{ include "archestra-platform.postgresql.port" . }}; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 1
+              done
+              echo "PostgreSQL is up - continuing"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.archestra.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: backend
+              containerPort: 9000
+              protocol: TCP
+            - name: frontend
+              containerPort: 3000
+              protocol: TCP
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}

@@ -9,6 +9,23 @@ class ChatModel {
     return chat;
   }
 
+  static async createOrGetByHash(data: { agentId: string; hashForId: string }) {
+    const [chat] = await db
+      .select()
+      .from(schema.chatsTable)
+      .where(eq(schema.chatsTable.hashForId, data.hashForId));
+
+    if (chat) {
+      return chat;
+    } else {
+      const [chat] = await db
+        .insert(schema.chatsTable)
+        .values(data)
+        .returning();
+      return chat;
+    }
+  }
+
   static async findAll(): Promise<ChatWithInteractions[]> {
     const chats = await db
       .select()

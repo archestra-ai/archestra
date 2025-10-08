@@ -1,13 +1,14 @@
 "use client";
 
 import type { GetAgentsResponses, GetChatsResponses } from "@shared/api-client";
-import { reverse, uniq } from "lodash-es";
+import { uniq } from "lodash-es";
 import { Copy } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
 import { TruncatedText } from "@/components/truncated-text";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,6 +26,10 @@ import {
 } from "@/components/ui/table";
 import { useAgents } from "@/lib/agent.query";
 import { useChats } from "@/lib/chat.query";
+import {
+  toolNamesRefusedForChat,
+  toolNamesUsedForChat,
+} from "@/lib/chat.utils";
 import { cn, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
@@ -53,6 +58,8 @@ type ColumnId =
   | "agentId"
   | "agentName"
   | "interactions"
+  | "toolsUsed"
+  | "toolsRefused"
   | "firstMessage"
   | "lastMessage"
   | "createdAt"
@@ -110,6 +117,34 @@ function getColumnsWithoutOrder({
       label: "Number of messages",
       render: (chat) => chat.interactions.length,
     },
+    toolsUsed: {
+      label: "Tools used",
+      render: (chat) => {
+        return (
+          <>
+            {toolNamesUsedForChat(chat).map((toolName) => (
+              <Badge key={toolName} className="mt-2">
+                {toolName}
+              </Badge>
+            ))}
+          </>
+        );
+      },
+    },
+    toolsRefused: {
+      label: "Tools refused",
+      render: (chat) => {
+        return (
+          <>
+            {toolNamesRefusedForChat(chat).map((toolName) => (
+              <Badge key={toolName} className="mt-2" variant="destructive">
+                {toolName}
+              </Badge>
+            ))}
+          </>
+        );
+      },
+    },
     firstMessage: {
       label: "First user message",
       render: (chat) => <TruncatedText message={findFirstUserMessage(chat)} />,
@@ -162,6 +197,8 @@ const ALWAYS_SELECTED_COLUMN_IDS = ["id", "actions"] as const;
 const DEFAULT_SELECTED_COLUMNS: ColumnId[] = [
   ...ALWAYS_SELECTED_COLUMN_IDS,
   "interactions",
+  "toolsUsed",
+  "toolsRefused",
   "firstMessage",
   "createdAt",
 ];
@@ -305,14 +342,14 @@ function ColumnsSelector({
 function findFirstUserMessage(
   chat: GetChatsResponses["200"][number],
 ): string | undefined {
-  const a = chat.interactions.find(
+  const interaction = chat.interactions.find(
     (interaction) => interaction.content.role === "user",
   );
-  if (typeof a?.content.content === "string") {
-    return a.content.content;
+  if (typeof interaction?.content.content === "string") {
+    return interaction.content.content;
   }
-  if (a?.content.content?.[0]?.type === "text") {
-    return a.content.content?.[0].text;
+  if (interaction?.content.content?.[0]?.type === "text") {
+    return interaction.content.content?.[0].text;
   }
   return undefined;
 }
@@ -320,14 +357,14 @@ function findFirstUserMessage(
 function findLastUserMessage(
   chat: GetChatsResponses["200"][number],
 ): string | undefined {
-  const a = reverse(chat.interactions).find(
-    (interaction) => interaction.content.role === "user",
-  );
-  if (typeof a?.content.content === "string") {
-    return a.content.content;
+  const interaction = [...chat.interactions]
+    .reverse()
+    .find((interaction) => interaction.content.role === "user");
+  if (typeof interaction?.content.content === "string") {
+    return interaction.content.content;
   }
-  if (a?.content.content?.[0]?.type === "text") {
-    return a.content.content?.[0].text;
+  if (interaction?.content.content?.[0]?.type === "text") {
+    return interaction.content.content?.[0].text;
   }
   return undefined;
 }

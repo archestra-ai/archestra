@@ -50,11 +50,12 @@ export const evaluatePolicies = async (
         message: {
           role: "assistant",
           refusal: `
+          <archestra-tool-name>${toolCallName}</archestra-tool-name>
+          <archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>
+
 I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
 
-However, I was denied by a tool invocation policy:
-
-${reason}`,
+However, I was denied by a tool invocation policy: ${reason}`,
           content: null,
         },
       };

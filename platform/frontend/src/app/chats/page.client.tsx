@@ -1,21 +1,21 @@
-"use client";
+'use client';
 
-import type { GetAgentsResponses, GetChatsResponses } from "@shared/api-client";
-import { uniq } from "lodash-es";
-import { Copy } from "lucide-react";
-import Link from "next/link";
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { LoadingSpinner } from "@/components/loading";
-import { TruncatedText } from "@/components/truncated-text";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import type { GetAgentsResponses, GetChatsResponses } from '@shared/api-client';
+import { uniq } from 'lodash-es';
+import { Copy } from 'lucide-react';
+import Link from 'next/link';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { LoadingSpinner } from '@/components/loading';
+import { TruncatedText } from '@/components/truncated-text';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -23,22 +23,24 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { useAgents } from "@/lib/agent.query";
-import { useChats } from "@/lib/chat.query";
+} from '@/components/ui/table';
+import { useAgents } from '@/lib/agent.query';
+import { useChats } from '@/lib/chat.query';
 import {
   toolNamesRefusedForChat,
   toolNamesUsedForChat,
-} from "@/lib/chat.utils";
-import { cn, formatDate } from "@/lib/utils";
-import { ErrorBoundary } from "../_parts/error-boundary";
+} from '@/lib/chat.utils';
+import { cn, formatDate } from '@/lib/utils';
+import { ErrorBoundary } from '../_parts/error-boundary';
+import { WaitingForFirstRequest } from '@/components/waiting-for-first-request';
+import { usePolling } from '@/hooks/usePolling';
 
 export default function ChatsPage({
   initialData,
 }: {
   initialData?: {
-    chats: GetChatsResponses["200"];
-    agents: GetAgentsResponses["200"];
+    chats: GetChatsResponses['200'];
+    agents: GetAgentsResponses['200'];
   };
 }) {
   return (
@@ -54,36 +56,36 @@ export default function ChatsPage({
 }
 
 type ColumnId =
-  | "id"
-  | "agentId"
-  | "agentName"
-  | "interactions"
-  | "toolsUsed"
-  | "toolsRefused"
-  | "firstMessage"
-  | "lastMessage"
-  | "createdAt"
-  | "actions";
+  | 'id'
+  | 'agentId'
+  | 'agentName'
+  | 'interactions'
+  | 'toolsUsed'
+  | 'toolsRefused'
+  | 'firstMessage'
+  | 'lastMessage'
+  | 'createdAt'
+  | 'actions';
 
 function getColumnsWithoutOrder({
   agents,
 }: {
-  agents: GetAgentsResponses["200"];
+  agents: GetAgentsResponses['200'];
 }): Record<
   ColumnId,
   {
     label: string;
-    render: (chat: GetChatsResponses["200"][number]) => React.ReactNode;
-    onClick?: (chat: GetChatsResponses["200"][number]) => void;
+    render: (chat: GetChatsResponses['200'][number]) => React.ReactNode;
+    onClick?: (chat: GetChatsResponses['200'][number]) => void;
     cellClassName?: string;
   }
 > {
   return {
     id: {
-      label: "ID",
+      label: 'ID',
       onClick: (chat) => {
         navigator.clipboard.writeText(chat.id);
-        toast.success("ID copied to clipboard");
+        toast.success('ID copied to clipboard');
       },
       render: (chat) => (
         <div className="pr-6 cursor-pointer">
@@ -93,10 +95,10 @@ function getColumnsWithoutOrder({
       ),
     },
     agentId: {
-      label: "Agent ID",
+      label: 'Agent ID',
       onClick: (chat) => {
         navigator.clipboard.writeText(chat.agentId);
-        toast.success("Agent ID copied to clipboard");
+        toast.success('Agent ID copied to clipboard');
       },
       render: (chat) => (
         <div className="pr-6 cursor-pointer">
@@ -106,19 +108,19 @@ function getColumnsWithoutOrder({
       ),
     },
     agentName: {
-      label: "Agent name",
+      label: 'Agent name',
       render: (chat) => {
         const text =
-          agents.find((agent) => agent.id === chat.agentId)?.name ?? "Unknown";
+          agents.find((agent) => agent.id === chat.agentId)?.name ?? 'Unknown';
         return <TruncatedText message={text} />;
       },
     },
     interactions: {
-      label: "Number of messages",
+      label: 'Number of messages',
       render: (chat) => chat.interactions.length,
     },
     toolsUsed: {
-      label: "Tools used",
+      label: 'Tools used',
       render: (chat) => {
         return (
           <>
@@ -132,7 +134,7 @@ function getColumnsWithoutOrder({
       },
     },
     toolsRefused: {
-      label: "Tools refused",
+      label: 'Tools refused',
       render: (chat) => {
         return (
           <>
@@ -146,30 +148,30 @@ function getColumnsWithoutOrder({
       },
     },
     firstMessage: {
-      label: "First user message",
+      label: 'First user message',
       render: (chat) => <TruncatedText message={findFirstUserMessage(chat)} />,
     },
     lastMessage: {
-      label: "Last user message",
+      label: 'Last user message',
       render: (chat) => <TruncatedText message={findLastUserMessage(chat)} />,
     },
     createdAt: {
-      label: "Date",
+      label: 'Date',
       render: (chat) => formatDate({ date: chat.createdAt }),
     },
     actions: {
-      label: "Actions",
+      label: 'Actions',
       render: (chat) => (
         <Button variant="outline" asChild>
           <Link href={`/chats/${chat.id}`}>Details</Link>
         </Button>
       ),
-      cellClassName: "text-right",
+      cellClassName: 'text-right',
     },
   };
 }
 
-function getColumns({ agents }: { agents: GetAgentsResponses["200"] }) {
+function getColumns({ agents }: { agents: GetAgentsResponses['200'] }) {
   const columns = getColumnsWithoutOrder({ agents });
   return Object.keys(columns).reduce(
     (acc, id) => {
@@ -183,34 +185,37 @@ function getColumns({ agents }: { agents: GetAgentsResponses["200"] }) {
       ColumnId,
       {
         label: string;
-        render: (chat: GetChatsResponses["200"][number]) => React.ReactNode;
-        onClick?: (chat: GetChatsResponses["200"][number]) => void;
+        render: (chat: GetChatsResponses['200'][number]) => React.ReactNode;
+        onClick?: (chat: GetChatsResponses['200'][number]) => void;
         idx: number;
         cellClassName?: string;
       }
-    >,
+    >
   );
 }
 
-const LOCAL_STORAGE_KEY = "archestra-selectedChatsColumns";
-const ALWAYS_SELECTED_COLUMN_IDS = ["id", "actions"] as const;
+const LOCAL_STORAGE_KEY = 'archestra-selectedChatsColumns';
+const ALWAYS_SELECTED_COLUMN_IDS = ['id', 'actions'] as const;
 const DEFAULT_SELECTED_COLUMNS: ColumnId[] = [
   ...ALWAYS_SELECTED_COLUMN_IDS,
-  "interactions",
-  "toolsUsed",
-  "toolsRefused",
-  "firstMessage",
-  "createdAt",
+  'interactions',
+  'toolsUsed',
+  'toolsRefused',
+  'firstMessage',
+  'createdAt',
 ];
+
 function Chats({
   initialData,
 }: {
   initialData?: {
-    chats: GetChatsResponses["200"];
-    agents: GetAgentsResponses["200"];
+    chats: GetChatsResponses['200'];
+    agents: GetAgentsResponses['200'];
   };
 }) {
-  const { data: chats = [] } = useChats({ initialData: initialData?.chats });
+  const { data: chats = [], refetch: refetchChats } = useChats({
+    initialData: initialData?.chats,
+  });
   const { data: agents = [] } = useAgents({ initialData: initialData?.agents });
   const columns = getColumns({ agents: agents ?? [] });
   const [selectedColumns, setSelectedColumns] = useState<ColumnId[]>([]);
@@ -236,9 +241,22 @@ function Chats({
     }
   }, [setColumns]);
 
+  // Poll for new chats when no chats exist (every 5 seconds)
+  const shouldPoll = chats == null || chats.length === 0;
+  usePolling(
+    () => {
+      if (shouldPoll) {
+        refetchChats();
+      }
+    },
+    shouldPoll ? 5000 : null // 5 seconds
+  );
+
+  // MAIN CHANGE: Show waiting screen when no chats exist
   if (chats == null || chats.length === 0) {
-    return <p className="text-muted-foreground">No chats found</p>;
+    return <WaitingForFirstRequest onRefresh={refetchChats} />;
   }
+
   return (
     <div className="w-full">
       <ColumnsSelector
@@ -253,7 +271,7 @@ function Chats({
           <TableRow>
             {selectedColumns.map((column) => (
               <TableHead
-                className={cn("font-bold", columns[column].cellClassName)}
+                className={cn('font-bold', columns[column].cellClassName)}
                 key={column}
               >
                 {columns[column].label}
@@ -269,8 +287,8 @@ function Chats({
                 .map((column) => (
                   <TableCell
                     className={cn(
-                      "break-words relative group",
-                      columns[column].cellClassName,
+                      'break-words relative group',
+                      columns[column].cellClassName
                     )}
                     key={column}
                     {...(columns[column].onClick && {
@@ -325,7 +343,7 @@ function ColumnsSelector({
                   onSelect(
                     selectedColumnIds.includes(columnId)
                       ? selectedColumnIds.filter((id) => id !== columnId)
-                      : [...selectedColumnIds, columnId],
+                      : [...selectedColumnIds, columnId]
                   );
                 }}
               >
@@ -340,30 +358,30 @@ function ColumnsSelector({
 }
 
 function findFirstUserMessage(
-  chat: GetChatsResponses["200"][number],
+  chat: GetChatsResponses['200'][number]
 ): string | undefined {
   const interaction = chat.interactions.find(
-    (interaction) => interaction.content.role === "user",
+    (interaction) => interaction.content.role === 'user'
   );
-  if (typeof interaction?.content.content === "string") {
+  if (typeof interaction?.content.content === 'string') {
     return interaction.content.content;
   }
-  if (interaction?.content.content?.[0]?.type === "text") {
+  if (interaction?.content.content?.[0]?.type === 'text') {
     return interaction.content.content?.[0].text;
   }
   return undefined;
 }
 
 function findLastUserMessage(
-  chat: GetChatsResponses["200"][number],
+  chat: GetChatsResponses['200'][number]
 ): string | undefined {
   const interaction = [...chat.interactions]
     .reverse()
-    .find((interaction) => interaction.content.role === "user");
-  if (typeof interaction?.content.content === "string") {
+    .find((interaction) => interaction.content.role === 'user');
+  if (typeof interaction?.content.content === 'string') {
     return interaction.content.content;
   }
-  if (interaction?.content.content?.[0]?.type === "text") {
+  if (interaction?.content.content?.[0]?.type === 'text') {
     return interaction.content.content?.[0].text;
   }
   return undefined;

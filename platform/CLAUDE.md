@@ -99,7 +99,7 @@ platform/
 │       │   └── trusted-data.ts     # Taint analysis and trusted data marking
 │       ├── models/              # Data models
 │       │   ├── agent.ts         # Agent model with CRUD operations
-│       │   ├── interaction.ts   # Interaction model
+│       │   ├── interaction.ts   # Interaction model (stores full request/response)
 │       │   ├── tool-invocation-policy.ts  # Tool invocation policy model
 │       │   └── trusted-data-policy.ts     # Trusted data policy model
 │       ├── providers/           # LLM provider abstraction
@@ -109,7 +109,7 @@ platform/
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
 │           ├── autonomy-policies.ts  # Autonomy policies endpoints
-│           ├── interaction.ts   # Interaction and LLM endpoints
+│           ├── interaction.ts   # Interaction endpoints (list, get by ID)
 │           └── proxy/           # OpenAI proxy with integrated guardrails
 │               ├── openai.ts    # Main proxy route handler
 │               ├── types.ts     # TypeScript types for proxy
@@ -147,6 +147,8 @@ The production backend provides:
 #### REST API Endpoints
 
 - **Interaction Management**:
+  - `GET /api/interactions` - List all interactions (with optional agentId filter)
+  - `GET /api/interactions/:id` - Get interaction by ID
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
@@ -205,9 +207,9 @@ The backend integrates advanced security guardrails:
 - **Agent**: Stores AI agents with name and timestamps
 - **Interaction**: Stores LLM interactions with request/response data
   - `agentId`: Direct link to the agent (no longer through chat)
-  - `request`: JSONB field storing the full LLM API request
-  - `response`: JSONB field storing the full LLM API response
-  - Removed fields: `trusted`, `blocked`, `reason` (moved trust tracking elsewhere)
+  - `request`: JSONB field storing the full LLM API request (OpenAI ChatCompletionRequest format)
+  - `response`: JSONB field storing the full LLM API response (OpenAI ChatCompletionResponse format)
+  - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents

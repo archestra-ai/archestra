@@ -1,7 +1,6 @@
 services:
   platform:
     image: archestra/platform:latest
-    container_name: archestra-platform
     ports:
       - "3003:3000"
       - "9009:9000"
@@ -10,11 +9,10 @@ services:
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
     ports:
       - "3004:8080"
     environment:
-      - OPENAI_API_BASE_URL=http://host.docker.internal:9000/api/proxy/openai
+      - OPENAI_API_BASE_URL=http://platform:9000/api/proxy/openai
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - WEBUI_AUTH=false
     volumes:

@@ -1,10 +1,4 @@
-import {
-  index,
-  jsonb,
-  pgTable,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 import agentsTable from "./agent";
 

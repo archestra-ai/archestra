@@ -71,11 +71,8 @@ export const evaluateIfContextIsTrusted = async (
 
       if (toolName) {
         // Evaluate trusted data policy dynamically
-        const { isTrusted, isBlocked, reason } = await TrustedDataPolicyModel.evaluate(
-          agentId,
-          toolName,
-          toolResult,
-        );
+        const { isTrusted, isBlocked, reason } =
+          await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
 
         if (!isTrusted) {
           hasUntrustedData = true;
@@ -93,7 +90,10 @@ export const evaluateIfContextIsTrusted = async (
 
   // Second pass: filter or redact messages
   for (const message of messages) {
-    if (message.role === "tool" && blockedToolCallIds.has(message.tool_call_id)) {
+    if (
+      message.role === "tool" &&
+      blockedToolCallIds.has(message.tool_call_id)
+    ) {
       // Redact blocked tool result
       const reason = blockReasons.get(message.tool_call_id);
       filteredMessages.push({

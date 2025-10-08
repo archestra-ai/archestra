@@ -75,7 +75,6 @@ class ToolInvocationPolicyModel {
     toolInput: Record<string, any>,
     isContextTrusted: boolean,
   ): Promise<EvaluationResult> {
-
     /**
      * Get policies assigned to this agent that also match the tool name,
      * along with the tool's configuration

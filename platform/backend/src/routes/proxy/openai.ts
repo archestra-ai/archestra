@@ -1,13 +1,13 @@
-import fastifyHttpProxy from '@fastify/http-proxy';
-import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import OpenAI from 'openai';
-import { InteractionModel } from '@/models';
-import { ErrorResponseSchema, OpenAi } from '@/types';
-import { ChatCompletionsHeadersSchema } from './types';
-import * as utils from './utils';
+import fastifyHttpProxy from "@fastify/http-proxy";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import OpenAI from "openai";
+import { InteractionModel } from "@/models";
+import { ErrorResponseSchema, OpenAi } from "@/types";
+import { ChatCompletionsHeadersSchema } from "./types";
+import * as utils from "./utils";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = '/v1';
+  const API_PREFIX = "/v1";
   const CHAT_COMPLETIONS_ROUTE = `${API_PREFIX}/chat/completions`;
 
   /**
@@ -15,13 +15,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * This will proxy routes like /v1/models to https://api.openai.com/v1/models
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: 'https://api.openai.com/v1',
+    upstream: "https://api.openai.com/v1",
     prefix: API_PREFIX,
     // Exclude chat/completions route since we handle it specially below
     preHandler: (request, _reply, done) => {
-      if (request.method === 'POST' && request.url === CHAT_COMPLETIONS_ROUTE) {
+      if (request.method === "POST" && request.url === CHAT_COMPLETIONS_ROUTE) {
         // Skip proxy for this route - we handle it below
-        done(new Error('skip'));
+        done(new Error("skip"));
       } else {
         done();
       }
@@ -33,9 +33,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     CHAT_COMPLETIONS_ROUTE,
     {
       schema: {
-        operationId: 'openAiChatCompletions',
-        description: 'Create a chat completion with OpenAI',
-        tags: ['llm-proxy'],
+        operationId: "openAiChatCompletions",
+        description: "Create a chat completion with OpenAI",
+        tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: ChatCompletionsHeadersSchema,
         response: {
@@ -62,9 +62,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await utils.trustedData.evaluateIfContextIsTrusted(messages, agentId);
 
         if (stream) {
-          reply.header('Content-Type', 'text/event-stream');
-          reply.header('Cache-Control', 'no-cache');
-          reply.header('Connection', 'keep-alive');
+          reply.header("Content-Type", "text/event-stream");
+          reply.header("Cache-Control", "no-cache");
+          reply.header("Connection", "keep-alive");
 
           // Handle streaming response
           const stream = await openAiClient.chat.completions.create({
@@ -85,7 +85,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
-              contextIsTrusted
+              contextIsTrusted,
             );
 
           if (toolInvocationRefusal) {
@@ -98,8 +98,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assistantMessage = toolInvocationRefusal.message;
             chunks = [
               {
-                id: 'chatcmpl-blocked',
-                object: 'chat.completion.chunk',
+                id: "chatcmpl-blocked",
+                object: "chat.completion.chunk",
                 created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
                 model: body.model,
                 choices: [
@@ -107,7 +107,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     index: 0,
                     delta:
                       toolInvocationRefusal.message as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-                    finish_reason: 'stop',
+                    finish_reason: "stop",
                     logprobs: null,
                   },
                 ],
@@ -120,15 +120,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentId,
             request: body,
             response: {
-              id: chunks[0]?.id || 'chatcmpl-unknown',
-              object: 'chat.completion',
+              id: chunks[0]?.id || "chatcmpl-unknown",
+              object: "chat.completion",
               created: chunks[0]?.created || Date.now() / 1000,
               model: body.model,
               choices: [
                 {
                   index: 0,
                   message: assistantMessage,
-                  finish_reason: 'stop',
+                  finish_reason: "stop",
                   logprobs: null,
                 },
               ],
@@ -141,11 +141,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
              */
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
             await new Promise((resolve) =>
-              setTimeout(resolve, Math.random() * 10)
+              setTimeout(resolve, Math.random() * 10),
             );
           }
 
-          reply.raw.write('data: [DONE]\n\n');
+          reply.raw.write("data: [DONE]\n\n");
           reply.raw.end();
           return reply;
         } else {
@@ -162,7 +162,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await utils.toolInvocation.evaluatePolicies(
               assistantMessage,
               agentId,
-              contextIsTrusted
+              contextIsTrusted,
             );
           if (toolInvocationRefusal) {
             assistantMessage = toolInvocationRefusal.message;
@@ -182,19 +182,19 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         fastify.log.error(error);
 
         const statusCode =
-          error instanceof Error && 'status' in error
+          error instanceof Error && "status" in error
             ? (error.status as 200 | 400 | 404 | 403 | 500)
             : 500;
 
         return reply.status(statusCode).send({
           error: {
             message:
-              error instanceof Error ? error.message : 'Internal server error',
-            type: 'api_error',
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
           },
         });
       }
-    }
+    },
   );
 };
 

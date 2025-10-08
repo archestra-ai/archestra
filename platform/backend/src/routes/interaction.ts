@@ -1,23 +1,23 @@
-import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { z } from 'zod';
-import { InteractionModel } from '@/models';
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { InteractionModel } from "@/models";
+import type { Interaction } from "@/types";
 import {
   ErrorResponseSchema,
   SelectInteractionSchema,
   UuidIdSchema,
-} from '@/types';
-import type { Interaction } from '@/types';
+} from "@/types";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    '/api/interactions',
+    "/api/interactions",
     {
       schema: {
-        operationId: 'getInteractions',
-        description: 'Get all interactions',
-        tags: ['Interaction'],
+        operationId: "getInteractions",
+        description: "Get all interactions",
+        tags: ["Interaction"],
         querystring: z.object({
-          agentId: UuidIdSchema.optional().describe('Filter by agent ID'),
+          agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
         }),
         response: {
           200: z.array(SelectInteractionSchema),
@@ -27,24 +27,23 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ query: { agentId } }, reply) => {
       let interactions: Interaction[];
       if (agentId) {
-        interactions = await InteractionModel.getAllInteractionsForAgent(
-          agentId
-        );
+        interactions =
+          await InteractionModel.getAllInteractionsForAgent(agentId);
       } else {
         interactions = await InteractionModel.findAll();
       }
 
       return reply.send(interactions);
-    }
+    },
   );
 
   fastify.get(
-    '/api/interactions/:interactionId',
+    "/api/interactions/:interactionId",
     {
       schema: {
-        operationId: 'getInteraction',
-        description: 'Get interaction by ID',
-        tags: ['Interaction'],
+        operationId: "getInteraction",
+        description: "Get interaction by ID",
+        tags: ["Interaction"],
         params: z.object({
           interactionId: UuidIdSchema,
         }),
@@ -60,14 +59,14 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!interaction) {
         return reply.status(404).send({
           error: {
-            message: 'Interaction not found',
-            type: 'not_found',
+            message: "Interaction not found",
+            type: "not_found",
           },
         });
       }
 
       return reply.send(interaction);
-    }
+    },
   );
 };
 

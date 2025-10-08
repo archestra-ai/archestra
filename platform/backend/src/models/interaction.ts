@@ -24,11 +24,14 @@ class InteractionModel {
       .select()
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.id, id));
-    
+
     return interaction || null;
   }
 
-  static async getAllInteractionsForAgent(agentId: string, whereClauses?: SQL[]) {
+  static async getAllInteractionsForAgent(
+    agentId: string,
+    whereClauses?: SQL[],
+  ) {
     return db
       .select()
       .from(schema.interactionsTable)
@@ -48,7 +51,7 @@ class InteractionModel {
       .where(eq(schema.interactionsTable.agentId, agentId))
       .orderBy(asc(schema.interactionsTable.createdAt))
       .limit(1);
-    
+
     return interactions[0] || null;
   }
 }

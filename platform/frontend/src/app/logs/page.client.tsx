@@ -220,10 +220,10 @@ function Chats({
   const columns = getColumns({ agents: agents ?? [] });
   const [selectedColumns, setSelectedColumns] = useState<ColumnId[]>([]);
 
-  const setColumns = useCallback((columns: ColumnId[]) => {
-    const colsToSet = uniq([...ALWAYS_SELECTED_COLUMN_IDS, ...columns]);
+  const setColumns = useCallback((cols: ColumnId[]) => {
+    const colsToSet = uniq([...ALWAYS_SELECTED_COLUMN_IDS, ...cols]);
     setSelectedColumns(colsToSet);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(columns));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cols));
   }, []);
 
   useEffect(() => {
@@ -253,7 +253,7 @@ function Chats({
   );
 
   // MAIN CHANGE: Show waiting screen when no chats exist
-  if (chats == null || chats.length === 0) {
+  if (!chats || chats.length === 0) {
     return <WaitingForFirstRequest onRefresh={refetchChats} />;
   }
 
@@ -269,12 +269,12 @@ function Chats({
       <Table>
         <TableHeader>
           <TableRow>
-            {selectedColumns.map((column) => (
+            {selectedColumns.map((col) => (
               <TableHead
-                className={cn('font-bold', columns[column].cellClassName)}
-                key={column}
+                className={cn('font-bold', columns[col].cellClassName)}
+                key={col}
               >
-                {columns[column].label}
+                {columns[col].label}
               </TableHead>
             ))}
           </TableRow>
@@ -284,18 +284,18 @@ function Chats({
             <TableRow key={chat.id}>
               {selectedColumns
                 .sort((a, b) => columns[a].idx - columns[b].idx)
-                .map((column) => (
+                .map((col) => (
                   <TableCell
                     className={cn(
                       'break-words relative group',
-                      columns[column].cellClassName
+                      columns[col].cellClassName
                     )}
-                    key={column}
-                    {...(columns[column].onClick && {
-                      onClick: () => columns[column].onClick?.(chat),
+                    key={col}
+                    {...(columns[col].onClick && {
+                      onClick: () => columns[col].onClick?.(chat),
                     })}
                   >
-                    {columns[column].render(chat)}
+                    {columns[col].render(chat)}
                   </TableCell>
                 ))}
             </TableRow>
@@ -315,7 +315,7 @@ function ColumnsSelector({
 }: {
   selectedColumnIds: ColumnId[];
   alwaysSelectedColumnIds?: readonly ColumnId[];
-  onSelect: (columns: ColumnId[]) => void;
+  onSelect: (cols: ColumnId[]) => void;
   className?: string;
   columns: ReturnType<typeof getColumns>;
 }) {
@@ -327,27 +327,27 @@ function ColumnsSelector({
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56">
           {Object.keys(columns).map((id) => {
-            const columnId = id as ColumnId;
-            const column = columns[columnId];
+            const colId = id as ColumnId;
+            const col = columns[colId];
             return (
               <DropdownMenuCheckboxItem
-                key={columnId}
+                key={colId}
                 className="cursor-pointer"
-                checked={selectedColumnIds.includes(columnId)}
-                disabled={alwaysSelectedColumnIds.includes(columnId)}
+                checked={selectedColumnIds.includes(colId)}
+                disabled={alwaysSelectedColumnIds.includes(colId)}
                 onSelect={(e) => {
                   e.preventDefault();
-                  if (alwaysSelectedColumnIds.includes(columnId)) {
+                  if (alwaysSelectedColumnIds.includes(colId)) {
                     return;
                   }
                   onSelect(
-                    selectedColumnIds.includes(columnId)
-                      ? selectedColumnIds.filter((id) => id !== columnId)
-                      : [...selectedColumnIds, columnId]
+                    selectedColumnIds.includes(colId)
+                      ? selectedColumnIds.filter((id) => id !== colId)
+                      : [...selectedColumnIds, colId]
                   );
                 }}
               >
-                {column.label}
+                {col.label}
               </DropdownMenuCheckboxItem>
             );
           })}

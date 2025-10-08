@@ -68,7 +68,7 @@ Archestra Platform is an enterprise Model Context Protocol (MCP) platform built 
 - **Development**: Tilt for local development orchestration
 - **Backend**: Fastify server with pino logging + Drizzle ORM (PostgreSQL)
 - **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4
-- **Database**: PostgreSQL with Drizzle ORM for chat/interaction persistence
+- **Database**: PostgreSQL with Drizzle ORM for interaction persistence
 - **Security**: Production-ready guardrails with dual LLM pattern and taint analysis
 - **Build System**: TypeScript with separate tsconfig per workspace
 - **Code Quality**: Biome for linting and formatting
@@ -102,12 +102,12 @@ platform/
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
 │           ├── autonomy-policies.ts  # Autonomy policies endpoints
-│           ├── chat.ts          # Chat and LLM endpoints
+│           ├── interaction.ts   # Interaction and LLM endpoints
 │           └── proxy/           # OpenAI proxy with integrated guardrails
 │               ├── openai.ts    # Main proxy route handler
 │               ├── types.ts     # TypeScript types for proxy
 │               └── utils/       # Proxy utilities (modular structure)
-│                   ├── index.ts              # Core agent/chat management, message persistence
+│                   ├── index.ts              # Core agent management, message persistence
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
 │                   └── trusted-data.ts       # Trusted data policy evaluation and taint tracking
@@ -139,8 +139,8 @@ The production backend provides:
 
 #### REST API Endpoints
 
-- **Chat Management**:
-  - The chat model has been removed and interactions are now linked directly to agents
+- **Interaction Management**:
+  - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
   - `GET /v1/:provider/models` - List available models for a provider

@@ -1,8 +1,6 @@
 import type { Tool } from "@/types";
 
 import AgentModel from "./agent";
-import ChatModel from "./chat";
-import InteractionModel from "./interaction";
 import ToolModel from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 
@@ -10,17 +8,12 @@ describe("ToolInvocationPolicyModel", () => {
   const toolName = "test-tool";
 
   let agentId: string;
-  let chatId: string;
   let toolId: string;
 
   beforeEach(async () => {
     // Create test agent
     const agent = await AgentModel.create({ name: "Test Agent" });
     agentId = agent.id;
-
-    // Create test chat
-    const chat = await ChatModel.create({ agentId });
-    chatId = chat.id;
 
     // Create test tool
     await ToolModel.createToolIfNotExists({
@@ -38,11 +31,12 @@ describe("ToolInvocationPolicyModel", () => {
 
   describe("evaluate", () => {
     describe("basic policy evaluation", () => {
-      test("allows tool invocation when no policies exist and context is clean", async () => {
+      test("allows tool invocation when no policies exist and context is trusted", async () => {
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { arg1: "value1" },
+          true, // context is trusted
         );
 
         expect(result.isAllowed).toBe(true);
@@ -61,9 +55,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "hacker@evil.com" },
+          true,
         );
 
         expect(result.isAllowed).toBe(false);
@@ -82,9 +77,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "user@good.com" },
+          true,
         );
 
         expect(result.isAllowed).toBe(true);
@@ -93,21 +89,12 @@ describe("ToolInvocationPolicyModel", () => {
     });
 
     describe("untrusted context handling", () => {
-      beforeEach(async () => {
-        // Chat contains an untrusted interaction
-        await InteractionModel.create({
-          chatId,
-          content: { role: "user", content: "malicious input" },
-          trusted: false,
-          reason: "Untrusted user input",
-        });
-      });
-
       test("blocks tool invocation when context is untrusted and no explicit allow rule exists", async () => {
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { arg1: "value1" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(false);
@@ -126,9 +113,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { path: "/safe/file.txt" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(true);
@@ -147,9 +135,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { path: "/unsafe/file.txt" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(false);
@@ -168,9 +157,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           "permissive-tool",
           { arg1: "value1" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(true);
@@ -206,9 +196,10 @@ describe("ToolInvocationPolicyModel", () => {
         // Even though the allow policy doesn't match, the tool should still be allowed
         // because allowUsageWhenUntrustedDataIsPresent is true
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           "permissive-tool-with-policies",
           { arg1: "value1" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(true);
@@ -228,16 +219,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { status: "active" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { status: "inactive" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -253,16 +246,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { env: "development" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { env: "production" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -278,16 +273,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { message: "This contains a secret value" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { message: "This is safe content" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -303,16 +300,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { message: "This is not yet ready" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { message: "This is approved content" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -328,16 +327,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { path: "/tmp/file.txt" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { path: "/home/file.txt" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -353,16 +354,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { file: "malware.exe" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { file: "document.pdf" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -378,16 +381,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "user@example.com" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "user@other.com" },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -405,16 +410,18 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { user: { email: "hacker@blocked.com", name: "Hacker" } },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { user: { email: "user@allowed.com", name: "User" } },
+          true,
         );
         expect(allowedResult.isAllowed).toBe(true);
       });
@@ -432,9 +439,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { other: "value" },
+          false, // context is untrusted
         );
 
         expect(result.isAllowed).toBe(false);
@@ -452,9 +460,10 @@ describe("ToolInvocationPolicyModel", () => {
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { other: "value" },
+          true, // context is trusted
         );
 
         expect(result.isAllowed).toBe(true);
@@ -485,17 +494,19 @@ describe("ToolInvocationPolicyModel", () => {
 
         // Test that block policy is evaluated first
         const blockedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "user@blocked.com", override: "false" },
+          true,
         );
         expect(blockedResult.isAllowed).toBe(false);
 
         // Test that both policies are evaluated
         const allowedResult = await ToolInvocationPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { email: "user@allowed.com", override: "true" },
+          false, // untrusted context but override allowed
         );
         expect(allowedResult.isAllowed).toBe(true);
       });

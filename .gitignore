@@ -1,23 +1,6 @@
 # Local Claude settings
 **/.claude/settings.local.json
 
-node_modules
-dist
-target
-build
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-dist-ssr
-*.local
-
 # Editor directories and files
 .idea
 .DS_Store
@@ -26,9 +9,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-client_secret.json
-.local-mcp-repos
-.env
-
-*.tsbuildinfo

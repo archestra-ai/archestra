@@ -297,6 +297,7 @@ Some examples:
 
   console.log("Type /help to see the available commands");
   console.log("Type /exit to exit");
+  console.log("\n");
 
   while (true) {
     const userInput = await terminal.question("You: ");

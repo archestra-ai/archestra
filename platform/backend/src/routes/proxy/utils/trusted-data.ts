@@ -84,6 +84,9 @@ export const evaluateIfContextIsTrusted = async (
             blockReasons.set(toolCallId, reason);
           }
         }
+      } else {
+        // If we can't find the tool name, mark as untrusted
+        hasUntrustedData = true;
       }
     }
   }

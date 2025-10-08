@@ -1,7 +1,6 @@
 import type { Tool } from "@/types";
 
 import AgentModel from "./agent";
-import ChatModel from "./chat";
 import ToolModel from "./tool";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -9,17 +8,12 @@ describe("TrustedDataPolicyModel", async () => {
   const toolName = "test-tool";
 
   let agentId: string;
-  let chatId: string;
   let toolId: string;
 
   beforeEach(async () => {
     // Create test agent
     const agent = await AgentModel.create({ name: "Test Agent" });
     agentId = agent.id;
-
-    // Create test chat
-    const chat = await ChatModel.create({ agentId });
-    chatId = chat.id;
 
     // Create test tool
     await ToolModel.createToolIfNotExists({
@@ -38,9 +32,13 @@ describe("TrustedDataPolicyModel", async () => {
   describe("evaluate", () => {
     describe("basic trust evaluation", () => {
       test("marks data as untrusted when no policies exist", async () => {
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: "some data",
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: "some data",
+          },
+        );
 
         expect(result.isTrusted).toBe(false);
         expect(result.reason).toContain("No trust policy defined");
@@ -57,9 +55,13 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Trusted API source",
         });
 
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { source: "trusted-api", data: "some data" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "trusted-api", data: "some data" },
+          },
+        );
 
         expect(result.isTrusted).toBe(true);
         expect(result.reason).toContain("Trusted API source");
@@ -76,9 +78,13 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Trusted API source",
         });
 
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { source: "untrusted-api", data: "some data" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "untrusted-api", data: "some data" },
+          },
+        );
 
         expect(result.isTrusted).toBe(false);
         expect(result.reason).toContain("does not match any trust policies");
@@ -98,7 +104,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           "trusted-by-default-tool",
           { value: "any data" },
         );
@@ -134,7 +140,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           "trusted-by-default-with-policies",
           { value: { normal: "data" } },
         );
@@ -170,7 +176,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           "trusted-default-with-matching-policy",
           { value: { verified: "true" } },
         );
@@ -192,14 +198,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { status: "verified" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { status: "unverified" } },
         );
@@ -217,14 +223,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "trusted" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "untrusted" } },
         );
@@ -242,14 +248,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { url: "https://api.trusted-domain.com/data" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { url: "https://untrusted.com/data" } },
         );
@@ -267,14 +273,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { content: "This is safe content" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { content: "This contains malicious code" } },
         );
@@ -292,14 +298,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { path: "/trusted/data/file.json" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { path: "/untrusted/data/file.json" } },
         );
@@ -317,14 +323,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { email: "user@company.com" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { email: "user@external.com" } },
         );
@@ -342,14 +348,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { id: "ABC-12345" } },
         );
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { id: "invalid-id" } },
         );
@@ -370,7 +376,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // All emails from trusted domain - should be trusted
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           {
             value: {
@@ -385,7 +391,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Mixed emails - should be untrusted (ALL must match)
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           {
             value: {
@@ -410,9 +416,13 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Empty array - should be untrusted (no values to verify)
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { items: [] },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { items: [] },
+          },
+        );
         expect(result.isTrusted).toBe(false);
       });
 
@@ -427,9 +437,13 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Non-array value - should be untrusted
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { items: "not an array" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { items: "not an array" },
+          },
+        );
         expect(result.isTrusted).toBe(false);
       });
     });
@@ -446,7 +460,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const trustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           {
             value: {
@@ -464,7 +478,7 @@ describe("TrustedDataPolicyModel", async () => {
         expect(trustedResult.isTrusted).toBe(true);
 
         const untrustedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           {
             value: {
@@ -493,15 +507,19 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Missing path - should be untrusted
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: {
-            response: {
-              data: {
-                // user object missing
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: {
+              response: {
+                data: {
+                  // user object missing
+                },
               },
             },
           },
-        });
+        );
         expect(result.isTrusted).toBe(false);
       });
     });
@@ -517,9 +535,13 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Block malicious sources",
         });
 
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { source: "malicious", data: "some data" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "malicious", data: "some data" },
+          },
+        );
 
         expect(result.isTrusted).toBe(false);
         expect(result.isBlocked).toBe(true);
@@ -547,9 +569,13 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Block hacker emails",
         });
 
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { type: "email", from: "hacker@evil.com" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { type: "email", from: "hacker@evil.com" },
+          },
+        );
 
         expect(result.isTrusted).toBe(false);
         expect(result.isBlocked).toBe(true);
@@ -567,14 +593,18 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Should block if ANY email matches the condition
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: {
-            emails: [
-              { from: "user@company.com", subject: "Work" },
-              { from: "spam@spammer.com", subject: "Buy now" },
-            ],
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: {
+              emails: [
+                { from: "user@company.com", subject: "Work" },
+                { from: "spam@spammer.com", subject: "Buy now" },
+              ],
+            },
           },
-        });
+        );
 
         expect(result.isTrusted).toBe(false);
         expect(result.isBlocked).toBe(true);
@@ -599,9 +629,13 @@ describe("TrustedDataPolicyModel", async () => {
           description: "Allow trusted sources",
         });
 
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { source: "trusted" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { source: "trusted" },
+          },
+        );
 
         expect(result.isTrusted).toBe(true);
         expect(result.isBlocked).toBe(false);
@@ -619,14 +653,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const blockedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { domain: "evil.blocked.com" } },
         );
         expect(blockedResult.isBlocked).toBe(true);
 
         const allowedResult = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { domain: "safe.com" } },
         );
@@ -660,7 +694,7 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           "default-trusted-tool",
           { value: { dangerous: "true", other: "data" } },
         );
@@ -694,7 +728,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Test first policy match
         const result1 = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "api-v1" } },
         );
@@ -703,7 +737,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Test second policy match
         const result2 = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "api-v2" } },
         );
@@ -712,7 +746,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Test no match
         const result3 = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "unknown" } },
         );
@@ -741,7 +775,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Only first attribute matches - should be trusted
         const result1 = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "trusted", verified: "false" } },
         );
@@ -749,7 +783,7 @@ describe("TrustedDataPolicyModel", async () => {
 
         // Only second attribute matches - should be trusted
         const result2 = await TrustedDataPolicyModel.evaluate(
-          chatId,
+          agentId,
           toolName,
           { value: { source: "untrusted", verified: "true" } },
         );
@@ -769,10 +803,14 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Direct object (no value wrapper)
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          status: "success",
-          data: "some data",
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            status: "success",
+            data: "some data",
+          },
+        );
         expect(result.isTrusted).toBe(true);
       });
 
@@ -787,9 +825,13 @@ describe("TrustedDataPolicyModel", async () => {
         });
 
         // Wrapped in value property
-        const result = await TrustedDataPolicyModel.evaluate(chatId, toolName, {
-          value: { status: "success", data: "some data" },
-        });
+        const result = await TrustedDataPolicyModel.evaluate(
+          agentId,
+          toolName,
+          {
+            value: { status: "success", data: "some data" },
+          },
+        );
         expect(result.isTrusted).toBe(true);
       });
     });

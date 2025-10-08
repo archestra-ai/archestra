@@ -1,7 +1,5 @@
 ALTER TABLE "chats" DISABLE ROW LEVEL SECURITY;--> statement-breakpoint
 DROP TABLE "chats" CASCADE;--> statement-breakpoint
-ALTER TABLE "interactions" DROP CONSTRAINT "interactions_chat_id_chats_id_fk";
---> statement-breakpoint
 DROP INDEX "interactions_chat_id_idx";--> statement-breakpoint
 ALTER TABLE "interactions" ADD COLUMN "agent_id" uuid NOT NULL;--> statement-breakpoint
 ALTER TABLE "interactions" ADD COLUMN "request" jsonb NOT NULL;--> statement-breakpoint

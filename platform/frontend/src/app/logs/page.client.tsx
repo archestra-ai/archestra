@@ -1,9 +1,8 @@
 "use client";
 
 import type { GetInteractionsResponses } from "@shared/api-client";
-import { ChevronRight, Copy } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Suspense, useState } from "react";
-import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
 import {
   Accordion,
@@ -76,19 +75,6 @@ function Logs({
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(interaction.id);
-                          toast.success("ID copied to clipboard");
-                        }}
-                        className="p-1 hover:bg-muted rounded"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
-                    </div>
                   </div>
                 </AccordionTrigger>
               </CardHeader>
@@ -119,32 +105,12 @@ function Logs({
                     </div>
                   </div>
                   <div className="flex gap-4 text-xs text-muted-foreground">
-                    <div>
-                      <span className="font-medium">Agent ID:</span>{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(interaction.agentId);
-                          toast.success("Agent ID copied to clipboard");
-                        }}
-                        className="hover:underline"
-                      >
-                        {interaction.agentId}
-                      </button>
-                    </div>
-                    <div>
-                      <span className="font-medium">Interaction ID:</span>{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(interaction.id);
-                          toast.success("Interaction ID copied to clipboard");
-                        }}
-                        className="hover:underline"
-                      >
-                        {interaction.id}
-                      </button>
-                    </div>
+                    <span className="font-medium">
+                      Agent ID: {interaction.agentId}
+                    </span>
+                    <span className="font-medium">
+                      Interaction ID: {interaction.id}
+                    </span>
                   </div>
                 </CardContent>
               </AccordionContent>

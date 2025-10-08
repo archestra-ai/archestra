@@ -44,12 +44,19 @@ export const evaluatePolicies = async (
       contextIsTrusted,
     );
 
-    const refusalMessage = `
+    const archestraMetadata = `
+<archestra-tool-name>${toolCallName}</archestra-tool-name>
+<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>`;
+
+    const contentMessage = `
 I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
 
 However, I was denied by a tool invocation policy:
 
 ${reason}`;
+
+    const refusalMessage = `${archestraMetadata}
+${contentMessage}`;
 
     if (!isAllowed) {
       return {
@@ -66,7 +73,7 @@ ${reason}`;
            * message, but also show some special UI to indicate that the tool call was blocked.
            */
           refusal: refusalMessage,
-          content: refusalMessage,
+          content: contentMessage,
         },
       };
     }

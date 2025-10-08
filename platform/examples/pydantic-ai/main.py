@@ -1,8 +1,10 @@
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from dotenv import load_dotenv
 import os
 import sys
+import argparse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -11,20 +13,18 @@ load_dotenv()
 conversation_history = []
 
 
-def chat(user_message: str):
+def chat(user_message: str, use_archestra: bool = False):
   """Process a chat message through the agent."""
   conversation_history.append({"role": "user", "content": user_message})
 
-  # Configure OpenAI model to use Archestra as proxy
-  model = OpenAIModel(
-    "gpt-4o",
-    base_url="http://localhost:9000/v1",  # Point requests to Archestra Platform
-    api_key=os.getenv("OPENAI_API_KEY"),
-  )
-
-  # Create agent with custom model
   agent = Agent(
-    model=model, instructions="Be helpful and concise. Answer user questions clearly."
+    model=OpenAIChatModel(
+      model_name="gpt-4o",
+      provider=OpenAIProvider(
+        base_url="http://localhost:9000/v1" if use_archestra else "https://api.openai.com/v1",
+        api_key=os.getenv("OPENAI_API_KEY"),
+      ),
+    ),
   )
 
   @agent.tool
@@ -49,7 +49,13 @@ def chat(user_message: str):
 
 def main():
   """Main CLI loop."""
-  print('CLI Chat started. Type "exit" or "quit" to end the conversation.\n')
+  # Parse command line arguments
+  parser = argparse.ArgumentParser(description='CLI chat with optional Archestra security layer')
+  parser.add_argument('--secure', action='store_true', help='Use Archestra Platform as security proxy')
+  args = parser.parse_args()
+
+  mode = "Archestra-secured" if args.secure else "direct OpenAI"
+  print(f'CLI Chat started ({mode} mode). Type "exit" or "quit" to end the conversation.\n')
 
   while True:
     try:
@@ -62,7 +68,7 @@ def main():
       if not user_input:
         continue
 
-      response = chat(user_input)
+      response = chat(user_input, use_archestra=args.secure)
       print(f"\nAssistant: {response}\n")
     except KeyboardInterrupt:
       print("\nGoodbye!")

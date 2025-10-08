@@ -209,7 +209,6 @@ const getAssistantMessageFromStream = async (
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessage> => {
   // Accumulate the assistant message from chunks
   let accumulatedContent = "";
-  let accumulatedRefusal = "";
   const accumulatedToolCalls: any[] = [];
 
   if (shouldPrintPrefix) {
@@ -227,11 +226,6 @@ const getAssistantMessageFromStream = async (
     if (delta?.content) {
       accumulatedContent += delta.content;
       process.stdout.write(delta.content);
-    }
-
-    if (delta?.refusal) {
-      accumulatedRefusal += delta.refusal;
-      process.stdout.write(delta.refusal);
     }
 
     if (delta?.tool_calls) {
@@ -269,7 +263,6 @@ const getAssistantMessageFromStream = async (
   return {
     role: "assistant" as const,
     content: accumulatedContent || null,
-    refusal: accumulatedRefusal || null,
     tool_calls:
       accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
   };
@@ -363,13 +356,9 @@ Some examples:
 
         assistantMessage = response.choices[0].message;
 
-        // Only print if there's content or refusal to show (not for tool calls)
-        if (assistantMessage.content || assistantMessage.refusal) {
-          process.stdout.write(
-            `\nAssistant: ${
-              assistantMessage.content || assistantMessage.refusal
-            }`,
-          );
+        // Only print if there's content to show (not for tool calls)
+        if (assistantMessage.content) {
+          process.stdout.write(`\nAssistant: ${assistantMessage.content}`);
         }
       }
 

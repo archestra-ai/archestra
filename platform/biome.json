@@ -36,9 +36,6 @@
           }
         }
       },
-      "complexity": {
-        "noStaticOnlyClass": "off"
-      },
       "performance": {
         "noImgElement": "off"
       }

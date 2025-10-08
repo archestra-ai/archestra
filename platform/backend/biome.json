@@ -5,6 +5,9 @@
     "rules": {
       "suspicious": {
         "noConsole": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off"
       }
     }
   }

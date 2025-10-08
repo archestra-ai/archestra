@@ -23,7 +23,7 @@ class AgentModel {
     return agent || null;
   }
 
-  static async ensureDefaultAgentExists(
+  static async getAgentOrCreateDefault(
     name: string | undefined,
   ): Promise<Agent> {
     const agentName = name || "Default Agent";

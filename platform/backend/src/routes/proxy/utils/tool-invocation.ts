@@ -10,7 +10,8 @@ import { ToolInvocationPolicyModel } from "@/models";
  */
 export const evaluatePolicies = async (
   { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
-  chatId: string,
+  agentId: string,
+  contextIsTrusted: boolean,
 ): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
   for (const toolCall of toolCalls || []) {
     let toolCallName = "";
@@ -37,9 +38,10 @@ export const evaluatePolicies = async (
     const toolInput = JSON.parse(toolCallArgs);
 
     const { isAllowed, reason } = await ToolInvocationPolicyModel.evaluate(
-      chatId,
+      agentId,
       toolCallName,
       toolInput,
+      contextIsTrusted,
     );
 
     const refusalMessage = `

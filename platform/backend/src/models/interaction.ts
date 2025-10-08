@@ -43,17 +43,6 @@ class InteractionModel {
       )
       .orderBy(asc(schema.interactionsTable.createdAt));
   }
-
-  static async getLatestInteraction(agentId: string) {
-    const interactions = await db
-      .select()
-      .from(schema.interactionsTable)
-      .where(eq(schema.interactionsTable.agentId, agentId))
-      .orderBy(asc(schema.interactionsTable.createdAt))
-      .limit(1);
-
-    return interactions[0] || null;
-  }
 }
 
 export default InteractionModel;

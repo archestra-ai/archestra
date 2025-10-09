@@ -125,7 +125,10 @@ function ToolsList({
               strokeWidth={1.5}
               stroke="currentColor"
               className="w-6 h-6 text-muted-foreground"
+              role="img"
+              aria-label="Tools icon"
             >
+              <title>Tools</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

@@ -36,14 +36,15 @@ export default function RootLayout({
           <ArchestraQueryClientProvider>
             <SidebarProvider>
               <AppSidebar />
-              <main className="h-[100%] w-full overflow-auto">
-                <div className="h-8">
-                  <SidebarTrigger className="cursor-pointer" />
-                  <div className="absolute top-0 right-0">
-                    <ColorModeToggle />
-                  </div>
-                </div>
-                {children}
+              <main className="h-screen w-full flex flex-col bg-background">
+                {/* Header */}
+                <header className="h-14 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
+                  <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                  <ColorModeToggle />
+                </header>
+
+                {/* Main content */}
+                <div className="flex-1 overflow-auto">{children}</div>
               </main>
               <Toaster />
             </SidebarProvider>

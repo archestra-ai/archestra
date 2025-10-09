@@ -5,9 +5,7 @@ import type {
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { DebouncedInput } from "@/components/debounced-input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -44,32 +42,30 @@ export function ToolResultPolicies({
   const toolPatchMutation = useToolPatchMutation();
 
   return (
-    <div className="mt-4">
-      <CardTitle className="flex flex-row items-center justify-between">
-        <span>Tool Result Policies (after call)</span>
+    <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+      <div className="flex flex-row items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
+          <p className="text-xs text-muted-foreground">
+            Configure trust levels for outputs
+          </p>
+        </div>
         <Button
           variant="outline"
           size="sm"
-          className="bg-accent"
+          className="h-8 text-xs"
           onClick={() =>
             toolResultPoliciesCreateMutation.mutate({ toolId: tool.id })
           }
         >
-          <Plus /> Add
+          <Plus className="w-3.5 h-3.5" /> Add
         </Button>
-      </CardTitle>
-      <CardDescription className="mb-4">
-        Decide when to mark tool output as trusted or untrusted and whether to
-        block it from further processing
-      </CardDescription>
-      <PolicyCard>
-        <div className="flex flex-row items-center gap-4">
-          <Badge
-            variant="secondary"
-            className="bg-blue-500 text-white dark:bg-blue-600"
-          >
-            Default
-          </Badge>
+      </div>
+      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            DEFAULT
+          </div>
           <Select
             defaultValue={tool.dataIsTrustedByDefault ? "true" : "false"}
             onValueChange={(value) => {
@@ -91,7 +87,7 @@ export function ToolResultPolicies({
             </SelectContent>
           </Select>
         </div>
-      </PolicyCard>
+      </div>
       {policies.map((policy) => (
         <PolicyCard key={policy.id}>
           <div className="flex flex-row gap-4 justify-between w-full">

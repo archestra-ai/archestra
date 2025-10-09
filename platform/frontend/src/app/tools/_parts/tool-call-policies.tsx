@@ -5,9 +5,7 @@ import type {
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -48,35 +46,35 @@ export function ToolCallPolicies({
   const argumentNames = Object.keys(tool.parameters?.properties || []);
 
   return (
-    <div className="mt-4">
-      <CardTitle className="flex flex-row items-center justify-between">
-        <span>Tool Call Policies (before call)</span>
+    <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+      <div className="flex flex-row items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold mb-1">Tool Call Policies</h3>
+          <p className="text-xs text-muted-foreground">
+            Control execution when untrusted data is present
+          </p>
+        </div>
         <ButtonWithTooltip
           variant="outline"
           size="sm"
-          className="bg-accent"
+          className="h-8 text-xs"
           onClick={() =>
             toolInvocationPolicyCreateMutation.mutate({ toolId: tool.id })
           }
           disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
           disabledText="Custom policies require parameters"
         >
-          <Plus /> Add
+          <Plus className="w-3.5 h-3.5" /> Add
         </ButtonWithTooltip>
-      </CardTitle>
-      <CardDescription className="mb-4">
-        Decide whether to allow or block tool calling when untrusted data is
-        present
-      </CardDescription>
-      <PolicyCard>
-        <div className="flex flex-row items-center gap-4">
-          <Badge
-            variant="secondary"
-            className="bg-blue-500 text-white dark:bg-blue-600"
-          >
-            Default
-          </Badge>
-          <span>Allow usage when untrusted data is present</span>
+      </div>
+      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            DEFAULT
+          </div>
+          <span className="text-sm">
+            Allow usage when untrusted data is present
+          </span>
         </div>
         <Switch
           checked={tool.allowUsageWhenUntrustedDataIsPresent}
@@ -88,7 +86,7 @@ export function ToolCallPolicies({
             })
           }
         />
-      </PolicyCard>
+      </div>
       {policies.map((policy) => (
         <PolicyCard key={policy.id}>
           <div className="flex flex-row gap-4 justify-between w-full">

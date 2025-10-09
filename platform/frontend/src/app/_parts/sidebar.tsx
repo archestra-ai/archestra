@@ -7,23 +7,24 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
-import { Roboto_Mono } from "next/font/google";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import Divider from "@/components/divider";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
+  SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 
-const items = [
+const navigationItems = [
   {
     title: "How it works",
     url: "/test-agent",
@@ -41,11 +42,6 @@ const items = [
       },
     ],
   },
-  // {
-  //   title: "Agents",
-  //   url: "/agents",
-  //   icon: Bot,
-  // },
   {
     title: "Logs",
     url: "/logs",
@@ -63,64 +59,73 @@ const items = [
   },
 ];
 
-const robotoMono = Roboto_Mono({
-  variable: "--font-roboto-mono",
-});
+const actionItems = [
+  {
+    title: "Dual LLM",
+    url: "/dual-llm",
+    icon: ShieldCheck,
+  },
+];
 
 export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar className="pr-0">
+    <Sidebar>
+      <SidebarHeader>
+        <div className="flex items-center gap-2 px-2 py-2">
+          <Image src="/logo-light-mode.png" alt="Logo" width={20} height={20} />
+          <span className="text-base font-semibold">Archestra</span>
+        </div>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <div className="flex items-center gap-2 mt-2 mx-auto">
-            <Image
-              src="/logo-light-mode.png"
-              alt="Logo"
-              width={32}
-              height={32}
-              className="hidden dark:block"
-            />
-            <Image
-              src="/logo-light-mode.png"
-              alt="Logo"
-              width={32}
-              height={32}
-              className="block dark:hidden"
-            />
-            <span className={`text-2xl font-bold ${robotoMono.className}`}>
-              Archestra.AI
-            </span>
-          </div>
-          <Divider className="my-4" />
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-2">
-              {items.map((item) => (
+            <SidebarMenu>
+              {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url} className="text-xl">
+                    <a href={item.url}>
                       <item.icon />
-                      <span className="text-base">{item.title}</span>
+                      <span>{item.title}</span>
                     </a>
                   </SidebarMenuButton>
                   {item.subItems && (
                     <SidebarMenuSub>
                       {item.subItems.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuButton
+                          <SidebarMenuSubButton
                             asChild
                             isActive={subItem.url === pathname}
                           >
-                            <a href={subItem.url} className="text-xl">
+                            <a href={subItem.url}>
                               {subItem.icon && <subItem.icon />}
-                              <span className="text-base">{subItem.title}</span>
+                              <span>{subItem.title}</span>
                             </a>
-                          </SidebarMenuButton>
+                          </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
                     </SidebarMenuSub>
                   )}
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Actions</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {actionItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={item.url === pathname}>
+                    <a href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </a>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

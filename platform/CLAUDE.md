@@ -278,7 +278,11 @@ The `platform/examples/` directory contains example integrations:
 - **pydantic-ai**: Python CLI chat agent showing Pydantic AI integration with Archestra's security layer
   - Demonstrates autonomous agent with file reading and GitHub issue fetching capabilities
   - Shows how Archestra prevents prompt injection attacks from untrusted sources
-  - Includes `--secure` flag to toggle between direct OpenAI (vulnerable) and Archestra proxy (protected)
+  - Includes `--secure` flag to toggle between direct LLM (vulnerable) and Archestra proxy (protected)
+  - Supports multiple LLM providers:
+    - OpenAI (default): Uses `gpt-4o` by default, configurable via `MODEL_NAME`
+    - Anthropic: Uses `claude-sonnet-4-5-20250929` by default, configurable via `MODEL_NAME`
+    - Provider selection via `LLM_PROVIDER` environment variable (`openai` or `anthropic`)
   - Example uses GitHub issue #669 which contains a hidden prompt injection attack
 
 Each example includes a README with setup instructions and demonstrates how to use Archestra Platform as a security proxy for LLM applications.

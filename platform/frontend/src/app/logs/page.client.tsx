@@ -7,10 +7,12 @@ import type {
 import {
   BrainIcon,
   CalendarDaysIcon,
+  ChevronRightIcon,
   HatGlassesIcon,
   MessageSquareMoreIcon,
   WrenchIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { type ReactElement, Suspense, useState } from "react";
 import Divider from "@/components/divider";
 import { LoadingSpinner } from "@/components/loading";
@@ -113,10 +115,16 @@ function LogRow({
   return (
     <Card className="p-0">
       <AccordionItem value={interaction.id} className="border-0">
-        <CardHeader className="py-4 relative">
+        <CardHeader className="py-4 relative pb-12">
           <div className="absolute top-0 right-4 z-10">
             <AccordionTrigger className="hover:no-underline items-center" />
           </div>
+          <Link
+            href="#"
+            className="absolute bottom-4 right-4 flex items-center gap-1 text-sm text-primary hover:underline z-10 mt-4"
+          >
+            Open <ChevronRightIcon className="w-4 h-4 mt-[1px]" />
+          </Link>
           <div className="pr-12 min-w-0">
             <div className="flex justify-between w-full gap-4 min-w-0">
               <RawLogDetail

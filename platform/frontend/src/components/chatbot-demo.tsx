@@ -60,6 +60,7 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import Divider from "./divider";
 
 const models = [
   {
@@ -78,12 +79,14 @@ const ChatBotDemo = ({
   isEnded,
   showPromptInput,
   containerClassName,
+  topPart,
 }: {
   messages: PartialUIMessage[];
   reload?: () => void;
   isEnded?: boolean;
   showPromptInput?: boolean;
   containerClassName?: string;
+  topPart?: React.ReactNode;
 }) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
@@ -124,162 +127,214 @@ const ChatBotDemo = ({
   return (
     <div
       className={cn(
-        "max-w-4xl mx-auto relative size-full h-screen",
+        "mx-auto relative size-full h-[calc(100vh-3rem)]",
         containerClassName,
       )}
     >
       <div className="flex flex-col h-full">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message) => (
-              <div key={message.id}>
-                {message.role === "assistant" &&
-                  message.parts.filter((part) => part.type === "source-url")
-                    .length > 0 && (
-                    <Sources>
-                      <SourcesTrigger
-                        count={
-                          message.parts.filter(
-                            (part) => part.type === "source-url",
-                          ).length
-                        }
-                      />
-                      {message.parts
-                        .filter((part) => part.type === "source-url")
-                        .map((part, i) => (
-                          <SourcesContent key={`${message.id}-${i}`}>
-                            <Source
-                              key={`${message.id}-${i}`}
-                              href={part.url}
-                              title={part.url}
-                            />
-                          </SourcesContent>
-                        ))}
-                    </Sources>
-                  )}
+            {topPart}
+            <Divider className="my-4" />
+            <div className="max-w-4xl mx-auto">
+              {messages.map((message, idx) => (
+                <div key={message.id || idx}>
+                  {message.role === "assistant" &&
+                    message.parts.filter((part) => part.type === "source-url")
+                      .length > 0 && (
+                      <Sources>
+                        <SourcesTrigger
+                          count={
+                            message.parts.filter(
+                              (part) => part.type === "source-url",
+                            ).length
+                          }
+                        />
+                        {message.parts
+                          .filter((part) => part.type === "source-url")
+                          .map((part, i) => (
+                            <SourcesContent key={`${message.id}-${i}`}>
+                              <Source
+                                key={`${message.id}-${i}`}
+                                href={part.url}
+                                title={part.url}
+                              />
+                            </SourcesContent>
+                          ))}
+                      </Sources>
+                    )}
 
-                {message.parts.map((part, i) => {
-                  switch (part.type) {
-                    case "text":
-                      return (
-                        <Fragment key={`${message.id}-${i}`}>
-                          <Message from={message.role}>
-                            <MessageContent>
-                              <Response>{part.text}</Response>
-                            </MessageContent>
-                          </Message>
-                          {message.role === "assistant" &&
-                            i === messages.length - 1 && (
-                              <Actions className="mt-2">
-                                <Action
-                                  onClick={() =>
-                                    navigator.clipboard.writeText(part.text)
-                                  }
-                                  label="Copy"
-                                >
-                                  <CopyIcon className="size-3" />
-                                </Action>
-                              </Actions>
-                            )}
-                        </Fragment>
-                      );
-                    case "tool-invocation":
-                    case "dynamic-tool": {
-                      const toolName =
-                        part.type === "dynamic-tool"
-                          ? part.toolName
-                          : part.toolCallId;
-                      const isDanger = [
-                        "gather_sensitive_data",
-                        "send_email",
-                        "analyze_email_blocked",
-                      ].includes(part.toolCallId);
-                      const isShield = part.toolCallId === "dual_llm_activated";
-                      const isSuccess = part.toolCallId === "attack_blocked";
-                      const getIcon = () => {
-                        if (isDanger)
-                          return (
-                            <TriangleAlert className="size-4 text-muted-foreground" />
-                          );
-                        if (isShield)
-                          return (
-                            <ShieldCheck className="size-4 text-muted-foreground" />
-                          );
-                        if (isSuccess)
-                          return (
-                            <Check className="size-4 text-muted-foreground" />
-                          );
-                        return undefined;
-                      };
-                      const getColorClass = () => {
-                        if (isDanger) return "bg-red-500/30";
-                        if (isShield) return "bg-sky-400/60";
-                        if (isSuccess) return "bg-emerald-700/60";
-                        return "";
-                      };
+                  {message.parts.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Message from={message.role}>
+                              <MessageContent>
+                                <Response>{part.text}</Response>
+                              </MessageContent>
+                            </Message>
+                            {message.role === "assistant" &&
+                              i === messages.length - 1 && (
+                                <Actions className="mt-2">
+                                  <Action
+                                    onClick={() =>
+                                      navigator.clipboard.writeText(part.text)
+                                    }
+                                    label="Copy"
+                                  >
+                                    <CopyIcon className="size-3" />
+                                  </Action>
+                                </Actions>
+                              )}
+                          </Fragment>
+                        );
+                      case "tool-invocation":
+                      case "dynamic-tool": {
+                        const toolName =
+                          part.type === "dynamic-tool"
+                            ? part.toolName
+                            : part.toolCallId;
+                        const isDanger = [
+                          "gather_sensitive_data",
+                          "send_email",
+                          "analyze_email_blocked",
+                        ].includes(part.toolCallId);
+                        const isShield =
+                          part.toolCallId === "dual_llm_activated";
+                        const isSuccess = part.toolCallId === "attack_blocked";
+                        const getIcon = () => {
+                          if (isDanger)
+                            return (
+                              <TriangleAlert className="size-4 text-muted-foreground" />
+                            );
+                          if (isShield)
+                            return (
+                              <ShieldCheck className="size-4 text-muted-foreground" />
+                            );
+                          if (isSuccess)
+                            return (
+                              <Check className="size-4 text-muted-foreground" />
+                            );
+                          return undefined;
+                        };
+                        const getColorClass = () => {
+                          if (isDanger) return "bg-red-500/30";
+                          if (isShield) return "bg-sky-400/60";
+                          if (isSuccess) return "bg-emerald-700/60";
+                          return "";
+                        };
 
-                      return (
-                        <Tool
-                          key={`${message.id}-${part.toolCallId}`}
-                          className={getColorClass()}
-                        >
-                          {!message.metadata?.trusted && (
-                            <div className="m-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
-                              <div className="flex items-start gap-2">
-                                <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                                <div className="flex-1">
-                                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                    Untrusted Content
-                                  </p>
-                                  {message.metadata?.reason && (
-                                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                                      {message.metadata.reason}
+                        return (
+                          <Tool
+                            key={`${message.id}-${part.toolCallId}`}
+                            className={getColorClass()}
+                          >
+                            {/* {!message.metadata?.trusted && (
+                              <div className="m-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
+                                <div className="flex items-start gap-2">
+                                  <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                                      Untrusted Content
                                     </p>
-                                  )}
+                                    {message.metadata?.reason && (
+                                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                                        {message.metadata.reason}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )} */}
+                            <ToolHeader
+                              type={`tool-${toolName}`}
+                              state={part.state}
+                              icon={getIcon()}
+                            />
+                            <ToolContent>
+                              {part.input &&
+                              Object.keys(part.input).length > 0 ? (
+                                <ToolInput input={part.input} />
+                              ) : null}
+                              <ToolOutput
+                                output={part.output}
+                                errorText={part.errorText}
+                              />
+                            </ToolContent>
+                          </Tool>
+                        );
+                      }
+                      case "reasoning":
+                        return (
+                          <Reasoning
+                            key={`${message.id}-${i}`}
+                            className="w-full"
+                            isStreaming={
+                              status === "streaming" &&
+                              i === message.parts.length - 1 &&
+                              message.id === messages.at(-1)?.id
+                            }
+                          >
+                            <ReasoningTrigger />
+                            <ReasoningContent>{part.text}</ReasoningContent>
+                          </Reasoning>
+                        );
+                      default: {
+                        // Handle custom blocked-tool type
+                        // @ts-expect-error - Custom part type not in base UIMessage
+                        if (part.type === "blocked-tool") {
+                          const blockedPart =
+                            part as unknown as BlockedToolPart;
+                          return (
+                            <div
+                              key={`${message.id}-${i}`}
+                              className="my-2 p-4 bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800 rounded-lg"
+                            >
+                              <div className="flex items-start gap-3">
+                                <TriangleAlert className="size-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                                      Blocked by tool invocation policy
+                                    </p>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <span className="font-medium text-red-800 dark:text-red-200">
+                                        Tool:
+                                      </span>
+                                      <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100">
+                                        {blockedPart.toolName}
+                                      </code>
+                                    </div>
+                                    {blockedPart.toolArguments && (
+                                      <div className="flex items-start gap-2 text-xs">
+                                        <span className="font-medium text-red-800 dark:text-red-200 flex-shrink-0">
+                                          Arguments:
+                                        </span>
+                                        <code className="px-2 py-1 bg-red-100 dark:bg-red-900/50 rounded text-red-900 dark:text-red-100 break-all">
+                                          {blockedPart.toolArguments}
+                                        </code>
+                                      </div>
+                                    )}
+                                    <p className="text-xs text-red-700 dark:text-red-300 mt-2">
+                                      {blockedPart.reason}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          )}
-                          <ToolHeader
-                            type={`tool-${toolName}`}
-                            state={part.state}
-                            icon={getIcon()}
-                          />
-                          <ToolContent>
-                            {part.input &&
-                            Object.keys(part.input).length > 0 ? (
-                              <ToolInput input={part.input} />
-                            ) : null}
-                            <ToolOutput
-                              output={part.output}
-                              errorText={part.errorText}
-                            />
-                          </ToolContent>
-                        </Tool>
-                      );
+                          );
+                        }
+                        return null;
+                      }
                     }
-                    case "reasoning":
-                      return (
-                        <Reasoning
-                          key={`${message.id}-${i}`}
-                          className="w-full"
-                          isStreaming={
-                            status === "streaming" &&
-                            i === message.parts.length - 1 &&
-                            message.id === messages.at(-1)?.id
-                          }
-                        >
-                          <ReasoningTrigger />
-                          <ReasoningContent>{part.text}</ReasoningContent>
-                        </Reasoning>
-                      );
-                    default:
-                      return null;
-                  }
-                })}
-              </div>
-            ))}
-            {status === "submitted" && <Loader />}
+                  })}
+                </div>
+              ))}
+              {status === "submitted" && <Loader />}
+            </div>
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -354,9 +409,17 @@ const ChatBotDemo = ({
   );
 };
 
+export type BlockedToolPart = {
+  type: "blocked-tool";
+  toolName: string;
+  toolArguments?: string;
+  reason: string;
+  fullRefusal?: string;
+};
+
 export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
-  parts: UIMessage["parts"];
+  parts: (UIMessage["parts"][number] | BlockedToolPart)[];
   metadata?: {
     trusted?: boolean;
     blocked?: boolean;

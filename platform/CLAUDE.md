@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **Use Biome for formatting and linting** - Run `pnpm lint` before committing changes
 3. **TypeScript strict mode** - Ensure code passes `pnpm type-check` before completion
 4. **Tilt for development** - The project uses Tilt to orchestrate the development environment
+5. **Use shadcn/ui components** - Add components with `npx shadcn@latest add <component>` instead of using Radix UI directly
 
 ## Common Development Commands
 
@@ -74,7 +75,8 @@ Archestra Platform is an enterprise Model Context Protocol (MCP) platform built 
 - **Monorepo**: pnpm workspaces with Turbo for build orchestration
 - **Development**: Tilt for local development orchestration
 - **Backend**: Fastify server with pino logging + Drizzle ORM (PostgreSQL)
-- **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4
+- **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4 + shadcn/ui
+- **UI Components**: shadcn/ui (add with `npx shadcn@latest add <component>`)
 - **Database**: PostgreSQL with Drizzle ORM for interaction persistence
 - **Security**: Production-ready guardrails with dual LLM pattern and taint analysis
 - **Build System**: TypeScript with separate tsconfig per workspace

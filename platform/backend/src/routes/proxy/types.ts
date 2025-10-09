@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { OpenAi, UuidIdSchema } from "@/types";
 
+export const SupportedProvidersSchema = z.enum(["openai"]);
+
 export const ChatCompletionsHeadersSchema = z.object({
   "x-archestra-chat-id": UuidIdSchema.optional().describe(
     "If specified, interactions will be associated with this chat, otherwise a new chat will be created",

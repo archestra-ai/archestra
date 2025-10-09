@@ -1010,217 +1010,238 @@ export type GetInteractionResponses = {
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
-export type DeleteV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type DeleteV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type GetV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type HeadV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type OptionsV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type PatchV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type PostV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1Data = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/';
-};
-
-export type PutV1Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1By__Data = {
+export type DeleteV1ByProviderData = {
     body?: never;
     path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type DeleteV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type GetV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type HeadV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type OptionsV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type PatchV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type PostV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1ByProviderData = {
+    body?: never;
+    path: {
+        provider: string;
+    };
+    query?: never;
+    url: '/v1/{provider}/';
+};
+
+export type PutV1ByProviderResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1ByProviderBy__Data = {
+    body?: never;
+    path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type DeleteV1By__Responses = {
+export type DeleteV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetV1By__Data = {
+export type GetV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type GetV1By__Responses = {
+export type GetV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadV1By__Data = {
+export type HeadV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type HeadV1By__Responses = {
+export type HeadV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OptionsV1By__Data = {
+export type OptionsV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type OptionsV1By__Responses = {
+export type OptionsV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PatchV1By__Data = {
+export type PatchV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type PatchV1By__Responses = {
+export type PatchV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PostV1By__Data = {
+export type PostV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type PostV1By__Responses = {
+export type PostV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PutV1By__Data = {
+export type PutV1ByProviderBy__Data = {
     body?: never;
     path: {
+        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{*}';
+    url: '/v1/{provider}/{*}';
 };
 
-export type PutV1By__Responses = {
+export type PutV1ByProviderBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OpenAiChatCompletionsData = {
+export type OpenAiChatCompletionsWithDefaultAgentData = {
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487
      */
@@ -1518,10 +1539,10 @@ export type OpenAiChatCompletionsData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/chat/completions';
+    url: '/v1/openai/chat/completions';
 };
 
-export type OpenAiChatCompletionsErrors = {
+export type OpenAiChatCompletionsWithDefaultAgentErrors = {
     /**
      * Default Response
      */
@@ -1560,9 +1581,9 @@ export type OpenAiChatCompletionsErrors = {
     };
 };
 
-export type OpenAiChatCompletionsError = OpenAiChatCompletionsErrors[keyof OpenAiChatCompletionsErrors];
+export type OpenAiChatCompletionsWithDefaultAgentError = OpenAiChatCompletionsWithDefaultAgentErrors[keyof OpenAiChatCompletionsWithDefaultAgentErrors];
 
-export type OpenAiChatCompletionsResponses = {
+export type OpenAiChatCompletionsWithDefaultAgentResponses = {
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248
      */
@@ -1638,7 +1659,429 @@ export type OpenAiChatCompletionsResponses = {
     };
 };
 
-export type OpenAiChatCompletionsResponse = OpenAiChatCompletionsResponses[keyof OpenAiChatCompletionsResponses];
+export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
+
+export type OpenAiChatCompletionsWithAgentData = {
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487
+     */
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        stream?: boolean | null;
+    };
+    headers: {
+        /**
+         * If specified, interactions will be associated with this chat, otherwise a new chat will be created
+         */
+        'x-archestra-chat-id'?: string;
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/chat/completions';
+};
+
+export type OpenAiChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithAgentError = OpenAiChatCompletionsWithAgentErrors[keyof OpenAiChatCompletionsWithAgentErrors];
+
+export type OpenAiChatCompletionsWithAgentResponses = {
+    /**
+     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+            index: number;
+            logprobs: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+             */
+            message: {
+                content: string | null;
+                refusal: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown>;
+                audio?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        server_tier?: string;
+        system_fingerprint?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+             */
+            completion_tokens_details?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+             */
+            prompt_tokens_details?: unknown;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
 export type GetToolsData = {
     body?: never;

@@ -26,7 +26,7 @@ async def run_agent(use_archestra: bool = False):
       model_name="gpt-4o",
       provider=OpenAIProvider(
         # Configure OpenAI provider - use Archestra if --secure flag is set
-        base_url="http://host.docker.internal:9000/v1" if use_archestra else "https://api.openai.com/v1",
+        base_url="http://host.docker.internal:9000/v1/openai" if use_archestra else "https://api.openai.com/v1",
         api_key=os.getenv("OPENAI_API_KEY"),
       ),
     ),

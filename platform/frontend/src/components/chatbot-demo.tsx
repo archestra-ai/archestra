@@ -230,23 +230,6 @@ const ChatBotDemo = ({
                             key={`${message.id}-${part.toolCallId}`}
                             className={getColorClass()}
                           >
-                            {/* {!message.metadata?.trusted && (
-                              <div className="m-2 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg">
-                                <div className="flex items-start gap-2">
-                                  <TriangleAlert className="size-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                                  <div className="flex-1">
-                                    <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                      Untrusted Content
-                                    </p>
-                                    {message.metadata?.reason && (
-                                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                                        {message.metadata.reason}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )} */}
                             <ToolHeader
                               type={`tool-${toolName}`}
                               state={part.state}
@@ -282,7 +265,7 @@ const ChatBotDemo = ({
                         );
                       default: {
                         // Handle custom blocked-tool type
-                        // @ts-expect-error - Custom part type not in base UIMessage
+                        // @ts-expect-error - Custom Archestrapart type not in base UIMessage
                         if (part.type === "blocked-tool") {
                           const blockedPart =
                             part as unknown as BlockedToolPart;
@@ -296,7 +279,7 @@ const ChatBotDemo = ({
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-2">
                                     <p className="text-sm font-semibold text-red-900 dark:text-red-100">
-                                      Blocked by tool invocation policy
+                                      {blockedPart.reason}
                                     </p>
                                   </div>
                                   <div className="space-y-2">
@@ -309,7 +292,7 @@ const ChatBotDemo = ({
                                       </code>
                                     </div>
                                     {blockedPart.toolArguments && (
-                                      <div className="flex items-start gap-2 text-xs">
+                                      <div className="flex items-center gap-2 text-xs">
                                         <span className="font-medium text-red-800 dark:text-red-200 flex-shrink-0">
                                           Arguments:
                                         </span>
@@ -318,9 +301,6 @@ const ChatBotDemo = ({
                                         </code>
                                       </div>
                                     )}
-                                    <p className="text-xs text-red-700 dark:text-red-300 mt-2">
-                                      {blockedPart.reason}
-                                    </p>
                                   </div>
                                 </div>
                               </div>

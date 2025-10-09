@@ -66,12 +66,7 @@ export function Chat({
   // Add response message if available
   const responseMessage = interaction.response?.choices?.[0]?.message;
   if (responseMessage) {
-    // Type assertion needed as response message type differs slightly from request message
-    requestMessages.push(
-      mapInteractionToUiMessage(
-        responseMessage as GetInteractionResponse["request"]["messages"][number],
-      ),
-    );
+    requestMessages.push(mapInteractionToUiMessage(responseMessage));
   }
 
   return (
@@ -80,7 +75,6 @@ export function Chat({
       <div className="px-2">
         <ChatBotDemo
           messages={requestMessages}
-          // containerClassName="h-[75vh]"
           topPart={
             <InteractionSummary
               interaction={interaction}
@@ -96,7 +90,9 @@ export function Chat({
 }
 
 function mapInteractionToUiMessage(
-  message: GetInteractionResponse["request"]["messages"][number],
+  message:
+    | GetInteractionResponse["request"]["messages"][number]
+    | GetInteractionResponse["response"]["choices"][number]["message"],
 ): PartialUIMessage {
   const content = message.content;
 
@@ -223,13 +219,7 @@ function mapInteractionToUiMessage(
   }
 
   return {
-    // id: message.id,
     role,
     parts,
-    // metadata: {
-    //   trusted: interaction.trusted,
-    //   blocked: interaction.blocked,
-    //   reason: interaction.reason ?? undefined,
-    // },
   };
 }

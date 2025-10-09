@@ -77,13 +77,13 @@ export function parseRefusalMessage(refusal: string): RefusalInfo {
   const toolArgsMatch = refusal.match(
     /<archestra-tool-arguments>(.*?)<\/archestra-tool-arguments>/,
   );
-
-  // Extract the reason - typically comes after "tool invocation policy:"
-  const reasonMatch = refusal.match(/tool invocation policy:\s*(.+?)(?:\n|$)/i);
+  const toolReasonMatch = refusal.match(
+    /<archestra-tool-reason>(.*?)<\/archestra-tool-reason>/,
+  );
 
   return {
     toolName: toolNameMatch?.[1],
     toolArguments: toolArgsMatch?.[1],
-    reason: reasonMatch?.[1] || "Tool invocation blocked by policy",
+    reason: toolReasonMatch?.[1] || "Blocked by policy",
   };
 }

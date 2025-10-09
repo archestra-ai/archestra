@@ -123,6 +123,7 @@ platform/
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages
+│           └── agents/  # Agent management UI (create, edit, delete agents)
 ├── experiments/       # Experimental features and prototypes
 │   └── src/
 │       ├── main.ts              # OpenAI proxy server (port 9000)
@@ -154,6 +155,8 @@ The production backend provides:
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
+  - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
+  - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
 - **Agent Management**:

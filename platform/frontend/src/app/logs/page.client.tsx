@@ -9,6 +9,7 @@ import {
   CalendarDaysIcon,
   HatGlassesIcon,
   MessageSquareMoreIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { type ReactElement, Suspense, useState } from "react";
 import Divider from "@/components/divider";
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui/tabs";
 import { useAgents } from "@/lib/agent.query";
 import { useInteractions } from "@/lib/interaction.query";
 import { formatDate } from "@/lib/utils";
@@ -46,22 +47,10 @@ export default function LogsPage({
       <Tabs defaultValue={TabsOptions.Table}>
         <div className="flex flex-col gap-1 mb-2">
           <h1 className="text-3xl font-bold mb-6">Logs</h1>
-          <span className="text-sm text-muted-foreground">Display as</span>
-          <TabsList>
-            <TabsTrigger value={TabsOptions.Table}>
-              {TabsOptions.Table}
-            </TabsTrigger>
-            <TabsTrigger value={TabsOptions.Raw}>{TabsOptions.Raw}</TabsTrigger>
-          </TabsList>
         </div>
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>
-            <TabsContent value={TabsOptions.Table}>
-              Make changes to your account here.
-            </TabsContent>
-            <TabsContent value={TabsOptions.Raw}>
-              <LogsRaw initialData={initialData} />
-            </TabsContent>
+            <LogsRaw initialData={initialData} />
           </Suspense>
         </ErrorBoundary>
       </Tabs>
@@ -125,36 +114,93 @@ function LogRow({
     <Card className="p-0">
       <AccordionItem value={interaction.id} className="border-0">
         <CardHeader className="py-4">
-          <div className="flex items-start w-full gap-4 pr-4">
-            <RawLogDetail
-              label="Date"
-              value={formatDate({ date: interaction.createdAt })}
-              icon={<CalendarDaysIcon className={iconClassName} />}
-              width="15%"
-            />
-            <RawLogDetail
-              label="Model"
-              value={interaction.request.model}
-              icon={<BrainIcon className={iconClassName} />}
-              width="10%"
-            />
-            <RawLogDetail
-              label="Agent name"
-              value={<TruncatedText message={agent?.name ?? "Unknown"} />}
-              icon={<HatGlassesIcon className={iconClassName} />}
-              width="30%"
-              isTruncated={agentNameTruncated}
-            />
-            <RawLogDetail
-              label="Last user message"
-              value={
-                <TruncatedText message={findLastUserMessage(interaction)} />
-              }
-              icon={<MessageSquareMoreIcon className={iconClassName} />}
-              width="40%"
-              isTruncated={lastMessageTruncated}
-            />
-            <div className="flex-shrink-0">
+          <div className="flex gap-4">
+            <div className="flex-shrink-0 flex-grow-1">
+              <div className="flex justify-between w-full gap-4 pr-4">
+                <RawLogDetail
+                  label="Date"
+                  value={formatDate({ date: interaction.createdAt })}
+                  icon={<CalendarDaysIcon className={iconClassName} />}
+                />
+                <RawLogDetail
+                  label="Model"
+                  value={interaction.request.model}
+                  icon={<BrainIcon className={iconClassName} />}
+                />
+                <RawLogDetail
+                  label="Tools used"
+                  value={
+                    <div>
+                      {toolNamesUsedForInteraction(interaction).length > 0 ? (
+                        toolNamesUsedForInteraction(interaction).map(
+                          (toolName) => (
+                            <Badge key={toolName} className="mt-2">
+                              {toolName}
+                            </Badge>
+                          ),
+                        )
+                      ) : (
+                        <p className="text-muted-foreground">None</p>
+                      )}
+                    </div>
+                  }
+                  icon={<WrenchIcon className={iconClassName} />}
+                />
+                <RawLogDetail
+                  label="Tools blocked"
+                  value={
+                    <div>
+                      {toolNamesRefusedForInteraction(interaction).length >
+                      0 ? (
+                        toolNamesRefusedForInteraction(interaction).map(
+                          (toolName) => (
+                            <Badge
+                              key={toolName}
+                              className="mt-2"
+                              variant="destructive"
+                            >
+                              {toolName}
+                            </Badge>
+                          ),
+                        )
+                      ) : (
+                        <p className="text-muted-foreground">None</p>
+                      )}
+                    </div>
+                  }
+                  icon={<WrenchIcon className={iconClassName} />}
+                />
+              </div>
+              <div className="flex justify-between w-full gap-4 pr-4 mt-4">
+                <RawLogDetail
+                  label="Agent name"
+                  value={<TruncatedText message={agent?.name ?? "Unknown"} />}
+                  icon={<HatGlassesIcon className={iconClassName} />}
+                  isTruncated={agentNameTruncated}
+                />
+                <RawLogDetail
+                  label="Last user message"
+                  value={
+                    <TruncatedText message={findLastUserMessage(interaction)} />
+                  }
+                  icon={<MessageSquareMoreIcon className={iconClassName} />}
+                  isTruncated={lastMessageTruncated}
+                />
+                <RawLogDetail
+                  label="Response"
+                  value={
+                    <TruncatedText
+                      message={
+                        interaction.response.choices[0].message.content ?? ""
+                      }
+                    />
+                  }
+                  icon={<MessageSquareMoreIcon className={iconClassName} />}
+                  isTruncated={lastMessageTruncated}
+                />
+              </div>
+            </div>
+            <div className="flex-shrink-1">
               <AccordionTrigger className="hover:no-underline items-center" />
             </div>
           </div>
@@ -218,6 +264,41 @@ function findLastUserMessage(
   return "";
 }
 
+function toolNamesUsedForInteraction(
+  interaction: GetInteractionsResponses["200"][number],
+) {
+  const toolsUsed = new Set<string>();
+  for (const message of interaction.request.messages) {
+    if (message.role === "assistant" && message.tool_calls) {
+      for (const toolCall of message.tool_calls) {
+        if ("function" in toolCall) {
+          toolsUsed.add(toolCall.function.name);
+        }
+      }
+    }
+  }
+  return Array.from(toolsUsed);
+}
+
+function toolNamesRefusedForInteraction(
+  interaction: GetInteractionsResponses["200"][number],
+) {
+  const toolsRefused = new Set<string>();
+  for (const message of interaction.request.messages) {
+    if (message.role === "assistant") {
+      if (message.refusal && message.refusal.length > 0) {
+        const toolName = message.refusal.match(
+          /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
+        )?.[1];
+        if (toolName) {
+          toolsRefused.add(toolName);
+        }
+      }
+    }
+  }
+  return Array.from(toolsRefused);
+}
+
 function RawLogDetail({
   label,
   value,
@@ -228,7 +309,7 @@ function RawLogDetail({
   label: string;
   value: string | ReactElement;
   icon: ReactElement;
-  width: string;
+  width?: string;
   isTruncated?: boolean;
 }) {
   return (
@@ -236,12 +317,16 @@ function RawLogDetail({
       <span className="flex text-sm text-muted-foreground mb-2 items-center">
         <span className="mr-1">{icon}</span> {label}
       </span>
-      <Badge
-        variant="secondary"
-        className={`flex w-full min-w-0 justify-start ${isTruncated ? "pr-0" : ""} whitespace-normal w-[fit-content]`}
-      >
-        {value}
-      </Badge>
+      {typeof value === "string" ? (
+        <Badge
+          variant="secondary"
+          className={`flex w-full min-w-0 justify-start ${isTruncated ? "pr-0" : ""} whitespace-normal w-[fit-content]`}
+        >
+          {value}
+        </Badge>
+      ) : (
+        value
+      )}
     </div>
   );
 }

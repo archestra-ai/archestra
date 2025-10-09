@@ -123,6 +123,8 @@ platform/
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages
+│           ├── dual-llm/        # Dual LLM configuration interface
+│           └── tools/           # Tools management with policy configuration
 ├── experiments/       # Experimental features and prototypes
 │   └── src/
 │       ├── main.ts              # OpenAI proxy server (port 9000)

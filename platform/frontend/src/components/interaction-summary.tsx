@@ -50,7 +50,7 @@ export function InteractionSummary({
             <div>
               {toolNamesUsedForInteraction(interaction).length > 0 ? (
                 toolNamesUsedForInteraction(interaction).map((toolName) => (
-                  <Badge key={toolName} className="mt-2">
+                  <Badge key={toolName} className="mt-2 mr-2">
                     {toolName}
                   </Badge>
                 ))

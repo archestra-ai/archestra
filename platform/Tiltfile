@@ -52,7 +52,20 @@ local_resource(
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
-  cmd='cd backend && pnpm db:migrate',
+  # Retry logic: wait for PostgreSQL to be ready before running migrations
+  cmd='''
+    cd backend
+    for i in {1..30}; do
+      if pnpm db:migrate 2>/dev/null; then
+        echo "✅ Migration completed successfully"
+        exit 0
+      fi
+      echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
+      sleep 2
+    done
+    echo "❌ Migration failed after 30 attempts"
+    exit 1
+  ''',
   deps=['./backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']

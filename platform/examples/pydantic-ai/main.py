@@ -25,7 +25,7 @@ def get_model(use_archestra: bool = False):
   provider = os.getenv("LLM_PROVIDER", "openai").lower()
   model_name = os.getenv("MODEL_NAME")
   extra_provider_kwargs = {
-    "base_url": "http://host.docker.internal:9000/v1",
+    "base_url": f"http://host.docker.internal:9000/v1/{provider}",
   } if use_archestra else {}
 
   if provider == "anthropic":

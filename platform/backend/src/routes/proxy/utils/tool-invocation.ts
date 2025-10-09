@@ -46,7 +46,8 @@ export const evaluatePolicies = async (
 
     const archestraMetadata = `
 <archestra-tool-name>${toolCallName}</archestra-tool-name>
-<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>`;
+<archestra-tool-arguments>${JSON.stringify(toolInput)}</archestra-tool-arguments>
+<archestra-tool-reason>${reason}</archestra-tool-reason>`;
 
     const contentMessage = `
 I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.

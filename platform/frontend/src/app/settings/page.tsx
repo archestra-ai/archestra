@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -20,9 +21,23 @@ export default function SettingsPage() {
           />
         </div>
         <div>
-          <CardTitle className="text-2xl font-bold">Proxy URL</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            Archestra Platform Proxy URL
+          </CardTitle>
           <CardDescription className="text-md">
-            Configure the endpoint for your LLM proxy
+            Configure your agentic AI application to point to this endpoint to
+            benefit from the Archestra Platform's security features.
+            <br />
+            <br />
+            To learn more about the Archestra Platform, and how the security
+            features work, and how to configure them, head to our documentation{" "}
+            <Link
+              href="https://www.archestra.ai/docs/platform-lethal-trifecta#breaking-the-trifecta"
+              className="text-primary hover:underline"
+            >
+              here
+            </Link>
+            .
           </CardDescription>
         </div>
       </CardHeader>

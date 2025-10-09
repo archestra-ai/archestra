@@ -20,7 +20,7 @@ async function chat(userMessage: string) {
 
   const customOpenAI = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-    baseURL: "http://localhost:9000/v1", // point requests to Archestra Platform
+    baseURL: "http://localhost:9000/v1/openai", // point requests to Archestra Platform
   }).chat; // Archestra supports Chat Completions API
 
   const result = streamText({

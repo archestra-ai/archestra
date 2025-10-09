@@ -9,6 +9,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
 const {
@@ -34,6 +35,9 @@ fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
   try {
+    // Seed database with demo data
+    await seedDatabase();
+
     /**
      * Register CORS plugin to allow cross-origin requests from frontend
      * (running on any port in case the default (3000) is taken)

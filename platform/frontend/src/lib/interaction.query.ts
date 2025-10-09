@@ -30,9 +30,11 @@ export function useInteractions({
 export function useInteraction({
   interactionId,
   initialData,
+  refetchInterval = 3_000,
 }: {
   interactionId: string;
   initialData?: GetInteractionResponses["200"];
+  refetchInterval?: number | null;
 }) {
   return useQuery({
     queryKey: ["interactions", interactionId],
@@ -41,6 +43,6 @@ export function useInteraction({
       return response.data;
     },
     initialData,
-    refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
+    ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
   });
 }

@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **Use Biome for formatting and linting** - Run `pnpm lint` before committing changes
 3. **TypeScript strict mode** - Ensure code passes `pnpm type-check` before completion
 4. **Tilt for development** - The project uses Tilt to orchestrate the development environment
+5. **Use shadcn/ui components** - Add components with `npx shadcn@latest add <component>` instead of using Radix UI directly
 
 ## Common Development Commands
 
@@ -74,7 +75,8 @@ Archestra Platform is an enterprise Model Context Protocol (MCP) platform built 
 - **Monorepo**: pnpm workspaces with Turbo for build orchestration
 - **Development**: Tilt for local development orchestration
 - **Backend**: Fastify server with pino logging + Drizzle ORM (PostgreSQL)
-- **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4
+- **Frontend**: Next.js 15.5.4 with React 19 + Turbopack + Tailwind CSS 4 + shadcn/ui
+- **UI Components**: shadcn/ui (add with `npx shadcn@latest add <component>`)
 - **Database**: PostgreSQL with Drizzle ORM for interaction persistence
 - **Security**: Production-ready guardrails with dual LLM pattern and taint analysis
 - **Build System**: TypeScript with separate tsconfig per workspace
@@ -121,6 +123,7 @@ platform/
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages
+│           └── agents/  # Agent management UI (create, edit, delete agents)
 ├── experiments/       # Experimental features and prototypes
 │   └── src/
 │       ├── main.ts              # OpenAI proxy server (port 9000)
@@ -152,6 +155,8 @@ The production backend provides:
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
   - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
+  - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
+  - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
 - **Agent Management**:

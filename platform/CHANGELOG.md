@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.8](https://github.com/archestra-ai/archestra/compare/platform-v0.0.7...platform-v0.0.8) (2025-10-09)
+
+
+### Features
+
+* add platform example for pydantic AI ([#655](https://github.com/archestra-ai/archestra/issues/655)) ([c82862b](https://github.com/archestra-ai/archestra/commit/c82862ba8629d1eb92a75ff2f243cb627f37fc12))
+* multi-agent support ([#680](https://github.com/archestra-ai/archestra/issues/680)) ([c3f0cbd](https://github.com/archestra-ai/archestra/commit/c3f0cbd623a7fb32330007aaa9fa3613777578bb))
+
+
+### Bug Fixes
+
+* tell agents to use shadcn over radix ([#674](https://github.com/archestra-ai/archestra/issues/674)) ([924b0a6](https://github.com/archestra-ai/archestra/commit/924b0a6363d927101651e7c026181e9d89fdca75))
+
 ## [0.0.7](https://github.com/archestra-ai/archestra/compare/platform-v0.0.6...platform-v0.0.7) (2025-10-08)
 
 

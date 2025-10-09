@@ -1,40 +1,62 @@
 "use client";
 
-import { BLOCKED_DEMO_INTERACTION_ID } from "@shared";
+import type {
+  GetAgentsResponses,
+  GetInteractionResponse,
+} from "@shared/api-client";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
 import Divider from "@/components/divider";
 import { InteractionSummary } from "@/components/interaction-summary";
 import { LoadingSpinner } from "@/components/loading";
-import { useAgents } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interaction.query";
-import { mapInteractionToUiMessage } from "@/lib/interaction.utils";
+import {
+  mapInteractionToUiMessage,
+  toolsRefusedCountForInteraction,
+} from "@/lib/interaction.utils";
 
-export const dynamic = "force-dynamic";
-
-export default function MitigatedPage() {
+export function ChatPage({
+  initialData,
+  id,
+}: {
+  initialData?: {
+    interaction: GetInteractionResponse | undefined;
+    agents: GetAgentsResponses["200"];
+  };
+  id: string;
+}) {
   return (
     <div className="container mx-auto">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <Mitigated />
+          <Chat initialData={initialData} id={id} />
         </Suspense>
       </ErrorBoundary>
     </div>
   );
 }
 
-function Mitigated() {
+export function Chat({
+  initialData,
+  id,
+}: {
+  initialData?: {
+    interaction: GetInteractionResponse | undefined;
+    agents: GetAgentsResponses["200"];
+  };
+  id: string;
+}) {
   const { data: interaction } = useInteraction({
-    interactionId: BLOCKED_DEMO_INTERACTION_ID,
-    refetchInterval: null,
+    interactionId: id,
+    initialData: initialData?.interaction,
   });
-  const { data: agents } = useAgents();
 
   if (!interaction) {
-    return null;
+    return "Interaction not found";
   }
+
+  const _refusedCount = toolsRefusedCountForInteraction(interaction);
 
   // Map request messages
   const requestMessages = interaction.request.messages.map(
@@ -56,7 +78,9 @@ function Mitigated() {
           topPart={
             <InteractionSummary
               interaction={interaction}
-              agent={agents?.find((agent) => agent.id === interaction.agentId)}
+              agent={initialData?.agents.find(
+                (agent) => agent.id === interaction.agentId,
+              )}
             />
           }
         />

@@ -7,13 +7,13 @@ export const auth = betterAuth({
     organization({
       requireEmailVerificationOnInvitation: true, // https://www.better-auth.com/docs/plugins/organization#email-verification-requirement
       async sendInvitationEmail(_data) {
-        const _inviteLink = `https://example.com/accept-invitation/${data.id}`;
+        const _inviteLink = `https://example.com/accept-invitation/${_data.id}`;
         // TODO : add send invitation logic
         /*sendOrganizationInvitation({
-          email: data.email,
-          invitedByUsername: data.inviter.user.name,
-          invitedByEmail: data.inviter.user.email,
-          teamName: data.organization.name,
+          email: _data.email,
+          invitedByUsername: _data.inviter.user.name,
+          invitedByEmail: _data.inviter.user.email,
+          teamName: _data.organization.name,
           inviteLink,
         });*/
       },

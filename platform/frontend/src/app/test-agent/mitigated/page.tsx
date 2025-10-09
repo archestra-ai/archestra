@@ -11,6 +11,8 @@ import { useAgents } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interaction.query";
 import { mapInteractionToUiMessage } from "@/lib/interaction.utils";
 
+export const dynamic = "force-dynamic";
+
 export default function MitigatedPage() {
   return (
     <div className="container mx-auto">

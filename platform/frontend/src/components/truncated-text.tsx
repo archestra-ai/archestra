@@ -37,13 +37,18 @@ export function TruncatedText({
     : message;
 
   return (
-    <div className={cn(isTruncated ? "relative pr-8" : "", "overflow-hidden")}>
+    <div
+      className={cn(
+        isTruncated ? "relative pr-8" : "",
+        "overflow-hidden group",
+      )}
+    >
       <span>{displayText}</span>
       {isTruncated && (
         <Tooltip open={isOpen} onOpenChange={handleOpenChange}>
           <TooltipTrigger asChild>
             <AlignLeft
-              className={`w-4 h-4 absolute top-1/2 right-2 -translate-y-1/2 ${shouldShowIcon ? "block" : "hidden group-hover:block"}`}
+              className={`w-4 h-4 absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer ${shouldShowIcon ? "block" : "hidden group-hover:block"}`}
             />
           </TooltipTrigger>
           <TooltipContent className="max-w-md whitespace-pre-wrap break-words">

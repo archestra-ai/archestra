@@ -1,7 +1,7 @@
 "use client";
 
 import type { GetAgentsResponses } from "@shared/api-client";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -86,7 +86,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="px-6">
             <Table>
               <TableHeader>
                 <TableRow>

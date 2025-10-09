@@ -1,4 +1,5 @@
 "use client";
+import { UserButton } from "@daveyplate/better-auth-ui";
 import {
   FileJson2,
   Info,
@@ -124,6 +125,11 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="mt-auto mb-4">
+          <SidebarGroupContent>
+            <UserButton align="center" className="w-full" />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

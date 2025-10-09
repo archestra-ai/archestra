@@ -1,4 +1,5 @@
 export { default as agentRoutes } from "./agent";
+export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as interactionRoutes } from "./interaction";
 export { default as openAiProxyRoutes } from "./proxy/openai";

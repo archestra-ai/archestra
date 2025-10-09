@@ -41,7 +41,9 @@ const start = async () => {
     await fastify.register(fastifyCors, {
       origin: [/http:\/\/localhost:\d+/],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
       credentials: true,
+      maxAge: 86400,
     });
 
     /**
@@ -75,7 +77,7 @@ const start = async () => {
       status: name,
       version,
     }));
-
+    fastify.register(routes.authRoutes);
     fastify.register(routes.agentRoutes);
     fastify.register(routes.interactionRoutes);
     fastify.register(routes.openAiProxyRoutes);

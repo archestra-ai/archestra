@@ -7,6 +7,7 @@ import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "./providers";
 
 const mainFont = Lato({
   subsets: ["latin"],
@@ -27,28 +28,30 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${mainFont.className} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <ArchestraQueryClientProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <main className="h-[100%] w-full overflow-auto">
-                <div className="h-8">
-                  <SidebarTrigger className="cursor-pointer" />
-                  <div className="absolute top-0 right-0">
-                    <ColorModeToggle />
+        <Providers>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ArchestraQueryClientProvider>
+              <SidebarProvider>
+                <AppSidebar />
+                <main className="h-[100%] w-full overflow-auto">
+                  <div className="h-8">
+                    <SidebarTrigger className="cursor-pointer" />
+                    <div className="absolute top-0 right-0">
+                      <ColorModeToggle />
+                    </div>
                   </div>
-                </div>
-                {children}
-              </main>
-              <Toaster />
-            </SidebarProvider>
-          </ArchestraQueryClientProvider>
-        </ThemeProvider>
+                  {children}
+                </main>
+                <Toaster />
+              </SidebarProvider>
+            </ArchestraQueryClientProvider>
+          </ThemeProvider>
+        </Providers>
       </body>
     </html>
   );

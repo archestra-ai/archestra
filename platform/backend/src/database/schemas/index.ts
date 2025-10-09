@@ -1,4 +1,13 @@
 export { default as agentsTable } from "./agent";
+export {
+  account,
+  invitation,
+  member,
+  organization,
+  session,
+  user,
+  verification,
+} from "./auth-schema";
 export { default as interactionsTable } from "./interaction";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";

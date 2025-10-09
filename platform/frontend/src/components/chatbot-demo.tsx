@@ -171,6 +171,11 @@ const ChatBotDemo = ({
                           <Fragment key={`${message.id}-${i}`}>
                             <Message from={message.role}>
                               <MessageContent>
+                                {message.role === "system" && (
+                                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    System Prompt
+                                  </div>
+                                )}
                                 <Response>{part.text}</Response>
                               </MessageContent>
                             </Message>

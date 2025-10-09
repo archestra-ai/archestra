@@ -29,6 +29,9 @@ importers:
       '@fastify/swagger':
         specifier: ^9.5.2
         version: 9.5.2
+      '@shared':
+        specifier: workspace:*
+        version: link:../shared
       ai:
         specifier: ^5.0.57
         version: 5.0.60(zod@4.1.11)

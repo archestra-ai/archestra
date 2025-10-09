@@ -3,8 +3,24 @@ import db, { schema } from "@/database";
 import type { InsertTool, Tool, UpdateTool } from "@/types";
 
 class ToolModel {
+  static async create(tool: InsertTool): Promise<Tool> {
+    const [createdTool] = await db
+      .insert(schema.toolsTable)
+      .values(tool)
+      .returning();
+    return createdTool;
+  }
+
   static async createToolIfNotExists(tool: InsertTool) {
     return db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
+  }
+
+  static async findById(id: string): Promise<Tool | null> {
+    const [tool] = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, id));
+    return tool || null;
   }
 
   static async findAll(): Promise<Tool[]> {

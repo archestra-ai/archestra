@@ -149,7 +149,7 @@ def main():
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""
 Examples:
-  # Run without Archestra (direct to OpenAI) - vulnerable to prompt injection
+  # Run without Archestra (direct to LLM provider) - vulnerable to prompt injection
   python main.py
 
   # Run with Archestra protection - blocks malicious tool calls
@@ -159,7 +159,7 @@ Examples:
   parser.add_argument('--secure', action='store_true', help='Use Archestra Platform as security proxy')
   args = parser.parse_args()
 
-  mode = "🔒 Archestra-secured" if args.secure else "⚠️  Direct OpenAI (UNSAFE)"
+  mode = "🔒 Archestra-secured" if args.secure else "⚠️  Direct to LLM provider (UNSAFE)"
   print(f"\n{'='*60}")
   print(f"Mode: {mode}")
   print(f"{'='*60}")

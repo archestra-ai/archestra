@@ -47,7 +47,7 @@ const navigationItems = [
     title: "Agents",
     url: "/agents",
     icon: Bot,
-  },>>>>>>> main
+  },
   {
     title: "Logs",
     url: "/logs",

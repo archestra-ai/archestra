@@ -27,7 +27,6 @@ class ToolModel {
     return db
       .select({
         id: schema.toolsTable.id,
-        agentId: schema.toolsTable.agentId,
         name: schema.toolsTable.name,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
@@ -42,7 +41,7 @@ class ToolModel {
         },
       })
       .from(schema.toolsTable)
-      .leftJoin(
+      .innerJoin(
         schema.agentsTable,
         eq(schema.toolsTable.agentId, schema.agentsTable.id),
       )

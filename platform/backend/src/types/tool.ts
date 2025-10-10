@@ -19,7 +19,9 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
 
-export const SelectToolWithAgentSchema = SelectToolSchema.extend({
+export const SelectToolWithAgentSchema = SelectToolSchema.omit({
+  agentId: true,
+}).extend({
   agent: z.object({
     id: z.string(),
     name: z.string(),

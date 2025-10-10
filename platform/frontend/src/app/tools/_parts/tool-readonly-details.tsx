@@ -14,7 +14,7 @@ export function ToolReadonlyDetails({
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground">Agent</div>
-          <div className="font-mono text-sm break-all text-foreground">
+          <div className="text-sm break-all text-foreground">
             {tool.agent.name}
           </div>
         </div>

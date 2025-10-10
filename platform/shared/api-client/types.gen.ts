@@ -2116,7 +2116,6 @@ export type GetToolsResponses = {
      */
     200: Array<{
         id: string;
-        agentId: string;
         name: string;
         /**
          *

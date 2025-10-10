@@ -1,7 +1,7 @@
 "use client";
 
 import type { GetAgentsResponses } from "@shared/api-client";
-import { Check, Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -65,137 +65,125 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Agents</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            List of agents detected by proxy.{" "}
-            <a
-              href="https://www.archestra.ai/docs/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:no-underline"
-            >
-              Read more in the docs
-            </a>
-          </p>
+    <div className="w-full h-full">
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight mb-2">
+                Agents
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                List of agents detected by proxy.{" "}
+                <a
+                  href="https://www.archestra.ai/docs/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Read more in the docs
+                </a>
+              </p>
+            </div>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </Button>
+          </div>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Agent
-        </Button>
       </div>
 
-      {!agents || agents.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No agents found</CardTitle>
-            <CardDescription>
-              Create your first agent to get started with the Archestra
-              Platform.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="px-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Agent ID</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {agents.map((agent) => (
-                  <TableRow key={agent.id}>
-                    <TableCell className="font-medium">{agent.name}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {agent.id}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(agent.createdAt).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "numeric",
-                        day: "numeric",
-                      })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            setEditingAgent({ id: agent.id, name: agent.name })
-                          }
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeletingAgentId(agent.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      <CreateAgentDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-      />
-
-      {editingAgent && (
-        <EditAgentDialog
-          agent={editingAgent}
-          open={!!editingAgent}
-          onOpenChange={(open) => !open && setEditingAgent(null)}
-        />
-      )}
-
-      {deletingAgentId && (
-        <DeleteAgentDialog
-          agentId={deletingAgentId}
-          open={!!deletingAgentId}
-          onOpenChange={(open) => !open && setDeletingAgentId(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function _CopyableUrl({ agentId }: { agentId: string }) {
-  const [copied, setCopied] = useState(false);
-  const url = `http://localhost:9000/v1/openai/${agentId}`;
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    toast.success("Proxy URL copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <code className="text-sm bg-muted px-2 py-1 rounded">{url}</code>
-      <Button variant="ghost" size="icon" onClick={handleCopy}>
-        {copied ? (
-          <Check className="h-4 w-4 text-green-500" />
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        {!agents || agents.length === 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>No agents found</CardTitle>
+              <CardDescription>
+                Create your first agent to get started with the Archestra
+                Platform.
+              </CardDescription>
+            </CardHeader>
+          </Card>
         ) : (
-          <Copy className="h-4 w-4" />
+          <Card>
+            <CardContent className="px-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Agent ID</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agents.map((agent) => (
+                    <TableRow key={agent.id}>
+                      <TableCell className="font-medium">
+                        {agent.name}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {agent.id}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(agent.createdAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "numeric",
+                          day: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setEditingAgent({
+                                id: agent.id,
+                                name: agent.name,
+                              })
+                            }
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingAgentId(agent.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
-      </Button>
+
+        <CreateAgentDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
+
+        {editingAgent && (
+          <EditAgentDialog
+            agent={editingAgent}
+            open={!!editingAgent}
+            onOpenChange={(open) => !open && setEditingAgent(null)}
+          />
+        )}
+
+        {deletingAgentId && (
+          <DeleteAgentDialog
+            agentId={deletingAgentId}
+            open={!!deletingAgentId}
+            onOpenChange={(open) => !open && setDeletingAgentId(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }

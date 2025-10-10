@@ -36,17 +36,28 @@ export default function LogsPage({
   };
 }) {
   return (
-    <div className="container mx-auto p-6">
-      <Tabs defaultValue={TabsOptions.Table}>
-        <div className="flex flex-col gap-1 mb-2">
-          <h1 className="text-3xl font-bold mb-6">Logs</h1>
+    <div className="w-full h-full">
+      {/* Page header */}
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <h1 className="text-2xl font-semibold tracking-tight mb-2">Logs</h1>
+          <p className="text-sm text-muted-foreground">
+            View all interactions between your agents and LLMs, including
+            requests, responses, and tool invocations.
+          </p>
         </div>
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingSpinner />}>
-            <LogsRaw initialData={initialData} />
-          </Suspense>
-        </ErrorBoundary>
-      </Tabs>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        <Tabs defaultValue={TabsOptions.Table}>
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <LogsRaw initialData={initialData} />
+            </Suspense>
+          </ErrorBoundary>
+        </Tabs>
+      </div>
     </div>
   );
 }

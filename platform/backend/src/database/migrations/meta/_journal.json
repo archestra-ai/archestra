@@ -71,6 +71,13 @@
       "when": 1760085630191,
       "tag": "0009_misty_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1760116071330,
+      "tag": "0010_neat_zombie",
+      "breakpoints": true
     }
   ]
 }

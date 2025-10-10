@@ -15,16 +15,11 @@ export function Providers({ children }: { children: ReactNode }) {
       navigate={router.push}
       replace={router.replace}
       onSessionChange={() => {
-        // Clear router cache (protected routes)
         router.refresh();
       }}
       Link={Link}
       organization={{
         logo: true,
-        customRoles: [
-          { role: "developer", label: "Developer" },
-          { role: "viewer", label: "Viewer" },
-        ],
       }}
     >
       {children}

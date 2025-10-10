@@ -42,16 +42,17 @@ async function chat(userMessage: string) {
 
   process.stdout.write("\nAssistant: ");
 
-  let fullResponse = "";
   for await (const textPart of result.textStream) {
     process.stdout.write(textPart);
-    fullResponse += textPart;
   }
 
-  conversationHistory.push({
-    role: "assistant",
-    content: fullResponse,
-  });
+  // Wait for the full result to get all messages including tool calls and tool results
+  // This is necessary for Archestra proxy to properly track untrusted data across requests
+  const finalResult = await result.response;
+
+  // Add all messages from the AI SDK result to conversation history
+  // This includes assistant messages with tool_calls and tool result messages
+  conversationHistory.push(...finalResult.messages);
 
   process.stdout.write("\n\n");
   promptUser();

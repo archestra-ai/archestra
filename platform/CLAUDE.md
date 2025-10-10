@@ -14,6 +14,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **Tilt for development** - The project uses Tilt to orchestrate the development environment
 5. **Use shadcn/ui components** - Add components with `npx shadcn@latest add <component>` instead of using Radix UI directly
 
+## Monitoring and Debugging
+
+### Tilt Web UI
+
+When running `tilt up`, the Tilt web UI is available at http://localhost:10350/ and provides:
+
+- **Backend logs**: http://localhost:10350/r/pnpm-dev/overview - View real-time logs from the backend server
+- **Frontend logs**: http://localhost:10350/r/pnpm-dev/overview - View Next.js development logs
+- **Lint errors**: http://localhost:10350/r/lint%3Afix/overview - See linting and type-check errors
+- **Resource refresh**: Each resource has a refresh button to restart individual services without restarting Tilt
+- **Clear Logs**: Click on any resource, then click the "Clear Logs" button in the top right corner to clear logs for better visibility
+  - Alternative: Kill the `tilt up` process and run it again to clear all logs
+
+### Frontend Application
+
+- **Frontend UI**: http://localhost:3000/ - Main application interface
+- **Tools Inspector**: http://localhost:3000/tools - Inspect all requests and responses flowing through the Archestra proxy in real-time
+
+### Database Inspection
+
+- **Drizzle Studio**: https://local.drizzle.studio/ - View and edit database tables and schema in a web UI
+
+### Using Playwright MCP for Browser Automation
+
+To access the Tilt web UI and Drizzle Studio programmatically, use the Playwright MCP:
+
+```bash
+claude mcp add playwright npx @playwright/mcp@latest
+```
+
 ## Common Development Commands
 
 ### Starting the Development Environment
@@ -52,7 +82,40 @@ pnpm start           # Start production server
 # Experiments (Proxy & Guardrails)
 cd experiments
 pnpm proxy:dev       # Start OpenAI proxy server on port 9000
-pnpm cli-chat-with-guardrails  # Test guardrails CLI
+pnpm cli-chat-with-guardrails  # Test guardrails CLI (interactive, requires user input)
+```
+
+### Testing with Example CLI Chats
+
+The platform includes two example CLI chat applications for testing:
+
+```bash
+# 1. Experiments CLI Chat (TypeScript with OpenAI SDK)
+cd experiments
+pnpm cli-chat-with-guardrails
+# Interactive CLI - supports commands:
+# - Regular messages to chat with the AI
+# - /help - Show available commands
+# - /exit - Exit the program
+# Flags:
+#   --include-external-email  # Include external email in mock Gmail data
+#   --include-malicious-email # Include malicious email with prompt injection
+#   --stream                  # Stream the response
+#   --model <model>           # Specify model (default: gpt-4o)
+#   --debug                   # Print debug messages
+
+# 2. AI SDK Express Example (TypeScript with Vercel AI SDK)
+cd examples/ai-sdk-express
+pnpm dev
+# Interactive CLI - type messages to chat, "exit" or "quit" to exit
+# This example demonstrates AI SDK integration with Archestra proxy
+# Tool: get_file - reads files from the file system
+```
+
+Both examples connect to Archestra backend on http://localhost:9000/v1/openai and demonstrate:
+- Tool invocation policies (blocking untrusted tool calls)
+- Trusted data policies (marking data as trusted/untrusted)
+- Request/response interception and logging
 ```
 
 ### Code Quality

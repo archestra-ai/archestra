@@ -49,7 +49,10 @@ function Tools({ initialData }: { initialData?: GetToolsResponses["200"] }) {
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
           <p className="text-sm text-muted-foreground">
-            Manage and configure tool policies
+            Here you can find the tools parsed from the interactions between
+            your agents and LLMs. If you don't see the tools you expect, please
+            ensure that your agents are properly configured to use Archestra as
+            an LLM proxy, and trigger some interactions.
           </p>
         </div>
       </div>
@@ -81,7 +84,7 @@ function ToolsList({
       {/* Tool selector */}
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-3">
-          AVAILABLE TOOLS
+          DETECTED TOOLS
         </div>
         <div className="flex flex-wrap gap-2">
           {tools.map((tool) => {

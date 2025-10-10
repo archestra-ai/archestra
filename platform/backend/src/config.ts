@@ -13,10 +13,21 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
+// Parse port from ARCHESTRA_API_BASE_URL if provided
+const getPortFromUrl = (url?: string): number => {
+  if (!url) return 9000;
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.port ? Number.parseInt(parsedUrl.port, 10) : 9000;
+  } catch {
+    return 9000;
+  }
+};
+
 export default {
   api: {
     host: "0.0.0.0",
-    port: 9000,
+    port: getPortFromUrl(process.env.ARCHESTRA_API_BASE_URL),
     name: "Archestra Platform API",
     version: packageJson.version,
   },

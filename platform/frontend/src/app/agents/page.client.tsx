@@ -67,7 +67,20 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   return (
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Agents</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Agents</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            List of agents detected by proxy.{" "}
+            <a
+              href="https://www.archestra.ai/docs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline"
+            >
+              Read more in the docs
+            </a>
+          </p>
+        </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Create Agent

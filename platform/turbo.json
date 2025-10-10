@@ -6,7 +6,8 @@
     },
     "dev": {
       "persistent": true,
-      "cache": false
+      "cache": false,
+      "env": ["ARCHESTRA_API_BASE_URL"]
     },
     "lint": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]

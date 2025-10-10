@@ -62,9 +62,9 @@ export function ToolCallPolicies({
             toolInvocationPolicyCreateMutation.mutate({ toolId: tool.id })
           }
           disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
-          disabledText="Custom policies require parameters"
+          disabledText="This tool has no parameters"
         >
-          <Plus className="w-3.5 h-3.5" /> Add
+          <Plus className="w-3.5 h-3.5" /> Add policy for tool parameters
         </ButtonWithTooltip>
       </div>
       <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">

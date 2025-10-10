@@ -9,6 +9,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { createAdminUser } from "./auth/create-admin";
 import { authMiddleware } from "./middleware/auth-middleware";
 import * as routes from "./routes";
 
@@ -78,6 +79,7 @@ const start = async () => {
       status: name,
       version,
     }));
+    await createAdminUser();
     fastify.addHook("preHandler", authMiddleware);
     fastify.register(routes.authRoutes);
     fastify.register(routes.agentRoutes);
@@ -85,7 +87,6 @@ const start = async () => {
     fastify.register(routes.openAiProxyRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);
-
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
   } catch (err) {

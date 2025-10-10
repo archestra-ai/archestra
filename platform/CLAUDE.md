@@ -35,6 +35,7 @@ When running `tilt up`, the Tilt web UI is available at http://localhost:10350/ 
 
 - **Frontend UI**: http://localhost:3000/ - Main application interface
 - **Tools Inspector**: http://localhost:3000/tools - Inspect all requests and responses flowing through the Archestra proxy in real-time
+- **Dual LLM Configuration**: http://localhost:3000/dual-llm - Configure the dual LLM quarantine pattern for enhanced security
 
 ### Database Inspection
 

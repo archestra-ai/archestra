@@ -1,0 +1,33 @@
+---
+description: Core project conventions and working directory rules for Archestra Platform
+alwaysApply: true
+---
+
+# Project Conventions
+
+**⚠️ IMPORTANT: Keep .cursor/rules/ in sync with CLAUDE.md. When updating one, update the other.**
+
+## Working Directory
+
+**ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
+
+## Package Management
+
+**ALWAYS use pnpm** (not npm or yarn) for all package management operations:
+- Install: `pnpm install`
+- Add dependencies: `pnpm add <package>`
+- Run scripts: `pnpm <script-name>`
+
+## Code Quality Standards
+
+1. **TypeScript strict mode** - Ensure code passes `pnpm type-check` before completion
+2. **Biome for linting and formatting** - Run `pnpm lint` before committing changes
+3. **Testing** - Use Vitest with PGLite for backend tests
+4. Test files should be colocated with source (`.test.ts` extension)
+
+## Naming Conventions
+
+- Use **camelCase** for TypeScript variables, functions, and properties
+- Use **PascalCase** for TypeScript classes, interfaces, and types
+- Use **kebab-case** for file names (e.g., `tool-invocation-policy.ts`)
+- Use workspace-relative imports within each workspace

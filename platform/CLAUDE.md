@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**⚠️ IMPORTANT: This file must be kept in sync with `.cursor/rules/` (for Cursor IDE users). When updating one, update the other.**
+
+> **Note for Cursor IDE users**: This project now uses modern Project Rules in `.cursor/rules/` directory. The legacy `.cursorrules` file is deprecated.
+
 ## Working Directory
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
@@ -349,6 +353,154 @@ The `platform/examples/` directory contains example integrations:
   - Example uses GitHub issue #669 which contains a hidden prompt injection attack
 
 Each example includes a README with setup instructions and demonstrates how to use Archestra Platform as a security proxy for LLM applications.
+
+### Coding Conventions
+
+The project follows strict coding conventions to maintain consistency and quality across frontend, backend, and shared code.
+
+#### Frontend Conventions
+
+1. **Component Architecture**
+   - Extract pure functions out of components whenever it makes sense
+   - Create small, focused components - when using `array.map()`, extract each item into its own component
+   - Extract business logic to pure functions or TanStack Query hooks
+
+   ```typescript
+   // ✅ Good: Small, focused components
+   {items.map(item => <ItemCard key={item.id} item={item} />)}
+   
+   // ❌ Bad: Inline complex JSX
+   {items.map(item => <div>...complex JSX...</div>)}
+   ```
+
+2. **Data Fetching**
+   - Always use TanStack Query for data fetching
+   - Use `useSuspenseQuery` for data fetching in client components
+   - Never call HTTP clients directly from client components
+   - Prefetch page data on the server and pass as initial data to queries when possible
+
+   ```typescript
+   // lib/chat.query.ts
+   export function useChatMessages(chatId: string) {
+     return useSuspenseQuery({
+       queryKey: ['chats', chatId, 'messages'],
+       queryFn: () => apiClient.get(`/chats/${chatId}/messages`),
+     });
+   }
+   ```
+
+3. **Error Handling and Loading States**
+   - Use error boundaries from components for handling errors
+   - Use Suspense for loading states (avoid `loading.tsx` files)
+
+4. **Styling**
+   - Use Tailwind CSS 4 utility classes
+   - Prioritize applying colors via global theme rather than inline in components
+   - Use `bg-primary`, `bg-secondary`, `bg-destructive` instead of hardcoded colors like `bg-blue-500`
+
+5. **State Management**
+   - Avoid creating React Context without real need
+   - Prefer TanStack Query reused in multiple places to avoid prop drilling
+   - For shared data, create a query hook and reuse it across components
+
+6. **UI Components**
+   - Always use shadcn/ui components
+   - Never use Radix UI directly
+   - Add components with `npx shadcn@latest add <component>`
+
+7. **File Organization**
+   - **Avoid unnecessary exports** - Only export what needs to be used by other modules. If something is only used within the file, don't export it.
+   - **Avoid index and barrel files** - import directly from source files
+   - Promote domain/feature file colocation with flat structure
+   - Use naming patterns: `chat.query.ts`, `chat.utils.ts`, `chat.hook.ts`, `chat.types.ts`
+   - Avoid creating nested folders without need
+
+   ```typescript
+   // ❌ Bad: Exporting internal helpers
+   export function formatDate(date: Date): string { ... }
+   export function UserProfile({ user }: Props) {
+     return <div>{formatDate(user.createdAt)}</div>;
+   }
+
+   // ✅ Good: Only export what's needed externally
+   function formatDate(date: Date): string { ... }  // Internal helper
+   export function UserProfile({ user }: Props) {   // Public API
+     return <div>{formatDate(user.createdAt)}</div>;
+   }
+   ```
+
+   ```
+   ✅ Good: Flat structure
+   lib/
+   ├── chat.query.ts
+   ├── chat.utils.ts
+   ├── chat.hook.ts
+   └── user.query.ts
+   
+   ❌ Bad: Unnecessary nesting
+   lib/chat/queries/use-chat-messages.ts
+   lib/chat/utils/format-message.ts
+   ```
+
+#### Backend Conventions
+
+1. **File Organization**
+   - **Avoid unnecessary exports** - Only export what needs to be used by other modules. If something is only used within the file, don't export it.
+   - **Avoid index and barrel files** - use direct imports
+   - **Avoid nested folder structure** - keep it flat
+   - Promote domain/feature file colocation
+   - Colocate test files with source files (`.test.ts` extension)
+
+   ```typescript
+   // ❌ Bad: Exporting internal helpers
+   export function validateAgentName(name: string): boolean { ... }
+   export async function createAgent(data: CreateAgentInput) { ... }
+
+   // ✅ Good: Only export public API
+   function validateAgentName(name: string): boolean { ... }  // Internal
+   export async function createAgent(data: CreateAgentInput) { ... }  // Public
+   ```
+
+   ```
+   ✅ Good: Flat structure
+   models/
+   ├── agent.ts
+   ├── agent.test.ts
+   ├── chat.ts
+   └── chat.test.ts
+   
+   ❌ Bad: Unnecessary nesting
+   models/agent/crud/create.ts
+   models/agent/queries/get-by-id.ts
+   ```
+
+2. **Database Operations**
+   - Use Drizzle ORM for all database operations
+   - Never use raw SQL unless absolutely necessary
+   - Use parameterized queries to prevent SQL injection
+   - Return results from `.returning()` for insert/update operations
+
+3. **Testing**
+   - Use Vitest with PGLite for in-memory database testing
+   - Colocate test files with source (`.test.ts` extension)
+   - Test all CRUD operations and edge cases
+
+#### Shared Workspace Conventions
+
+- Common/reusable code needed by both frontend and backend should be placed in the `/shared` pnpm workspace
+- Only put truly shared, environment-agnostic code in `shared/`
+- Examples: TypeScript types, Zod validation schemas, constants, API client types
+- Don't put frontend-specific (React) or backend-specific (Fastify, database) code in `shared/`
+
+```typescript
+// shared/types/agent.types.ts
+export interface Agent {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
 
 ### Development Best Practices
 

@@ -17,7 +17,9 @@
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/database/seed.ts",
+    "db:clean": "tsx src/database/clean-db-on-dev.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

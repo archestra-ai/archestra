@@ -3,7 +3,6 @@ import {
   ALLOWED_DEMO_TOOL_IDS,
   BLOCKED_DEMO_AGENT_ID,
   BLOCKED_DEMO_INTERACTION_ID,
-  BLOCKED_DEMO_TOOL_IDS,
   DEMO_AGENT_ID,
 } from "@shared/consts";
 import AgentModel from "@/models/agent";
@@ -47,6 +46,7 @@ async function seedAgents(): Promise<void> {
     const agentData: InsertAgent = {
       id: DEMO_AGENT_ID,
       name: "Demo Agent without Archestra",
+      isDemo: true,
     };
     await AgentModel.create(agentData);
   }
@@ -57,6 +57,7 @@ async function seedAgents(): Promise<void> {
     const agentData: InsertAgent = {
       id: BLOCKED_DEMO_AGENT_ID,
       name: "Demo Agent with Archestra",
+      isDemo: true,
     };
     await AgentModel.create(agentData);
   }
@@ -115,60 +116,6 @@ async function seedTools(): Promise<void> {
       },
       description: "Get emails from the user's Gmail inbox",
       allowUsageWhenUntrustedDataIsPresent: true,
-      dataIsTrustedByDefault: false,
-    };
-    await ToolModel.create(toolData);
-  }
-
-  // Blocked demo tools
-  const blockedSendEmailsTool = await ToolModel.findById(
-    BLOCKED_DEMO_TOOL_IDS.sendEmails,
-  );
-  if (!blockedSendEmailsTool) {
-    const toolData: InsertTool = {
-      id: BLOCKED_DEMO_TOOL_IDS.sendEmails,
-      agentId: BLOCKED_DEMO_AGENT_ID,
-      name: "gmail__sendEmails",
-      parameters: {
-        type: "object",
-        required: ["to", "subject", "body"],
-        properties: {
-          to: {
-            type: "string",
-            description: "The email address to send the email to",
-          },
-          body: {
-            type: "string",
-            description: "The body of the email",
-          },
-          subject: {
-            type: "string",
-            description: "The subject of the email",
-          },
-        },
-      },
-      description: "Send an email via Gmail",
-      allowUsageWhenUntrustedDataIsPresent: false,
-      dataIsTrustedByDefault: false,
-    };
-    await ToolModel.create(toolData);
-  }
-
-  const blockedGetMyEmailsTool = await ToolModel.findById(
-    BLOCKED_DEMO_TOOL_IDS.getMyEmails,
-  );
-  if (!blockedGetMyEmailsTool) {
-    const toolData: InsertTool = {
-      id: BLOCKED_DEMO_TOOL_IDS.getMyEmails,
-      agentId: BLOCKED_DEMO_AGENT_ID,
-      name: "gmail__getMyEmails",
-      parameters: {
-        type: "object",
-        required: [],
-        properties: {},
-      },
-      description: "Get emails from the user's Gmail inbox",
-      allowUsageWhenUntrustedDataIsPresent: false,
       dataIsTrustedByDefault: false,
     };
     await ToolModel.create(toolData);
@@ -556,4 +503,19 @@ async function seedInteractions(): Promise<void> {
 
     await InteractionModel.create(interactionData);
   }
+}
+
+/**
+ * CLI entry point for seeding the database
+ */
+if (require.main === module) {
+  seedDatabase()
+    .then(() => {
+      console.log("\n✅ Done!");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("\n❌ Error seeding database:", error);
+      process.exit(1);
+    });
 }

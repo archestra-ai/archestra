@@ -9,6 +9,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { authMiddleware } from "./middleware/auth-middleware";
 import * as routes from "./routes";
 
 const {
@@ -77,6 +78,7 @@ const start = async () => {
       status: name,
       version,
     }));
+    fastify.addHook("preHandler", authMiddleware);
     fastify.register(routes.authRoutes);
     fastify.register(routes.agentRoutes);
     fastify.register(routes.interactionRoutes);

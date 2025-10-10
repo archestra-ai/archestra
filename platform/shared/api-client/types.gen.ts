@@ -60,6 +60,7 @@ export type GetAgentsResponses = {
     200: Array<{
         id: string;
         name: string;
+        isDemo: boolean;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -70,6 +71,7 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         name: string;
+        isDemo?: boolean;
     };
     path?: never;
     query?: never;
@@ -97,6 +99,7 @@ export type CreateAgentResponses = {
     200: {
         id: string;
         name: string;
+        isDemo: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -186,6 +189,7 @@ export type GetAgentResponses = {
     200: {
         id: string;
         name: string;
+        isDemo: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -196,6 +200,7 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body?: {
         name?: string;
+        isDemo?: boolean;
     };
     path: {
         id: string;
@@ -234,6 +239,7 @@ export type UpdateAgentResponses = {
     200: {
         id: string;
         name: string;
+        isDemo: boolean;
         createdAt: string;
         updatedAt: string;
     };
@@ -2132,6 +2138,10 @@ export type GetToolsResponses = {
         dataIsTrustedByDefault: boolean;
         createdAt: string;
         updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
     }>;
 };
 

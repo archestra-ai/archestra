@@ -15,7 +15,7 @@ export function ToolReadonlyDetails({
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground">Agent</div>
           <div className="font-mono text-sm break-all text-foreground">
-            {tool.agentId}
+            {tool.agent.name}
           </div>
         </div>
         <div className="space-y-1.5">

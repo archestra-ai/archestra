@@ -106,6 +106,7 @@ function ToolsList({
                 onClick={() => setSelectedToolId(isSelected ? null : tool.id)}
               >
                 {tool.name}
+                <span className="opacity-70"> ({tool.agent.name})</span>
               </button>
             );
           })}

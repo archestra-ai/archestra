@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1By__Data, DeleteV1By__Responses, DeleteV1Data, DeleteV1Responses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1By__Data, GetV1By__Responses, GetV1Data, GetV1Responses, HeadV1By__Data, HeadV1By__Responses, HeadV1Data, HeadV1Responses, OpenAiChatCompletionsData, OpenAiChatCompletionsErrors, OpenAiChatCompletionsResponses, OptionsV1By__Data, OptionsV1By__Responses, OptionsV1Data, OptionsV1Responses, PatchV1By__Data, PatchV1By__Responses, PatchV1Data, PatchV1Responses, PostV1By__Data, PostV1By__Responses, PostV1Data, PostV1Responses, PutV1By__Data, PutV1By__Responses, PutV1Data, PutV1Responses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1ByProviderBy__Data, DeleteV1ByProviderBy__Responses, DeleteV1ByProviderData, DeleteV1ByProviderResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1ByProviderBy__Data, GetV1ByProviderBy__Responses, GetV1ByProviderData, GetV1ByProviderResponses, HeadV1ByProviderBy__Data, HeadV1ByProviderBy__Responses, HeadV1ByProviderData, HeadV1ByProviderResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, OptionsV1ByProviderBy__Data, OptionsV1ByProviderBy__Responses, OptionsV1ByProviderData, OptionsV1ByProviderResponses, PatchV1ByProviderBy__Data, PatchV1ByProviderBy__Responses, PatchV1ByProviderData, PatchV1ByProviderResponses, PostV1ByProviderBy__Data, PostV1ByProviderBy__Responses, PostV1ByProviderData, PostV1ByProviderResponses, PutV1ByProviderBy__Data, PutV1ByProviderBy__Responses, PutV1ByProviderData, PutV1ByProviderResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -110,110 +110,124 @@ export const getInteraction = <ThrowOnError extends boolean = false>(options: Op
     });
 };
 
-export const deleteV1 = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).delete<DeleteV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const deleteV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const getV1 = <ThrowOnError extends boolean = false>(options?: Options<GetV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const getV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<GetV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const headV1 = <ThrowOnError extends boolean = false>(options?: Options<HeadV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).head<HeadV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const headV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<HeadV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).head<HeadV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const optionsV1 = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).options<OptionsV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const optionsV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<OptionsV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).options<OptionsV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const patchV1 = <ThrowOnError extends boolean = false>(options?: Options<PatchV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).patch<PatchV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const patchV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<PatchV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).patch<PatchV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const postV1 = <ThrowOnError extends boolean = false>(options?: Options<PostV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const postV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<PostV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const putV1 = <ThrowOnError extends boolean = false>(options?: Options<PutV1Data, ThrowOnError>) => {
-    return (options?.client ?? client).put<PutV1Responses, unknown, ThrowOnError>({
-        url: '/v1/',
+export const putV1ByProvider = <ThrowOnError extends boolean = false>(options: Options<PutV1ByProviderData, ThrowOnError>) => {
+    return (options.client ?? client).put<PutV1ByProviderResponses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/',
         ...options
     });
 };
 
-export const deleteV1By__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const deleteV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const getV1By__ = <ThrowOnError extends boolean = false>(options: Options<GetV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const getV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).get<GetV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const headV1By__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const headV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).head<HeadV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const optionsV1By__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const optionsV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).options<OptionsV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const patchV1By__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const patchV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).patch<PatchV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const postV1By__ = <ThrowOnError extends boolean = false>(options: Options<PostV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const postV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
-export const putV1By__ = <ThrowOnError extends boolean = false>(options: Options<PutV1By__Data, ThrowOnError>) => {
-    return (options.client ?? client).put<PutV1By__Responses, unknown, ThrowOnError>({
-        url: '/v1/{*}',
+export const putV1ByProviderBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1ByProviderBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).put<PutV1ByProviderBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/{provider}/{*}',
         ...options
     });
 };
 
 /**
- * Create a chat completion with OpenAI
+ * Create a chat completion with OpenAI (uses default agent)
  */
-export const openAiChatCompletions = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsData, ThrowOnError>) => {
-    return (options.client ?? client).post<OpenAiChatCompletionsResponses, OpenAiChatCompletionsErrors, ThrowOnError>({
-        url: '/v1/chat/completions',
+export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+        url: '/v1/openai/chat/completions',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Create a chat completion with OpenAI for a specific agent
+ */
+export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
+        url: '/v1/openai/{agentId}/chat/completions',
         ...options,
         headers: {
             'Content-Type': 'application/json',

@@ -1,0 +1,133 @@
+---
+description: Guidelines for shared code used by both frontend and backend
+globs:
+  - shared/**/*.ts
+  - shared/**/*.tsx
+alwaysApply: false
+---
+
+# Shared Workspace Guidelines
+
+The `shared/` workspace contains code that is used by both frontend and backend.
+
+## When to Use Shared
+
+Place code in `shared/` when:
+
+1. ✅ Types/interfaces used by both frontend and backend
+2. ✅ Constants and configuration shared across workspaces
+3. ✅ Validation schemas (e.g., Zod schemas) used on both client and server
+4. ✅ Utility functions needed in multiple workspaces
+5. ✅ API client types and type-safe SDK
+
+## What NOT to Put in Shared
+
+❌ Frontend-specific code (React components, hooks, Next.js utilities)  
+❌ Backend-specific code (Fastify plugins, database models)  
+❌ Node.js-only or browser-only APIs  
+
+## File Organization
+
+Keep the shared workspace flat and organized by domain:
+
+```typescript
+shared/
+├── api-client/           # Type-safe API client (generated)
+│   ├── client.gen.ts
+│   ├── types.gen.ts
+│   └── sdk.gen.ts
+├── types/
+│   ├── agent.types.ts   # Agent-related types
+│   ├── chat.types.ts    # Chat-related types
+│   └── api.types.ts     # API request/response types
+├── constants/
+│   ├── config.ts        # Shared configuration constants
+│   └── routes.ts        # API route constants
+├── validation/
+│   ├── agent.schema.ts  # Zod schemas for agent validation
+│   └── chat.schema.ts   # Zod schemas for chat validation
+└── index.ts             # Main exports (acceptable here for external use)
+```
+
+## Example: Shared Types
+
+```typescript
+// shared/types/agent.types.ts
+export interface Agent {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateAgentRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateAgentRequest {
+  name?: string;
+  description?: string;
+}
+```
+
+## Example: Shared Validation
+
+```typescript
+// shared/validation/agent.schema.ts
+import { z } from 'zod';
+
+export const createAgentSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+});
+
+export const updateAgentSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+});
+
+export type CreateAgentInput = z.infer<typeof createAgentSchema>;
+export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
+```
+
+## Example: Shared Constants
+
+```typescript
+// shared/constants/routes.ts
+export const API_ROUTES = {
+  AGENTS: '/api/agents',
+  CHATS: '/api/chats',
+  INTERACTIONS: '/api/interactions',
+  POLICIES: '/api/autonomy-policies',
+} as const;
+
+// shared/constants/config.ts
+export const DEFAULT_PAGE_SIZE = 20;
+export const MAX_PAGE_SIZE = 100;
+export const API_VERSION = 'v1';
+```
+
+## Using Shared Code
+
+Import from the shared workspace in both frontend and backend:
+
+```typescript
+// In frontend (Next.js)
+import { Agent, CreateAgentRequest } from '@shared/types/agent.types';
+import { createAgentSchema } from '@shared/validation/agent.schema';
+
+// In backend (Fastify)
+import { Agent, CreateAgentRequest } from '@shared/types/agent.types';
+import { createAgentSchema } from '@shared/validation/agent.schema';
+```
+
+## Key Practices
+
+1. ✅ Only put truly shared, reusable code in `shared/`
+2. ✅ Ensure code is environment-agnostic (works in both Node.js and browser)
+3. ✅ Use TypeScript for type safety across workspaces
+4. ✅ Consider using Zod for runtime validation that works everywhere
+5. ✅ Keep the structure flat and organized by domain
+6. ✅ Document any platform-specific considerations

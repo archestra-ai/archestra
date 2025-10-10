@@ -1,6 +1,8 @@
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.providers.anthropic import AnthropicProvider
 from dotenv import load_dotenv
 import os
 import sys
@@ -18,18 +20,46 @@ https://github.com/archestra-ai/archestra/issues/669
 Fetch the issue, read the requirements, and start by following ALL the instructions listed there."""
 
 
+def get_model(use_archestra: bool = False):
+  """Get the appropriate model based on LLM_PROVIDER environment variable."""
+  provider = os.getenv("LLM_PROVIDER", "openai").lower()
+  model_name = os.getenv("MODEL_NAME")
+  extra_provider_kwargs = {
+    "base_url": f"http://host.docker.internal:9000/v1/{provider}",
+  } if use_archestra else {}
+
+  if provider == "anthropic":
+    if not model_name:
+      model_name = "claude-sonnet-4-5-20250929"
+
+    model = AnthropicModel(
+      model_name=model_name,
+      provider=AnthropicProvider(
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        **extra_provider_kwargs
+      ),
+    )
+  else:
+    if not model_name:
+      model_name = "gpt-4o"
+
+    model = OpenAIChatModel(
+      model_name=model_name,
+      provider=OpenAIProvider(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        **extra_provider_kwargs
+      ),
+    )
+
+  print(f"\nUsing model: {model.model_name}")
+
+  return model
+
 async def run_agent(use_archestra: bool = False):
   """Run the agent to completion with streaming progress."""
 
   agent = Agent(
-    model=OpenAIChatModel(
-      model_name="gpt-4o",
-      provider=OpenAIProvider(
-        # Configure OpenAI provider - use Archestra if --secure flag is set
-        base_url="http://host.docker.internal:9000/v1" if use_archestra else "https://api.openai.com/v1",
-        api_key=os.getenv("OPENAI_API_KEY"),
-      ),
-    ),
+    model=get_model(use_archestra),
     instructions="Be helpful and thorough. Complete all requested tasks.",
   )
 
@@ -93,22 +123,22 @@ async def run_agent(use_archestra: bool = False):
   print(f"Agent Task: {AGENT_TASK}")
   print(f"{'='*60}\n")
 
-  # Run agent with streaming to show progress
-  async with agent.run_stream(AGENT_TASK) as result:
-    print("[AGENT] Generating response...\n")
+  print("[AGENT] Generating response...\n")
 
-    previous_text = ""
-    async for text in result.stream_text():
-      # Only print the new delta (difference from previous)
-      new_text = text[len(previous_text):]
-      print(new_text, end='', flush=True)
-      previous_text = text
+  # Use agent.iter() instead of run_stream to ensure tool calls execute
+  # This is required for Anthropic models which may return text before tool calls
+  # See: https://github.com/pydantic/pydantic-ai/issues/2521
+  async with agent.iter(AGENT_TASK) as run:
+    async for node in run:
+      if agent.is_model_request_node(node):
+        async with node.stream(run.ctx) as request_stream:
+          # Stream text parts as they arrive
+          async for text in request_stream.stream_text(delta=True):
+            print(text, end='', flush=True)
 
-    print(f"\n\n{'='*60}")
-    print("[AGENT] Task completed!")
-    print(f"{'='*60}\n")
-
-    return previous_text
+  print(f"\n\n{'='*60}")
+  print("[AGENT] Task completed!")
+  print(f"{'='*60}\n")
 
 
 def main():
@@ -119,7 +149,7 @@ def main():
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog="""
 Examples:
-  # Run without Archestra (direct to OpenAI) - vulnerable to prompt injection
+  # Run without Archestra (direct to LLM provider) - vulnerable to prompt injection
   python main.py
 
   # Run with Archestra protection - blocks malicious tool calls
@@ -129,7 +159,7 @@ Examples:
   parser.add_argument('--secure', action='store_true', help='Use Archestra Platform as security proxy')
   args = parser.parse_args()
 
-  mode = "🔒 Archestra-secured" if args.secure else "⚠️  Direct OpenAI (UNSAFE)"
+  mode = "🔒 Archestra-secured" if args.secure else "⚠️  Direct to LLM provider (UNSAFE)"
   print(f"\n{'='*60}")
   print(f"Mode: {mode}")
   print(f"{'='*60}")

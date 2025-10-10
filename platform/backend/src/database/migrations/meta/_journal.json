@@ -64,6 +64,13 @@
       "when": 1759934813692,
       "tag": "0008_curved_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1760085630191,
+      "tag": "0009_misty_goliath",
+      "breakpoints": true
     }
   ]
 }

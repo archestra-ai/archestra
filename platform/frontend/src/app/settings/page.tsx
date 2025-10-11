@@ -23,6 +23,8 @@ export default function SettingsPage() {
   const particleIdRef = useRef(0);
   const frameRef = useRef<number | undefined>(undefined);
 
+  console.info(proxyUrl, "YOOOO");
+
   useEffect(() => {
     // Create particles at regular intervals
     const createParticle = () => {
@@ -319,7 +321,7 @@ export default function SettingsPage() {
             <div className="border-t pt-6">
               <h3 className="font-medium mb-2">Proxy Endpoint</h3>
               <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                <code className="text-sm">{}</code>
+                <code className="text-sm">{proxyUrl}</code>
                 <Button variant="ghost" size="icon" onClick={handleCopy}>
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />

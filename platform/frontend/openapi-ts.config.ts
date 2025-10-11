@@ -3,7 +3,7 @@ import { defineConfig } from '@hey-api/openapi-ts';
 export default defineConfig({
   input: 'http://localhost:9000/openapi.json',
   output: {
-    path: './api-client',
+    path: './src/lib/clients/api',
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',
@@ -15,7 +15,7 @@ export default defineConfig({
   plugins: [
     {
       name: '@hey-api/client-fetch',
-      runtimeConfigPath: './custom-client.ts',
+      runtimeConfigPath: './custom-client',
     },
   ],
 });

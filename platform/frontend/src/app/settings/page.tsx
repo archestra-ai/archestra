@@ -2,9 +2,12 @@
 
 import { Check, Copy } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import config, { PROXY_URL_ENV_VAR_NAME } from "@/lib/config";
+
+const { proxyUrl } = config.api;
 
 export default function SettingsPage() {
   const [particles, setParticles] = useState<
@@ -16,31 +19,9 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  const [proxyUrl, setProxyUrl] = useState<string>("");
 
   const particleIdRef = useRef(0);
   const frameRef = useRef<number | undefined>(undefined);
-
-  // Fetch the API base URL from the backend
-  useEffect(() => {
-    fetch("/api/config")
-      .then((res) => res.json())
-      .then((config) => {
-        if (config.apiBaseUrl) {
-          setProxyUrl(`${config.apiBaseUrl}/v1`);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to fetch configuration:", error);
-      });
-  }, []);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(proxyUrl);
-    setCopied(true);
-    toast.success("Proxy URL copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   useEffect(() => {
     // Create particles at regular intervals
@@ -146,7 +127,14 @@ export default function SettingsPage() {
     };
   }, []);
 
-  const getParticlePosition = (path: string, progress: number) => {
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(proxyUrl);
+    setCopied(true);
+    toast.success("Proxy URL copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
+
+  const getParticlePosition = useCallback((path: string, progress: number) => {
     // Smooth progress from 0 to 100
     const t = progress / 100;
 
@@ -163,7 +151,7 @@ export default function SettingsPage() {
         top: "40%",
       };
     }
-  };
+  }, []);
 
   return (
     <div className="container mx-auto p-8">
@@ -331,13 +319,8 @@ export default function SettingsPage() {
             <div className="border-t pt-6">
               <h3 className="font-medium mb-2">Proxy Endpoint</h3>
               <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                <code className="text-sm">{proxyUrl || "Loading..."}</code>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCopy}
-                  disabled={!proxyUrl}
-                >
+                <code className="text-sm">{}</code>
+                <Button variant="ghost" size="icon" onClick={handleCopy}>
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (
@@ -352,7 +335,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 This value is configured via the{" "}
                 <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                  ARCHESTRA_API_BASE_URL
+                  {PROXY_URL_ENV_VAR_NAME}
                 </code>{" "}
                 environment variable
               </p>

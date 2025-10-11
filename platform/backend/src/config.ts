@@ -13,21 +13,29 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
-// Parse port from ARCHESTRA_API_BASE_URL if provided
-const getPortFromUrl = (url?: string): number => {
-  if (!url) return 9000;
+/**
+ * Parse port from NEXT_PUBLIC_ARCHESTRA_API_BASE_URL if provided
+ */
+const getPortFromUrl = (): number => {
+  const url = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+  const defaultPort = 9000;
+
+  if (!url) {
+    return defaultPort;
+  }
+
   try {
     const parsedUrl = new URL(url);
-    return parsedUrl.port ? Number.parseInt(parsedUrl.port, 10) : 9000;
+    return parsedUrl.port ? Number.parseInt(parsedUrl.port, 10) : defaultPort;
   } catch {
-    return 9000;
+    return defaultPort;
   }
 };
 
 export default {
   api: {
     host: "0.0.0.0",
-    port: getPortFromUrl(process.env.ARCHESTRA_API_BASE_URL),
+    port: getPortFromUrl(),
     name: "Archestra Platform API",
     version: packageJson.version,
   },

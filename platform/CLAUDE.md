@@ -107,6 +107,7 @@ The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy U
 - URLs already ending with `/v1` are used as-is
 - URLs with trailing slashes have the slash removed before appending `/v1`
 - URLs without trailing components get `/v1` appended
+- Empty string is treated as if the env var is not set (defaults to http://localhost:9000/v1)
 - The backend also uses this URL to parse the port for server binding
 
 ### Testing with Example CLI Chats

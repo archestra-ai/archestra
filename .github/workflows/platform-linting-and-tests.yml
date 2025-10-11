@@ -65,7 +65,7 @@ jobs:
             attempt=0
 
             while [ $attempt -lt $max_attempts ]; do
-              if curl -f http://localhost:$port/healthcheck; then
+              if curl -f http://localhost:$port/health; then
                 echo "✓ Backend health check passed on port $port"
                 break
               fi

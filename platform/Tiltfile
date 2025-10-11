@@ -82,7 +82,7 @@ local_resource(
     echo "❌ Migration failed after 30 attempts"
     exit 1
   ''',
-  deps=['./backend/src/database/migrations', './backend/src/database/seed.ts'],
+  deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
 )

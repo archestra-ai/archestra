@@ -14,10 +14,10 @@ if (!process.env.DATABASE_URL) {
 }
 
 /**
- * Parse port from NEXT_PUBLIC_ARCHESTRA_API_BASE_URL if provided
+ * Parse port from ARCHESTRA_API_BASE_URL if provided
  */
 const getPortFromUrl = (): number => {
-  const url = process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+  const url = process.env.ARCHESTRA_API_BASE_URL;
   const defaultPort = 9000;
 
   if (!url) {

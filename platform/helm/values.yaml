@@ -7,7 +7,7 @@ archestra:
   # These will be merged with the default DATABASE_URL environment variable
   # Example:
   #   env:
-  #     NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "https://api.example.com"
+  #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
   #     CUSTOM_VAR: "custom-value"
   env: {}
 

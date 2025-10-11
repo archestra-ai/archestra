@@ -5,9 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import config, { PROXY_URL_ENV_VAR_NAME } from "@/lib/config";
-
-const { proxyUrl } = config.api;
+import { useConfig } from "../_parts/config-provider";
 
 export default function SettingsPage() {
   const [particles, setParticles] = useState<
@@ -19,11 +17,10 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
+  const { apiBaseUrl } = useConfig();
 
   const particleIdRef = useRef(0);
   const frameRef = useRef<number | undefined>(undefined);
-
-  console.info(proxyUrl, "YOOOO");
 
   useEffect(() => {
     // Create particles at regular intervals
@@ -130,11 +127,11 @@ export default function SettingsPage() {
   }, []);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(proxyUrl);
+    await navigator.clipboard.writeText(apiBaseUrl);
     setCopied(true);
     toast.success("Proxy URL copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
-  }, []);
+  }, [apiBaseUrl]);
 
   const getParticlePosition = useCallback((path: string, progress: number) => {
     // Smooth progress from 0 to 100
@@ -321,7 +318,7 @@ export default function SettingsPage() {
             <div className="border-t pt-6">
               <h3 className="font-medium mb-2">Proxy Endpoint</h3>
               <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                <code className="text-sm">{proxyUrl}</code>
+                <code className="text-sm">{apiBaseUrl || "Loading..."}</code>
                 <Button variant="ghost" size="icon" onClick={handleCopy}>
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />
@@ -337,7 +334,7 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 This value is configured via the{" "}
                 <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                  {PROXY_URL_ENV_VAR_NAME}
+                  ARCHESTRA_API_BASE_URL
                 </code>{" "}
                 environment variable
               </p>

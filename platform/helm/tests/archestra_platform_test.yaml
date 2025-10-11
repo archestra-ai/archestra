@@ -147,13 +147,13 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_API_BASE_URL: "https://api.example.com"
         CUSTOM_VAR: "custom-value"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
       - contains:
           path: spec.template.spec.containers[0].env
@@ -165,7 +165,7 @@ tests:
     documentIndex: 1
     set:
       archestra.env:
-        NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        ARCHESTRA_API_BASE_URL: "https://api.example.com"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -175,5 +175,5 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+            name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"

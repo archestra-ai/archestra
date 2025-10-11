@@ -99,11 +99,11 @@ The platform uses the following environment variables:
 DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
 # Optional
-NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000/v1"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
+ARCHESTRA_API_BASE_URL="http://localhost:9000/v1"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
 ```
 
-The `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
+The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
 - URLs already ending with `/v1` are used as-is
 - URLs with trailing slashes have the slash removed before appending `/v1`
 - URLs without trailing components get `/v1` appended

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   platform:
     image: archestra/platform:ci-test
@@ -54,8 +52,6 @@ services:
       - POSTGRES_USER=archestra
       - POSTGRES_PASSWORD=archestra_dev_password
       - POSTGRES_DB=archestra_dev
-    volumes:
-      - archestra_postgres_data:/var/lib/postgresql/data
 
   platform-custom-database-url:
     image: archestra/platform:ci-test

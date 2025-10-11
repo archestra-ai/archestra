@@ -504,18 +504,3 @@ async function seedInteractions(): Promise<void> {
     await InteractionModel.create(interactionData);
   }
 }
-
-/**
- * CLI entry point for seeding the database
- */
-if (require.main === module) {
-  seedDatabase()
-    .then(() => {
-      console.log("\n✅ Done!");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("\n❌ Error seeding database:", error);
-      process.exit(1);
-    });
-}

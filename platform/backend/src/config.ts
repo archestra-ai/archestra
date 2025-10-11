@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import packageJson from "../package.json";
 
@@ -7,6 +8,7 @@ import packageJson from "../package.json";
  *
  * This is a bit of a hack for now to avoid having to have a duplicate .env file in the backend subdirectory
  */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
 if (!process.env.DATABASE_URL) {

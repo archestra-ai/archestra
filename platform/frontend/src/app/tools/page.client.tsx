@@ -44,7 +44,6 @@ export function ToolsPage({
 function Tools({ initialData }: { initialData?: GetToolsResponses["200"] }) {
   return (
     <div className="w-full h-full">
-      {/* Page header */}
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
@@ -56,8 +55,6 @@ function Tools({ initialData }: { initialData?: GetToolsResponses["200"] }) {
           </p>
         </div>
       </div>
-
-      {/* Content */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         <ToolsList initialData={initialData} />
       </div>
@@ -81,7 +78,6 @@ function ToolsList({
 
   return (
     <div className="space-y-6">
-      {/* Tool selector */}
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-3">
           DETECTED TOOLS
@@ -116,7 +112,6 @@ function ToolsList({
         </div>
       </div>
 
-      {/* Selected Tool Details */}
       {selectedTool ? (
         <ToolCard tool={selectedTool} />
       ) : (
@@ -152,7 +147,6 @@ function ToolsList({
 function ToolCard({ tool }: { tool: GetToolsResponses["200"][number] }) {
   return (
     <div className="space-y-6">
-      {/* Tool header */}
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight mb-1">
@@ -163,11 +157,7 @@ function ToolCard({ tool }: { tool: GetToolsResponses["200"][number] }) {
           )}
         </div>
       </div>
-
-      {/* Tool information */}
       <ToolReadonlyDetails tool={tool} />
-
-      {/* Policies */}
       <div className="space-y-6">
         <ToolCallPolicies tool={tool} />
         <ToolResultPolicies tool={tool} />

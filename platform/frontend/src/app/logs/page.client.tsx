@@ -37,7 +37,6 @@ export default function LogsPage({
 }) {
   return (
     <div className="w-full h-full">
-      {/* Page header */}
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Logs</h1>
@@ -48,7 +47,6 @@ export default function LogsPage({
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         <Tabs defaultValue={TabsOptions.Table}>
           <ErrorBoundary>

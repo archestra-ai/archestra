@@ -175,9 +175,7 @@ export default function SettingsPage() {
 
         <div className="bg-card rounded-lg p-8 shadow-sm">
           <div className="relative">
-            {/* Flow diagram */}
             <div className="flex items-center justify-between gap-8">
-              {/* Agent */}
               <div className="flex flex-col items-center z-10">
                 <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary relative">
                   <svg
@@ -199,11 +197,8 @@ export default function SettingsPage() {
                 <span className="mt-3 font-medium">Your Agent</span>
               </div>
 
-              {/* Connection line from Agent to Archestra */}
               <div className="flex-1 relative">
                 <div className="h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50 absolute top-[40%] w-full" />
-
-                {/* Particles on this path */}
                 {particles
                   .filter((p) => p.path === "agent-to-archestra")
                   .map((particle) => {
@@ -253,7 +248,6 @@ export default function SettingsPage() {
                   })}
               </div>
 
-              {/* Archestra.AI */}
               <div className="flex flex-col items-center z-10">
                 <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center relative border-2 border-gray-200">
                   <Image
@@ -269,11 +263,8 @@ export default function SettingsPage() {
                 <span className="mt-3 font-medium">Archestra.AI</span>
               </div>
 
-              {/* Connection line from Archestra to LLM */}
               <div className="flex-1 relative">
                 <div className="h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50 absolute top-[40%] w-full" />
-
-                {/* Particles on this path */}
                 {particles
                   .filter((p) => p.path === "archestra-to-llm")
                   .map((particle) => {
@@ -323,7 +314,6 @@ export default function SettingsPage() {
                   })}
               </div>
 
-              {/* LLM */}
               <div className="flex flex-col items-center z-10">
                 <div className="w-24 h-24 rounded-full bg-black flex items-center justify-center">
                   <span className="text-white font-bold text-lg">OpenAI</span>
@@ -333,7 +323,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Configuration section */}
           <div className="mt-12 space-y-6">
             <p className="text-sm mb-4">
               Archestra is a proxy between your agent and LLM. It will collect

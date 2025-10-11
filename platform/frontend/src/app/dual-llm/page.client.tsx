@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 export function DualLLMPage() {
   return (
     <div className="w-full h-full">
-      {/* Page header */}
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">
@@ -20,14 +19,11 @@ export function DualLLMPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="grid grid-cols-2 gap-8">
-          {/* Left column - Pattern Flow */}
           <div className="border border-border rounded-lg p-6 bg-card">
             <h2 className="text-sm font-semibold mb-4">Pattern Flow</h2>
 
-            {/* Diagram */}
             <div className="border border-border rounded-lg p-6 bg-muted/30 mb-6">
               <div className="text-center text-sm font-mono mb-6 pb-4 border-b border-border">
                 DUAL LLM QUARANTINE PATTERN
@@ -139,7 +135,6 @@ export function DualLLMPage() {
             </div>
           </div>
 
-          {/* Right column - Configuration */}
           <div className="space-y-6">
             <div className="border border-border rounded-lg p-6 bg-card">
               <Label htmlFor="max-rounds" className="text-sm font-semibold">

@@ -1,4 +1,6 @@
-import { AgentModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import AgentModel from "@/models/agent";
+import ToolModel from "@/models/tool";
+import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import type { Tool } from "@/types";
 import type { ChatCompletionRequestMessages } from "../types";
 import { evaluateIfContextIsTrusted } from "./trusted-data";

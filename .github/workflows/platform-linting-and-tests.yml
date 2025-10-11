@@ -63,10 +63,12 @@ jobs:
           for port in $ports; do
             max_attempts=10
             attempt=0
+            success=false
 
             while [ $attempt -lt $max_attempts ]; do
               if curl -f http://localhost:$port/health; then
                 echo "✓ Backend health check passed on port $port"
+                success=true
                 break
               fi
 
@@ -75,8 +77,10 @@ jobs:
               sleep 5
             done
 
-            echo "✗ Backend health check failed after $max_attempts attempts on port $port"
-            exit 1
+            if [ "$success" = false ]; then
+              echo "✗ Backend health check failed after $max_attempts attempts on port $port"
+              exit 1
+            fi
           done
 
       - name: Check frontend health
@@ -86,10 +90,12 @@ jobs:
           for port in $ports; do
             max_attempts=10
             attempt=0
+            success=false
 
             while [ $attempt -lt $max_attempts ]; do
               if curl -f http://localhost:$port/; then
                 echo "✓ Frontend health check passed on port $port"
+                success=true
                 break
               fi
 
@@ -98,8 +104,10 @@ jobs:
               sleep 5
             done
 
-            echo "✗ Frontend health check failed after $max_attempts attempts on port $port"
-            exit 1
+            if [ "$success" = false ]; then
+              echo "✗ Frontend health check failed after $max_attempts attempts on port $port"
+              exit 1
+            fi
           done
 
       - name: Show container logs on failure

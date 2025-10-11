@@ -117,7 +117,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV=%(ENV_NODE_ENV)s,ARCHESTRA_API_BASE_URL="placeholder"
+environment=NODE_ENV=%(ENV_NODE_ENV)s,NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
 EOF
 
 # Create initialization script
@@ -166,7 +166,12 @@ fi
 
 # Update supervisord config with actual environment variables
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
+
+# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
+# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
 sed -i "s|ARCHESTRA_API_BASE_URL=\"[^\"]*\"|ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
+sed -i "s|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"[^\"]*\"|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
 
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisord.conf

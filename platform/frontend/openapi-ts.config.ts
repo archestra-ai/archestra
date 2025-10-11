@@ -9,16 +9,13 @@ export default defineConfig({
     tsConfigPath: './tsconfig.json',
   },
   /**
-   * See here for why we need this, basically to configure the baseUrl of the API client
-   * https://heyapi.dev/openapi-ts/clients/fetch#runtime-api
-   *
-   * NOTE: DON'T use an absolute path here, won't work
+   * We need to define the following so that we can support setting the baseUrl of the API client AT RUNTIME
+   * (see https://heyapi.dev/openapi-ts/clients/fetch#runtime-api)
    */
   plugins: [
     {
       name: '@hey-api/client-fetch',
-      runtimeConfigPath: './custom-client',
-      baseUrl: false, // don't use the baseUrl from the config
+      runtimeConfigPath: './custom-client.ts',
     },
   ],
 });

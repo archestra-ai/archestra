@@ -1,7 +1,3 @@
-import type {
-  GetToolsResponse,
-  GetTrustedDataPoliciesResponse,
-} from "@shared/api-client";
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -19,6 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type {
+  GetToolsResponse,
+  GetTrustedDataPoliciesResponse,
+} from "@/lib/clients/api";
 import {
   useOperators,
   useToolResultPolicies,

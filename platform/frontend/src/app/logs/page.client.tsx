@@ -1,9 +1,5 @@
 "use client";
 
-import type {
-  GetAgentsResponses,
-  GetInteractionsResponses,
-} from "@shared/api-client";
 import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useState } from "react";
@@ -19,6 +15,10 @@ import {
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { useAgents } from "@/lib/agent.query";
+import type {
+  GetAgentsResponses,
+  GetInteractionsResponses,
+} from "@/lib/clients/api";
 import { useInteractions } from "@/lib/interaction.query";
 import { ErrorBoundary } from "../_parts/error-boundary";
 

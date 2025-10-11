@@ -3,7 +3,7 @@ import {
   type GetInteractionResponse,
   getAgents,
   getInteraction,
-} from "@shared/api-client";
+} from "@/lib/clients/api";
 import { ChatPage } from "./page.client";
 
 export default async function ChatPageServer({

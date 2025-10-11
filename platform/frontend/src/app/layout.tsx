@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
+import { PublicEnvScript } from "next-runtime-env";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ConfigProvider } from "./_parts/config-provider";
@@ -27,6 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <PublicEnvScript />
+      </head>
       <body className={`${mainFont.className} antialiased`}>
         <ThemeProvider
           attribute="class"

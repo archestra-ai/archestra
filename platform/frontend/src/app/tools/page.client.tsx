@@ -1,9 +1,9 @@
 "use client";
 
-import type { GetToolsResponses } from "@shared/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
+import type { GetToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,

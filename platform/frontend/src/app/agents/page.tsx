@@ -1,4 +1,4 @@
-import { type GetAgentsResponses, getAgents } from "@shared/api-client";
+import { type GetAgentsResponses, getAgents } from "@/lib/clients/api";
 import AgentsPage from "./page.client";
 
 export const dynamic = "force-dynamic";

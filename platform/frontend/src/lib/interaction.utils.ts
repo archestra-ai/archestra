@@ -1,8 +1,8 @@
+import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type {
   GetInteractionResponse,
   GetInteractionsResponses,
-} from "@shared/api-client";
-import type { PartialUIMessage } from "@/components/chatbot-demo";
+} from "@/lib/clients/api";
 
 export function toolNamesUsedForInteraction(
   interaction: GetInteractionsResponses["200"][number],

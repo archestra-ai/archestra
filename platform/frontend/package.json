@@ -11,6 +11,7 @@
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
     "test": "vitest",
+    "codegen:api-client": "openapi-ts",
     "check:ci": "pnpm type-check && pnpm test && biome ci"
   },
   "dependencies": {
@@ -32,7 +33,6 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "@shared": "workspace:*",
     "@tanstack/react-query": "^5.90.2",
     "@uidotdev/usehooks": "^2.4.1",
     "ai": "^5.0.57",
@@ -44,6 +44,7 @@
     "lucide-react": "^0.544.0",
     "nanoid": "^5.1.6",
     "next": "15.5.4",
+    "next-runtime-env": "^3.3.0",
     "next-themes": "^0.4.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -58,6 +59,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "^0.84.4",
     "@tailwindcss/postcss": "^4",
     "@types/date-fns": "^2.6.3",
     "@types/lodash-es": "^4.17.12",

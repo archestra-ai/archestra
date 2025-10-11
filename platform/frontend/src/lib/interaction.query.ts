@@ -1,12 +1,12 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   type GetInteractionResponses,
   type GetInteractionsResponses,
   getInteraction,
   getInteractions,
-} from "@shared/api-client";
-import { useQuery } from "@tanstack/react-query";
+} from "@/lib/clients/api";
 
 export function useInteractions({
   agentId,

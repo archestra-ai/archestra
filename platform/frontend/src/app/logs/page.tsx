@@ -3,7 +3,7 @@ import {
   type GetInteractionsResponses,
   getAgents,
   getInteractions,
-} from "@shared/api-client";
+} from "@/lib/clients/api";
 import LogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";

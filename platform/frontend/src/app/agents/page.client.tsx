@@ -1,6 +1,5 @@
 "use client";
 
-import type { GetAgentsResponses } from "@shared/api-client";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
@@ -38,6 +37,7 @@ import {
   useDeleteAgent,
   useUpdateAgent,
 } from "@/lib/agent.query";
+import type { GetAgentsResponses } from "@/lib/clients/api";
 
 export default function AgentsPage({
   initialData,

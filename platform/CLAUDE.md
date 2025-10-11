@@ -100,6 +100,7 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 
 # Optional
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
+NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
 OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
 ```
 
@@ -109,6 +110,8 @@ The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy U
 - URLs without trailing components get `/v1` appended
 - Empty string is treated as if the env var is not set (defaults to http://localhost:9000/v1)
 - The backend also uses this URL to parse the port for server binding
+
+The `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` environment variable is used specifically by the frontend. If not set, it defaults to the value of `ARCHESTRA_API_BASE_URL`. This allows for separate frontend/backend configuration if needed.
 
 ### Testing with Example CLI Chats
 

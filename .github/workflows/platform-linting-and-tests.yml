@@ -58,48 +58,62 @@ jobs:
 
       - name: Check backend health
         run: |
-          max_attempts=10
-          attempt=0
-          while [ $attempt -lt $max_attempts ]; do
-            if curl -f http://localhost:9001/healthcheck; then
-              echo "✓ Backend health check passed"
-              exit 0
-            fi
-            attempt=$((attempt + 1))
-            echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
-            sleep 5
+          ports="9000 9001 9002"
+
+          for port in $ports; do
+            max_attempts=10
+            attempt=0
+
+            while [ $attempt -lt $max_attempts ]; do
+              if curl -f http://localhost:$port/healthcheck; then
+                echo "✓ Backend health check passed on port $port"
+                break
+              fi
+
+              attempt=$((attempt + 1))
+              echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
+              sleep 5
+            done
+
+            echo "✗ Backend health check failed after $max_attempts attempts on port $port"
+            exit 1
           done
-          echo "✗ Backend health check failed after $max_attempts attempts"
-          exit 1
 
       - name: Check frontend health
         run: |
-          max_attempts=10
-          attempt=0
-          while [ $attempt -lt $max_attempts ]; do
-            if curl -f http://localhost:3000/; then
-              echo "✓ Frontend health check passed"
-              exit 0
-            fi
-            attempt=$((attempt + 1))
-            echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
-            sleep 5
+          ports="3000 3001 3002"
+
+          for port in $ports; do
+            max_attempts=10
+            attempt=0
+
+            while [ $attempt -lt $max_attempts ]; do
+              if curl -f http://localhost:$port/; then
+                echo "✓ Frontend health check passed on port $port"
+                break
+              fi
+
+              attempt=$((attempt + 1))
+              echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
+              sleep 5
+            done
+
+            echo "✗ Frontend health check failed after $max_attempts attempts on port $port"
+            exit 1
           done
-          echo "✗ Frontend health check failed after $max_attempts attempts"
-          exit 1
 
       - name: Show container logs on failure
         if: failure()
         run: |
           echo "=== Platform Container Logs ==="
-          docker-compose -f .github/testing/docker-compose-platform.yml logs
+          docker compose -f .github/testing/docker-compose-platform.yml logs
           echo "=== Container Status ==="
-          docker-compose -f .github/testing/docker-compose-platform.yml ps
+          docker compose -f .github/testing/docker-compose-platform.yml ps
 
       - name: Cleanup
         if: always()
         run: |
-          docker-compose -f .github/testing/docker-compose-platform.yml down -v
+          docker compose -f .github/testing/docker-compose-platform.yml down -v
 
   build-platform-docker-image:
     name: Build platform Docker image

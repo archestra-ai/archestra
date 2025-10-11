@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  platform:
+    image: archestra/platform:ci-test
+    container_name: archestra-platform-test
+    ports:
+      - "9001:9001"
+      - "3000:3000"
+    environment:
+      - ARCHESTRA_API_BASE_URL=http://localhost:9001
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

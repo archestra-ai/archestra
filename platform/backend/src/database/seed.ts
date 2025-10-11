@@ -1,10 +1,3 @@
-import {
-  ALLOWED_DEMO_INTERACTION_ID,
-  ALLOWED_DEMO_TOOL_IDS,
-  BLOCKED_DEMO_AGENT_ID,
-  BLOCKED_DEMO_INTERACTION_ID,
-  DEMO_AGENT_ID,
-} from "@shared/consts";
 import AgentModel from "@/models/agent";
 import InteractionModel from "@/models/interaction";
 import ToolModel from "@/models/tool";
@@ -15,6 +8,19 @@ import type {
   InteractionRequest,
   InteractionResponse,
 } from "@/types";
+
+/**
+ * TODO: remove the following once we figure out how to configure the backend build to properly
+ * be able to reference the @shared/consts module
+ */
+const DEMO_AGENT_ID = "be7a5556-9d4e-45a6-956f-82c07c4f8f8f";
+const BLOCKED_DEMO_AGENT_ID = "91c561cd-547a-423a-b563-3ce9031a66b6";
+const ALLOWED_DEMO_TOOL_IDS = {
+  sendEmail: "6fd5a5b1-751b-47f7-b806-f54842b3da85",
+  getEmails: "dcacf636-658f-42fe-bb43-25ec594c0592",
+};
+const ALLOWED_DEMO_INTERACTION_ID = "293bfa6f-afef-4631-96c9-22891c4d60e6";
+const BLOCKED_DEMO_INTERACTION_ID = "df5e094d-bbb8-4837-ba28-1761cfb714b6";
 
 /**
  * Main seed function

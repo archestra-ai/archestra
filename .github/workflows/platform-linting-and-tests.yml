@@ -50,9 +50,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Start platform with docker-compose
+      - name: Start platform with docker compose
         run: |
-          docker-compose -f .github/testing/docker-compose-platform.yml up -d
+          docker compose -f .github/testing/docker-compose-platform.yml up -d
           echo "Waiting for services to be healthy..."
           sleep 30
 

@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { Check, Copy } from 'lucide-react';
-import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import config from '@/lib/config';
+import { Check, Copy } from "lucide-react";
+import Image from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import config from "@/lib/config";
 
 const { proxyUrl: apiProxyUrl } = config.api;
 
@@ -13,9 +13,9 @@ export default function SettingsPage() {
   const [particles, setParticles] = useState<
     Array<{
       id: number;
-      path: 'agent-to-archestra' | 'archestra-to-llm';
+      path: "agent-to-archestra" | "archestra-to-llm";
       progress: number;
-      direction: 'forward' | 'backward';
+      direction: "forward" | "backward";
     }>
   >([]);
   const [copied, setCopied] = useState(false);
@@ -33,9 +33,9 @@ export default function SettingsPage() {
         ...prev,
         {
           id,
-          path: 'agent-to-archestra',
+          path: "agent-to-archestra",
           progress: 0,
-          direction: 'forward',
+          direction: "forward",
         },
       ]);
 
@@ -45,9 +45,9 @@ export default function SettingsPage() {
           ...prev,
           {
             id: particleIdRef.current++,
-            path: 'archestra-to-llm',
+            path: "archestra-to-llm",
             progress: 0,
-            direction: 'forward',
+            direction: "forward",
           },
         ]);
       }, 800);
@@ -58,9 +58,9 @@ export default function SettingsPage() {
           ...prev,
           {
             id: particleIdRef.current++,
-            path: 'archestra-to-llm',
+            path: "archestra-to-llm",
             progress: 100,
-            direction: 'backward',
+            direction: "backward",
           },
         ]);
       }, 1600);
@@ -70,9 +70,9 @@ export default function SettingsPage() {
           ...prev,
           {
             id: particleIdRef.current++,
-            path: 'agent-to-archestra',
+            path: "agent-to-archestra",
             progress: 100,
-            direction: 'backward',
+            direction: "backward",
           },
         ]);
       }, 2400);
@@ -96,7 +96,7 @@ export default function SettingsPage() {
             const increment = speed * deltaTime;
 
             let newProgress = particle.progress;
-            if (particle.direction === 'forward') {
+            if (particle.direction === "forward") {
               newProgress = Math.min(100, particle.progress + increment);
             } else {
               newProgress = Math.max(0, particle.progress - increment);
@@ -106,7 +106,7 @@ export default function SettingsPage() {
           })
           .filter((particle) => {
             // Keep particles that are still in transit
-            if (particle.direction === 'forward') {
+            if (particle.direction === "forward") {
               return particle.progress < 100;
             } else {
               return particle.progress > 0;
@@ -130,7 +130,7 @@ export default function SettingsPage() {
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(apiProxyUrl);
     setCopied(true);
-    toast.success('Proxy URL copied to clipboard');
+    toast.success("Proxy URL copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
   }, []);
 
@@ -138,17 +138,17 @@ export default function SettingsPage() {
     // Smooth progress from 0 to 100
     const t = progress / 100;
 
-    if (path === 'agent-to-archestra') {
+    if (path === "agent-to-archestra") {
       // Position from 20% to 50% horizontally
       return {
         left: `${20 + t * 30}%`,
-        top: '40%',
+        top: "40%",
       };
     } else {
       // Position from 50% to 80% horizontally
       return {
         left: `${50 + t * 30}%`,
-        top: '40%',
+        top: "40%",
       };
     }
   }, []);
@@ -188,18 +188,18 @@ export default function SettingsPage() {
               <div className="flex-1 relative">
                 <div className="h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50 absolute top-[40%] w-full" />
                 {particles
-                  .filter((p) => p.path === 'agent-to-archestra')
+                  .filter((p) => p.path === "agent-to-archestra")
                   .map((particle) => {
                     const pos = getParticlePosition(
                       particle.path,
-                      particle.progress
+                      particle.progress,
                     );
                     const opacity = Math.min(
                       1,
                       Math.min(
                         particle.progress / 10,
-                        (100 - particle.progress) / 10
-                      )
+                        (100 - particle.progress) / 10,
+                      ),
                     );
 
                     return (
@@ -213,21 +213,21 @@ export default function SettingsPage() {
                       >
                         <div
                           className={`relative ${
-                            particle.direction === 'forward' ? '' : ''
+                            particle.direction === "forward" ? "" : ""
                           }`}
                         >
                           <div
                             className={`w-3 h-3 rounded-full ${
-                              particle.direction === 'forward'
-                                ? 'bg-blue-500 shadow-lg shadow-blue-500/50'
-                                : 'bg-green-500 shadow-lg shadow-green-500/50'
+                              particle.direction === "forward"
+                                ? "bg-blue-500 shadow-lg shadow-blue-500/50"
+                                : "bg-green-500 shadow-lg shadow-green-500/50"
                             }`}
                           />
                           <div
                             className={`absolute inset-0 rounded-full ${
-                              particle.direction === 'forward'
-                                ? 'bg-blue-400'
-                                : 'bg-green-400'
+                              particle.direction === "forward"
+                                ? "bg-blue-400"
+                                : "bg-green-400"
                             } animate-ping`}
                           />
                         </div>
@@ -254,18 +254,18 @@ export default function SettingsPage() {
               <div className="flex-1 relative">
                 <div className="h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50 absolute top-[40%] w-full" />
                 {particles
-                  .filter((p) => p.path === 'archestra-to-llm')
+                  .filter((p) => p.path === "archestra-to-llm")
                   .map((particle) => {
                     const pos = getParticlePosition(
                       particle.path,
-                      particle.progress
+                      particle.progress,
                     );
                     const opacity = Math.min(
                       1,
                       Math.min(
                         particle.progress / 10,
-                        (100 - particle.progress) / 10
-                      )
+                        (100 - particle.progress) / 10,
+                      ),
                     );
 
                     return (
@@ -279,21 +279,21 @@ export default function SettingsPage() {
                       >
                         <div
                           className={`relative ${
-                            particle.direction === 'forward' ? '' : ''
+                            particle.direction === "forward" ? "" : ""
                           }`}
                         >
                           <div
                             className={`w-3 h-3 rounded-full ${
-                              particle.direction === 'forward'
-                                ? 'bg-blue-500 shadow-lg shadow-blue-500/50'
-                                : 'bg-green-500 shadow-lg shadow-green-500/50'
+                              particle.direction === "forward"
+                                ? "bg-blue-500 shadow-lg shadow-blue-500/50"
+                                : "bg-green-500 shadow-lg shadow-green-500/50"
                             }`}
                           />
                           <div
                             className={`absolute inset-0 rounded-full ${
-                              particle.direction === 'forward'
-                                ? 'bg-blue-400'
-                                : 'bg-green-400'
+                              particle.direction === "forward"
+                                ? "bg-blue-400"
+                                : "bg-green-400"
                             } animate-ping`}
                           />
                         </div>
@@ -333,10 +333,10 @@ export default function SettingsPage() {
                 calling OpenAI (default should be https://api.openai.com/v1/)
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                This value is configured via the{' '}
+                This value is configured via the{" "}
                 <code className="text-xs bg-muted px-1 py-0.5 rounded">
                   ARCHESTRA_API_BASE_URL
-                </code>{' '}
+                </code>{" "}
                 environment variable
               </p>
             </div>

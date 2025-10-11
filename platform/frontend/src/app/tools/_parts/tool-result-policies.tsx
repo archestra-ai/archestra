@@ -34,7 +34,7 @@ function AttributePathExamples() {
     <Accordion type="single" collapsible>
       <AccordionItem
         value="examples"
-        className="border border-border rounded-lg bg-card"
+        className="border border-border rounded-lg bg-card border-b-0 last:border-b"
       >
         <AccordionTrigger className="px-4 hover:no-underline">
           <span className="text-sm font-medium">
@@ -59,7 +59,6 @@ function AttributePathExamples() {
             </p>
 
             <div className="space-y-6">
-              {/* Example 1: Simple nested object */}
               <div className="space-y-2">
                 <h4 className="font-medium">Example 1: Simple nested object</h4>
                 <p className="text-muted-foreground">
@@ -99,7 +98,6 @@ function AttributePathExamples() {
                 </div>
               </div>
 
-              {/* Example 2: Array with wildcard */}
               <div className="space-y-2">
                 <h4 className="font-medium">
                   Example 2: Array with wildcard (*)
@@ -151,72 +149,6 @@ function AttributePathExamples() {
                   <p className="text-muted-foreground mt-2 italic">
                     Use case: Block emails from external domains or mark
                     internal emails as trusted
-                  </p>
-                </div>
-              </div>
-
-              {/* Example 3: Complex nested structure */}
-              <div className="space-y-2">
-                <h4 className="font-medium">
-                  Example 3: Complex nested structure
-                </h4>
-                <p className="text-muted-foreground">
-                  Tool response from a GitHub API:
-                </p>
-                <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
-                  {`{
-  "repository": {
-    "name": "archestra",
-    "owner": {
-      "login": "archestra-ai",
-      "type": "Organization"
-    }
-  },
-  "issues": [
-    {
-      "number": 669,
-      "title": "Feature request",
-      "author": {
-        "login": "trusted-user",
-        "type": "Member"
-      }
-    },
-    {
-      "number": 670,
-      "title": "Bug report",
-      "author": {
-        "login": "external-user",
-        "type": "Contributor"
-      }
-    }
-  ]
-}`}
-                </pre>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Attribute paths:</p>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
-                    <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        repository.owner.login
-                      </code>{" "}
-                      → <span className="text-foreground">"archestra-ai"</span>
-                    </li>
-                    <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        issues[*].author.type
-                      </code>{" "}
-                      → Matches all author types in issues
-                    </li>
-                    <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        issues[*].title
-                      </code>{" "}
-                      → Matches all issue titles
-                    </li>
-                  </ul>
-                  <p className="text-muted-foreground mt-2 italic">
-                    Use case: Mark issues from "Member" authors as trusted,
-                    block issues from external contributors
                   </p>
                 </div>
               </div>

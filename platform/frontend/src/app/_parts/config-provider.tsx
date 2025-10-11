@@ -3,13 +3,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 interface Config {
-  apiBaseUrl: string;
+  apiProxyUrl: string;
 }
 
 const ConfigContext = createContext<Config | null>(null);
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<Config>({ apiBaseUrl: "" });
+  const [config, setConfig] = useState<Config>({ apiProxyUrl: "" });
 
   useEffect(() => {
     const fetchConfig = async () => {

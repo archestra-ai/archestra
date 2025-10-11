@@ -17,7 +17,7 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  const { apiBaseUrl } = useConfig();
+  const { apiProxyUrl } = useConfig();
 
   const particleIdRef = useRef(0);
   const frameRef = useRef<number | undefined>(undefined);
@@ -127,11 +127,11 @@ export default function SettingsPage() {
   }, []);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(apiBaseUrl);
+    await navigator.clipboard.writeText(apiProxyUrl);
     setCopied(true);
     toast.success("Proxy URL copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
-  }, [apiBaseUrl]);
+  }, [apiProxyUrl]);
 
   const getParticlePosition = useCallback((path: string, progress: number) => {
     // Smooth progress from 0 to 100
@@ -318,8 +318,13 @@ export default function SettingsPage() {
             <div className="border-t pt-6">
               <h3 className="font-medium mb-2">Proxy Endpoint</h3>
               <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                <code className="text-sm">{apiBaseUrl || "Loading..."}</code>
-                <Button variant="ghost" size="icon" onClick={handleCopy}>
+                <code className="text-sm">{apiProxyUrl || "Loading..."}</code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCopy}
+                  disabled={!apiProxyUrl}
+                >
                   {copied ? (
                     <Check className="h-4 w-4 text-green-500" />
                   ) : (

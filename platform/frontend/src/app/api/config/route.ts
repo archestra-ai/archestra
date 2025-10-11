@@ -16,6 +16,6 @@ export const getProxyUrl = (): string => {
 
 export async function GET() {
   return NextResponse.json({
-    apiBaseUrl: getProxyUrl(),
+    apiProxyUrl: getProxyUrl(),
   });
 }

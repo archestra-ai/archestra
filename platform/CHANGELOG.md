@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.0.9](https://github.com/archestra-ai/archestra/compare/platform-v0.0.8...platform-v0.0.9) (2025-10-11)
+
+
+### Features
+
+* add gemini support to pydantic ai example ([6af8061](https://github.com/archestra-ai/archestra/commit/6af8061920f8707740e78b9e4aca37cc8aa93f28))
+* allow customizing proxy URL displayed in UI ([#690](https://github.com/archestra-ai/archestra/issues/690)) ([169b993](https://github.com/archestra-ai/archestra/commit/169b993897f83844141c78b6d6a72e2e3ee35d19))
+
+
+### Bug Fixes
+
+* "hydration" next.js warning on Agents page ([7080c8f](https://github.com/archestra-ai/archestra/commit/7080c8f78cc5bdbc208faa7c46cf18766c78ea16))
+* fix ai sdk example ([#683](https://github.com/archestra-ai/archestra/issues/683)) ([2678ba3](https://github.com/archestra-ai/archestra/commit/2678ba3686dd5f3bb9becbf7c0bc0fc9cd4e2e78))
+* tool name unique constraint should be composite (with agent id) ([#685](https://github.com/archestra-ai/archestra/issues/685)) ([0da4659](https://github.com/archestra-ai/archestra/commit/0da465930e742d22a21faf5b2e875ebd63bea890))
+* ui polishing and dynamic backend API endpoint ([#687](https://github.com/archestra-ai/archestra/issues/687)) ([afc51ca](https://github.com/archestra-ai/archestra/commit/afc51cae9be09e318b65344f603c89edee3ccf0c))
+* use tsup to bundle backend, fix dockerized app ([#691](https://github.com/archestra-ai/archestra/issues/691)) ([9507a9d](https://github.com/archestra-ai/archestra/commit/9507a9d16a9468fe857d0c0408f31721dc33d5a3))
+
 ## [0.0.8](https://github.com/archestra-ai/archestra/compare/platform-v0.0.7...platform-v0.0.8) (2025-10-09)
 
 

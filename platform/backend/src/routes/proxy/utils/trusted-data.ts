@@ -45,6 +45,7 @@ const extractToolNameFromMessages = (
 export const evaluateIfContextIsTrusted = async (
   messages: ChatCompletionRequestMessages,
   agentId: string,
+  apiKey: string,
 ): Promise<{
   filteredMessages: ChatCompletionRequestMessages;
   contextIsTrusted: boolean;
@@ -140,6 +141,7 @@ export const evaluateIfContextIsTrusted = async (
             messages,
             message,
             agentId,
+            apiKey,
           );
           const safeContent = await dualLlmSubagent.processWithMainAgent();
 

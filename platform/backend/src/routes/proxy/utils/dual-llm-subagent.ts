@@ -4,10 +4,6 @@ import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type { DualLlmConfig } from "@/types";
 import type { ChatCompletionRequestMessages } from "../types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
  * extracting information from untrusted data sources.
@@ -23,17 +19,20 @@ export class DualLlmSubagent {
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
+  openai: OpenAI; // OpenAI client instance
 
   constructor(
     messages: ChatCompletionRequestMessages,
     currentMessage: ChatCompletionRequestMessages[number],
     config: DualLlmConfig,
     agentId: string,
+    apiKey: string,
   ) {
     this.messages = messages;
     this.currentMessage = currentMessage;
     this.config = config;
     this.agentId = agentId;
+    this.openai = new OpenAI({ apiKey });
 
     // Extract tool_call_id from current message
     if (currentMessage.role !== "tool") {
@@ -49,9 +48,16 @@ export class DualLlmSubagent {
     messages: ChatCompletionRequestMessages,
     currentMessage: ChatCompletionRequestMessages[number],
     agentId: string,
+    apiKey: string,
   ): Promise<DualLlmSubagent> {
     const config = await DualLlmConfigModel.getDefault();
-    return new DualLlmSubagent(messages, currentMessage, config, agentId);
+    return new DualLlmSubagent(
+      messages,
+      currentMessage,
+      config,
+      agentId,
+      apiKey,
+    );
   }
 
   /**
@@ -126,7 +132,7 @@ export class DualLlmSubagent {
       console.log(`\n--- Round ${round + 1}/${this.config.maxRounds} ---`);
 
       // Step 1: Main agent formulates a multiple choice question
-      const mainAgentResponse = await openai.chat.completions.create({
+      const mainAgentResponse = await this.openai.chat.completions.create({
         model: "gpt-4o",
         messages: conversation,
         temperature: 0,
@@ -225,7 +231,7 @@ export class DualLlmSubagent {
       .replace("{{options}}", optionsText)
       .replace("{{maxIndex}}", String(options.length - 1));
 
-    const response = await openai.chat.completions.create({
+    const response = await this.openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: quarantinedPrompt }],
       response_format: {
@@ -290,7 +296,7 @@ export class DualLlmSubagent {
       qaText,
     );
 
-    const summaryResponse = await openai.chat.completions.create({
+    const summaryResponse = await this.openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: summaryPrompt }],
       temperature: 0,

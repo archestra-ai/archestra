@@ -71,6 +71,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.trustedData.evaluateIfContextIsTrusted(
           messages,
           resolvedAgentId,
+          openAiApiKey,
         );
 
       if (stream) {

@@ -210,7 +210,8 @@ platform/
 │                   ├── index.ts              # Core agent management, message persistence
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
-│                   └── trusted-data.ts       # Trusted data policy evaluation and taint tracking
+│                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
+│                   └── dual-llm-subagent.ts  # Dual LLM pattern implementation for quarantining untrusted data
 ├── frontend/          # Next.js web application
 │   └── src/
 │       └── app/       # Next.js App Router pages
@@ -277,12 +278,23 @@ The production backend provides:
 - **Tool Management**:
   - `GET /api/tools` - List all tools with trust settings
   - `PATCH /api/tools/:id` - Update tool configuration including trust policies
+- **Dual LLM Configuration**:
+  - `GET /api/dual-llm-config/default` - Get default configuration
+  - `GET /api/dual-llm-config` - List all configurations
+  - `POST /api/dual-llm-config` - Create configuration
+  - `GET /api/dual-llm-config/:id` - Get configuration by ID
+  - `PUT /api/dual-llm-config/:id` - Update configuration
+  - `DELETE /api/dual-llm-config/:id` - Delete configuration
 
 #### Security Features (Production-Ready)
 
 The backend integrates advanced security guardrails:
 
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
+  - Main Agent: Formulates questions without access to untrusted data
+  - Quarantined Agent: Accesses untrusted data but can only respond via structured multiple choice
+  - Prevents prompt injection by isolating untrusted data from the main LLM
+  - Configurable via UI at http://localhost:3000/dual-llm
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
@@ -314,6 +326,12 @@ The backend integrates advanced security guardrails:
 - **TrustedDataPolicy**: Policies for marking data as trusted or blocked
   - Stores attribute path, operator, value, and action ("mark_as_trusted" or "block_always")
 - **AgentToolInvocationPolicy**: Junction table linking agents to their policies
+- **DualLlmConfig**: Configuration for dual LLM quarantine pattern
+  - Stores prompts for main agent, quarantined agent, and summary generation
+  - Configures maximum Q&A rounds between agents
+- **DualLlmResult**: Stores results from dual LLM executions
+  - Links to agent, tool call, and configuration used
+  - Stores Q&A conversation, summary, and metadata
 - Supports trust tracking and data blocking for security analysis
 
 ### Experiments Workspace

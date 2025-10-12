@@ -301,7 +301,11 @@ const ChatBotDemo = ({
                             <ToolHeader
                               type={`tool-${toolName}`}
                               state={
-                                toolResultPart ? "output-available" : part.state
+                                dualLlmPart
+                                  ? "output-available-dual-llm"
+                                  : toolResultPart
+                                    ? "output-available"
+                                    : part.state
                               }
                               icon={getIcon()}
                             />
@@ -426,7 +430,7 @@ const ChatBotDemo = ({
                             >
                               <ToolHeader
                                 type="tool-dual-llm-action"
-                                state="output-available"
+                                state="output-available-dual-llm"
                                 icon={
                                   <ShieldCheck className="size-4 text-muted-foreground" />
                                 }

@@ -42,6 +42,7 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
     "input-streaming": "Pending",
     "input-available": "Running",
     "output-available": "Completed",
+    "output-available-dual-llm": "Completed With Dual LLM",
     "output-error": "Error",
   } as const;
 
@@ -49,6 +50,9 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
+    "output-available-dual-llm": (
+      <CheckCircleIcon className="size-4 text-green-600" />
+    ),
     "output-error": <XCircleIcon className="size-4 text-red-600" />,
   } as const;
 

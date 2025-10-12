@@ -117,6 +117,10 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   output: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
+  conversations?: Array<{
+    role: "user" | "assistant";
+    content: string | unknown;
+  }>;
 };
 
 export const ToolOutput = ({
@@ -124,10 +128,47 @@ export const ToolOutput = ({
   output,
   errorText,
   label,
+  conversations,
   ...props
 }: ToolOutputProps) => {
-  if (!(output || errorText)) {
+  if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Render conversations as chat bubbles if provided
+  // Note: In Dual LLM context, "user" = Main Agent (questions), "assistant" = Quarantined Agent (answers)
+  if (conversations && conversations.length > 0) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Conversation"}
+        </h4>
+        <div className="space-y-3 rounded-md bg-muted/50 p-3">
+          {conversations.map((conv, idx) => (
+            <div
+              key={idx}
+              className={cn(
+                "flex gap-2 items-start",
+                conv.role === "assistant" ? "justify-end" : "justify-start",
+              )}
+            >
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
+                  conv.role === "assistant"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-foreground",
+                )}
+              >
+                {typeof conv.content === "string"
+                  ? conv.content
+                  : JSON.stringify(conv.content, null, 2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   let Output = <div>{output as ReactNode}</div>;

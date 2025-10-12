@@ -344,23 +344,9 @@ const ChatBotDemo = ({
                                   />
                                   <ToolOutput
                                     label="Questions and Answers"
-                                    output={(() => {
-                                      let questionsAndAnswers = "";
-                                      dualLlmPart.conversations
-                                        .slice(1)
-                                        .forEach((conv) => {
-                                          const content =
-                                            typeof conv.content === "string"
-                                              ? conv.content
-                                              : JSON.stringify(
-                                                  conv.content,
-                                                  null,
-                                                  2,
-                                                );
-                                          questionsAndAnswers += `${content}\n\n`;
-                                        });
-                                      return questionsAndAnswers;
-                                    })()}
+                                    conversations={dualLlmPart.conversations.slice(
+                                      1,
+                                    )}
                                   />
                                 </>
                               )}
@@ -428,27 +414,10 @@ const ChatBotDemo = ({
                           );
                         }
 
-                        // Handle custom dual-llm-analysis type
+                        // Handle custom dual-llm-analysis type (standalone, not following a tool)
                         // @ts-expect-error - Custom Archestra part type not in base UIMessage
                         if (part.type === "dual-llm-analysis") {
                           const dualLlmPart = part as unknown as DualLlmPart;
-
-                          // Format safe result
-                          const safeResult = `SAFE RESULT:\n${dualLlmPart.safeResult}`;
-
-                          // Format Q&A conversations
-                          let questionsAndAnswers = `Q&A (${0.5 * (dualLlmPart.conversations.length - 1)} rounds):\n\n`;
-
-                          // Skip the first message and don't show labels
-                          dualLlmPart.conversations
-                            .slice(1)
-                            .forEach((conv, _idx) => {
-                              const content =
-                                typeof conv.content === "string"
-                                  ? conv.content
-                                  : JSON.stringify(conv.content, null, 2);
-                              questionsAndAnswers += `${content}\n\n`;
-                            });
 
                           return (
                             <Tool
@@ -463,8 +432,16 @@ const ChatBotDemo = ({
                                 }
                               />
                               <ToolContent>
-                                <ToolOutput output={safeResult} />
-                                <ToolOutput output={questionsAndAnswers} />
+                                <ToolOutput
+                                  label="Safe Result"
+                                  output={dualLlmPart.safeResult}
+                                />
+                                <ToolOutput
+                                  label="Questions and Answers"
+                                  conversations={dualLlmPart.conversations.slice(
+                                    1,
+                                  )}
+                                />
                               </ToolContent>
                             </Tool>
                           );

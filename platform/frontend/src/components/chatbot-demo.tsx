@@ -185,11 +185,7 @@ const ChatBotDemo = ({
 
                     // Skip dual-llm-analysis parts that follow a tool (invocation or result)
                     // They will be rendered together with the tool
-                    if (
-                      "type" in part &&
-                      (part as any).type === "dual-llm-analysis" &&
-                      i > 0
-                    ) {
+                    if (_isDualLlmPart(part) && i > 0) {
                       const prevPart = message.parts[i - 1];
                       if (
                         prevPart.type === "dynamic-tool" ||
@@ -267,7 +263,7 @@ const ChatBotDemo = ({
 
                         // Look ahead for tool result and dual LLM analysis
                         let toolResultPart = null;
-                        let dualLlmPart = null;
+                        let dualLlmPart: DualLlmPart | null = null;
 
                         // Check if next part is a tool result (same tool call ID)
                         const nextPart = message.parts[i + 1];
@@ -282,23 +278,13 @@ const ChatBotDemo = ({
 
                           // Check if there's a dual LLM part after the tool result
                           const dualLlmPartCandidate = message.parts[i + 2];
-                          if (
-                            dualLlmPartCandidate &&
-                            "type" in dualLlmPartCandidate &&
-                            (dualLlmPartCandidate as any).type ===
-                              "dual-llm-analysis"
-                          ) {
-                            dualLlmPart =
-                              dualLlmPartCandidate as unknown as DualLlmPart;
+                          if (_isDualLlmPart(dualLlmPartCandidate)) {
+                            dualLlmPart = dualLlmPartCandidate;
                           }
                         } else {
                           // Check if the next part is directly a dual LLM analysis
-                          if (
-                            nextPart &&
-                            "type" in nextPart &&
-                            (nextPart as any).type === "dual-llm-analysis"
-                          ) {
-                            dualLlmPart = nextPart as unknown as DualLlmPart;
+                          if (_isDualLlmPart(nextPart)) {
+                            dualLlmPart = nextPart;
                           }
                         }
 
@@ -332,7 +318,7 @@ const ChatBotDemo = ({
                                         ? "Unsafe Result"
                                         : "Result"
                                   }
-                                  output={toolResultPart.output as any}
+                                  output={toolResultPart.output as unknown}
                                   errorText={toolResultPart.errorText}
                                 />
                               )}
@@ -345,7 +331,7 @@ const ChatBotDemo = ({
                                         ? "Unsafe Result"
                                         : "Result"
                                   }
-                                  output={part.output as any}
+                                  output={part.output as unknown}
                                   errorText={part.errorText}
                                 />
                               )}
@@ -385,12 +371,8 @@ const ChatBotDemo = ({
                         );
                       default: {
                         // Handle custom blocked-tool type
-                        if (
-                          "type" in part &&
-                          (part as any).type === "blocked-tool"
-                        ) {
-                          const blockedPart =
-                            part as unknown as BlockedToolPart;
+                        if (_isBlockedToolPart(part)) {
+                          const blockedPart = part as BlockedToolPart;
                           return (
                             <div
                               key={`${message.id}-${i}`}
@@ -431,11 +413,8 @@ const ChatBotDemo = ({
                         }
 
                         // Handle custom dual-llm-analysis type (standalone, not following a tool)
-                        if (
-                          "type" in part &&
-                          (part as any).type === "dual-llm-analysis"
-                        ) {
-                          const dualLlmPart = part as unknown as DualLlmPart;
+                        if (_isDualLlmPart(part)) {
+                          const dualLlmPart = part as DualLlmPart;
 
                           return (
                             <Tool
@@ -574,5 +553,24 @@ export type PartialUIMessage = Partial<UIMessage> & {
     reason?: string;
   };
 };
+
+// Type guards for custom part types
+function _isDualLlmPart(part: unknown): part is DualLlmPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    (part as { type: string }).type === "dual-llm-analysis"
+  );
+}
+
+function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    (part as { type: string }).type === "blocked-tool"
+  );
+}
 
 export default ChatBotDemo;

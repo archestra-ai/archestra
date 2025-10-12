@@ -51,37 +51,43 @@ export function DualLlmConversation({ result }: { result: DualLlmResult }) {
                 Q&A Rounds (Main Agent ↔ Quarantined Agent)
               </h4>
               <div className="space-y-3">
-                {conversations.map((message: any, idx: number) => (
-                  <div
-                    key={`${idx}-${message.role}`}
-                    className={`rounded-lg p-3 ${
-                      message.role === "user"
-                        ? "bg-blue-50 border-l-4 border-blue-500"
-                        : "bg-green-50 border-l-4 border-green-500"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge
-                        variant={
-                          message.role === "user" ? "default" : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {message.role === "user"
-                          ? "Main Agent"
-                          : "Quarantined Agent"}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Round {Math.ceil((idx + 1) / 2)}
-                      </span>
+                {conversations.map((message: unknown, idx: number) => {
+                  const msg = message as {
+                    role: "user" | "assistant";
+                    content: string | unknown;
+                  };
+                  return (
+                    <div
+                      key={`${idx}-${msg.role}`}
+                      className={`rounded-lg p-3 ${
+                        msg.role === "user"
+                          ? "bg-blue-50 border-l-4 border-blue-500"
+                          : "bg-green-50 border-l-4 border-green-500"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge
+                          variant={
+                            msg.role === "user" ? "default" : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {msg.role === "user"
+                            ? "Main Agent"
+                            : "Quarantined Agent"}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Round {Math.ceil((idx + 1) / 2)}
+                        </span>
+                      </div>
+                      <div className="text-sm whitespace-pre-wrap font-mono">
+                        {typeof msg.content === "string"
+                          ? msg.content
+                          : JSON.stringify(msg.content, null, 2)}
+                      </div>
                     </div>
-                    <div className="text-sm whitespace-pre-wrap font-mono">
-                      {typeof message.content === "string"
-                        ? message.content
-                        : JSON.stringify(message.content, null, 2)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

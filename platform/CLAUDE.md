@@ -295,6 +295,12 @@ The backend integrates advanced security guardrails:
   - Quarantined Agent: Accesses untrusted data but can only respond via structured multiple choice
   - Prevents prompt injection by isolating untrusted data from the main LLM
   - Configurable via UI at http://localhost:3000/dual-llm
+  - Operation flow:
+    1. Main agent formulates questions about the untrusted data
+    2. Quarantined agent examines the data and responds with structured answers
+    3. Process continues for configured number of rounds (maxRounds)
+    4. Final summary is generated based on the Q&A conversation
+  - Results stored in database for auditing and analysis
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)

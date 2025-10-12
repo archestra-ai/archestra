@@ -226,6 +226,17 @@ platform/
 └── shared/            # Shared utilities (currently empty)
 ```
 
+### Dual LLM Pattern
+
+The platform implements the Dual LLM Quarantine Pattern to prevent prompt injection attacks when processing untrusted data:
+
+- **Main Agent**: Formulates questions without access to untrusted data
+- **Quarantined Agent**: Examines untrusted data but can only respond with structured multiple choice answers
+- **Information Flow**: Controlled Q&A rounds between agents (configurable max rounds)
+- **Configuration**: Manage prompts and settings at http://localhost:3000/dual-llm
+- **Implementation**: See `platform/backend/src/routes/proxy/utils/dual-llm-subagent.ts`
+- **Database**: Results stored in `dual_llm_result` table for auditing
+
 ### Development Orchestration
 
 The project uses **Tilt** to orchestrate the development environment:

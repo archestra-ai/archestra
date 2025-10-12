@@ -28,9 +28,7 @@ export function useUpdateDualLlmConfig() {
     }: {
       id: string;
       data: {
-        mainAgentSystemPrompt?: string;
-        mainAgentInitialPrompt?: string;
-        mainAgentQuestionPrompt?: string;
+        mainAgentPrompt?: string;
         quarantinedAgentPrompt?: string;
         summaryPrompt?: string;
         maxRounds?: number;

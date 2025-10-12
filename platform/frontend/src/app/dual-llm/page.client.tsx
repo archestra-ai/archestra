@@ -5,6 +5,7 @@ import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { GetDefaultDualLlmConfigResponses } from "@/lib/clients/api";
 import {
@@ -37,6 +38,7 @@ function DualLLMContent({
   const { data: config } = useDualLlmConfig({ initialData });
   const updateConfig = useUpdateDualLlmConfig();
 
+  const [enabled, setEnabled] = useState(config?.enabled ?? false);
   const [mainAgentPrompt, setMainAgentPrompt] = useState(
     config?.mainAgentPrompt || "",
   );
@@ -54,6 +56,7 @@ function DualLLMContent({
     updateConfig.mutate({
       id: config.id,
       data: {
+        enabled,
         mainAgentPrompt,
         quarantinedAgentPrompt,
         summaryPrompt,
@@ -63,6 +66,7 @@ function DualLLMContent({
   };
 
   const hasChanges =
+    enabled !== config?.enabled ||
     mainAgentPrompt !== config?.mainAgentPrompt ||
     quarantinedAgentPrompt !== config?.quarantinedAgentPrompt ||
     summaryPrompt !== config?.summaryPrompt ||
@@ -93,6 +97,25 @@ function DualLLMContent({
 
       <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="space-y-6">
+          <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="enabled" className="text-sm font-semibold">
+                  Enable Dual LLM Analysis
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, untrusted data will be processed through the
+                  dual LLM quarantine pattern
+                </p>
+              </div>
+              <Switch
+                id="enabled"
+                checked={enabled}
+                onCheckedChange={setEnabled}
+              />
+            </div>
+          </div>
+
           <div className="border border-border rounded-lg p-6 bg-card">
             <Label htmlFor="max-rounds" className="text-sm font-semibold">
               Max Quarantine Rounds

@@ -535,6 +535,7 @@ async function seedDualLlmConfig(): Promise<void> {
   // Only seed if no configuration exists
   if (existingConfigs.length === 0) {
     const defaultConfig: InsertDualLlmConfig = {
+      enabled: false,
       mainAgentPrompt: `You are a helpful agent working with quarantined data.
 
 Original user request: "{{originalUserRequest}}"

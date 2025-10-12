@@ -1,4 +1,8 @@
-import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
+import {
+  DualLlmConfigModel,
+  DualLlmResultModel,
+  TrustedDataPolicyModel,
+} from "@/models";
 import type { ChatCompletionRequestMessages } from "../types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
@@ -45,6 +49,9 @@ export const evaluateIfContextIsTrusted = async (
   filteredMessages: ChatCompletionRequestMessages;
   contextIsTrusted: boolean;
 }> => {
+  // Load dual LLM configuration to check if analysis is enabled
+  const dualLlmConfig = await DualLlmConfigModel.getDefault();
+
   const filteredMessages: ChatCompletionRequestMessages = [];
   const blockedToolCallIds = new Set<string>();
   const blockReasons = new Map<string, string>();
@@ -109,37 +116,43 @@ export const evaluateIfContextIsTrusted = async (
     } else if (message.role === "tool") {
       // Tool message - check if it needs Dual LLM analysis
 
-      // First, check if this tool call has already been analyzed
-      const existingResult = await DualLlmResultModel.findByToolCallId(
-        message.tool_call_id,
-      );
-
-      if (existingResult) {
-        // Use cached result from database
-        filteredMessages.push({
-          ...message,
-          content: existingResult.result,
-        });
-      } else {
-        // No cached result - run Dual LLM quarantine pattern
-        // Dual LLM Quarantine Pattern:
-        // 1. Main LLM (privileged) asks multiple choice questions
-        // 2. Quarantined LLM sees the untrusted data and answers the questions
-        // 3. Main LLM extracts safe information through Q&A
-        // 4. Returns a safe summary instead of raw untrusted data
-        const dualLlmSubagent = await DualLlmSubagent.create(
-          messages,
-          message,
-          agentId,
+      // Check if Dual LLM analysis is enabled
+      if (dualLlmConfig.enabled) {
+        // First, check if this tool call has already been analyzed
+        const existingResult = await DualLlmResultModel.findByToolCallId(
+          message.tool_call_id,
         );
-        const safeContent = await dualLlmSubagent.processWithMainAgent();
 
-        // Replace the tool message content with the safe summary
-        // Note: The result is automatically saved to database in processWithMainAgent
-        filteredMessages.push({
-          ...message,
-          content: safeContent,
-        });
+        if (existingResult) {
+          // Use cached result from database
+          filteredMessages.push({
+            ...message,
+            content: existingResult.result,
+          });
+        } else {
+          // No cached result - run Dual LLM quarantine pattern
+          // Dual LLM Quarantine Pattern:
+          // 1. Main LLM (privileged) asks multiple choice questions
+          // 2. Quarantined LLM sees the untrusted data and answers the questions
+          // 3. Main LLM extracts safe information through Q&A
+          // 4. Returns a safe summary instead of raw untrusted data
+          const dualLlmSubagent = await DualLlmSubagent.create(
+            messages,
+            message,
+            agentId,
+          );
+          const safeContent = await dualLlmSubagent.processWithMainAgent();
+
+          // Replace the tool message content with the safe summary
+          // Note: The result is automatically saved to database in processWithMainAgent
+          filteredMessages.push({
+            ...message,
+            content: safeContent,
+          });
+        }
+      } else {
+        // Dual LLM analysis is disabled - pass through the original message
+        filteredMessages.push(message);
       }
     } else {
       filteredMessages.push(message);

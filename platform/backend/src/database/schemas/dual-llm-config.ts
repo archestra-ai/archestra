@@ -1,4 +1,11 @@
-import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
  * Configuration for the Dual LLM Quarantine Pattern
@@ -6,6 +13,9 @@ import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
  */
 const dualLlmConfigTable = pgTable("dual_llm_config", {
   id: uuid("id").primaryKey().defaultRandom(),
+
+  // Enable/disable dual LLM analysis
+  enabled: boolean("enabled").notNull().default(false),
 
   // Main agent prompt - all instructions for the privileged LLM in a single user message
   mainAgentPrompt: text("main_agent_prompt").notNull(),

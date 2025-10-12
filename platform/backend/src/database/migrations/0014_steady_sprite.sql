@@ -1,0 +1,1 @@
+ALTER TABLE "dual_llm_config" ALTER COLUMN "enabled" SET DEFAULT false;

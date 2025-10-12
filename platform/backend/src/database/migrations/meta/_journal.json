@@ -92,6 +92,20 @@
       "when": 1760257156731,
       "tag": "0012_lame_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1760286518019,
+      "tag": "0013_curved_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1760286890689,
+      "tag": "0014_steady_sprite",
+      "breakpoints": true
     }
   ]
 }

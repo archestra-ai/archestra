@@ -150,28 +150,35 @@ export const ToolOutput = ({
           {label ?? "Conversation"}
         </h4>
         <div className="space-y-3 rounded-md bg-muted/50 p-3">
-          {conversations.map((conv, idx) => (
-            <div
-              key={idx}
-              className={cn(
-                "flex gap-2 items-start",
-                conv.role === "assistant" ? "justify-end" : "justify-start",
-              )}
-            >
+          {conversations.map((conv, idx) => {
+            // Create a stable key combining index and content hash
+            const contentStr =
+              typeof conv.content === "string"
+                ? conv.content
+                : JSON.stringify(conv.content);
+            const key = `${idx}-${conv.role}-${contentStr.slice(0, 20)}`;
+
+            return (
               <div
+                key={key}
                 className={cn(
-                  "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
-                  conv.role === "assistant"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-foreground",
+                  "flex gap-2 items-start",
+                  conv.role === "assistant" ? "justify-end" : "justify-start",
                 )}
               >
-                {typeof conv.content === "string"
-                  ? conv.content
-                  : JSON.stringify(conv.content, null, 2)}
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
+                    conv.role === "assistant"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground",
+                  )}
+                >
+                  {contentStr}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );

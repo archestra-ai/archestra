@@ -16,9 +16,11 @@ import {
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ColorModeToggle } from "@/components/color-mode-toggle";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -214,6 +216,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center justify-center py-2">
+          <ColorModeToggle />
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   Bot,
+  Bug,
   FileJson2,
   Github,
   Info,
@@ -194,6 +195,18 @@ export function AppSidebar() {
                   >
                     <Slack />
                     <span>Talk to developers</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://github.com/archestra-ai/archestra/issues/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Bug />
+                    <span>Report a Bug</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>

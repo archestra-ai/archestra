@@ -1,13 +1,13 @@
 import {
-  type GetDefaultDualLlmConfigResponses,
-  getDefaultDualLlmConfig,
-  updateDualLlmConfig,
-} from "@shared/api-client";
-import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import {
+  type GetDefaultDualLlmConfigResponses,
+  getDefaultDualLlmConfig,
+  updateDualLlmConfig,
+} from "@/lib/clients/api";
 
 export function useDualLlmConfig(params?: {
   initialData?: GetDefaultDualLlmConfigResponses["200"];

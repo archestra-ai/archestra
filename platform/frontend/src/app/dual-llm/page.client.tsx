@@ -1,12 +1,12 @@
 "use client";
 
-import type { GetDefaultDualLlmConfigResponses } from "@shared/api-client";
 import { Suspense, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { GetDefaultDualLlmConfigResponses } from "@/lib/clients/api";
 import {
   useDualLlmConfig,
   useUpdateDualLlmConfig,

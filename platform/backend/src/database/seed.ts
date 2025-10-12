@@ -52,6 +52,9 @@ async function seedAgents(): Promise<void> {
       isDemo: true,
     };
     await AgentModel.create(agentData);
+    console.log("✓ Seeded allowed demo agent");
+  } else {
+    console.log("✓ Allowed demo agent already exists, skipping");
   }
 
   // Blocked demo agent
@@ -63,6 +66,9 @@ async function seedAgents(): Promise<void> {
       isDemo: true,
     };
     await AgentModel.create(agentData);
+    console.log("✓ Seeded blocked demo agent");
+  } else {
+    console.log("✓ Blocked demo agent already exists, skipping");
   }
 }
 
@@ -102,6 +108,9 @@ async function seedTools(): Promise<void> {
       dataIsTrustedByDefault: true,
     };
     await ToolModel.create(toolData);
+    console.log("✓ Seeded gmail__sendEmail tool");
+  } else {
+    console.log("✓ gmail__sendEmail tool already exists, skipping");
   }
 
   const allowedGetEmailsTool = await ToolModel.findById(
@@ -122,6 +131,9 @@ async function seedTools(): Promise<void> {
       dataIsTrustedByDefault: false,
     };
     await ToolModel.create(toolData);
+    console.log("✓ Seeded gmail__getEmails tool");
+  } else {
+    console.log("✓ gmail__getEmails tool already exists, skipping");
   }
 }
 
@@ -326,6 +338,9 @@ async function seedInteractions(): Promise<void> {
     };
 
     await InteractionModel.create(interactionData);
+    console.log("✓ Seeded allowed demo interaction");
+  } else {
+    console.log("✓ Allowed demo interaction already exists, skipping");
   }
 
   // Blocked demo interaction
@@ -505,9 +520,11 @@ async function seedInteractions(): Promise<void> {
     };
 
     await InteractionModel.create(interactionData);
+    console.log("✓ Seeded blocked demo interaction");
+  } else {
+    console.log("✓ Blocked demo interaction already exists, skipping");
   }
 }
-<<<<<<< HEAD
 
 /**
  * Seeds default dual LLM configuration
@@ -589,20 +606,3 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
     console.log("✓ Dual LLM configuration already exists, skipping");
   }
 }
-
-/**
- * CLI entry point for seeding the database
- */
-if (require.main === module) {
-  seedDatabase()
-    .then(() => {
-      console.log("\n✅ Done!");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("\n❌ Error seeding database:", error);
-      process.exit(1);
-    });
-}
-=======
->>>>>>> main

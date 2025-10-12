@@ -235,7 +235,10 @@ The platform implements the Dual LLM Quarantine Pattern to prevent prompt inject
 - **Information Flow**: Controlled Q&A rounds between agents (configurable max rounds)
 - **Configuration**: Manage prompts and settings at http://localhost:3000/dual-llm
 - **Implementation**: See `platform/backend/src/routes/proxy/utils/dual-llm-subagent.ts`
-- **Database**: Results stored in `dual_llm_result` table for auditing
+- **Database**: 
+  - Configuration stored in `dual_llm_config` table
+  - Results stored in `dual_llm_result` table for auditing
+- **Usage**: Automatically invoked when processing untrusted tool outputs if enabled in configuration
 
 ### Development Orchestration
 
@@ -301,6 +304,9 @@ The production backend provides:
   - `GET /api/dual-llm-results/by-interaction/:interactionId` - Get results by interaction
   - `GET /api/dual-llm-results` - List all results (with optional agentId filter)
   - `GET /api/dual-llm-results/:id` - Get result by ID
+  - `POST /api/dual-llm-results` - Create result (internal use)
+  - `PUT /api/dual-llm-results/:id` - Update result (internal use)
+  - `DELETE /api/dual-llm-results/:id` - Delete result
 
 #### Security Features (Production-Ready)
 

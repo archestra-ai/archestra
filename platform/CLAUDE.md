@@ -296,6 +296,11 @@ The production backend provides:
   - `GET /api/dual-llm-config/:id` - Get configuration by ID
   - `PUT /api/dual-llm-config/:id` - Update configuration
   - `DELETE /api/dual-llm-config/:id` - Delete configuration
+- **Dual LLM Results**:
+  - `GET /api/dual-llm-results/by-tool-call-id/:toolCallId` - Get result by tool call ID
+  - `GET /api/dual-llm-results/by-interaction/:interactionId` - Get results by interaction
+  - `GET /api/dual-llm-results` - List all results (with optional agentId filter)
+  - `GET /api/dual-llm-results/:id` - Get result by ID
 
 #### Security Features (Production-Ready)
 

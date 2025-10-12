@@ -2,7 +2,10 @@
 
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import ChatBotDemo from "@/components/chatbot-demo";
+import ChatBotDemo, {
+  type DualLlmPart,
+  type PartialUIMessage,
+} from "@/components/chatbot-demo";
 import Divider from "@/components/divider";
 import { InteractionSummary } from "@/components/interaction-summary";
 import { LoadingSpinner } from "@/components/loading";
@@ -65,7 +68,7 @@ export function Chat({
   const _refusedCount = toolsRefusedCountForInteraction(interaction);
 
   // Map request messages, combining tool calls with their results and dual LLM analysis
-  const requestMessages: ReturnType<typeof mapInteractionToUiMessage>[] = [];
+  const requestMessages: PartialUIMessage[] = [];
   const messages = interaction.request.messages;
 
   for (let i = 0; i < messages.length; i++) {
@@ -80,7 +83,7 @@ export function Chat({
 
     // If this is an assistant message with tool_calls, look ahead for tool results
     if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
-      const toolCallParts = [...uiMessage.parts];
+      const toolCallParts: PartialUIMessage["parts"] = [...uiMessage.parts];
 
       // For each tool call, find its corresponding tool result
       for (const toolCall of msg.tool_calls) {
@@ -100,12 +103,15 @@ export function Chat({
           );
 
           if (dualLlmResult) {
-            toolCallParts.push({
-              type: "dual-llm-analysis" as const,
+            const dualLlmPart: DualLlmPart = {
+              type: "dual-llm-analysis",
               toolCallId: dualLlmResult.toolCallId,
               safeResult: dualLlmResult.result,
-              conversations: dualLlmResult.conversations,
-            });
+              conversations: Array.isArray(dualLlmResult.conversations)
+                ? (dualLlmResult.conversations as DualLlmPart["conversations"])
+                : [],
+            };
+            toolCallParts.push(dualLlmPart);
           }
         }
       }

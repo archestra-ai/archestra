@@ -12,6 +12,11 @@ import type { GetDualLlmResultByToolCallIdResponses } from "@/lib/clients/api";
 type DualLlmResult = NonNullable<GetDualLlmResultByToolCallIdResponses["200"]>;
 
 export function DualLlmConversation({ result }: { result: DualLlmResult }) {
+  // Type guard to check if conversations is an array
+  const conversations = Array.isArray(result.conversations)
+    ? result.conversations
+    : [];
+
   return (
     <div className="mt-6 space-y-4">
       <Collapsible defaultOpen className="space-y-2">
@@ -46,7 +51,7 @@ export function DualLlmConversation({ result }: { result: DualLlmResult }) {
                 Q&A Rounds (Main Agent ↔ Quarantined Agent)
               </h4>
               <div className="space-y-3">
-                {result.conversations.map((message, idx) => (
+                {conversations.map((message: any, idx: number) => (
                   <div
                     key={`${idx}-${message.role}`}
                     className={`rounded-lg p-3 ${

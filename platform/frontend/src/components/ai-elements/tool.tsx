@@ -32,12 +32,14 @@ export const Tool = ({ className, ...props }: ToolProps) => (
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"];
+  state: ToolUIPart["state"] | "output-available-dual-llm";
   className?: string;
   icon?: React.ReactNode;
 };
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
+const getStatusBadge = (
+  status: ToolUIPart["state"] | "output-available-dual-llm",
+) => {
   const labels = {
     "input-streaming": "Pending",
     "input-available": "Running",
@@ -118,7 +120,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
 );
 
 export type ToolOutputProps = ComponentProps<"div"> & {
-  output: ToolUIPart["output"];
+  output?: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
   conversations?: Array<{

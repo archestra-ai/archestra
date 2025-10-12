@@ -2759,6 +2759,7 @@ export type GetDefaultDualLlmConfigResponses = {
      */
     200: {
         id: string;
+        enabled: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
@@ -2797,6 +2798,7 @@ export type GetDualLlmConfigsResponses = {
      */
     200: Array<{
         id: string;
+        enabled: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
@@ -2810,6 +2812,7 @@ export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDual
 
 export type CreateDualLlmConfigData = {
     body: {
+        enabled?: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
@@ -2840,6 +2843,7 @@ export type CreateDualLlmConfigResponses = {
      */
     200: {
         id: string;
+        enabled: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
@@ -2932,6 +2936,7 @@ export type GetDualLlmConfigResponses = {
      */
     200: {
         id: string;
+        enabled: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
@@ -2945,6 +2950,7 @@ export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLl
 
 export type UpdateDualLlmConfigData = {
     body?: {
+        enabled?: boolean;
         mainAgentPrompt?: string;
         quarantinedAgentPrompt?: string;
         summaryPrompt?: string;
@@ -2986,6 +2992,7 @@ export type UpdateDualLlmConfigResponses = {
      */
     200: {
         id: string;
+        enabled: boolean;
         mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;

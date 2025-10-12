@@ -185,12 +185,16 @@ const ChatBotDemo = ({
 
                     // Skip dual-llm-analysis parts that follow a tool (invocation or result)
                     // They will be rendered together with the tool
-                    // @ts-expect-error - Custom Archestra part type not in base UIMessage
-                    if (part.type === "dual-llm-analysis" && i > 0) {
+                    if (
+                      "type" in part &&
+                      (part as any).type === "dual-llm-analysis" &&
+                      i > 0
+                    ) {
                       const prevPart = message.parts[i - 1];
                       if (
                         prevPart.type === "dynamic-tool" ||
-                        prevPart.type === "tool-invocation"
+                        ("type" in prevPart &&
+                          prevPart.type === "tool-invocation")
                       ) {
                         return null;
                       }
@@ -278,17 +282,22 @@ const ChatBotDemo = ({
 
                           // Check if there's a dual LLM part after the tool result
                           const dualLlmPartCandidate = message.parts[i + 2];
-                          // @ts-expect-error - Custom Archestra part type not in base UIMessage
                           if (
-                            dualLlmPartCandidate?.type === "dual-llm-analysis"
+                            dualLlmPartCandidate &&
+                            "type" in dualLlmPartCandidate &&
+                            (dualLlmPartCandidate as any).type ===
+                              "dual-llm-analysis"
                           ) {
                             dualLlmPart =
                               dualLlmPartCandidate as unknown as DualLlmPart;
                           }
                         } else {
                           // Check if the next part is directly a dual LLM analysis
-                          // @ts-expect-error - Custom Archestra part type not in base UIMessage
-                          if (nextPart?.type === "dual-llm-analysis") {
+                          if (
+                            nextPart &&
+                            "type" in nextPart &&
+                            (nextPart as any).type === "dual-llm-analysis"
+                          ) {
                             dualLlmPart = nextPart as unknown as DualLlmPart;
                           }
                         }
@@ -323,11 +332,11 @@ const ChatBotDemo = ({
                                         ? "Unsafe Result"
                                         : "Result"
                                   }
-                                  output={toolResultPart.output}
+                                  output={toolResultPart.output as any}
                                   errorText={toolResultPart.errorText}
                                 />
                               )}
-                              {!toolResultPart && part.output && (
+                              {!toolResultPart && Boolean(part.output) && (
                                 <ToolOutput
                                   label={
                                     part.errorText
@@ -336,7 +345,7 @@ const ChatBotDemo = ({
                                         ? "Unsafe Result"
                                         : "Result"
                                   }
-                                  output={part.output}
+                                  output={part.output as any}
                                   errorText={part.errorText}
                                 />
                               )}
@@ -348,6 +357,7 @@ const ChatBotDemo = ({
                                   />
                                   <ToolOutput
                                     label="Questions and Answers"
+                                    output={undefined}
                                     conversations={dualLlmPart.conversations.slice(
                                       1,
                                     )}
@@ -375,8 +385,10 @@ const ChatBotDemo = ({
                         );
                       default: {
                         // Handle custom blocked-tool type
-                        // @ts-expect-error - Custom Archestra part type not in base UIMessage
-                        if (part.type === "blocked-tool") {
+                        if (
+                          "type" in part &&
+                          (part as any).type === "blocked-tool"
+                        ) {
                           const blockedPart =
                             part as unknown as BlockedToolPart;
                           return (
@@ -419,8 +431,10 @@ const ChatBotDemo = ({
                         }
 
                         // Handle custom dual-llm-analysis type (standalone, not following a tool)
-                        // @ts-expect-error - Custom Archestra part type not in base UIMessage
-                        if (part.type === "dual-llm-analysis") {
+                        if (
+                          "type" in part &&
+                          (part as any).type === "dual-llm-analysis"
+                        ) {
                           const dualLlmPart = part as unknown as DualLlmPart;
 
                           return (
@@ -442,6 +456,7 @@ const ChatBotDemo = ({
                                 />
                                 <ToolOutput
                                   label="Questions and Answers"
+                                  output={undefined}
                                   conversations={dualLlmPart.conversations.slice(
                                     1,
                                   )}

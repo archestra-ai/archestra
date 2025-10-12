@@ -28,6 +28,7 @@ export function useUpdateDualLlmConfig() {
     }: {
       id: string;
       data: {
+        enabled?: boolean;
         mainAgentPrompt?: string;
         quarantinedAgentPrompt?: string;
         summaryPrompt?: string;

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { DualLlmConfigModel } from "@/models";
+import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type { DualLlmConfig } from "@/types";
 
 const openai = new OpenAI({
@@ -19,18 +19,31 @@ const openai = new OpenAI({
 export class DualLlmSubagent {
   data: any; // The untrusted tool result data
   config: DualLlmConfig; // Configuration loaded from database
+  agentId: string; // The agent ID for tracking
+  toolCallId: string; // The tool call ID for tracking
 
-  constructor(toolResult: any, config: DualLlmConfig) {
+  constructor(
+    toolResult: any,
+    config: DualLlmConfig,
+    agentId: string,
+    toolCallId: string,
+  ) {
     this.data = toolResult;
     this.config = config;
+    this.agentId = agentId;
+    this.toolCallId = toolCallId;
   }
 
   /**
    * Create a DualLlmSubagent instance with configuration loaded from database
    */
-  static async create(toolResult: any): Promise<DualLlmSubagent> {
+  static async create(
+    toolResult: any,
+    agentId: string,
+    toolCallId: string,
+  ): Promise<DualLlmSubagent> {
     const config = await DualLlmConfigModel.getDefault();
-    return new DualLlmSubagent(toolResult, config);
+    return new DualLlmSubagent(toolResult, config, agentId, toolCallId);
   }
 
   /**
@@ -114,8 +127,23 @@ export class DualLlmSubagent {
 
     console.log("\n=== Q&A Loop Complete ===\n");
 
+    // Log the complete conversation history
+    console.log("=== Final Messages Object ===");
+    console.log(JSON.stringify(conversation, null, 2));
+    console.log("=== End Messages Object ===\n");
+
     // Generate a safe summary from the Q&A conversation
-    return this.generateSummary(conversation);
+    const summary = await this.generateSummary(conversation);
+
+    // Store the result in the database
+    await DualLlmResultModel.create({
+      agentId: this.agentId,
+      toolCallId: this.toolCallId,
+      conversations: conversation,
+      result: summary,
+    });
+
+    return summary;
   }
 
   /**

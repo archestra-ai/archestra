@@ -143,7 +143,11 @@ export const evaluateIfContextIsTrusted = async (
       // 2. Quarantined LLM sees the untrusted data and answers the questions
       // 3. Main LLM extracts safe information through Q&A
       // 4. Returns a safe summary instead of raw untrusted data
-      const dualLlmSubagent = await DualLlmSubagent.create(toolResult);
+      const dualLlmSubagent = await DualLlmSubagent.create(
+        toolResult,
+        agentId,
+        message.tool_call_id,
+      );
       const safeContent =
         await dualLlmSubagent.processWithMainAgent(originalUserRequest);
 

@@ -9,7 +9,8 @@ archestra:
   #   env:
   #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
   #     CUSTOM_VAR: "custom-value"
-  env: {}
+  env:
+    ARCHESTRA_API_BASE_URL: http://archestra-platform:9000/
 
 # PostgreSQL configuration
 postgresql:

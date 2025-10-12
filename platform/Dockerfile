@@ -117,7 +117,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV=%(ENV_NODE_ENV)s,NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
+environment=NODE_ENV=%(ENV_NODE_ENV)s,HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
 EOF
 
 # Create initialization script

@@ -53,32 +53,72 @@ jobs:
       - name: Start platform with docker compose
         run: |
           docker compose -f .github/testing/docker-compose-platform.yml up -d
-          echo "Waiting for services to be healthy..."
+          echo "=== Containers started ==="
+          docker compose -f .github/testing/docker-compose-platform.yml ps
+          echo ""
+          echo "=== Waiting for services to initialize (30s) ==="
           sleep 30
+          echo ""
+          echo "=== Container status after wait ==="
+          docker compose -f .github/testing/docker-compose-platform.yml ps
+          echo ""
+          echo "=== Quick log check for each container ==="
+          docker logs archestra-platform-test --tail 50
+          echo ""
+          docker logs archestra-platform-test-custom-api-base-url --tail 50
+          echo ""
+          docker logs archestra-platform-test-custom-database-url --tail 50
+          echo ""
+          echo "=== Network inspection ==="
+          docker network inspect testing_default || echo "Network not found"
+          echo ""
+          echo "=== Port bindings ==="
+          docker port archestra-platform-test || echo "Container not running"
+          docker port archestra-platform-test-custom-api-base-url || echo "Container not running"
+          docker port archestra-platform-test-custom-database-url || echo "Container not running"
 
       - name: Check backend health
         run: |
           ports="9000 9001 9002"
 
           for port in $ports; do
+            echo ""
+            echo "=== Testing backend on port $port ==="
             max_attempts=10
             attempt=0
             success=false
 
             while [ $attempt -lt $max_attempts ]; do
-              if curl -f http://localhost:$port/health; then
+              echo "Attempt $((attempt + 1))/$max_attempts on port $port..."
+
+              # Try curl with verbose output for debugging
+              if curl -v -f http://localhost:$port/health 2>&1; then
                 echo "✓ Backend health check passed on port $port"
                 success=true
                 break
+              else
+                echo "curl exit code: $?"
               fi
 
               attempt=$((attempt + 1))
-              echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
-              sleep 5
+
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Retrying in 5s..."
+                sleep 5
+              fi
             done
 
             if [ "$success" = false ]; then
+              echo ""
               echo "✗ Backend health check failed after $max_attempts attempts on port $port"
+              echo "=== Checking if port is listening ==="
+              netstat -tuln | grep ":$port" || echo "Port $port not listening"
+              echo "=== Checking container processes ==="
+              case $port in
+                9000) docker exec archestra-platform-test ps aux || echo "Container not accessible" ;;
+                9001) docker exec archestra-platform-test-custom-api-base-url ps aux || echo "Container not accessible" ;;
+                9002) docker exec archestra-platform-test-custom-database-url ps aux || echo "Container not accessible" ;;
+              esac
               exit 1
             fi
           done
@@ -88,24 +128,36 @@ jobs:
           ports="3000 3001 3002"
 
           for port in $ports; do
+            echo ""
+            echo "=== Testing frontend on port $port ==="
             max_attempts=10
             attempt=0
             success=false
 
             while [ $attempt -lt $max_attempts ]; do
-              if curl -f http://localhost:$port/; then
+              echo "Attempt $((attempt + 1))/$max_attempts on port $port..."
+
+              if curl -v -f http://localhost:$port/ 2>&1; then
                 echo "✓ Frontend health check passed on port $port"
                 success=true
                 break
+              else
+                echo "curl exit code: $?"
               fi
 
               attempt=$((attempt + 1))
-              echo "Attempt $attempt/$max_attempts failed, retrying in 5s..."
-              sleep 5
+
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Retrying in 5s..."
+                sleep 5
+              fi
             done
 
             if [ "$success" = false ]; then
+              echo ""
               echo "✗ Frontend health check failed after $max_attempts attempts on port $port"
+              echo "=== Checking if port is listening ==="
+              netstat -tuln | grep ":$port" || echo "Port $port not listening"
               exit 1
             fi
           done

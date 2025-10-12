@@ -78,6 +78,13 @@
       "when": 1760116071330,
       "tag": "0010_neat_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1760248734208,
+      "tag": "0011_salty_zodiak",
+      "breakpoints": true
     }
   ]
 }

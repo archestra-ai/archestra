@@ -85,6 +85,7 @@ const start = async () => {
     fastify.register(routes.openAiProxyRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);
+    fastify.register(routes.dualLlmConfigRoutes);
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);

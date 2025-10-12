@@ -2731,3 +2731,282 @@ export type UpdateTrustedDataPolicyResponses = {
 };
 
 export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
+
+export type GetDefaultDualLlmConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config/default';
+};
+
+export type GetDefaultDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDefaultDualLlmConfigError = GetDefaultDualLlmConfigErrors[keyof GetDefaultDualLlmConfigErrors];
+
+export type GetDefaultDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetDefaultDualLlmConfigResponse = GetDefaultDualLlmConfigResponses[keyof GetDefaultDualLlmConfigResponses];
+
+export type GetDualLlmConfigsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config';
+};
+
+export type GetDualLlmConfigsErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmConfigsError = GetDualLlmConfigsErrors[keyof GetDualLlmConfigsErrors];
+
+export type GetDualLlmConfigsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDualLlmConfigsResponses];
+
+export type CreateDualLlmConfigData = {
+    body: {
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config';
+};
+
+export type CreateDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateDualLlmConfigError = CreateDualLlmConfigErrors[keyof CreateDualLlmConfigErrors];
+
+export type CreateDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateDualLlmConfigResponse = CreateDualLlmConfigResponses[keyof CreateDualLlmConfigResponses];
+
+export type DeleteDualLlmConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type DeleteDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteDualLlmConfigError = DeleteDualLlmConfigErrors[keyof DeleteDualLlmConfigErrors];
+
+export type DeleteDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteDualLlmConfigResponse = DeleteDualLlmConfigResponses[keyof DeleteDualLlmConfigResponses];
+
+export type GetDualLlmConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type GetDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmConfigError = GetDualLlmConfigErrors[keyof GetDualLlmConfigErrors];
+
+export type GetDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
+
+export type UpdateDualLlmConfigData = {
+    body?: {
+        mainAgentSystemPrompt?: string;
+        mainAgentInitialPrompt?: string;
+        mainAgentQuestionPrompt?: string;
+        quarantinedAgentPrompt?: string;
+        summaryPrompt?: string;
+        maxRounds?: number;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type UpdateDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateDualLlmConfigError = UpdateDualLlmConfigErrors[keyof UpdateDualLlmConfigErrors];
+
+export type UpdateDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        mainAgentSystemPrompt: string;
+        mainAgentInitialPrompt: string;
+        mainAgentQuestionPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];

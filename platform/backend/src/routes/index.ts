@@ -1,5 +1,6 @@
 export { default as agentRoutes } from "./agent";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
+export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as interactionRoutes } from "./interaction";
 export { default as openAiProxyRoutes } from "./proxy/openai";
 export { default as toolRoutes } from "./tool";

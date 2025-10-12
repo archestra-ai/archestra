@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1ByProviderBy__Data, DeleteV1ByProviderBy__Responses, DeleteV1ByProviderData, DeleteV1ByProviderResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1ByProviderBy__Data, GetV1ByProviderBy__Responses, GetV1ByProviderData, GetV1ByProviderResponses, HeadV1ByProviderBy__Data, HeadV1ByProviderBy__Responses, HeadV1ByProviderData, HeadV1ByProviderResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, OptionsV1ByProviderBy__Data, OptionsV1ByProviderBy__Responses, OptionsV1ByProviderData, OptionsV1ByProviderResponses, PatchV1ByProviderBy__Data, PatchV1ByProviderBy__Responses, PatchV1ByProviderData, PatchV1ByProviderResponses, PostV1ByProviderBy__Data, PostV1ByProviderBy__Responses, PostV1ByProviderData, PostV1ByProviderResponses, PutV1ByProviderBy__Data, PutV1ByProviderBy__Responses, PutV1ByProviderData, PutV1ByProviderResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1ByProviderBy__Data, DeleteV1ByProviderBy__Responses, DeleteV1ByProviderData, DeleteV1ByProviderResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1ByProviderBy__Data, GetV1ByProviderBy__Responses, GetV1ByProviderData, GetV1ByProviderResponses, HeadV1ByProviderBy__Data, HeadV1ByProviderBy__Responses, HeadV1ByProviderData, HeadV1ByProviderResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, OptionsV1ByProviderBy__Data, OptionsV1ByProviderBy__Responses, OptionsV1ByProviderData, OptionsV1ByProviderResponses, PatchV1ByProviderBy__Data, PatchV1ByProviderBy__Responses, PatchV1ByProviderData, PatchV1ByProviderResponses, PostV1ByProviderBy__Data, PostV1ByProviderBy__Responses, PostV1ByProviderData, PostV1ByProviderResponses, PutV1ByProviderBy__Data, PutV1ByProviderBy__Responses, PutV1ByProviderData, PutV1ByProviderResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -378,6 +378,74 @@ export const getTrustedDataPolicy = <ThrowOnError extends boolean = false>(optio
 export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(options: Options<UpdateTrustedDataPolicyData, ThrowOnError>) => {
     return (options.client ?? client).put<UpdateTrustedDataPolicyResponses, UpdateTrustedDataPolicyErrors, ThrowOnError>({
         url: '/api/trusted-data-policies/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get default dual LLM configuration
+ */
+export const getDefaultDualLlmConfig = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultDualLlmConfigData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetDefaultDualLlmConfigResponses, GetDefaultDualLlmConfigErrors, ThrowOnError>({
+        url: '/api/dual-llm-config/default',
+        ...options
+    });
+};
+
+/**
+ * Get all dual LLM configurations
+ */
+export const getDualLlmConfigs = <ThrowOnError extends boolean = false>(options?: Options<GetDualLlmConfigsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetDualLlmConfigsResponses, GetDualLlmConfigsErrors, ThrowOnError>({
+        url: '/api/dual-llm-config',
+        ...options
+    });
+};
+
+/**
+ * Create a new dual LLM configuration
+ */
+export const createDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<CreateDualLlmConfigData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateDualLlmConfigResponses, CreateDualLlmConfigErrors, ThrowOnError>({
+        url: '/api/dual-llm-config',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete a dual LLM configuration
+ */
+export const deleteDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<DeleteDualLlmConfigData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteDualLlmConfigResponses, DeleteDualLlmConfigErrors, ThrowOnError>({
+        url: '/api/dual-llm-config/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get dual LLM configuration by ID
+ */
+export const getDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<GetDualLlmConfigData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetDualLlmConfigResponses, GetDualLlmConfigErrors, ThrowOnError>({
+        url: '/api/dual-llm-config/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update a dual LLM configuration
+ */
+export const updateDualLlmConfig = <ThrowOnError extends boolean = false>(options: Options<UpdateDualLlmConfigData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateDualLlmConfigResponses, UpdateDualLlmConfigErrors, ThrowOnError>({
+        url: '/api/dual-llm-config/{id}',
         ...options,
         headers: {
             'Content-Type': 'application/json',

@@ -165,6 +165,37 @@ const ChatBotDemo = ({
                     )}
 
                   {message.parts.map((part, i) => {
+                    // Skip tool result parts that immediately follow a tool invocation with same toolCallId
+                    if (
+                      (part.type === "dynamic-tool" ||
+                        part.type === "tool-invocation") &&
+                      part.state === "output-available" &&
+                      i > 0
+                    ) {
+                      const prevPart = message.parts[i - 1];
+                      if (
+                        (prevPart.type === "dynamic-tool" ||
+                          prevPart.type === "tool-invocation") &&
+                        prevPart.state === "input-available" &&
+                        prevPart.toolCallId === part.toolCallId
+                      ) {
+                        return null;
+                      }
+                    }
+
+                    // Skip dual-llm-analysis parts that follow a tool (invocation or result)
+                    // They will be rendered together with the tool
+                    // @ts-expect-error - Custom Archestra part type not in base UIMessage
+                    if (part.type === "dual-llm-analysis" && i > 0) {
+                      const prevPart = message.parts[i - 1];
+                      if (
+                        prevPart.type === "dynamic-tool" ||
+                        prevPart.type === "tool-invocation"
+                      ) {
+                        return null;
+                      }
+                    }
+
                     switch (part.type) {
                       case "text":
                         return (
@@ -230,6 +261,38 @@ const ChatBotDemo = ({
                           return "";
                         };
 
+                        // Look ahead for tool result and dual LLM analysis
+                        let toolResultPart = null;
+                        let dualLlmPart = null;
+
+                        // Check if next part is a tool result (same tool call ID)
+                        const nextPart = message.parts[i + 1];
+                        if (
+                          nextPart &&
+                          (nextPart.type === "dynamic-tool" ||
+                            nextPart.type === "tool-invocation") &&
+                          nextPart.state === "output-available" &&
+                          nextPart.toolCallId === part.toolCallId
+                        ) {
+                          toolResultPart = nextPart;
+
+                          // Check if there's a dual LLM part after the tool result
+                          const dualLlmPartCandidate = message.parts[i + 2];
+                          // @ts-expect-error - Custom Archestra part type not in base UIMessage
+                          if (
+                            dualLlmPartCandidate?.type === "dual-llm-analysis"
+                          ) {
+                            dualLlmPart =
+                              dualLlmPartCandidate as unknown as DualLlmPart;
+                          }
+                        } else {
+                          // Check if the next part is directly a dual LLM analysis
+                          // @ts-expect-error - Custom Archestra part type not in base UIMessage
+                          if (nextPart?.type === "dual-llm-analysis") {
+                            dualLlmPart = nextPart as unknown as DualLlmPart;
+                          }
+                        }
+
                         return (
                           <Tool
                             key={`${message.id}-${part.toolCallId}`}
@@ -237,7 +300,9 @@ const ChatBotDemo = ({
                           >
                             <ToolHeader
                               type={`tool-${toolName}`}
-                              state={part.state}
+                              state={
+                                toolResultPart ? "output-available" : part.state
+                              }
                               icon={getIcon()}
                             />
                             <ToolContent>
@@ -245,10 +310,60 @@ const ChatBotDemo = ({
                               Object.keys(part.input).length > 0 ? (
                                 <ToolInput input={part.input} />
                               ) : null}
-                              <ToolOutput
-                                output={part.output}
-                                errorText={part.errorText}
-                              />
+                              {toolResultPart && (
+                                <ToolOutput
+                                  label={
+                                    toolResultPart.errorText
+                                      ? "Error"
+                                      : dualLlmPart
+                                        ? "Unsafe Result"
+                                        : "Result"
+                                  }
+                                  output={toolResultPart.output}
+                                  errorText={toolResultPart.errorText}
+                                />
+                              )}
+                              {!toolResultPart && part.output && (
+                                <ToolOutput
+                                  label={
+                                    part.errorText
+                                      ? "Error"
+                                      : dualLlmPart
+                                        ? "Unsafe Result"
+                                        : "Result"
+                                  }
+                                  output={part.output}
+                                  errorText={part.errorText}
+                                />
+                              )}
+                              {dualLlmPart && (
+                                <>
+                                  <ToolOutput
+                                    label="Safe Result"
+                                    output={dualLlmPart.safeResult}
+                                  />
+                                  <ToolOutput
+                                    label="Questions and Answers"
+                                    output={(() => {
+                                      let questionsAndAnswers = "";
+                                      dualLlmPart.conversations
+                                        .slice(1)
+                                        .forEach((conv) => {
+                                          const content =
+                                            typeof conv.content === "string"
+                                              ? conv.content
+                                              : JSON.stringify(
+                                                  conv.content,
+                                                  null,
+                                                  2,
+                                                );
+                                          questionsAndAnswers += `${content}\n\n`;
+                                        });
+                                      return questionsAndAnswers;
+                                    })()}
+                                  />
+                                </>
+                              )}
                             </ToolContent>
                           </Tool>
                         );
@@ -270,7 +385,7 @@ const ChatBotDemo = ({
                         );
                       default: {
                         // Handle custom blocked-tool type
-                        // @ts-expect-error - Custom Archestrapart type not in base UIMessage
+                        // @ts-expect-error - Custom Archestra part type not in base UIMessage
                         if (part.type === "blocked-tool") {
                           const blockedPart =
                             part as unknown as BlockedToolPart;
@@ -310,6 +425,48 @@ const ChatBotDemo = ({
                                 </div>
                               </div>
                             </div>
+                          );
+                        }
+
+                        // Handle custom dual-llm-analysis type
+                        // @ts-expect-error - Custom Archestra part type not in base UIMessage
+                        if (part.type === "dual-llm-analysis") {
+                          const dualLlmPart = part as unknown as DualLlmPart;
+
+                          // Format safe result
+                          const safeResult = `SAFE RESULT:\n${dualLlmPart.safeResult}`;
+
+                          // Format Q&A conversations
+                          let questionsAndAnswers = `Q&A (${0.5 * (dualLlmPart.conversations.length - 1)} rounds):\n\n`;
+
+                          // Skip the first message and don't show labels
+                          dualLlmPart.conversations
+                            .slice(1)
+                            .forEach((conv, _idx) => {
+                              const content =
+                                typeof conv.content === "string"
+                                  ? conv.content
+                                  : JSON.stringify(conv.content, null, 2);
+                              questionsAndAnswers += `${content}\n\n`;
+                            });
+
+                          return (
+                            <Tool
+                              key={`${message.id}-dual-llm-${i}`}
+                              className="bg-sky-400/20"
+                            >
+                              <ToolHeader
+                                type="tool-dual-llm-action"
+                                state="output-available"
+                                icon={
+                                  <ShieldCheck className="size-4 text-muted-foreground" />
+                                }
+                              />
+                              <ToolContent>
+                                <ToolOutput output={safeResult} />
+                                <ToolOutput output={questionsAndAnswers} />
+                              </ToolContent>
+                            </Tool>
                           );
                         }
                         return null;
@@ -402,9 +559,19 @@ export type BlockedToolPart = {
   fullRefusal?: string;
 };
 
+export type DualLlmPart = {
+  type: "dual-llm-analysis";
+  toolCallId: string;
+  safeResult: string;
+  conversations: Array<{
+    role: "user" | "assistant";
+    content: string | unknown;
+  }>;
+};
+
 export type PartialUIMessage = Partial<UIMessage> & {
   role: UIMessage["role"];
-  parts: (UIMessage["parts"][number] | BlockedToolPart)[];
+  parts: (UIMessage["parts"][number] | BlockedToolPart | DualLlmPart)[];
   metadata?: {
     trusted?: boolean;
     blocked?: boolean;

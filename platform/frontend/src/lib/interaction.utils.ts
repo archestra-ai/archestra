@@ -4,6 +4,33 @@ import type {
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 
+/**
+ * Check if the last message in an interaction is a tool message
+ */
+export function isLastMessageToolCall(
+  interaction: GetInteractionsResponses["200"][number],
+): boolean {
+  const messages = interaction.request.messages;
+  if (messages.length === 0) return false;
+  const lastMessage = messages[messages.length - 1];
+  return lastMessage.role === "tool";
+}
+
+/**
+ * Get the tool_call_id from the last message if it's a tool message
+ */
+export function getLastToolCallId(
+  interaction: GetInteractionsResponses["200"][number],
+): string | null {
+  const messages = interaction.request.messages;
+  if (messages.length === 0) return null;
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage.role === "tool") {
+    return lastMessage.tool_call_id;
+  }
+  return null;
+}
+
 export function toolNamesUsedForInteraction(
   interaction: GetInteractionsResponses["200"][number],
 ) {

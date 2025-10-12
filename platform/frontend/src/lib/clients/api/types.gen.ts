@@ -2759,9 +2759,7 @@ export type GetDefaultDualLlmConfigResponses = {
      */
     200: {
         id: string;
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds: number;
@@ -2799,9 +2797,7 @@ export type GetDualLlmConfigsResponses = {
      */
     200: Array<{
         id: string;
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds: number;
@@ -2814,9 +2810,7 @@ export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDual
 
 export type CreateDualLlmConfigData = {
     body: {
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds?: number;
@@ -2846,9 +2840,7 @@ export type CreateDualLlmConfigResponses = {
      */
     200: {
         id: string;
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds: number;
@@ -2940,9 +2932,7 @@ export type GetDualLlmConfigResponses = {
      */
     200: {
         id: string;
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds: number;
@@ -2955,9 +2945,7 @@ export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLl
 
 export type UpdateDualLlmConfigData = {
     body?: {
-        mainAgentSystemPrompt?: string;
-        mainAgentInitialPrompt?: string;
-        mainAgentQuestionPrompt?: string;
+        mainAgentPrompt?: string;
         quarantinedAgentPrompt?: string;
         summaryPrompt?: string;
         maxRounds?: number;
@@ -2998,9 +2986,7 @@ export type UpdateDualLlmConfigResponses = {
      */
     200: {
         id: string;
-        mainAgentSystemPrompt: string;
-        mainAgentInitialPrompt: string;
-        mainAgentQuestionPrompt: string;
+        mainAgentPrompt: string;
         quarantinedAgentPrompt: string;
         summaryPrompt: string;
         maxRounds: number;
@@ -3010,3 +2996,94 @@ export type UpdateDualLlmConfigResponses = {
 };
 
 export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];
+
+export type GetDualLlmResultByToolCallIdData = {
+    body?: never;
+    path: {
+        toolCallId: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}';
+};
+
+export type GetDualLlmResultByToolCallIdErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmResultByToolCallIdError = GetDualLlmResultByToolCallIdErrors[keyof GetDualLlmResultByToolCallIdErrors];
+
+export type GetDualLlmResultByToolCallIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        toolCallId: string;
+        conversations: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        result: string;
+        createdAt: string;
+    } | null;
+};
+
+export type GetDualLlmResultByToolCallIdResponse = GetDualLlmResultByToolCallIdResponses[keyof GetDualLlmResultByToolCallIdResponses];
+
+export type GetDualLlmResultsByInteractionData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-results/by-interaction/{interactionId}';
+};
+
+export type GetDualLlmResultsByInteractionErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmResultsByInteractionError = GetDualLlmResultsByInteractionErrors[keyof GetDualLlmResultsByInteractionErrors];
+
+export type GetDualLlmResultsByInteractionResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string;
+        toolCallId: string;
+        conversations: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        result: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];

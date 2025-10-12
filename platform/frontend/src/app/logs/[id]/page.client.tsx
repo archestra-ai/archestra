@@ -10,6 +10,7 @@ import type {
   GetAgentsResponses,
   GetInteractionResponse,
 } from "@/lib/clients/api";
+import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
 import {
   mapInteractionToUiMessage,
@@ -52,16 +53,71 @@ export function Chat({
     initialData: initialData?.interaction,
   });
 
+  // Fetch all dual LLM results for this interaction
+  const { data: allDualLlmResults = [] } = useDualLlmResultsByInteraction({
+    interactionId: id,
+  });
+
   if (!interaction) {
     return "Interaction not found";
   }
 
   const _refusedCount = toolsRefusedCountForInteraction(interaction);
 
-  // Map request messages
-  const requestMessages = interaction.request.messages.map(
-    mapInteractionToUiMessage,
-  );
+  // Map request messages, combining tool calls with their results and dual LLM analysis
+  const requestMessages: ReturnType<typeof mapInteractionToUiMessage>[] = [];
+  const messages = interaction.request.messages;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+
+    // Skip tool messages - they'll be merged with their assistant message
+    if (msg.role === "tool") {
+      continue;
+    }
+
+    const uiMessage = mapInteractionToUiMessage(msg);
+
+    // If this is an assistant message with tool_calls, look ahead for tool results
+    if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
+      const toolCallParts = [...uiMessage.parts];
+
+      // For each tool call, find its corresponding tool result
+      for (const toolCall of msg.tool_calls) {
+        // Find the tool result message
+        const toolResultMsg = messages
+          .slice(i + 1)
+          .find((m) => m.role === "tool" && m.tool_call_id === toolCall.id);
+
+        if (toolResultMsg) {
+          // Map the tool result to a UI part
+          const toolResultUiMsg = mapInteractionToUiMessage(toolResultMsg);
+          toolCallParts.push(...toolResultUiMsg.parts);
+
+          // Check if there's a dual LLM result for this tool call
+          const dualLlmResult = allDualLlmResults.find(
+            (result) => result.toolCallId === toolCall.id,
+          );
+
+          if (dualLlmResult) {
+            toolCallParts.push({
+              type: "dual-llm-analysis" as const,
+              toolCallId: dualLlmResult.toolCallId,
+              safeResult: dualLlmResult.result,
+              conversations: dualLlmResult.conversations,
+            });
+          }
+        }
+      }
+
+      requestMessages.push({
+        ...uiMessage,
+        parts: toolCallParts,
+      });
+    } else {
+      requestMessages.push(uiMessage);
+    }
+  }
 
   // Add response message if available
   const responseMessage = interaction.response?.choices?.[0]?.message;

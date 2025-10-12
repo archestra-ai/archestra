@@ -1,4 +1,4 @@
-import { TrustedDataPolicyModel } from "@/models";
+import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
 import type { ChatCompletionRequestMessages } from "../types";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
@@ -106,56 +106,41 @@ export const evaluateIfContextIsTrusted = async (
         ...message,
         content: `[Content blocked by policy${reason ? `: ${reason}` : ""}]`,
       });
-    } else if (i === messages.length - 1 && message.role === "tool") {
-      // Last message is a fresh tool response - run dual LLM quarantine pattern
-      console.log("Last message");
-      console.log(
-        "This is fresh tool response, we need to run dual llm for it",
-      );
-      console.log("For now we well run it for every tool call result");
-      console.log(
-        "For now we will do it only for the last message, because for the previous ones it will be cahced in the db",
-      );
+    } else if (message.role === "tool") {
+      // Tool message - check if it needs Dual LLM analysis
 
-      // Extract the original user request from messages (last user message)
-      // This is what the user actually asked for (e.g., "summarize my emails")
-      // The main LLM needs to know this to formulate relevant questions
-      const originalUserRequest =
-        messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
-        "process this data";
-
-      // Extract tool result data from message content
-      // The tool message contains the untrusted data (e.g., email contents)
-      // Parse it if it's JSON, otherwise use as-is
-      let toolResult: any;
-      if (typeof message.content === "string") {
-        try {
-          toolResult = JSON.parse(message.content);
-        } catch {
-          toolResult = message.content;
-        }
-      } else {
-        toolResult = message.content;
-      }
-
-      // Dual LLM Quarantine Pattern:
-      // 1. Main LLM (privileged) asks multiple choice questions
-      // 2. Quarantined LLM sees the untrusted data and answers the questions
-      // 3. Main LLM extracts safe information through Q&A
-      // 4. Returns a safe summary instead of raw untrusted data
-      const dualLlmSubagent = await DualLlmSubagent.create(
-        toolResult,
-        agentId,
+      // First, check if this tool call has already been analyzed
+      const existingResult = await DualLlmResultModel.findByToolCallId(
         message.tool_call_id,
       );
-      const safeContent =
-        await dualLlmSubagent.processWithMainAgent(originalUserRequest);
 
-      // Replace the tool message content with the safe summary
-      filteredMessages.push({
-        ...message,
-        content: safeContent,
-      });
+      if (existingResult) {
+        // Use cached result from database
+        filteredMessages.push({
+          ...message,
+          content: existingResult.result,
+        });
+      } else {
+        // No cached result - run Dual LLM quarantine pattern
+        // Dual LLM Quarantine Pattern:
+        // 1. Main LLM (privileged) asks multiple choice questions
+        // 2. Quarantined LLM sees the untrusted data and answers the questions
+        // 3. Main LLM extracts safe information through Q&A
+        // 4. Returns a safe summary instead of raw untrusted data
+        const dualLlmSubagent = await DualLlmSubagent.create(
+          messages,
+          message,
+          agentId,
+        );
+        const safeContent = await dualLlmSubagent.processWithMainAgent();
+
+        // Replace the tool message content with the safe summary
+        // Note: The result is automatically saved to database in processWithMainAgent
+        filteredMessages.push({
+          ...message,
+          content: safeContent,
+        });
+      }
     } else {
       filteredMessages.push(message);
     }

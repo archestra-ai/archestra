@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type { DualLlmConfig } from "@/types";
+import type { ChatCompletionRequestMessages } from "../types";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -17,43 +18,92 @@ const openai = new OpenAI({
  * - Information flows through structured Q&A, preventing prompt injection
  */
 export class DualLlmSubagent {
-  data: any; // The untrusted tool result data
+  messages: ChatCompletionRequestMessages; // Full conversation history
+  currentMessage: ChatCompletionRequestMessages[number]; // Current tool message being analyzed
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
 
   constructor(
-    toolResult: any,
+    messages: ChatCompletionRequestMessages,
+    currentMessage: ChatCompletionRequestMessages[number],
     config: DualLlmConfig,
     agentId: string,
-    toolCallId: string,
   ) {
-    this.data = toolResult;
+    this.messages = messages;
+    this.currentMessage = currentMessage;
     this.config = config;
     this.agentId = agentId;
-    this.toolCallId = toolCallId;
+
+    // Extract tool_call_id from current message
+    if (currentMessage.role !== "tool") {
+      throw new Error("currentMessage must be a tool message");
+    }
+    this.toolCallId = currentMessage.tool_call_id;
   }
 
   /**
    * Create a DualLlmSubagent instance with configuration loaded from database
    */
   static async create(
-    toolResult: any,
+    messages: ChatCompletionRequestMessages,
+    currentMessage: ChatCompletionRequestMessages[number],
     agentId: string,
-    toolCallId: string,
   ): Promise<DualLlmSubagent> {
     const config = await DualLlmConfigModel.getDefault();
-    return new DualLlmSubagent(toolResult, config, agentId, toolCallId);
+    return new DualLlmSubagent(messages, currentMessage, config, agentId);
+  }
+
+  /**
+   * Extract the user's original request from the conversation.
+   * Currently gets the last user message.
+   * In the future, this could use smarter intent extraction.
+   */
+  private extractUserRequest(): string {
+    const userContent =
+      this.messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
+      "process this data";
+
+    // Convert to string if it's an array (multimodal content)
+    return typeof userContent === "string"
+      ? userContent
+      : JSON.stringify(userContent);
+  }
+
+  /**
+   * Extract the tool result data from the current message.
+   * Parses JSON if possible, otherwise returns as-is.
+   */
+  private extractToolResult(): unknown {
+    if (this.currentMessage.role !== "tool") {
+      throw new Error("Current message is not a tool message");
+    }
+
+    const content = this.currentMessage.content;
+
+    if (typeof content === "string") {
+      try {
+        return JSON.parse(content);
+      } catch {
+        // If content is not valid JSON, use it as-is
+        return content;
+      }
+    }
+
+    return content;
   }
 
   /**
    * Main entry point for the quarantine pattern.
    * Runs a Q&A session between main agent and quarantined agent.
    *
-   * @param originalUserRequest - What the user actually asked for (e.g., "summarize my emails")
    * @returns A safe summary of the information extracted
    */
-  async processWithMainAgent(originalUserRequest: string) {
+  async processWithMainAgent(): Promise<string> {
+    // Extract data from messages
+    const originalUserRequest = this.extractUserRequest();
+    const toolResult = this.extractToolResult();
+
     // Load prompt from database configuration and replace template variable
     const mainAgentPrompt = this.config.mainAgentPrompt.replace(
       "{{originalUserRequest}}",
@@ -110,10 +160,16 @@ export class DualLlmSubagent {
 
       console.log(`\nQuestion: ${question}`);
       console.log(`Options (${options.length}):`);
-      options.forEach((opt, idx) => console.log(`  ${idx}: ${opt}`));
+      for (let idx = 0; idx < options.length; idx++) {
+        console.log(`  ${idx}: ${options[idx]}`);
+      }
 
       // Step 3: Quarantined agent answers the question (can see untrusted data)
-      const answerIndex = await this.answerQuestion(question, options);
+      const answerIndex = await this.answerQuestion(
+        question,
+        options,
+        toolResult,
+      );
       const selectedOption = options[answerIndex];
 
       console.log(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
@@ -152,14 +208,19 @@ export class DualLlmSubagent {
    *
    * @param question - The question to answer
    * @param options - Array of possible answers
+   * @param toolResult - The untrusted tool result data
    * @returns Index of the selected option (0-based)
    */
-  async answerQuestion(question: string, options: string[]) {
+  private async answerQuestion(
+    question: string,
+    options: string[],
+    toolResult: unknown,
+  ): Promise<number> {
     const optionsText = options.map((opt, idx) => `${idx}: ${opt}`).join("\n");
 
     // Load quarantined agent prompt from database configuration and replace template variables
     const quarantinedPrompt = this.config.quarantinedAgentPrompt
-      .replace("{{toolResultData}}", JSON.stringify(this.data, null, 2))
+      .replace("{{toolResultData}}", JSON.stringify(toolResult, null, 2))
       .replace("{{question}}", question)
       .replace("{{options}}", optionsText)
       .replace("{{maxIndex}}", String(options.length - 1));
@@ -212,7 +273,9 @@ export class DualLlmSubagent {
    * @param conversation - The Q&A conversation history
    * @returns A concise summary (2-3 sentences)
    */
-  async generateSummary(conversation: ChatCompletionMessageParam[]) {
+  private async generateSummary(
+    conversation: ChatCompletionMessageParam[],
+  ): Promise<string> {
     // Extract just the Q&A pairs and summarize
     const qaText = conversation
       .map((msg) =>

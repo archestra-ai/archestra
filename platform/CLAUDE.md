@@ -90,6 +90,29 @@ pnpm proxy:dev       # Start OpenAI proxy server on port 9000
 pnpm cli-chat-with-guardrails  # Test guardrails CLI (interactive, requires user input)
 ```
 
+### Environment Variables
+
+The platform uses the following environment variables:
+
+```bash
+# Required
+DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
+
+# Optional
+ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
+NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
+OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
+```
+
+The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
+- URLs already ending with `/v1` are used as-is
+- URLs with trailing slashes have the slash removed before appending `/v1`
+- URLs without trailing components get `/v1` appended
+- Empty string is treated as if the env var is not set (defaults to http://localhost:9000/v1)
+- The backend also uses this URL to parse the port for server binding
+
+The `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` environment variable is used specifically by the frontend. If not set, it defaults to the value of `ARCHESTRA_API_BASE_URL`. This allows for separate frontend/backend configuration if needed.
+
 ### Testing with Example CLI Chats
 
 The platform includes two example CLI chat applications for testing:

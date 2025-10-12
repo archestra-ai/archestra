@@ -1,15 +1,15 @@
 import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import {
   createAgent,
   deleteAgent,
   type GetAgentsResponses,
   getAgents,
   updateAgent,
-} from "@shared/api-client";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+} from "@/lib/clients/api";
 
 export function useAgents(params?: {
   initialData?: GetAgentsResponses["200"];

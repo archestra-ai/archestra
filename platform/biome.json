@@ -14,7 +14,8 @@
       "!.next",
       "!**/dist",
       "!build",
-      "!helm/**/*"
+      "!helm/**/*",
+      "!**/*.gen.ts"
     ]
   },
   "formatter": {

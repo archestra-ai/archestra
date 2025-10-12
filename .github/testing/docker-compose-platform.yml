@@ -1,0 +1,73 @@
+services:
+  platform:
+    image: archestra/platform:ci-test
+    container_name: archestra-platform-test
+    ports:
+      - "9000:9000"
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  platform-custom-api-base-url:
+    image: archestra/platform:ci-test
+    container_name: archestra-platform-test-custom-api-base-url
+    ports:
+      - "9001:9001"
+      - "3001:3000"
+    environment:
+      - ARCHESTRA_API_BASE_URL=http://localhost:9001
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgresql:
+    image: postgres:16-alpine
+    container_name: archestra-platform-test-postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=archestra
+      - POSTGRES_PASSWORD=archestra_dev_password
+      - POSTGRES_DB=archestra_dev
+
+  platform-custom-database-url:
+    image: archestra/platform:ci-test
+    container_name: archestra-platform-test-custom-database-url
+    ports:
+      - "9002:9000"
+      - "3002:3000"
+    environment:
+      - DATABASE_URL=postgresql://archestra:archestra_dev_password@archestra-platform-test-postgresql:5432/archestra_dev?schema=public
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/",
+        ]

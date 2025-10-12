@@ -3,6 +3,14 @@ archestra:
   # This image contains both the backend API and frontend
   image: archestra/platform:latest
 
+  # Additional environment variables to pass to the container
+  # These will be merged with the default DATABASE_URL environment variable
+  # Example:
+  #   env:
+  #     ARCHESTRA_API_BASE_URL: "https://api.example.com"
+  #     CUSTOM_VAR: "custom-value"
+  env: {}
+
 # PostgreSQL configuration
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance

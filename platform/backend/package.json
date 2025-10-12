@@ -5,10 +5,11 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "type": "module",
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "tsup",
     "start": "node dist/server.js",
-    "dev": "tsx --watch src/server.ts",
+    "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",
@@ -18,8 +19,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx src/database/seed.ts",
-    "db:clean": "tsx src/database/clean-db-on-dev.ts"
+    "db:seed": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-db.ts",
+    "db:clean": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/clean-db-on-dev.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -47,9 +48,9 @@
     "@types/pg": "^8.15.5",
     "@types/uuid": "^11.0.0",
     "tsc-alias": "^1.8.10",
+    "tsup": "^8.5.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.0",
-    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   }
 }

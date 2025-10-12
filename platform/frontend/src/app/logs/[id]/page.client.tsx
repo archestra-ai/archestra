@@ -1,15 +1,15 @@
 "use client";
 
-import type {
-  GetAgentsResponses,
-  GetInteractionResponse,
-} from "@shared/api-client";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo from "@/components/chatbot-demo";
 import Divider from "@/components/divider";
 import { InteractionSummary } from "@/components/interaction-summary";
 import { LoadingSpinner } from "@/components/loading";
+import type {
+  GetAgentsResponses,
+  GetInteractionResponse,
+} from "@/lib/clients/api";
 import { useInteraction } from "@/lib/interaction.query";
 import {
   mapInteractionToUiMessage,

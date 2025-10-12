@@ -1,9 +1,5 @@
 "use client";
 
-import type {
-  GetAgentsResponses,
-  GetInteractionsResponses,
-} from "@shared/api-client";
 import {
   BrainIcon,
   CalendarDaysIcon,
@@ -14,6 +10,10 @@ import {
 import { type ReactElement, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
+import type {
+  GetAgentsResponses,
+  GetInteractionsResponses,
+} from "@/lib/clients/api";
 import {
   toolNamesRefusedForInteraction,
   toolNamesUsedForInteraction,
@@ -146,7 +146,9 @@ function RawLogDetail({
       {typeof value === "string" ? (
         <Badge
           variant="secondary"
-          className={`flex min-w-0 max-w-full justify-start ${isTruncated ? "pr-0" : ""} whitespace-normal`}
+          className={`flex min-w-0 max-w-full justify-start ${
+            isTruncated ? "pr-0" : ""
+          } whitespace-normal`}
         >
           {value}
         </Badge>

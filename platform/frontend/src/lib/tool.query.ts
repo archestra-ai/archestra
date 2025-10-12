@@ -1,14 +1,14 @@
 import {
-  type GetToolsResponses,
-  getTools,
-  type UpdateToolData,
-  updateTool,
-} from "@shared/api-client";
-import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import {
+  type GetToolsResponses,
+  getTools,
+  type UpdateToolData,
+  updateTool,
+} from "@/lib/clients/api";
 
 export function useTools({
   initialData,

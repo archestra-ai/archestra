@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
+import { PublicEnvScript } from "next-runtime-env";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
@@ -26,6 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <PublicEnvScript />
+      </head>
       <body className={`${mainFont.className} antialiased`}>
         <ThemeProvider
           attribute="class"
@@ -37,13 +41,10 @@ export default function RootLayout({
             <SidebarProvider>
               <AppSidebar />
               <main className="h-screen w-full flex flex-col bg-background">
-                {/* Header */}
                 <header className="h-14 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
                   <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
                   <ColorModeToggle />
                 </header>
-
-                {/* Main content */}
                 <div className="flex-1 overflow-auto">{children}</div>
               </main>
               <Toaster />

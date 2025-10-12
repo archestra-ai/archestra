@@ -1,4 +1,4 @@
-import type { GetToolsResponses } from "@shared/api-client";
+import type { GetToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
 
 export function ToolReadonlyDetails({

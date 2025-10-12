@@ -43,6 +43,7 @@ FROM base AS unified
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install PostgreSQL 17 and supervisord
@@ -104,7 +105,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV="production",DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
+environment=NODE_ENV=%(ENV_NODE_ENV)s,DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder"
 
 [program:frontend]
 directory=/app/frontend
@@ -116,7 +117,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV="production",NEXT_PUBLIC_BACKEND_URL="http://localhost:9000",HOSTNAME="0.0.0.0",PORT="3000"
+environment=NODE_ENV=%(ENV_NODE_ENV)s,NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
 EOF
 
 # Create initialization script
@@ -163,8 +164,14 @@ EOSQL
     echo "PostgreSQL initialized successfully"
 fi
 
-# Update supervisord config with actual DATABASE_URL
+# Update supervisord config with actual environment variables
 sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
+
+# NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+# because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client
+# AT RUNTIME (see https://github.com/expatfile/next-runtime-env)
+sed -i "s|ARCHESTRA_API_BASE_URL=\"[^\"]*\"|ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
+sed -i "s|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"[^\"]*\"|NEXT_PUBLIC_ARCHESTRA_API_BASE_URL=\"${ARCHESTRA_API_BASE_URL}\"|" /etc/supervisord.conf
 
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisord.conf

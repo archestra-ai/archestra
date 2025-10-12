@@ -7,9 +7,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { vi } from "vitest";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let pgliteClient: PGlite | null = null;
 let testDb: ReturnType<typeof drizzle> | null = null;

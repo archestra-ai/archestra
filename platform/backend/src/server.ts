@@ -9,7 +9,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { createAdminUser } from "./auth/create-admin";
 import { seedDatabase } from "./database/seed";
 import { authMiddleware } from "./middleware/auth-middleware";
 import * as routes from "./routes";

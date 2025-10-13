@@ -82,7 +82,15 @@ function DualLLMContent({
                 Dual LLM Agent Configuration
               </h1>
               <p className="text-sm text-muted-foreground">
-                Configure the dual LLM pattern for enhanced security
+                Configure the dual LLM pattern for enhanced security.{" "}
+                <a
+                  href="https://archestra.ai/docs/platform-dual-llm"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Learn more →
+                </a>
               </p>
             </div>
             <Button

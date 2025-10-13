@@ -7,5 +7,5 @@ import type { CreateClientConfig } from "./client.gen";
  */
 export const createClientConfig: CreateClientConfig = (config) => ({
   ...config,
-  baseUrl: env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL"),
+  baseUrl: env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL") || "http://localhost:9000",
 });

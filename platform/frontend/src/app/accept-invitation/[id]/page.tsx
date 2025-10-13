@@ -2,8 +2,9 @@
 
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,126 +13,71 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/loading";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import {
+  useAcceptInvitation,
+  useInvitation,
+  useRejectInvitation,
+} from "@/lib/organization.query";
 
-export default function AcceptInvitationPage() {
+function InvitationContent() {
   const params = useParams();
   const router = useRouter();
   const invitationId = params.id as string;
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAccepting, setIsAccepting] = useState(false);
-  const [invitation, setInvitation] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
+  const { data: invitation, error: invitationError } = useInvitation(invitationId);
+  const acceptMutation = useAcceptInvitation();
+  const rejectMutation = useRejectInvitation();
 
+  // If user is not authenticated, redirect immediately to sign-up
   useEffect(() => {
-    const fetchInvitation = async () => {
-      if (!invitationId) return;
+    if (!session && invitationId) {
+      const signUpUrl = `/auth/sign-up-with-invitation?invitationId=${invitationId}`;
+      router.push(signUpUrl);
+    }
+  }, [session, invitationId, router]);
 
-      // If user is not authenticated, redirect immediately to sign-up
-      if (!session) {
-        const signUpUrl = `/auth/sign-up-with-invitation?invitationId=${invitationId}`;
-        router.push(signUpUrl);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const { data, error } = await authClient.organization.getInvitation({
-          query: {
-            id: invitationId,
-          },
-        });
-
-        if (error) {
-          setError(error.message || "Failed to load invitation");
-        } else if (data) {
-          // Check if invitation is already accepted
-          if (data.status === "accepted") {
-            toast.info("Already accepted", {
-              description: "This invitation has already been accepted",
-            });
-            router.push("/");
-            return;
-          }
-
-          setInvitation(data);
-        }
-      } catch (_err) {
-        setError("An unexpected error occurred");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchInvitation();
-  }, [invitationId, session, router]);
+  // Check if invitation is already accepted
+  useEffect(() => {
+    if (invitation?.status === "accepted") {
+      toast.info("Already accepted", {
+        description: "This invitation has already been accepted",
+      });
+      router.push("/");
+    }
+  }, [invitation, router]);
 
   const handleAccept = async () => {
-    setIsAccepting(true);
     try {
-      const { error } = await authClient.organization.acceptInvitation({
-        invitationId,
+      await acceptMutation.mutateAsync(invitationId);
+      toast.success("Invitation accepted", {
+        description: "You have successfully joined the organization",
       });
-
-      if (error) {
-        toast.error("Error", {
-          description: error.message || "Failed to accept invitation",
-        });
-      } else {
-        toast.success("Invitation accepted", {
-          description: "You have successfully joined the organization",
-        });
-        router.push("/");
-      }
-    } catch (_err) {
+      router.push("/");
+    } catch (error: any) {
       toast.error("Error", {
-        description: "An unexpected error occurred",
+        description: error.message || "Failed to accept invitation",
       });
-    } finally {
-      setIsAccepting(false);
     }
   };
 
   const handleReject = async () => {
-    setIsAccepting(true);
     try {
-      const { error } = await authClient.organization.rejectInvitation({
-        invitationId,
+      await rejectMutation.mutateAsync(invitationId);
+      toast.success("Invitation rejected", {
+        description: "You have declined the invitation",
       });
-
-      if (error) {
-        toast.error("Error", {
-          description: error.message || "Failed to reject invitation",
-        });
-      } else {
-        toast.success("Invitation rejected", {
-          description: "You have declined the invitation",
-        });
-        router.push("/");
-      }
-    } catch (_err) {
+      router.push("/");
+    } catch (error: any) {
       toast.error("Error", {
-        description: "An unexpected error occurred",
+        description: error.message || "Failed to reject invitation",
       });
-    } finally {
-      setIsAccepting(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <main className="container p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-muted-foreground">Loading invitation...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !invitation) {
+  if (invitationError || !invitation) {
     return (
       <main className="container p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
         <Card className="max-w-md w-full">
@@ -141,7 +87,7 @@ export default function AcceptInvitationPage() {
               Invalid Invitation
             </CardTitle>
             <CardDescription>
-              {error || "This invitation is invalid or has expired"}
+              {invitationError?.message || "This invitation is invalid or has expired"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -157,6 +103,8 @@ export default function AcceptInvitationPage() {
       </main>
     );
   }
+
+  const isProcessing = acceptMutation.isPending || rejectMutation.isPending;
 
   return (
     <main className="container p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
@@ -195,15 +143,15 @@ export default function AcceptInvitationPage() {
           <div className="flex gap-2">
             <Button
               onClick={handleAccept}
-              disabled={isAccepting}
+              disabled={isProcessing}
               className="flex-1"
             >
-              {isAccepting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {acceptMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Accept
             </Button>
             <Button
               onClick={handleReject}
-              disabled={isAccepting}
+              disabled={isProcessing}
               variant="outline"
               className="flex-1"
             >
@@ -213,5 +161,17 @@ export default function AcceptInvitationPage() {
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+export default function AcceptInvitationPage() {
+  return (
+    <div className="container mx-auto">
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <InvitationContent />
+        </Suspense>
+      </ErrorBoundary>
+    </div>
   );
 }

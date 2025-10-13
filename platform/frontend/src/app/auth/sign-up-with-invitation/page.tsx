@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useProcessInvitation } from "@/lib/organization.query";
 
 export default function SignUpWithInvitationPage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function SignUpWithInvitationPage() {
   const _email = searchParams.get("email");
 
   const { data: session } = authClient.useSession();
+  const { processInvitation } = useProcessInvitation();
 
   // Check if user is already authenticated on mount
   useEffect(() => {
@@ -33,7 +35,7 @@ export default function SignUpWithInvitationPage() {
 
   // Handle auto-accept after sign-up
   useEffect(() => {
-    const processInvitation = async () => {
+    const handleProcessInvitation = async () => {
       // Don't auto-accept if we're redirecting an already-authenticated user
       if (isRedirecting) return;
 
@@ -42,32 +44,22 @@ export default function SignUpWithInvitationPage() {
         setHasProcessed(true);
 
         try {
-          const { error } = await authClient.organization.acceptInvitation({
-            invitationId,
+          await processInvitation(invitationId);
+          toast.success("Welcome!", {
+            description:
+              "Your account has been created and you've joined the organization",
           });
-
-          if (error) {
-            toast.error("Error", {
-              description: error.message || "Failed to accept invitation",
-            });
-            router.push(`/accept-invitation/${invitationId}`);
-          } else {
-            toast.success("Welcome!", {
-              description:
-                "Your account has been created and you've joined the organization",
-            });
-            router.push("/");
-          }
-        } catch (_err) {
+          router.push("/");
+        } catch (error: any) {
           toast.error("Error", {
-            description: "An unexpected error occurred",
+            description: error.message || "Failed to accept invitation",
           });
           router.push(`/accept-invitation/${invitationId}`);
         }
       }
     };
 
-    processInvitation();
+    handleProcessInvitation();
   }, [
     session,
     invitationId,
@@ -75,6 +67,7 @@ export default function SignUpWithInvitationPage() {
     router,
     initialSessionChecked,
     isRedirecting,
+    processInvitation,
   ]);
 
   return (

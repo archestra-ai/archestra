@@ -8,7 +8,7 @@ import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { Providers } from "./providers";
+import { AuthProvider } from "./auth-provider";
 
 const mainFont = Lato({
   subsets: ["latin"],
@@ -32,7 +32,7 @@ export default function RootLayout({
         <PublicEnvScript />
       </head>
       <body className={`${mainFont.className} antialiased`}>
-        <Providers>
+        <AuthProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -56,7 +56,7 @@ export default function RootLayout({
               </ArchestraQueryClientProvider>
             </PostHogProviderWrapper>
           </ThemeProvider>
-        </Providers>
+        </AuthProvider>
       </body>
     </html>
   );

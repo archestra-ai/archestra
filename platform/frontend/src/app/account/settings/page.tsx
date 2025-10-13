@@ -7,9 +7,11 @@ import {
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
 import { Shield, User, Users } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { InvitePendingList } from "@/components/invite-pending-list";
+import { LoadingSpinner } from "@/components/loading";
 import {
   Card,
   CardContent,
@@ -24,43 +26,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import {
+  useActiveMemberRole,
+  useActiveOrganization,
+} from "@/lib/organization.query";
 
-export default function AccountSettingsPage() {
-  const { data: session, isPending } = authClient.useSession();
-  const { data: activeOrg } = authClient.useActiveOrganization();
-  const [activeMemberRole, setActiveMemberRole] = useState<string | null>(null);
+function SettingsContent() {
+  const { data: activeOrg } = useActiveOrganization();
+  const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [_refreshKey, _setRefreshKey] = useState(0);
-
-  const fetchRole = useCallback(async () => {
-    if (!activeOrg?.id) return;
-    try {
-      const { data } = await authClient.organization.getActiveMemberRole();
-      const role =
-        data && typeof data === "object" && "role" in data
-          ? (data as any).role
-          : (data as any);
-      setActiveMemberRole(role || null);
-    } catch (_err) {
-      setActiveMemberRole(null);
-    }
-  }, [activeOrg?.id]);
-
-  useEffect(() => {
-    fetchRole();
-  }, [fetchRole]);
-
-  if (isPending) {
-    return (
-      <main className="container p-4 md:p-6">
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main className="container p-4 md:p-6">
@@ -160,5 +135,15 @@ export default function AccountSettingsPage() {
         </TabsContent>
       </Tabs>
     </main>
+  );
+}
+
+export default function AccountSettingsPage() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingSpinner />}>
+        <SettingsContent />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

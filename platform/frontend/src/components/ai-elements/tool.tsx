@@ -44,7 +44,7 @@ const getStatusBadge = (
     "input-streaming": "Pending",
     "input-available": "Running",
     "output-available": "Completed",
-    "output-available-dual-llm": "Completed With Dual LLM",
+    "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
   } as const;
 

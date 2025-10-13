@@ -47,7 +47,7 @@ function DefaultFallbackComponent({
         </CardContent>
         <CardFooter>
           <Button onClick={resetErrorBoundary} className="w-full">
-            Try Again
+            Try again
           </Button>
         </CardFooter>
       </Card>

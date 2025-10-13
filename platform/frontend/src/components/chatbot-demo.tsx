@@ -317,7 +317,7 @@ const ChatBotDemo = ({
                                     toolResultPart.errorText
                                       ? "Error"
                                       : dualLlmPart
-                                        ? "Unsafe Result"
+                                        ? "Unsafe result"
                                         : "Result"
                                   }
                                   output={toolResultPart.output as unknown}
@@ -330,7 +330,7 @@ const ChatBotDemo = ({
                                     part.errorText
                                       ? "Error"
                                       : dualLlmPart
-                                        ? "Unsafe Result"
+                                        ? "Unsafe result"
                                         : "Result"
                                   }
                                   output={part.output as unknown}
@@ -340,7 +340,7 @@ const ChatBotDemo = ({
                               {dualLlmPart && (
                                 <>
                                   <ToolOutput
-                                    label="Safe Result"
+                                    label="Safe result"
                                     output={dualLlmPart.safeResult}
                                   />
                                   <ToolOutput
@@ -432,11 +432,11 @@ const ChatBotDemo = ({
                               />
                               <ToolContent>
                                 <ToolOutput
-                                  label="Safe Result"
+                                  label="Safe result"
                                   output={dualLlmPart.safeResult}
                                 />
                                 <ToolOutput
-                                  label="Questions and Answers"
+                                  label="Questions and answers"
                                   output={undefined}
                                   conversations={dualLlmPart.conversations.slice(
                                     1,

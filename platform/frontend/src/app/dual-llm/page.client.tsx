@@ -237,7 +237,7 @@ function DualLLMContent({
               onClick={handleSave}
               disabled={!hasChanges || updateConfig.isPending}
             >
-              {updateConfig.isPending ? "Saving..." : "Save Changes"}
+              {updateConfig.isPending ? "Saving..." : "Save changes"}
             </Button>
           </div>
         </div>
@@ -246,7 +246,7 @@ function DualLLMContent({
       <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="space-y-6">
           <div className="bg-card rounded-lg p-8 shadow-sm">
-            <h2 className="text-lg font-semibold mb-2">How It Works</h2>
+            <h2 className="text-lg font-semibold mb-2">How it works</h2>
             <p className="text-sm text-muted-foreground mb-6">
               The dual LLM pattern uses two separate agents: a quarantined agent
               that has access to untrusted data but can only respond with

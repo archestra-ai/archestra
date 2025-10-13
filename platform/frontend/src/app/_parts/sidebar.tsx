@@ -135,7 +135,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Security Sub-agents</SidebarGroupLabel>
+          <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {actionItems.map((item) => (
@@ -208,7 +208,7 @@ export function AppSidebar() {
                     rel="noopener noreferrer"
                   >
                     <Bug />
-                    <span>Report a Bug</span>
+                    <span>Report a bug</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>

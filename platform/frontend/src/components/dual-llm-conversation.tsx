@@ -73,8 +73,8 @@ export function DualLlmConversation({ result }: { result: DualLlmResult }) {
                           className="text-xs"
                         >
                           {msg.role === "user"
-                            ? "Main Agent"
-                            : "Quarantined Agent"}
+                            ? "Main agent"
+                            : "Quarantined agent"}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           Round {Math.ceil((idx + 1) / 2)}

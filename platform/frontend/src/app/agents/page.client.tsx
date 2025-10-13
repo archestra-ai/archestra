@@ -224,7 +224,7 @@ function CreateAgentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Agent</DialogTitle>
+          <DialogTitle>Create new agent</DialogTitle>
           <DialogDescription>
             Create a new agent to use with the Archestra Platform proxy.
           </DialogDescription>
@@ -251,7 +251,7 @@ function CreateAgentDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={createAgent.isPending}>
-              {createAgent.isPending ? "Creating..." : "Create Agent"}
+              {createAgent.isPending ? "Creating..." : "Create agent"}
             </Button>
           </DialogFooter>
         </form>
@@ -295,7 +295,7 @@ function EditAgentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Agent</DialogTitle>
+          <DialogTitle>Edit agent</DialogTitle>
           <DialogDescription>Update the agent's name.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -320,7 +320,7 @@ function EditAgentDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={updateAgent.isPending}>
-              {updateAgent.isPending ? "Updating..." : "Update Agent"}
+              {updateAgent.isPending ? "Updating..." : "Update agent"}
             </Button>
           </DialogFooter>
         </form>
@@ -354,7 +354,7 @@ function DeleteAgentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete Agent</DialogTitle>
+          <DialogTitle>Delete agent</DialogTitle>
           <DialogDescription>
             Are you sure you want to delete this agent? This action cannot be
             undone.
@@ -373,7 +373,7 @@ function DeleteAgentDialog({
             onClick={handleDelete}
             disabled={deleteAgent.isPending}
           >
-            {deleteAgent.isPending ? "Deleting..." : "Delete Agent"}
+            {deleteAgent.isPending ? "Deleting..." : "Delete agent"}
           </Button>
         </DialogFooter>
       </DialogContent>

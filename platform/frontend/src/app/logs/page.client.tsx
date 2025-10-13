@@ -58,25 +58,23 @@ export default function LogsPage({
   };
 }) {
   return (
-    <div className="container mx-auto overflow-y-auto">
-      <div className="w-full h-full">
-        <div className="border-b border-border bg-card/30">
-          <div className="max-w-7xl mx-auto px-8 py-8">
-            <h1 className="text-2xl font-semibold tracking-tight mb-2">Logs</h1>
-            <p className="text-sm text-muted-foreground">
-              View all interactions between your agents and LLMs, including
-              requests, responses, and tool invocations.
-            </p>
-          </div>
+    <div className="w-full h-full overflow-y-auto">
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+          <h1 className="text-2xl font-semibold tracking-tight mb-2">Logs</h1>
+          <p className="text-sm text-muted-foreground">
+            View all interactions between your agents and LLMs, including
+            requests, responses, and tool invocations.
+          </p>
         </div>
+      </div>
 
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingSpinner />}>
-              <LogsTable initialData={initialData} />
-            </Suspense>
-          </ErrorBoundary>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingSpinner />}>
+            <LogsTable initialData={initialData} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </div>
   );
@@ -102,17 +100,17 @@ function LogsTable({
   }
 
   return (
-    <div className="border rounded-lg">
+    <div className="border rounded-lg overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[140px]">Date</TableHead>
-            <TableHead className="w-[150px]">Agent</TableHead>
-            <TableHead className="w-[120px]">Model</TableHead>
-            <TableHead className="w-[200px]">User Message</TableHead>
-            <TableHead className="w-[200px]">Assistant Response</TableHead>
-            <TableHead className="w-[180px]">Tools</TableHead>
-            <TableHead className="w-[80px]">Actions</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Agent</TableHead>
+            <TableHead>Model</TableHead>
+            <TableHead>User Message</TableHead>
+            <TableHead>Assistant Response</TableHead>
+            <TableHead>Tools</TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

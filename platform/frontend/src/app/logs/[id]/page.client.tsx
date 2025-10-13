@@ -43,14 +43,12 @@ export function ChatPage({
   id: string;
 }) {
   return (
-    <div className="container mx-auto overflow-y-auto">
-      <div className="w-full h-full">
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingSpinner />}>
-            <LogDetail initialData={initialData} id={id} />
-          </Suspense>
-        </ErrorBoundary>
-      </div>
+    <div className="w-full h-full overflow-y-auto">
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <LogDetail initialData={initialData} id={id} />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }
@@ -157,7 +155,7 @@ function LogDetail({
     <>
       {/* Header */}
       <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
           <div className="flex items-center gap-4 mb-2">
             <Button variant="ghost" size="icon" asChild>
               <Link href="/logs">
@@ -174,7 +172,7 @@ function LogDetail({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
         {/* Metadata Section */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Metadata</h2>
@@ -267,8 +265,8 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Request</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4">
-                  <pre className="text-xs overflow-auto">
+                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-xs">
                     {JSON.stringify(interaction.request, null, 2)}
                   </pre>
                 </div>
@@ -280,8 +278,8 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <div className="bg-muted rounded-lg p-4">
-                  <pre className="text-xs overflow-auto">
+                <div className="bg-muted rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-xs">
                     {JSON.stringify(interaction.response, null, 2)}
                   </pre>
                 </div>

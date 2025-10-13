@@ -90,10 +90,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run E2E tests
-        working-directory: ./platform/e2e-tests
+        working-directory: ./platform
         run: pnpm test:e2e
-        env:
-          BASE_URL: http://localhost:3000
 
       - name: Upload Playwright report
         if: always()

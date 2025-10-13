@@ -101,31 +101,33 @@ function LogsTable({
 
   return (
     <div className="border rounded-lg overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Agent</TableHead>
-            <TableHead>Model</TableHead>
-            <TableHead>User Message</TableHead>
-            <TableHead>Assistant Response</TableHead>
-            <TableHead>Tools</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {interactions.map((interaction) => {
-            const agent = agents?.find((a) => a.id === interaction.agentId);
-            return (
-              <LogRow
-                key={interaction.id}
-                interaction={interaction}
-                agent={agent}
-              />
-            );
-          })}
-        </TableBody>
-      </Table>
+      <div className="w-[fit-content]">
+        <Table className="overflow-x-auto">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[140px]">Date</TableHead>
+              <TableHead className="w-[140px]">Agent</TableHead>
+              <TableHead className="w-[100px]">Model</TableHead>
+              <TableHead className="w-[180px]">User Message</TableHead>
+              <TableHead className="w-[180px]">Assistant Response</TableHead>
+              <TableHead className="w-[160px]">Tools</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {interactions.map((interaction) => {
+              const agent = agents?.find((a) => a.id === interaction.agentId);
+              return (
+                <LogRow
+                  key={interaction.id}
+                  interaction={interaction}
+                  agent={agent}
+                />
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

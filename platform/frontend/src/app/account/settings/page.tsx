@@ -2,6 +2,7 @@
 
 import {
   AccountSettingsCards,
+  DeleteAccountCard,
   OrganizationMembersCard,
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
@@ -92,7 +93,10 @@ export default function AccountSettingsPage() {
         </TabsList>
 
         <TabsContent value="account" className="mt-6">
-          <AccountSettingsCards />
+          <div className="space-y-6">
+            <AccountSettingsCards />
+            <DeleteAccountCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="security" className="mt-6">

@@ -29,6 +29,13 @@ export default function AcceptInvitationPage() {
     const fetchInvitation = async () => {
       if (!invitationId) return;
 
+      // If user is not authenticated, redirect immediately to sign-up
+      if (!session) {
+        const signUpUrl = `/auth/sign-up-with-invitation?invitationId=${invitationId}`;
+        router.push(signUpUrl);
+        return;
+      }
+
       setIsLoading(true);
       try {
         const { data, error } = await authClient.organization.getInvitation({
@@ -40,6 +47,15 @@ export default function AcceptInvitationPage() {
         if (error) {
           setError(error.message || "Failed to load invitation");
         } else if (data) {
+          // Check if invitation is already accepted
+          if (data.status === "accepted") {
+            toast.info("Already accepted", {
+              description: "This invitation has already been accepted",
+            });
+            router.push("/");
+            return;
+          }
+
           setInvitation(data);
         }
       } catch (_err) {
@@ -50,19 +66,9 @@ export default function AcceptInvitationPage() {
     };
 
     fetchInvitation();
-  }, [invitationId]);
+  }, [invitationId, session, router]);
 
   const handleAccept = async () => {
-    if (!session) {
-      const signUpUrl = `/sign-up?email=${encodeURIComponent(invitation?.email || "")}&redirect=/accept-invitation/${invitationId}`;
-      toast.info("Create your account", {
-        description:
-          "Please create an account or sign in to accept this invitation",
-      });
-      router.push(signUpUrl);
-      return;
-    }
-
     setIsAccepting(true);
     try {
       const { error } = await authClient.organization.acceptInvitation({
@@ -89,15 +95,6 @@ export default function AcceptInvitationPage() {
   };
 
   const handleReject = async () => {
-    if (!session) {
-      const signInUrl = `/sign-in?email=${encodeURIComponent(invitation?.email || "")}&redirect=/accept-invitation/${invitationId}`;
-      toast.info("Sign in required", {
-        description: "Please sign in to reject this invitation",
-      });
-      router.push(signInUrl);
-      return;
-    }
-
     setIsAccepting(true);
     try {
       const { error } = await authClient.organization.rejectInvitation({
@@ -178,7 +175,7 @@ export default function AcceptInvitationPage() {
             <div className="flex justify-between">
               <span className="text-sm font-medium">Organization:</span>
               <span className="text-sm text-muted-foreground">
-                {invitation.organization?.name || "Unknown"}
+                {invitation.organizationName || "Unknown"}
               </span>
             </div>
             <div className="flex justify-between">
@@ -190,65 +187,29 @@ export default function AcceptInvitationPage() {
             <div className="flex justify-between">
               <span className="text-sm font-medium">Invited by:</span>
               <span className="text-sm text-muted-foreground">
-                {invitation.inviter?.user?.name ||
-                  invitation.inviter?.user?.email ||
-                  "Unknown"}
+                {invitation.inviterEmail || "Unknown"}
               </span>
             </div>
           </div>
 
-          {!session ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                To join this organization, you need to create an account or sign
-                in.
-              </p>
-              <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() =>
-                    router.push(
-                      `/sign-up?email=${encodeURIComponent(invitation?.email || "")}&redirect=/accept-invitation/${invitationId}`,
-                    )
-                  }
-                  className="w-full"
-                >
-                  Create Account & Accept
-                </Button>
-                <Button
-                  onClick={() =>
-                    router.push(
-                      `/sign-in?email=${encodeURIComponent(invitation?.email || "")}&redirect=/accept-invitation/${invitationId}`,
-                    )
-                  }
-                  variant="outline"
-                  className="w-full"
-                >
-                  Already have an account? Sign In
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Button
-                onClick={handleAccept}
-                disabled={isAccepting}
-                className="flex-1"
-              >
-                {isAccepting && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Accept
-              </Button>
-              <Button
-                onClick={handleReject}
-                disabled={isAccepting}
-                variant="outline"
-                className="flex-1"
-              >
-                Reject
-              </Button>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAccept}
+              disabled={isAccepting}
+              className="flex-1"
+            >
+              {isAccepting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Accept
+            </Button>
+            <Button
+              onClick={handleReject}
+              disabled={isAccepting}
+              variant="outline"
+              className="flex-1"
+            >
+              Reject
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </main>

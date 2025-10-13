@@ -17,6 +17,12 @@ export const auth = betterAuth({
     admin(),
   ],
 
+  user: {
+    deleteUser: {
+      enabled: true,
+    },
+  },
+
   trustedOrigins: ["http://localhost:3000", "https://archestra.ai"],
 
   database: drizzleAdapter(db, {

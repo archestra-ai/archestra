@@ -7,6 +7,7 @@ export function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/auth/sign-in") ||
     pathname.startsWith("/auth/sign-up") ||
+    pathname.startsWith("/accept-invitation") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   ) {

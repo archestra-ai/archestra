@@ -15,5 +15,4 @@ test('can create and deletean agent', async ({ page }) => {
   await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`).click();
   await page.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).not.toBeVisible();
-  await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).toBeVisible(); // TODO revert
 });

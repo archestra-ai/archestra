@@ -13,6 +13,7 @@ import { createAdminUser } from "./auth/create-admin";
 import { seedDatabase } from "./database/seed";
 import { authMiddleware } from "./middleware/auth-middleware";
 import * as routes from "./routes";
+import User from "@/models/user";
 
 const {
   api: { port, name, version, host },
@@ -39,7 +40,7 @@ const start = async () => {
   try {
     // Seed database with demo data
     await seedDatabase();
-    await createAdminUser();
+    await User.createAdminUser();
 
     /**
      * Register CORS plugin to allow cross-origin requests from frontend

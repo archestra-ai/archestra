@@ -98,7 +98,7 @@ The platform uses the following environment variables:
 # Required
 DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
-# Optional
+# Optional (not included in default Helm deployment)
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
 OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
@@ -657,6 +657,9 @@ The platform includes a simplified Helm chart for Kubernetes deployments:
   ```
 - **Configuration**:
   - `archestra.image`: Docker image to deploy (default: `archestra/platform:latest`)
+  - `archestra.env`: Optional environment variables to inject (default: empty object `{}`)
+    - Example: `archestra.env.ARCHESTRA_API_BASE_URL: "https://api.example.com"`
+    - The default deployment no longer includes hardcoded API URL environment variables
   - `postgresql.external_database_url`: Optional external database URL (format: `postgresql://username:password@host:5432/database`)
   - `postgresql.*`: Bitnami PostgreSQL chart configuration when using internal database
     - Uses `bitnamisecure/postgresql:latest` image due to Bitnami repository changes

@@ -1,14 +1,22 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import ChatBotDemo, {
   type DualLlmPart,
   type PartialUIMessage,
 } from "@/components/chatbot-demo";
-import Divider from "@/components/divider";
-import { InteractionSummary } from "@/components/interaction-summary";
 import { LoadingSpinner } from "@/components/loading";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type {
   GetAgentsResponses,
   GetInteractionResponse,
@@ -16,9 +24,13 @@ import type {
 import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
 import {
+  getLastToolCallId,
+  isLastMessageToolCall,
   mapInteractionToUiMessage,
-  toolsRefusedCountForInteraction,
+  toolNamesRefusedForInteraction,
+  toolNamesUsedForInteraction,
 } from "@/lib/interaction.utils";
+import { formatDate } from "@/lib/utils";
 
 export function ChatPage({
   initialData,
@@ -31,17 +43,19 @@ export function ChatPage({
   id: string;
 }) {
   return (
-    <div className="container mx-auto">
-      <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Chat initialData={initialData} id={id} />
-        </Suspense>
-      </ErrorBoundary>
+    <div className="container mx-auto overflow-y-auto">
+      <div className="w-full h-full">
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingSpinner />}>
+            <LogDetail initialData={initialData} id={id} />
+          </Suspense>
+        </ErrorBoundary>
+      </div>
     </div>
   );
 }
 
-export function Chat({
+function LogDetail({
   initialData,
   id,
 }: {
@@ -56,16 +70,24 @@ export function Chat({
     initialData: initialData?.interaction,
   });
 
-  // Fetch all dual LLM results for this interaction
   const { data: allDualLlmResults = [] } = useDualLlmResultsByInteraction({
     interactionId: id,
   });
 
   if (!interaction) {
-    return "Interaction not found";
+    return (
+      <div className="text-muted-foreground p-8">Interaction not found</div>
+    );
   }
 
-  const _refusedCount = toolsRefusedCountForInteraction(interaction);
+  const agent = initialData?.agents.find((a) => a.id === interaction.agentId);
+  const toolsUsed = toolNamesUsedForInteraction(interaction);
+  const toolsBlocked = toolNamesRefusedForInteraction(interaction);
+  const isDualLlmRelevant = isLastMessageToolCall(interaction);
+  const lastToolCallId = getLastToolCallId(interaction);
+  const dualLlmResult = allDualLlmResults.find(
+    (r) => r.toolCallId === lastToolCallId,
+  );
 
   // Map request messages, combining tool calls with their results and dual LLM analysis
   const requestMessages: PartialUIMessage[] = [];
@@ -98,17 +120,17 @@ export function Chat({
           toolCallParts.push(...toolResultUiMsg.parts);
 
           // Check if there's a dual LLM result for this tool call
-          const dualLlmResult = allDualLlmResults.find(
+          const dualLlmResultForTool = allDualLlmResults.find(
             (result) => result.toolCallId === toolCall.id,
           );
 
-          if (dualLlmResult) {
+          if (dualLlmResultForTool) {
             const dualLlmPart: DualLlmPart = {
               type: "dual-llm-analysis",
-              toolCallId: dualLlmResult.toolCallId,
-              safeResult: dualLlmResult.result,
-              conversations: Array.isArray(dualLlmResult.conversations)
-                ? (dualLlmResult.conversations as DualLlmPart["conversations"])
+              toolCallId: dualLlmResultForTool.toolCallId,
+              safeResult: dualLlmResultForTool.result,
+              conversations: Array.isArray(dualLlmResultForTool.conversations)
+                ? (dualLlmResultForTool.conversations as DualLlmPart["conversations"])
                 : [],
             };
             toolCallParts.push(dualLlmPart);
@@ -133,19 +155,140 @@ export function Chat({
 
   return (
     <>
-      <Divider />
-      <div className="px-2">
-        <ChatBotDemo
-          messages={requestMessages}
-          topPart={
-            <InteractionSummary
-              interaction={interaction}
-              agent={initialData?.agents.find(
-                (agent) => agent.id === interaction.agentId,
+      {/* Header */}
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <div className="flex items-center gap-4 mb-2">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/logs">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Log Details
+            </h1>
+          </div>
+          <p className="text-sm text-muted-foreground ml-14">
+            {formatDate({ date: interaction.createdAt })}
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-8 py-8 space-y-8">
+        {/* Metadata Section */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Metadata</h2>
+          <div className="border border-border rounded-lg p-6 bg-card">
+            <div className="grid grid-cols-2 gap-x-12 gap-y-6">
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Agent Name
+                </div>
+                <div className="font-medium">{agent?.name ?? "Unknown"}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">Model</div>
+                <div className="font-medium">{interaction.request.model}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Tools Used
+                </div>
+                {toolsUsed.length > 0 ? (
+                  <div className="space-y-1">
+                    {toolsUsed.map((toolName) => (
+                      <div key={toolName} className="font-mono text-sm">
+                        {toolName}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">None</div>
+                )}
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Tools Blocked
+                </div>
+                {toolsBlocked.length > 0 ? (
+                  <div className="space-y-1">
+                    {toolsBlocked.map((toolName) => (
+                      <div key={toolName} className="font-mono text-sm">
+                        {toolName}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">None</div>
+                )}
+              </div>
+              {isDualLlmRelevant && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Dual LLM Analysis
+                  </div>
+                  {dualLlmResult ? (
+                    <Badge className="bg-green-600">Analyzed</Badge>
+                  ) : (
+                    <div className="text-muted-foreground">Not analyzed</div>
+                  )}
+                </div>
               )}
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Timestamp
+                </div>
+                <div className="font-medium">
+                  {formatDate({ date: interaction.createdAt })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Conversation Section */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Conversation</h2>
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <ChatBotDemo
+              messages={requestMessages}
+              containerClassName="h-auto"
+              hideDivider={true}
             />
-          }
-        />
+          </div>
+        </div>
+
+        {/* Raw Data Section */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Raw Data</h2>
+          <Accordion type="single" collapsible defaultValue="response">
+            <AccordionItem value="request" className="border rounded-lg mb-2">
+              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                <span className="text-base font-semibold">Raw Request</span>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <div className="bg-muted rounded-lg p-4">
+                  <pre className="text-xs overflow-auto">
+                    {JSON.stringify(interaction.request, null, 2)}
+                  </pre>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="response" className="border rounded-lg">
+              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                <span className="text-base font-semibold">Raw Response</span>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <div className="bg-muted rounded-lg p-4">
+                  <pre className="text-xs overflow-auto">
+                    {JSON.stringify(interaction.response, null, 2)}
+                  </pre>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
       </div>
     </>
   );

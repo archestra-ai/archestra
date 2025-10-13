@@ -1,5 +1,6 @@
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
+import Link from "next/link";
 import { DebouncedInput } from "@/components/debounced-input";
 import {
   Accordion,
@@ -7,6 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,6 +21,7 @@ import type {
   GetToolsResponse,
   GetTrustedDataPoliciesResponse,
 } from "@/lib/clients/api";
+import { useDualLlmConfig } from "@/lib/dual-llm-config.query";
 import {
   useOperators,
   useToolResultPolicies,
@@ -171,12 +174,17 @@ export function ToolResultPolicies({
     data: { byToolId },
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
+  const { data: dualLlmConfig } = useDualLlmConfig();
   const policies = byToolId[tool.id] || [];
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
   const toolPatchMutation = useToolPatchMutation();
+
+  // Determine if Dual LLM will be triggered based on the default action
+  const isDualLlmEnabled = dualLlmConfig?.enabled ?? false;
+  const willTriggerDualLlm = !tool.dataIsTrustedByDefault && isDualLlmEnabled;
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -256,6 +264,19 @@ export function ToolResultPolicies({
               ))}
             </SelectContent>
           </Select>
+          {willTriggerDualLlm ? (
+            <Badge variant="default" asChild>
+              <Link href="/dual-llm" className="cursor-pointer">
+                Dual LLM will activate
+              </Link>
+            </Badge>
+          ) : (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dual-llm">
+                Configure Dual LLM →
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
       {policies.map((policy) => (

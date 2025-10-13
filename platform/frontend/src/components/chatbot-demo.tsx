@@ -80,6 +80,7 @@ const ChatBotDemo = ({
   showPromptInput,
   containerClassName,
   topPart,
+  hideDivider,
 }: {
   messages: PartialUIMessage[];
   reload?: () => void;
@@ -87,6 +88,7 @@ const ChatBotDemo = ({
   showPromptInput?: boolean;
   containerClassName?: string;
   topPart?: React.ReactNode;
+  hideDivider?: boolean;
 }) => {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(models[0].value);
@@ -135,7 +137,7 @@ const ChatBotDemo = ({
         <Conversation className="h-full">
           <ConversationContent>
             {topPart}
-            <Divider className="my-4" />
+            {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
               {messages.map((message, idx) => (
                 <div key={message.id || idx}>

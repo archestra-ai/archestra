@@ -11,6 +11,8 @@
     "lint:fix:unsafe": "turbo lint:fix:unsafe",
     "type-check": "turbo type-check",
     "test": "turbo test",
+    "test:e2e": "turbo test:e2e",
+    "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
     "codegen:api-client": "turbo codegen:api-client",
     "db:generate": "turbo db:generate",

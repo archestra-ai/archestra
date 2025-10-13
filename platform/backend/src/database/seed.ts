@@ -4,7 +4,7 @@ import {
   BLOCKED_DEMO_AGENT_ID,
   BLOCKED_DEMO_INTERACTION_ID,
   DEMO_AGENT_ID,
-} from "@shared/consts";
+} from "@shared";
 import AgentModel from "@/models/agent";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";

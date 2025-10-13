@@ -1,5 +1,6 @@
 "use client";
 
+import { E2eTestId } from "@shared";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
@@ -85,7 +86,10 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                 </a>
               </p>
             </div>
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Button
+              onClick={() => setIsCreateDialogOpen(true)}
+              data-testid={E2eTestId.CreateAgentButton}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Create Agent
             </Button>
@@ -107,7 +111,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
         ) : (
           <Card>
             <CardContent className="px-6">
-              <Table>
+              <Table data-testid={E2eTestId.AgentsTable}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -149,6 +153,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                           <Button
                             variant="ghost"
                             size="icon"
+                            data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
                             onClick={() => setDeletingAgentId(agent.id)}
                           >
                             <Trash2 className="h-4 w-4" />

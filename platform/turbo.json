@@ -26,6 +26,12 @@
     "test": {
       "cache": false
     },
+    "test:e2e": {
+      "cache": false
+    },
+    "test:e2e:ui": {
+      "cache": false
+    },
     "codegen:api-client": {
       "cache": false
     },

@@ -133,3 +133,21 @@ local_resource(
   labels=['dev'],
   resource_deps=['pnpm-install', 'pnpm-dev']
 )
+
+local_resource(
+  'e2e-tests',
+  cmd='pnpm test:e2e',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'e2e-tests-ui',
+  serve_cmd='pnpm test:e2e:ui',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)

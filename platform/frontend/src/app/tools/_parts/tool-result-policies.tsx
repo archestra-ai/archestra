@@ -272,9 +272,7 @@ export function ToolResultPolicies({
             </Badge>
           ) : (
             <Button variant="outline" size="sm" asChild>
-              <Link href="/dual-llm">
-                Configure Dual LLM →
-              </Link>
+              <Link href="/dual-llm">Configure Dual LLM →</Link>
             </Button>
           )}
         </div>

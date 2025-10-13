@@ -219,7 +219,10 @@ function DualLLMContent({
                 Dual LLM Agent Configuration
               </h1>
               <p className="text-sm text-muted-foreground">
-                The Dual LLM quarantine pattern protects your main agent from prompt injection attacks by isolating untrusted data in a separate agent that can only respond via structured multiple choice answers.{" "}
+                The Dual LLM quarantine pattern protects your main agent from
+                prompt injection attacks by isolating untrusted data in a
+                separate agent that can only respond via structured multiple
+                choice answers.{" "}
                 <a
                   href="https://archestra.ai/docs/platform-dual-llm"
                   target="_blank"
@@ -245,7 +248,10 @@ function DualLLMContent({
           <div className="bg-card rounded-lg p-8 shadow-sm">
             <h2 className="text-lg font-semibold mb-2">How It Works</h2>
             <p className="text-sm text-muted-foreground mb-6">
-              The dual LLM pattern uses two separate agents: a quarantined agent that has access to untrusted data but can only respond with structured answers, and a main agent that asks questions to safely extract information.
+              The dual LLM pattern uses two separate agents: a quarantined agent
+              that has access to untrusted data but can only respond with
+              structured answers, and a main agent that asks questions to safely
+              extract information.
             </p>
 
             <div className="relative">
@@ -258,7 +264,9 @@ function DualLLMContent({
                     )}
                   </div>
                   <span className="mt-3 font-medium text-sm">Tool Result</span>
-                  <span className="text-xs text-muted-foreground">Unsafe Data</span>
+                  <span className="text-xs text-muted-foreground">
+                    Unsafe Data
+                  </span>
                 </div>
 
                 <div className="flex-1 relative">
@@ -303,8 +311,12 @@ function DualLLMContent({
                       <div className="absolute inset-0 rounded-full animate-pulse bg-yellow-500/5" />
                     )}
                   </div>
-                  <span className="mt-3 font-medium text-sm">Quarantined LLM</span>
-                  <span className="text-xs text-muted-foreground">Restricted</span>
+                  <span className="mt-3 font-medium text-sm">
+                    Quarantined LLM
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Restricted
+                  </span>
                 </div>
 
                 <div className="flex-1 relative">
@@ -365,7 +377,9 @@ function DualLLMContent({
                     )}
                   </div>
                   <span className="mt-3 font-medium text-sm">Main LLM</span>
-                  <span className="text-xs text-muted-foreground">Privileged</span>
+                  <span className="text-xs text-muted-foreground">
+                    Privileged
+                  </span>
                 </div>
 
                 <div className="flex-1 relative">
@@ -408,13 +422,18 @@ function DualLLMContent({
                     <span className="text-2xl">✅</span>
                   </div>
                   <span className="mt-3 font-medium text-sm">Output</span>
-                  <span className="text-xs text-muted-foreground">Safe Result</span>
+                  <span className="text-xs text-muted-foreground">
+                    Safe Result
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="mt-6 text-sm text-muted-foreground">
-              <p>Integer indices only. No context exchanged directly between agents.</p>
+              <p>
+                Integer indices only. No context exchanged directly between
+                agents.
+              </p>
             </div>
           </div>
           <div className="border border-border rounded-lg p-6 bg-card">
@@ -483,9 +502,9 @@ function DualLLMContent({
                   Main Agent Prompt
                 </Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  All instructions for the main agent in a single user message. This
-                  agent asks questions to understand quarantined data without direct
-                  access to it. Use{" "}
+                  All instructions for the main agent in a single user message.
+                  This agent asks questions to understand quarantined data
+                  without direct access to it. Use{" "}
                   <code className="text-xs bg-muted px-1 py-0.5 rounded">
                     {"{"}
                     {"{"}originalUserRequest{"}}"}
@@ -522,8 +541,8 @@ function DualLLMContent({
                   Quarantined Agent Prompt
                 </Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  This agent has access to potentially malicious data but can only
-                  answer multiple choice questions. Variables:{" "}
+                  This agent has access to potentially malicious data but can
+                  only answer multiple choice questions. Variables:{" "}
                   <code className="text-xs bg-muted px-1 py-0.5 rounded">
                     {"{"}
                     {"{"}toolResultData{"}}"}
@@ -567,7 +586,10 @@ function DualLLMContent({
           <div className="border border-border rounded-lg p-6 bg-card">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <Label htmlFor="summary-prompt" className="text-sm font-semibold">
+                <Label
+                  htmlFor="summary-prompt"
+                  className="text-sm font-semibold"
+                >
                   Summary Generation Prompt
                 </Label>
                 <p className="text-xs text-muted-foreground mt-1">

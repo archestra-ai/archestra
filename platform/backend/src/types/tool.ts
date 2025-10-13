@@ -18,6 +18,16 @@ const ToolParametersContentSchema = z.union([
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
+
+export const SelectToolWithAgentSchema = SelectToolSchema.omit({
+  agentId: true,
+}).extend({
+  agent: z.object({
+    id: z.string(),
+    name: z.string(),
+  }),
+});
+
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
@@ -26,6 +36,7 @@ export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
+export type ToolWithAgent = z.infer<typeof SelectToolWithAgentSchema>;
 export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 

@@ -1,4 +1,10 @@
 import {
+  type QueryClient,
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import {
   createToolInvocationPolicy,
   createTrustedDataPolicy,
   deleteToolInvocationPolicy,
@@ -12,12 +18,7 @@ import {
   type UpdateTrustedDataPolicyData,
   updateToolInvocationPolicy,
   updateTrustedDataPolicy,
-} from "@shared/api-client";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
+} from "@/lib/clients/api";
 
 export function useToolInvocationPolicies() {
   return useSuspenseQuery({
@@ -158,6 +159,54 @@ export function useToolResultPoliciesDeleteMutation() {
       await deleteTrustedDataPolicy({ path: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tool-result-policies"] });
+    },
+  });
+}
+
+// Prefetch functions
+export function prefetchOperators(queryClient: QueryClient) {
+  return queryClient.prefetchQuery({
+    queryKey: ["operators"],
+    queryFn: async () => (await getOperators()).data ?? [],
+  });
+}
+
+export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
+  return queryClient.prefetchQuery({
+    queryKey: ["tool-invocation-policies"],
+    queryFn: async () => {
+      const all = (await getToolInvocationPolicies()).data ?? [];
+      const byToolId = all.reduce(
+        (acc, policy) => {
+          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          return acc;
+        },
+        {} as Record<string, GetToolInvocationPoliciesResponse["200"][]>,
+      );
+      return {
+        all,
+        byToolId,
+      };
+    },
+  });
+}
+
+export function prefetchToolResultPolicies(queryClient: QueryClient) {
+  return queryClient.prefetchQuery({
+    queryKey: ["tool-result-policies"],
+    queryFn: async () => {
+      const all = (await getTrustedDataPolicies()).data ?? [];
+      const byToolId = all.reduce(
+        (acc, policy) => {
+          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          return acc;
+        },
+        {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
+      );
+      return {
+        all,
+        byToolId,
+      };
     },
   });
 }

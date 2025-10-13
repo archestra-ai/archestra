@@ -1,4 +1,4 @@
-import { type GetToolsResponses, getTools } from "@shared/api-client";
+import { type GetToolsResponses, getTools } from "@/lib/clients/api";
 import { ToolsPage } from "./page.client";
 
 export const dynamic = "force-dynamic";

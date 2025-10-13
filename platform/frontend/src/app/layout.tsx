@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Lato } from "next/font/google";
-import { ColorModeToggle } from "@/components/color-mode-toggle";
+import { PublicEnvScript } from "next-runtime-env";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
@@ -27,6 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <PublicEnvScript />
+      </head>
       <body className={`${mainFont.className} antialiased`}>
         <Providers>
           <ThemeProvider
@@ -35,21 +39,22 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <ArchestraQueryClientProvider>
-              <SidebarProvider>
-                <AppSidebar />
-                <main className="h-[100%] w-full overflow-auto">
-                  <div className="h-8">
-                    <SidebarTrigger className="cursor-pointer" />
-                    <div className="absolute top-0 right-0">
-                      <ColorModeToggle />
+            <PostHogProviderWrapper>
+              <ArchestraQueryClientProvider>
+                <SidebarProvider>
+                  <AppSidebar />
+                  <main className="h-screen w-full flex flex-col bg-background min-w-0">
+                    <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
+                      <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                    </header>
+                    <div className="flex-1 overflow-auto min-w-0">
+                      {children}
                     </div>
-                  </div>
-                  {children}
-                </main>
-                <Toaster />
-              </SidebarProvider>
-            </ArchestraQueryClientProvider>
+                  </main>
+                  <Toaster />
+                </SidebarProvider>
+              </ArchestraQueryClientProvider>
+            </PostHogProviderWrapper>
           </ThemeProvider>
         </Providers>
       </body>

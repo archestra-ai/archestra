@@ -35,6 +35,15 @@ helm_remote(
 
 k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 
+# Database cleanup button (manual trigger only, for development)
+local_resource(
+  'db-clean',
+  cmd='cd backend && pnpm db:clean',
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database']
+)
+
 dotenv(
   './.env'
 )
@@ -48,12 +57,32 @@ local_resource(
 )
 
 local_resource(
-  'db-migrate',
+  'db-migrate-and-seed',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
-  cmd='cd backend && pnpm db:migrate',
-  deps=['./backend/src/database/migrations'],
+  # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
+  cmd='''
+    cd backend
+    for i in {1..30}; do
+      if pnpm db:migrate 2>/dev/null; then
+        echo "✅ Migration completed successfully"
+        echo "🌱 Running database seed..."
+        if pnpm db:seed; then
+          echo "✅ Seed completed successfully"
+          exit 0
+        else
+          echo "❌ Seed failed"
+          exit 1
+        fi
+      fi
+      echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
+      sleep 2
+    done
+    echo "❌ Migration failed after 30 attempts"
+    exit 1
+  ''',
+  deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['pre']
 )
@@ -63,7 +92,7 @@ local_resource(
   'pnpm-dev',
   serve_cmd='pnpm dev',
   labels=['dev'],
-  resource_deps=['db-migrate']
+  resource_deps=['db-migrate-and-seed']
 )
 
 local_resource(
@@ -73,7 +102,7 @@ local_resource(
   # propogate the required environment variables (ie. DATABASE_URL)
   serve_cmd='cd backend && pnpm db:studio',
   labels=['dev'],
-  resource_deps=['db-migrate']
+  resource_deps=['db-migrate-and-seed']
 )
 
 local_resource(
@@ -94,12 +123,31 @@ local_resource(
   cmd='pnpm lint:fix:unsafe',
   labels=['dev'],
   resource_deps=['pnpm-install'],
-  deps=["./frontend/src", "./backend/src", "./experiments/src", "./biome.json"]
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )
 
 local_resource(
   'codegen:api-client',
   cmd='pnpm codegen:api-client',
   labels=['dev'],
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'e2e-tests',
+  cmd='pnpm test:e2e',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'e2e-tests-ui',
+  serve_cmd='pnpm test:e2e:ui',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
   resource_deps=['pnpm-install', 'pnpm-dev']
 )

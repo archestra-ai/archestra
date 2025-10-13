@@ -2,3 +2,4 @@ packages:
   - "backend"
   - "frontend"
   - "shared"
+  - "e2e-tests"

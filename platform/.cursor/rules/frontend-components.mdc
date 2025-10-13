@@ -1,0 +1,420 @@
+---
+description: Guidelines for React components and Next.js App Router pages
+globs:
+  - frontend/src/components/**/*.tsx
+  - frontend/src/app/**/*.tsx
+  - frontend/src/lib/**/*.ts
+  - frontend/src/lib/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend Component Guidelines
+
+## React 19 Best Practices
+
+Use modern React 19 patterns:
+- Server Components by default (in Next.js App Router)
+- Add `'use client'` directive only when needed (state, effects, browser APIs)
+- Use async Server Components for data fetching
+- Leverage React Server Actions for mutations
+
+## Component Architecture
+
+### Keep Components Small and Focused
+
+Extract items from array maps into separate components:
+
+```typescript
+// ❌ Bad: Inline complex JSX in map
+{items.map(item => (
+  <div key={item.id}>
+    <h3>{item.title}</h3>
+    <p>{item.description}</p>
+    <button onClick={() => handleClick(item)}>Action</button>
+  </div>
+))}
+
+// ✅ Good: Extract to dedicated component
+{items.map(item => (
+  <ItemCard key={item.id} item={item} onAction={handleClick} />
+))}
+```
+
+### Extract Pure Functions
+
+Move business logic and data transformations out of components:
+
+```typescript
+// ❌ Bad: Logic inside component
+function UserProfile({ user }) {
+  const fullName = `${user.firstName} ${user.lastName}`.trim();
+  const isActive = user.status === 'active' && user.lastSeen > Date.now() - 300000;
+  return <div>{fullName} - {isActive ? 'Online' : 'Offline'}</div>;
+}
+
+// ✅ Good: Extract to pure functions
+// lib/user.utils.ts
+export function getUserFullName(user: User): string {
+  return `${user.firstName} ${user.lastName}`.trim();
+}
+
+export function isUserActive(user: User): boolean {
+  return user.status === 'active' && user.lastSeen > Date.now() - 300000;
+}
+
+// Component
+function UserProfile({ user }) {
+  return <div>{getUserFullName(user)} - {isUserActive(user) ? 'Online' : 'Offline'}</div>;
+}
+```
+
+### Extract Business Logic to Pure Functions or Queries
+
+Keep components thin - move logic to utilities or TanStack Query:
+
+```typescript
+// ❌ Bad: Business logic in component
+function Dashboard() {
+  const [data, setData] = useState(null);
+  
+  useEffect(() => {
+    const filtered = rawData.filter(item => item.status === 'active');
+    const sorted = filtered.sort((a, b) => b.priority - a.priority);
+    const enriched = sorted.map(item => ({
+      ...item,
+      score: calculateComplexScore(item)
+    }));
+    setData(enriched);
+  }, [rawData]);
+  
+  return <div>...</div>;
+}
+
+// ✅ Good: Extract to pure functions
+// lib/dashboard.utils.ts
+export function processDashboardData(rawData: RawData[]): ProcessedData[] {
+  return rawData
+    .filter(item => item.status === 'active')
+    .sort((a, b) => b.priority - a.priority)
+    .map(item => ({
+      ...item,
+      score: calculateComplexScore(item)
+    }));
+}
+
+// Component
+function Dashboard() {
+  const processedData = processDashboardData(rawData);
+  return <div>...</div>;
+}
+```
+
+## Component Structure
+
+```typescript
+// Server Component (default)
+export default async function ServerComponent() {
+  const data = await fetchData();
+  return <div>{data.title}</div>;
+}
+
+// Client Component (when needed)
+'use client';
+
+import { useState } from 'react';
+
+export function ClientComponent() {
+  const [state, setState] = useState();
+  return <button onClick={() => setState(...)}>Click</button>;
+}
+```
+
+## Data Fetching with TanStack Query
+
+**ALWAYS use TanStack Query** for data fetching. Never call HTTP clients directly from client components.
+
+### Use useSuspenseQuery
+
+```typescript
+// lib/chat.query.ts
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { apiClient } from './api-client';
+
+export function useChatMessages(chatId: string) {
+  return useSuspenseQuery({
+    queryKey: ['chats', chatId, 'messages'],
+    queryFn: () => apiClient.get(`/chats/${chatId}/messages`),
+  });
+}
+
+// Component
+'use client';
+
+function ChatMessages({ chatId }: Props) {
+  const { data } = useChatMessages(chatId);
+  return <MessageList messages={data} />;
+}
+```
+
+### Prefetch on Server, Pass as Initial Data
+
+```typescript
+// app/chat/[id]/page.tsx (Server Component)
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query';
+import { ChatView } from './chat-view';
+
+export default async function ChatPage({ params }: Props) {
+  const queryClient = new QueryClient();
+  
+  // Prefetch data on server
+  await queryClient.prefetchQuery({
+    queryKey: ['chats', params.id, 'messages'],
+    queryFn: () => fetchChatMessages(params.id),
+  });
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <ChatView chatId={params.id} />
+    </HydrationBoundary>
+  );
+}
+```
+
+### Reuse Queries Instead of React Context
+
+Avoid React Context for data sharing. Use TanStack Query to share data across components:
+
+```typescript
+// ❌ Bad: Creating context for data
+const UserContext = createContext();
+
+// ✅ Good: Reuse query across components
+// lib/user.query.ts
+export function useCurrentUser() {
+  return useSuspenseQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => apiClient.get('/auth/me'),
+  });
+}
+
+// Multiple components can use the same query
+function Header() {
+  const { data: user } = useCurrentUser();
+  return <div>{user.name}</div>;
+}
+
+function Sidebar() {
+  const { data: user } = useCurrentUser(); // Same data, cached
+  return <div>{user.email}</div>;
+}
+```
+
+## shadcn/ui Components
+
+**ALWAYS use shadcn/ui** instead of direct Radix UI:
+
+```bash
+# Add components via CLI
+npx shadcn@latest add button
+npx shadcn@latest add dialog
+npx shadcn@latest add form
+```
+
+Import from the components directory:
+```typescript
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+```
+
+## Error Handling and Loading States
+
+### Use Error Boundaries
+
+Use the error boundary from components for handling errors:
+
+```typescript
+// app/chat/error.tsx
+'use client';
+
+export default function ChatError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  );
+}
+```
+
+### Use Suspense for Loading States
+
+```typescript
+// app/chat/[id]/page.tsx
+import { Suspense } from 'react';
+import { ChatMessages } from './chat-messages';
+import { ChatSkeleton } from './chat-skeleton';
+
+export default function ChatPage({ params }: Props) {
+  return (
+    <Suspense fallback={<ChatSkeleton />}>
+      <ChatMessages chatId={params.id} />
+    </Suspense>
+  );
+}
+```
+
+## Styling
+
+Use Tailwind CSS 4 utility classes with consistent theming:
+
+### Prioritize Global Theme Colors
+
+Apply colors via global theme rather than inline in components:
+
+```typescript
+// ❌ Bad: Hardcoded colors
+<div className="bg-blue-500 text-white">...</div>
+
+// ✅ Good: Use theme colors
+<div className="bg-primary text-primary-foreground">...</div>
+<div className="bg-secondary text-secondary-foreground">...</div>
+<div className="bg-destructive text-destructive-foreground">...</div>
+```
+
+### Conditional Classes
+
+Use the `cn()` utility for conditional classes:
+
+```typescript
+import { cn } from '@/lib/utils';
+
+export function Component({ className, variant }: Props) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg p-4',
+        variant === 'primary' && 'bg-primary text-primary-foreground',
+        variant === 'secondary' && 'bg-secondary text-secondary-foreground',
+        className
+      )}
+    />
+  );
+}
+```
+
+## File Organization
+
+### Avoid Unnecessary Exports
+
+Only export what needs to be used by other modules. If something is only used within the file, don't export it:
+
+```typescript
+// ❌ Bad: Exporting internal helpers
+export function formatDate(date: Date): string { ... }
+export function validateEmail(email: string): boolean { ... }
+export function UserProfile({ user }: Props) {
+  return <div>{formatDate(user.createdAt)}</div>;
+}
+
+// ✅ Good: Only export what's needed externally
+function formatDate(date: Date): string { ... }  // Internal helper, not exported
+function validateEmail(email: string): boolean { ... }  // Internal helper, not exported
+
+export function UserProfile({ user }: Props) {  // Public API, exported
+  return <div>{formatDate(user.createdAt)}</div>;
+}
+```
+
+### Avoid Index and Barrel Files
+
+Don't create index files that re-export multiple modules. Import directly from source files:
+
+```typescript
+// ❌ Bad: Barrel file
+// components/index.ts
+export { Button } from './button';
+export { Dialog } from './dialog';
+
+// ❌ Bad: Importing from barrel
+import { Button, Dialog } from './components';
+
+// ✅ Good: Direct imports
+import { Button } from './components/button';
+import { Dialog } from './components/dialog';
+```
+
+### Promote Feature Colocation
+
+Group related files by feature/domain in flat structure:
+
+```
+lib/
+├── chat.query.ts        # TanStack Query hooks for chat
+├── chat.utils.ts        # Pure functions for chat logic
+├── chat.hook.ts         # Custom React hooks for chat
+├── chat.types.ts        # TypeScript types for chat
+├── user.query.ts        # User-related queries
+├── user.utils.ts        # User utility functions
+└── api-client.ts        # Shared API client
+```
+
+Avoid unnecessary nested folders:
+
+```typescript
+// ❌ Bad: Unnecessary nesting
+lib/chat/queries/use-chat-messages.ts
+lib/chat/utils/format-message.ts
+lib/chat/hooks/use-chat-state.ts
+
+// ✅ Good: Flat, feature-based
+lib/chat.query.ts
+lib/chat.utils.ts
+lib/chat.hook.ts
+```
+
+## Next.js App Router
+
+- Use file-based routing in `src/app/`
+- `page.tsx` for routes
+- `layout.tsx` for shared layouts
+- `loading.tsx` for loading states (prefer Suspense)
+- `error.tsx` for error boundaries
+- Use `generateMetadata` for SEO
+
+Example page structure:
+```typescript
+// app/dashboard/page.tsx
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Dashboard',
+  description: 'User dashboard',
+};
+
+export default async function DashboardPage() {
+  const data = await fetchDashboardData();
+  return <DashboardView data={data} />;
+}
+```
+
+## Summary of Key Practices
+
+1. ✅ Extract pure functions from components
+2. ✅ Create small, focused components (especially for array.map items)
+3. ✅ Use shadcn/ui, avoid direct Radix UI
+4. ✅ Use TanStack Query with useSuspenseQuery for data fetching
+5. ✅ Use error boundaries for error handling
+6. ✅ Use Suspense for loading states
+7. ✅ Prefetch data on server, pass as initial data to queries
+8. ✅ Avoid index/barrel files - use direct imports
+9. ✅ Use flat, feature-based file colocation (e.g., chat.query.ts, chat.utils.ts)
+10. ✅ Apply colors via global theme, not inline
+11. ✅ Avoid React Context - use TanStack Query for shared data
+12. ✅ Extract business logic to pure functions or queries
+13. ✅ Only export what needs to be used by other modules - keep internal helpers private

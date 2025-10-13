@@ -1,13 +1,7 @@
-import type {
-  GetToolInvocationPoliciesResponse,
-  GetToolsResponses,
-} from "@shared/api-client";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -16,6 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type {
+  GetToolInvocationPoliciesResponse,
+  GetToolsResponses,
+} from "@/lib/clients/api";
 import {
   useOperators,
   useToolInvocationPolicies,
@@ -48,35 +46,48 @@ export function ToolCallPolicies({
   const argumentNames = Object.keys(tool.parameters?.properties || []);
 
   return (
-    <div className="mt-4">
-      <CardTitle className="flex flex-row items-center justify-between">
-        <span>Tool Call Policies (before call)</span>
+    <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+      <div className="flex flex-row items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold mb-1">Tool Call Policies</h3>
+          <p className="text-sm text-muted-foreground">
+            Control execution when untrusted data is present.
+            <br />
+            <br />
+            By default, when the LLM your agent is interacting with has consumed
+            "untrusted data", tool execution is not permitted, unless explicit
+            policies have been configured for this tool. You have the open to
+            either:
+          </p>
+          <ul className="text-sm text-muted-foreground">
+            <li>• Allow usage, by default, when untrusted data is present</li>
+            <li>
+              • Allow usage, but only when the tool is invoked with argument(s)
+              that meet the policy's criteria
+            </li>
+          </ul>
+        </div>
         <ButtonWithTooltip
           variant="outline"
           size="sm"
-          className="bg-accent"
+          className="h-8 text-xs"
           onClick={() =>
             toolInvocationPolicyCreateMutation.mutate({ toolId: tool.id })
           }
           disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
-          disabledText="Custom policies require parameters"
+          disabledText="This tool has no parameters"
         >
-          <Plus /> Add
+          <Plus className="w-3.5 h-3.5" /> Add policy for tool parameters
         </ButtonWithTooltip>
-      </CardTitle>
-      <CardDescription className="mb-4">
-        Decide whether to allow or block tool calling when untrusted data is
-        present
-      </CardDescription>
-      <PolicyCard>
-        <div className="flex flex-row items-center gap-4">
-          <Badge
-            variant="secondary"
-            className="bg-blue-500 text-white dark:bg-blue-600"
-          >
-            Default
-          </Badge>
-          <span>Allow usage when untrusted data is present</span>
+      </div>
+      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            DEFAULT
+          </div>
+          <span className="text-sm">
+            Allow usage when untrusted data is present
+          </span>
         </div>
         <Switch
           checked={tool.allowUsageWhenUntrustedDataIsPresent}
@@ -88,7 +99,7 @@ export function ToolCallPolicies({
             })
           }
         />
-      </PolicyCard>
+      </div>
       {policies.map((policy) => (
         <PolicyCard key={policy.id}>
           <div className="flex flex-row gap-4 justify-between w-full">
@@ -137,6 +148,7 @@ export function ToolCallPolicies({
                 </SelectContent>
               </Select>
               <DebouncedInput
+                placeholder="Value"
                 initialValue={policy.value}
                 onChange={(value) =>
                   toolInvocationPolicyUpdateMutation.mutate({
@@ -175,6 +187,7 @@ export function ToolCallPolicies({
                 </SelectContent>
               </Select>
               <DebouncedInput
+                placeholder="Reason"
                 initialValue={policy.reason || ""}
                 onChange={(value) =>
                   toolInvocationPolicyUpdateMutation.mutate({

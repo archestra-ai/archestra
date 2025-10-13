@@ -1,0 +1,53 @@
+---
+description: Tech stack and architecture guidelines for Archestra Platform
+alwaysApply: true
+---
+
+# Tech Stack
+
+## Monorepo Architecture
+
+- **Build orchestration**: Turbo for coordinated builds across workspaces
+- **Package manager**: pnpm workspaces
+- **Development orchestration**: Tilt (use `tilt up` for best experience)
+
+## Backend Stack
+
+- **Framework**: Fastify with pino logging
+- **Database**: PostgreSQL with Drizzle ORM
+- **API**: RESTful endpoints with OpenAI-compatible proxy
+- **Testing**: Vitest with PGLite (in-memory PostgreSQL)
+
+Example backend test:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { db } from './database';
+
+describe('Model tests', () => {
+  it('should perform CRUD operations', async () => {
+    // Test implementation
+  });
+});
+```
+
+## Frontend Stack
+
+- **Framework**: Next.js 15.5.4 with App Router
+- **React**: Version 19
+- **Bundler**: Turbopack (built into Next.js)
+- **Styling**: Tailwind CSS 4
+- **Components**: shadcn/ui (add with `npx shadcn@latest add <component>`)
+
+**NEVER use Radix UI directly** - always use shadcn/ui components instead.
+
+Example adding a component:
+```bash
+npx shadcn@latest add button
+```
+
+## Database Patterns
+
+- Use Drizzle ORM for all database operations
+- Migrations are auto-generated: `pnpm db:migrate:dev`
+- Use Drizzle Studio for inspection: `pnpm db:studio`
+- Tests use PGLite for in-memory database (no real database needed)

@@ -25,7 +25,7 @@ if (!process.env.OPENAI_API_KEY) {
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "http://localhost:9000/v1",
+  baseURL: "http://localhost:9000/v1/openai",
 });
 
 const parseArgs = (): {
@@ -263,6 +263,7 @@ const getAssistantMessageFromStream = async (
   return {
     role: "assistant" as const,
     content: accumulatedContent || null,
+    refusal: null,
     tool_calls:
       accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
   };

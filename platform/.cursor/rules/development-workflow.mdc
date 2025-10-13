@@ -1,0 +1,70 @@
+---
+description: Development workflow and best practices for Archestra Platform
+alwaysApply: true
+---
+
+# Development Workflow
+
+## Starting Development
+
+**Recommended**: Use Tilt for orchestrated development with hot reload
+```bash
+tilt up              # Start full development environment
+```
+
+**Alternative**: Manual workspace development
+```bash
+pnpm dev             # Start all workspaces in dev mode
+```
+
+## Before Committing
+
+Always run these checks before committing code:
+
+```bash
+pnpm type-check      # Check TypeScript types across all workspaces
+pnpm lint            # Lint and auto-fix with Biome
+pnpm test            # Run tests (backend)
+```
+
+## Development Best Practices
+
+1. **Use existing patterns** - Check neighboring files for examples before creating new patterns
+2. **Follow project structure** - Keep test files colocated with source files
+3. **Write tests** - Add `.test.ts` files alongside new models or utilities
+4. **Use Tilt** - Prefer `tilt up` for the best development experience with hot reload
+5. **Check Tilt UI** - Monitor logs at http://localhost:10350/ when using Tilt
+6. **Database changes** - Always generate migrations with `pnpm db:migrate:dev`
+
+## Common Commands Reference
+
+### Backend
+```bash
+cd backend
+pnpm dev             # Start backend in watch mode
+pnpm build           # Compile TypeScript to dist/
+pnpm test            # Run tests with Vitest
+pnpm db:migrate      # Run database migrations
+pnpm db:studio       # Open Drizzle Studio
+```
+
+### Frontend
+```bash
+cd frontend
+pnpm dev             # Start Next.js dev server with Turbopack
+pnpm build           # Build for production
+```
+
+### Code Quality (from root)
+```bash
+pnpm type-check      # Check all TypeScript types
+pnpm lint            # Run Biome linter
+pnpm format          # Format code with Biome
+```
+
+## Debugging
+
+- **Tilt Web UI**: http://localhost:10350/ - View logs and resource status
+- **Frontend**: http://localhost:3000/ - Main application
+- **Tools Inspector**: http://localhost:3000/tools - Inspect proxy requests
+- **Drizzle Studio**: https://local.drizzle.studio/ - Database inspection

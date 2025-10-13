@@ -32,16 +32,19 @@ export const Tool = ({ className, ...props }: ToolProps) => (
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"];
+  state: ToolUIPart["state"] | "output-available-dual-llm";
   className?: string;
   icon?: React.ReactNode;
 };
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
+const getStatusBadge = (
+  status: ToolUIPart["state"] | "output-available-dual-llm",
+) => {
   const labels = {
     "input-streaming": "Pending",
     "input-available": "Running",
     "output-available": "Completed",
+    "output-available-dual-llm": "Completed with dual LLM",
     "output-error": "Error",
   } as const;
 
@@ -49,6 +52,9 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
     "input-streaming": <CircleIcon className="size-4" />,
     "input-available": <ClockIcon className="size-4 animate-pulse" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
+    "output-available-dual-llm": (
+      <CheckCircleIcon className="size-4 text-green-600" />
+    ),
     "output-error": <XCircleIcon className="size-4 text-red-600" />,
   } as const;
 
@@ -114,18 +120,68 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
 );
 
 export type ToolOutputProps = ComponentProps<"div"> & {
-  output: ToolUIPart["output"];
-  errorText: ToolUIPart["errorText"];
+  output?: ToolUIPart["output"];
+  errorText?: ToolUIPart["errorText"];
+  label?: string;
+  conversations?: Array<{
+    role: "user" | "assistant";
+    content: string | unknown;
+  }>;
 };
 
 export const ToolOutput = ({
   className,
   output,
   errorText,
+  label,
+  conversations,
   ...props
 }: ToolOutputProps) => {
-  if (!(output || errorText)) {
+  if (!(output || errorText || conversations)) {
     return null;
+  }
+
+  // Render conversations as chat bubbles if provided
+  // Note: In Dual LLM context, "user" = Main Agent (questions), "assistant" = Quarantined Agent (answers)
+  if (conversations && conversations.length > 0) {
+    return (
+      <div className={cn("space-y-2 p-4", className)} {...props}>
+        <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+          {label ?? "Conversation"}
+        </h4>
+        <div className="space-y-3 rounded-md bg-muted/50 p-3">
+          {conversations.map((conv, idx) => {
+            // Create a stable key combining index and content hash
+            const contentStr =
+              typeof conv.content === "string"
+                ? conv.content
+                : JSON.stringify(conv.content);
+            const key = `${idx}-${conv.role}-${contentStr.slice(0, 20)}`;
+
+            return (
+              <div
+                key={key}
+                className={cn(
+                  "flex gap-2 items-start",
+                  conv.role === "assistant" ? "justify-end" : "justify-start",
+                )}
+              >
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
+                    conv.role === "assistant"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground",
+                  )}
+                >
+                  {contentStr}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   let Output = <div>{output as ReactNode}</div>;
@@ -141,7 +197,7 @@ export const ToolOutput = ({
   return (
     <div className={cn("space-y-2 p-4", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {errorText ? "Error" : "Result"}
+        {label ?? (errorText ? "Error" : "Result")}
       </h4>
       <div
         className={cn(

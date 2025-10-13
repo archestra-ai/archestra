@@ -4,6 +4,7 @@ import { ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   SelectToolSchema,
+  SelectToolWithAgentSchema,
   UpdateToolSchema,
   UuidIdSchema,
 } from "@/types";
@@ -17,7 +18,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all tools",
         tags: ["Tools"],
         response: {
-          200: z.array(SelectToolSchema),
+          200: z.array(SelectToolWithAgentSchema),
           500: ErrorResponseSchema,
         },
       },

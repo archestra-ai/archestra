@@ -10,6 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import config from "@/config";
 import { createAdminUser } from "./auth/create-admin";
+import { seedDatabase } from "./database/seed";
 import { authMiddleware } from "./middleware/auth-middleware";
 import * as routes from "./routes";
 
@@ -36,6 +37,10 @@ fastify.setSerializerCompiler(serializerCompiler);
 
 const start = async () => {
   try {
+    // Seed database with demo data
+    await seedDatabase();
+    await createAdminUser();
+
     /**
      * Register CORS plugin to allow cross-origin requests from frontend
      * (running on any port in case the default (3000) is taken)
@@ -79,14 +84,18 @@ const start = async () => {
       status: name,
       version,
     }));
-    await createAdminUser();
+
     fastify.addHook("preHandler", authMiddleware);
+
     fastify.register(routes.authRoutes);
     fastify.register(routes.agentRoutes);
     fastify.register(routes.interactionRoutes);
     fastify.register(routes.openAiProxyRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);
+    fastify.register(routes.dualLlmConfigRoutes);
+    fastify.register(routes.dualLlmResultRoutes);
+
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
   } catch (err) {

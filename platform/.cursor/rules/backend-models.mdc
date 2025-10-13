@@ -1,0 +1,171 @@
+---
+description: Guidelines for backend model files with database operations
+globs: 
+  - backend/src/models/**/*.ts
+  - backend/src/models/*.ts
+alwaysApply: false
+---
+
+# Backend Model Guidelines
+
+When working with backend models, follow these patterns:
+
+## Model Structure
+
+Each model file should export:
+1. TypeScript types/interfaces for the model
+2. CRUD functions (create, read, update, delete)
+3. Any specialized query functions
+
+Example structure:
+```typescript
+import { db } from '../database';
+import { modelTable } from '../database/schema';
+import { eq } from 'drizzle-orm';
+
+export interface Model {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export async function createModel(data: Omit<Model, 'id' | 'createdAt' | 'updatedAt'>) {
+  const [model] = await db.insert(modelTable).values(data).returning();
+  return model;
+}
+
+export async function getModelById(id: string) {
+  const [model] = await db.select().from(modelTable).where(eq(modelTable.id, id));
+  return model;
+}
+```
+
+## Testing
+
+Always create corresponding `.test.ts` files for models:
+- Colocate tests with the model file
+- Use Vitest with PGLite (automatic setup via test-setup.ts)
+- Test all CRUD operations
+- Test edge cases and error conditions
+
+Example test file: `model.test.ts`
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createModel, getModelById } from './model';
+
+describe('Model CRUD operations', () => {
+  it('should create and retrieve a model', async () => {
+    const created = await createModel({ name: 'Test' });
+    const retrieved = await getModelById(created.id);
+    expect(retrieved?.name).toBe('Test');
+  });
+});
+```
+
+## Database Operations
+
+- Use Drizzle ORM query builder (never raw SQL unless absolutely necessary)
+- Use parameterized queries to prevent SQL injection
+- Return results from `.returning()` for insert/update operations
+- Handle not-found cases appropriately (return undefined or throw)
+
+## File Organization
+
+### Avoid Unnecessary Exports
+
+Only export what needs to be used by other modules. If something is only used within the file, don't export it:
+
+```typescript
+// ❌ Bad: Exporting internal helpers
+export function validateAgentName(name: string): boolean { ... }
+export function formatAgentData(data: RawData): Agent { ... }
+export async function createAgent(data: CreateAgentInput) {
+  if (!validateAgentName(data.name)) throw new Error('Invalid name');
+  const formatted = formatAgentData(data);
+  return db.insert(agentTable).values(formatted).returning();
+}
+
+// ✅ Good: Only export public API
+function validateAgentName(name: string): boolean { ... }  // Internal, not exported
+function formatAgentData(data: RawData): Agent { ... }      // Internal, not exported
+
+export async function createAgent(data: CreateAgentInput) {  // Public API, exported
+  if (!validateAgentName(data.name)) throw new Error('Invalid name');
+  const formatted = formatAgentData(data);
+  return db.insert(agentTable).values(formatted).returning();
+}
+```
+
+This keeps your module's public API surface small and makes refactoring easier.
+
+### Avoid Index and Barrel Files
+
+Don't create index files that re-export multiple modules. Import directly from source files:
+
+```typescript
+// ❌ Bad: Barrel file
+// models/index.ts
+export * from './agent';
+export * from './chat';
+export * from './tool';
+
+// ❌ Bad: Importing from barrel
+import { createAgent, createChat } from './models';
+
+// ✅ Good: Direct imports
+import { createAgent } from './models/agent';
+import { createChat } from './models/chat';
+```
+
+### Avoid Nested Folder Structure
+
+Keep the folder structure flat. Don't create unnecessary nesting:
+
+```typescript
+// ❌ Bad: Unnecessary nesting
+models/agent/crud/create.ts
+models/agent/crud/update.ts
+models/agent/queries/get-by-id.ts
+
+// ✅ Good: Flat structure with clear naming
+models/agent.ts              # All agent CRUD operations
+models/agent.test.ts         # Agent tests
+```
+
+### Promote Feature/Domain Colocation
+
+Group related files by feature or domain using consistent naming:
+
+```typescript
+// Example flat structure
+models/
+├── agent.ts                    # Agent model and CRUD
+├── agent.test.ts              # Agent tests
+├── chat.ts                    # Chat model and CRUD
+├── chat.test.ts               # Chat tests
+├── tool-invocation-policy.ts  # Tool invocation policy model
+├── tool-invocation-policy.test.ts
+└── index.ts                   # ❌ Avoid - use direct imports instead
+
+routes/
+├── agent.ts                   # Agent API routes
+├── chat.ts                    # Chat API routes
+├── proxy.ts                   # Proxy routes
+└── autonomy-policies.ts       # Policy routes
+
+utils/
+├── auth.utils.ts              # Auth utilities
+├── validation.utils.ts        # Validation helpers
+└── api.utils.ts               # API utilities
+```
+
+## Key Backend Practices
+
+1. ✅ Avoid index/barrel files - use direct imports
+2. ✅ Keep folder structure flat - avoid unnecessary nesting
+3. ✅ Use feature/domain-based file colocation with clear naming
+4. ✅ Colocate test files with source files (`.test.ts` extension)
+5. ✅ Use Drizzle ORM for all database operations
+6. ✅ Follow consistent CRUD patterns across models
+7. ✅ Only export what needs to be used by other modules - keep internal helpers private

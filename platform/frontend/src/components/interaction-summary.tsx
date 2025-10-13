@@ -1,20 +1,24 @@
 "use client";
 
-import type {
-  GetAgentsResponses,
-  GetInteractionsResponses,
-} from "@shared/api-client";
 import {
   BrainIcon,
   CalendarDaysIcon,
   HatGlassesIcon,
   MessageSquareMoreIcon,
+  ShieldCheckIcon,
   WrenchIcon,
 } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
+import type {
+  GetAgentsResponses,
+  GetInteractionsResponses,
+} from "@/lib/clients/api";
+import { useDualLlmResultByToolCallId } from "@/lib/dual-llm-result.query";
 import {
+  getLastToolCallId,
+  isLastMessageToolCall,
   toolNamesRefusedForInteraction,
   toolNamesUsedForInteraction,
 } from "@/lib/interaction.utils";
@@ -29,6 +33,13 @@ export function InteractionSummary({
 }) {
   const [agentNameTruncated, _setAgentNameTruncated] = useState(false);
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);
+
+  // Check if this interaction is about a tool call
+  const lastToolCallId = getLastToolCallId(interaction);
+  const isDualLlmRelevant = isLastMessageToolCall(interaction);
+
+  // Fetch dual LLM result if relevant
+  const { data: dualLlmResult } = useDualLlmResultByToolCallId(lastToolCallId);
 
   const iconClassName = "w-4 h-4";
   return (
@@ -50,7 +61,7 @@ export function InteractionSummary({
             <div>
               {toolNamesUsedForInteraction(interaction).length > 0 ? (
                 toolNamesUsedForInteraction(interaction).map((toolName) => (
-                  <Badge key={toolName} className="mt-2">
+                  <Badge key={toolName} className="mt-2 mr-2">
                     {toolName}
                   </Badge>
                 ))
@@ -78,6 +89,21 @@ export function InteractionSummary({
           }
           icon={<WrenchIcon className={iconClassName} />}
         />
+        {isDualLlmRelevant && (
+          <RawLogDetail
+            label="Dual LLM Analysis"
+            value={
+              dualLlmResult ? (
+                <Badge variant="default" className="mt-2 bg-green-600">
+                  🛡️ Analyzed
+                </Badge>
+              ) : (
+                <p className="text-muted-foreground">Not analyzed</p>
+              )
+            }
+            icon={<ShieldCheckIcon className={iconClassName} />}
+          />
+        )}
       </div>
       <div className="flex justify-between w-full gap-4 mt-4 min-w-0">
         <RawLogDetail
@@ -146,7 +172,9 @@ function RawLogDetail({
       {typeof value === "string" ? (
         <Badge
           variant="secondary"
-          className={`flex min-w-0 max-w-full justify-start ${isTruncated ? "pr-0" : ""} whitespace-normal`}
+          className={`flex min-w-0 max-w-full justify-start ${
+            isTruncated ? "pr-0" : ""
+          } whitespace-normal`}
         >
           {value}
         </Badge>

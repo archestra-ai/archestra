@@ -23,16 +23,54 @@ First, you'll need Docker running locally. Then:
 
     ```sh
     OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+    ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY"
+    GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
     GITHUB_TOKEN="YOUR_GITHUB_PERSONAL_ACCESS_TOKEN"
     ```
 
     You'll need a GitHub Personal Access Token to fetch the issue. You can create one at: <https://github.com/settings/tokens>
+
+    Note: You only need the API key for the LLM provider you want to use (OpenAI, Anthropic, or Gemini)
 
 2. Build the Docker image:
 
     ```sh
     docker build -t pydantic-ai-archestra-example .
     ```
+
+## Selecting a Model Provider
+
+By default, the example uses OpenAI's `gpt-4o` model. You can switch to Anthropic Claude or Google Gemini models by setting environment variables:
+
+### Using OpenAI (default)
+
+```sh
+# Uses gpt-4o by default
+docker run pydantic-ai-archestra-example
+
+# Or specify a different OpenAI model
+docker run -e LLM_PROVIDER=openai -e MODEL_NAME=gpt-4o-mini pydantic-ai-archestra-example
+```
+
+### Using Anthropic Claude
+
+```sh
+# Uses claude-sonnet-4-5-20250929 by default
+docker run -e LLM_PROVIDER=anthropic pydantic-ai-archestra-example
+
+# Or specify a different Claude model
+docker run -e LLM_PROVIDER=anthropic -e MODEL_NAME=claude-3-5-sonnet-latest pydantic-ai-archestra-example
+```
+
+### Using Google Gemini
+
+```sh
+# Uses gemini-2.5-pro by default
+docker run -e LLM_PROVIDER=gemini pydantic-ai-archestra-example
+
+# Or specify a different Gemini model
+docker run -e LLM_PROVIDER=gemini -e MODEL_NAME=gemini-1.5-pro pydantic-ai-archestra-example
+```
 
 ## Demonstrating Prompt Injection
 

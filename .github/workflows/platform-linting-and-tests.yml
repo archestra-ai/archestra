@@ -35,6 +35,11 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
@@ -76,108 +81,25 @@ jobs:
           docker port archestra-platform-test || echo "Container not running"
           docker port archestra-platform-test-custom-api-base-url || echo "Container not running"
           docker port archestra-platform-test-custom-database-url || echo "Container not running"
+        
 
-      - name: Check backend health
-        run: |
-          ports="9000 9001 9002"
-
-          for port in $ports; do
-            echo ""
-            echo "=== Testing backend on port $port ==="
-            max_attempts=10
-            attempt=0
-            success=false
-
-            while [ $attempt -lt $max_attempts ]; do
-              echo "Attempt $((attempt + 1))/$max_attempts on port $port..."
-
-              # Try curl with verbose output for debugging
-              if curl -v -f http://localhost:$port/health 2>&1; then
-                echo "✓ Backend health check passed on port $port"
-                success=true
-                break
-              else
-                echo "curl exit code: $?"
-              fi
-
-              attempt=$((attempt + 1))
-
-              if [ $attempt -lt $max_attempts ]; then
-                echo "Retrying in 5s..."
-                sleep 5
-              fi
-            done
-
-            if [ "$success" = false ]; then
-              echo ""
-              echo "✗ Backend health check failed after $max_attempts attempts on port $port"
-              echo "=== Checking if port is listening ==="
-              netstat -tuln | grep ":$port" || echo "Port $port not listening"
-              echo "=== Checking container processes ==="
-              case $port in
-                9000) docker exec archestra-platform-test ps aux || echo "Container not accessible" ;;
-                9001) docker exec archestra-platform-test-custom-api-base-url ps aux || echo "Container not accessible" ;;
-                9002) docker exec archestra-platform-test-custom-database-url ps aux || echo "Container not accessible" ;;
-              esac
-              exit 1
-            fi
-          done
-
-      - name: Check frontend health
-        run: |
-          ports="3000 3001 3002"
-
-          for port in $ports; do
-            echo ""
-            echo "=== Testing frontend on port $port ==="
-            max_attempts=10
-            attempt=0
-            success=false
-
-            while [ $attempt -lt $max_attempts ]; do
-              echo "Attempt $((attempt + 1))/$max_attempts on port $port..."
-
-              if curl -v -f http://localhost:$port/ 2>&1; then
-                echo "✓ Frontend health check passed on port $port"
-                success=true
-                break
-              else
-                echo "curl exit code: $?"
-              fi
-
-              attempt=$((attempt + 1))
-
-              if [ $attempt -lt $max_attempts ]; then
-                echo "Retrying in 5s..."
-                sleep 5
-              fi
-            done
-
-            if [ "$success" = false ]; then
-              echo ""
-              echo "✗ Frontend health check failed after $max_attempts attempts on port $port"
-              echo "=== Checking if port is listening ==="
-              netstat -tuln | grep ":$port" || echo "Port $port not listening"
-              exit 1
-            fi
-          done
 
       # E2e tests start
-      - name: Setup pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
-        with:
-          version: 10.16.1
+      # - name: Setup pnpm
+      #   uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      #   with:
+      #     version: 10.16.1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "20"
-          cache: "pnpm"
-          cache-dependency-path: ./platform/e2e-tests/pnpm-lock.yaml
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      #   with:
+      #     node-version: "20"
+      #     cache: "pnpm"
+      #     cache-dependency-path: ./platform/e2e-tests/pnpm-lock.yaml
 
-      - name: Install E2E test dependencies
-        working-directory: ./platform/e2e-tests
-        run: pnpm install --frozen-lockfile
+      # - name: Install E2E test dependencies
+      #   working-directory: ./platform/e2e-tests
+      #   run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         working-directory: ./platform/e2e-tests

@@ -1,9 +1,11 @@
 import { adminClient, organizationClient } from "better-auth/client/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { createAuthClient } from "better-auth/react";
+import config from "@/lib/config";
+
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:9000",
+  baseURL: config.api.baseUrl,
   plugins: [organizationClient(), nextCookies(), adminClient()],
-  cookies: { secure: process.env.NODE_ENV === "production" },
+  cookies: { secure: !config.debug },
   autoSignIn: true,
 });

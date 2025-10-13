@@ -30,6 +30,6 @@ export const config = {
      * - _next (Next.js internals)
      * - favicon.ico, robots.txt, sitemap.xml (static files)
      */
-    "/((?!auth/sign-in|auth/sign-up|accept-invitation|test-agent|_next|favicon.ico|robots.txt|sitemap.xml).*)",
+    "/((?!auth/sign-in|auth/sign-up|accept-invitation|test-agent|_next|public|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
 };

@@ -1,8 +1,8 @@
 import { env } from "next-runtime-env";
+  const envVarProxyUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
 export const getProxyUrl = (): string => {
   const proxyUrlSuffix = "/v1";
-  const envVarProxyUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
 
   if (!envVarProxyUrl) {
     return `http://localhost:9000${proxyUrlSuffix}`;
@@ -17,5 +17,7 @@ export const getProxyUrl = (): string => {
 export default {
   api: {
     proxyUrl: getProxyUrl(),
+    baseUrl: envVarProxyUrl || "http://localhost:9000",
   },
+  debug: process.env.NODE_ENV !== "production"
 };

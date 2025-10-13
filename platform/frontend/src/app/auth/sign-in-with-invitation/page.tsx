@@ -4,7 +4,7 @@ import { AuthView } from "@daveyplate/better-auth-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 export default function SignInWithInvitationPage() {
   const router = useRouter();

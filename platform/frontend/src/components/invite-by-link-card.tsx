@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 interface InviteByLinkCardProps {
   organizationId?: string;

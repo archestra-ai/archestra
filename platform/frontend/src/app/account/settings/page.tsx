@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 export default function AccountSettingsPage() {
   const { data: session, isPending } = authClient.useSession();

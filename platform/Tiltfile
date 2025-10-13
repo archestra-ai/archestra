@@ -123,7 +123,8 @@ local_resource(
   cmd='pnpm lint:fix:unsafe',
   labels=['dev'],
   resource_deps=['pnpm-install'],
-  deps=["./frontend/src", "./backend/src", "./experiments/src", "./biome.json"]
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )
 
 local_resource(

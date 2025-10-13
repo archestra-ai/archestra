@@ -132,16 +132,24 @@ tests:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: ".*external-db.example.com.*5432.*"
 
-  - it: should not add custom env vars when archestra.env is empty
+  - it: should include default env vars from values.yaml
     documentIndex: 1
-    set:
-      archestra.env: {}
     asserts:
-      - equal:
+      - contains:
           path: spec.template.spec.containers[0].env
-          value:
-            - name: DATABASE_URL
-              value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+          content:
+            name: DATABASE_URL
+            value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_API_BASE_URL
+            value: "http://archestra-platform:9000/"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+            value: "http://archestra-platform:9000/"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1
@@ -161,11 +169,12 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
-  - it: should include DATABASE_URL alongside custom env vars
+  - it: should override default env vars when custom values are provided
     documentIndex: 1
     set:
       archestra.env:
         ARCHESTRA_API_BASE_URL: "https://api.example.com"
+        NEXT_PUBLIC_ARCHESTRA_API_BASE_URL: "http://archestra-platform:9000/"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -177,3 +186,8 @@ tests:
           content:
             name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
+            value: "http://archestra-platform:9000/"

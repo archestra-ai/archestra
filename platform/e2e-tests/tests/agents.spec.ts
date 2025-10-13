@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { E2eTestId } from '@shared';
 import { getRandomString, goToPage } from '../utils';
 
-test('can create and deletean agent', async ({ page }) => {
+test('can create and delete an agent', async ({ page }) => {
   const AGENT_NAME = getRandomString(10, 'Test Agent');
   await goToPage(page, '/agents');
   await page.getByTestId(E2eTestId.CreateAgentButton).click();

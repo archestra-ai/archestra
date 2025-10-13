@@ -100,7 +100,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
               {navigationItems.map((item) => (
@@ -134,7 +134,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="px-4">
           <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -152,7 +152,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

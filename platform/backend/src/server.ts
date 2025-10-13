@@ -50,8 +50,7 @@ const start = async () => {
       origin: [/http:\/\/localhost:\d+/],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-      credentials: true,
-      maxAge: 86400,
+      credentials: true
     });
 
     /**

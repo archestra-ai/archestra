@@ -7,7 +7,7 @@ export {
   session,
   user,
   verification,
-} from "./auth-schema";
+} from "./auth";
 export { default as dualLlmConfigTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";

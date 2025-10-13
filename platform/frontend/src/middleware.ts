@@ -1,19 +1,13 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
+/**
+ * This middleware protects routes following below matcher config.
+ * It checks for a valid session cookie and redirects to the sign-in page if not found.
+ * @param req 
+ * @returns 
+ */
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  if (
-    pathname.startsWith("/auth/sign-in") ||
-    pathname.startsWith("/auth/sign-up") ||
-    pathname.startsWith("/accept-invitation") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
-  ) {
-    return NextResponse.next();
-  }
-
   const session = getSessionCookie(req, {
     cookiePrefix: "archestra",
   });
@@ -26,5 +20,16 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|favicon.ico).*)"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - auth/sign-in (login page)
+     * - auth/sign-up (registration page)
+     * - accept-invitation (invitation acceptance page)
+     * - test-agent (public test page)
+     * - _next (Next.js internals)
+     * - favicon.ico, robots.txt, sitemap.xml (static files)
+     */
+    "/((?!auth/sign-in|auth/sign-up|accept-invitation|test-agent|_next|favicon.ico|robots.txt|sitemap.xml).*)",
+  ],
 };

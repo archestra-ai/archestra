@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   Bot,
+  Bug,
   FileJson2,
   Github,
   Info,
@@ -15,9 +16,11 @@ import {
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ColorModeToggle } from "@/components/color-mode-toggle";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -197,10 +200,27 @@ export function AppSidebar() {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://github.com/archestra-ai/archestra/issues/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Bug />
+                    <span>Report a Bug</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center justify-center py-2">
+          <ColorModeToggle />
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

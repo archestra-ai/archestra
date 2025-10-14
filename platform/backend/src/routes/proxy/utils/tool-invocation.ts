@@ -9,20 +9,21 @@ import { ToolInvocationPolicyModel } from "@/models";
  * (in the format of an assistant message with a refusal)
  */
 export const evaluatePolicies = async (
-  message: OpenAI.Chat.ChatCompletionMessage,
+  { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
   agentId: string,
   contextIsTrusted: boolean,
-): Promise<null | OpenAI.Chat.ChatCompletion.Choice> => {
-  const toolCalls = message.tool_calls;
-
+): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
   for (const toolCall of toolCalls || []) {
-    // Only process function tool calls
-    if (toolCall.type !== "function") {
-      continue;
-    }
+    let toolCallName = "";
+    let toolCallArgs = "";
 
-    const toolCallName = toolCall.function.name;
-    const toolCallArgs = toolCall.function.arguments;
+    if (toolCall.type === "function") {
+      toolCallName = toolCall.function.name;
+      toolCallArgs = toolCall.function.arguments;
+    } else {
+      toolCallName = toolCall.custom.name;
+      toolCallArgs = toolCall.custom.input;
+    }
 
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:

@@ -263,7 +263,512 @@ export type GetInteractionsResponses = {
     /**
      * Default Response
      */
-    200: Array<unknown>;
+    200: Array<{
+        id: string;
+        agentId: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487
+         */
+        request: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            stream?: boolean | null;
+        };
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248
+         */
+        response: {
+            id: string;
+            choices: Array<{
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                index: number;
+                logprobs: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                 */
+                message: {
+                    content: string | null;
+                    refusal: string | null;
+                    role: 'assistant';
+                    annotations?: Array<unknown>;
+                    audio?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                };
+            }>;
+            created: number;
+            model: string;
+            object: 'chat.completion';
+            server_tier?: string;
+            system_fingerprint?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+             */
+            usage?: {
+                completion_tokens: number;
+                prompt_tokens: number;
+                total_tokens: number;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                 */
+                completion_tokens_details?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                 */
+                prompt_tokens_details?: unknown;
+            };
+        };
+        provider: 'openai';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: {
+            contents: Array<{
+                role: 'user' | 'model' | 'function';
+                parts: Array<{
+                    text: string;
+                } | {
+                    inlineData: {
+                        mimeType: string;
+                        data: string;
+                    };
+                } | {
+                    fileData: {
+                        mimeType: string;
+                        fileUri: string;
+                    };
+                } | {
+                    functionCall: {
+                        name: string;
+                        args: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        name: string;
+                        response: {
+                            [key: string]: unknown;
+                        };
+                    };
+                }>;
+            }>;
+            tools?: Array<{
+                functionDeclarations: Array<{
+                    name: string;
+                    description?: string;
+                    parameters?: {
+                        type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                        format?: string;
+                        description?: string;
+                        nullable?: boolean;
+                        enum?: Array<string>;
+                        maxItems?: number;
+                        minItems?: number;
+                        properties?: {
+                            [key: string]: unknown;
+                        };
+                        required?: Array<string>;
+                        items?: unknown;
+                    };
+                }>;
+            }>;
+            toolConfig?: {
+                functionCallingConfig: {
+                    mode: 'AUTO' | 'ANY' | 'NONE';
+                    allowedFunctionNames?: Array<string>;
+                };
+            };
+            safetySettings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+            }>;
+            systemInstruction?: {
+                parts: Array<{
+                    text: string;
+                }>;
+            };
+            generationConfig?: {
+                temperature?: number;
+                topP?: number;
+                topK?: number;
+                candidateCount?: number;
+                maxOutputTokens?: number;
+                stopSequences?: Array<string>;
+                responseMimeType?: string;
+                responseSchema?: unknown;
+            };
+        };
+        response: {
+            candidates?: Array<{
+                content?: {
+                    role: 'user' | 'model' | 'function';
+                    parts: Array<{
+                        text: string;
+                    } | {
+                        inlineData: {
+                            mimeType: string;
+                            data: string;
+                        };
+                    } | {
+                        fileData: {
+                            mimeType: string;
+                            fileUri: string;
+                        };
+                    } | {
+                        functionCall: {
+                            name: string;
+                            args: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    } | {
+                        functionResponse: {
+                            name: string;
+                            response: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    }>;
+                };
+                finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
+                index?: number;
+                safetyRatings?: Array<{
+                    category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                    probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                    blocked?: boolean;
+                }>;
+                citationMetadata?: {
+                    citations?: Array<{
+                        startIndex?: number;
+                        endIndex?: number;
+                        uri?: string;
+                        license?: string;
+                    }>;
+                };
+                tokenCount?: number;
+            }>;
+            promptFeedback?: {
+                blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
+                safetyRatings?: Array<{
+                    category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                    probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                    blocked?: boolean;
+                }>;
+            };
+            usageMetadata?: {
+                promptTokenCount?: number;
+                candidatesTokenCount?: number;
+                totalTokenCount?: number;
+            };
+            modelVersion?: string;
+        };
+        provider: 'gemini';
+        createdAt: string;
+    }>;
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
@@ -295,234 +800,720 @@ export type GetInteractionResponses = {
     /**
      * Default Response
      */
-    200: unknown;
-};
-
-export type DeleteV1ByProviderData = {
-    body?: never;
-    path: {
-        provider: string;
+    200: {
+        id: string;
+        agentId: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487
+         */
+        request: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            stream?: boolean | null;
+        };
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248
+         */
+        response: {
+            id: string;
+            choices: Array<{
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+                index: number;
+                logprobs: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                 */
+                message: {
+                    content: string | null;
+                    refusal: string | null;
+                    role: 'assistant';
+                    annotations?: Array<unknown>;
+                    audio?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                };
+            }>;
+            created: number;
+            model: string;
+            object: 'chat.completion';
+            server_tier?: string;
+            system_fingerprint?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+             */
+            usage?: {
+                completion_tokens: number;
+                prompt_tokens: number;
+                total_tokens: number;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                 */
+                completion_tokens_details?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                 */
+                prompt_tokens_details?: unknown;
+            };
+        };
+        provider: 'openai';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: {
+            contents: Array<{
+                role: 'user' | 'model' | 'function';
+                parts: Array<{
+                    text: string;
+                } | {
+                    inlineData: {
+                        mimeType: string;
+                        data: string;
+                    };
+                } | {
+                    fileData: {
+                        mimeType: string;
+                        fileUri: string;
+                    };
+                } | {
+                    functionCall: {
+                        name: string;
+                        args: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        name: string;
+                        response: {
+                            [key: string]: unknown;
+                        };
+                    };
+                }>;
+            }>;
+            tools?: Array<{
+                functionDeclarations: Array<{
+                    name: string;
+                    description?: string;
+                    parameters?: {
+                        type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                        format?: string;
+                        description?: string;
+                        nullable?: boolean;
+                        enum?: Array<string>;
+                        maxItems?: number;
+                        minItems?: number;
+                        properties?: {
+                            [key: string]: unknown;
+                        };
+                        required?: Array<string>;
+                        items?: unknown;
+                    };
+                }>;
+            }>;
+            toolConfig?: {
+                functionCallingConfig: {
+                    mode: 'AUTO' | 'ANY' | 'NONE';
+                    allowedFunctionNames?: Array<string>;
+                };
+            };
+            safetySettings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+            }>;
+            systemInstruction?: {
+                parts: Array<{
+                    text: string;
+                }>;
+            };
+            generationConfig?: {
+                temperature?: number;
+                topP?: number;
+                topK?: number;
+                candidateCount?: number;
+                maxOutputTokens?: number;
+                stopSequences?: Array<string>;
+                responseMimeType?: string;
+                responseSchema?: unknown;
+            };
+        };
+        response: {
+            candidates?: Array<{
+                content?: {
+                    role: 'user' | 'model' | 'function';
+                    parts: Array<{
+                        text: string;
+                    } | {
+                        inlineData: {
+                            mimeType: string;
+                            data: string;
+                        };
+                    } | {
+                        fileData: {
+                            mimeType: string;
+                            fileUri: string;
+                        };
+                    } | {
+                        functionCall: {
+                            name: string;
+                            args: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    } | {
+                        functionResponse: {
+                            name: string;
+                            response: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    }>;
+                };
+                finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
+                index?: number;
+                safetyRatings?: Array<{
+                    category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                    probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                    blocked?: boolean;
+                }>;
+                citationMetadata?: {
+                    citations?: Array<{
+                        startIndex?: number;
+                        endIndex?: number;
+                        uri?: string;
+                        license?: string;
+                    }>;
+                };
+                tokenCount?: number;
+            }>;
+            promptFeedback?: {
+                blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
+                safetyRatings?: Array<{
+                    category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                    probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                    blocked?: boolean;
+                }>;
+            };
+            usageMetadata?: {
+                promptTokenCount?: number;
+                candidatesTokenCount?: number;
+                totalTokenCount?: number;
+            };
+            modelVersion?: string;
+        };
+        provider: 'gemini';
+        createdAt: string;
     };
-    query?: never;
-    url: '/v1/{provider}/';
 };
 
-export type DeleteV1ByProviderResponses = {
+export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+
+export type DeleteV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type DeleteV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetV1ByProviderData = {
+export type GetV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type GetV1ByProviderResponses = {
+export type GetV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadV1ByProviderData = {
+export type HeadV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type HeadV1ByProviderResponses = {
+export type HeadV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OptionsV1ByProviderData = {
+export type OptionsV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type OptionsV1ByProviderResponses = {
+export type OptionsV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PatchV1ByProviderData = {
+export type PatchV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type PatchV1ByProviderResponses = {
+export type PatchV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PostV1ByProviderData = {
+export type PostV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type PostV1ByProviderResponses = {
+export type PostV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PutV1ByProviderData = {
+export type PutV1OpenaiData = {
     body?: never;
-    path: {
-        provider: string;
-    };
+    path?: never;
     query?: never;
-    url: '/v1/{provider}/';
+    url: '/v1/openai/';
 };
 
-export type PutV1ByProviderResponses = {
+export type PutV1OpenaiResponses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type DeleteV1ByProviderBy__Data = {
+export type DeleteV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type DeleteV1ByProviderBy__Responses = {
+export type DeleteV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetV1ByProviderBy__Data = {
+export type GetV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type GetV1ByProviderBy__Responses = {
+export type GetV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadV1ByProviderBy__Data = {
+export type HeadV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type HeadV1ByProviderBy__Responses = {
+export type HeadV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type OptionsV1ByProviderBy__Data = {
+export type OptionsV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type OptionsV1ByProviderBy__Responses = {
+export type OptionsV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PatchV1ByProviderBy__Data = {
+export type PatchV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type PatchV1ByProviderBy__Responses = {
+export type PatchV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PostV1ByProviderBy__Data = {
+export type PostV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type PostV1ByProviderBy__Responses = {
+export type PostV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type PutV1ByProviderBy__Data = {
+export type PutV1OpenaiBy__Data = {
     body?: never;
     path: {
-        provider: string;
         '*': string;
     };
     query?: never;
-    url: '/v1/{provider}/{*}';
+    url: '/v1/openai/{*}';
 };
 
-export type PutV1ByProviderBy__Responses = {
+export type PutV1OpenaiBy__Responses = {
     /**
      * Default Response
      */
@@ -812,10 +1803,6 @@ export type OpenAiChatCompletionsWithDefaultAgentData = {
         stream?: boolean | null;
     };
     headers: {
-        /**
-         * If specified, interactions will be associated with this chat, otherwise a new chat will be created
-         */
-        'x-archestra-chat-id'?: string;
         /**
          * The user agent of the client
          */
@@ -1233,10 +2220,6 @@ export type OpenAiChatCompletionsWithAgentData = {
     };
     headers: {
         /**
-         * If specified, interactions will be associated with this chat, otherwise a new chat will be created
-         */
-        'x-archestra-chat-id'?: string;
-        /**
          * The user agent of the client
          */
         'user-agent'?: string;
@@ -1370,6 +2353,918 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type DeleteV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type DeleteV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type GetV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type HeadV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type OptionsV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PatchV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PostV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PutV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type DeleteV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type GetV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type HeadV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type OptionsV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PatchV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PostV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PutV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiModelsByModelGenerateContentData = {
+    body: {
+        contents: Array<{
+            role: 'user' | 'model' | 'function';
+            parts: Array<{
+                text: string;
+            } | {
+                inlineData: {
+                    mimeType: string;
+                    data: string;
+                };
+            } | {
+                fileData: {
+                    mimeType: string;
+                    fileUri: string;
+                };
+            } | {
+                functionCall: {
+                    name: string;
+                    args: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        }>;
+        tools?: Array<{
+            functionDeclarations: Array<{
+                name: string;
+                description?: string;
+                parameters?: {
+                    type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                    format?: string;
+                    description?: string;
+                    nullable?: boolean;
+                    enum?: Array<string>;
+                    maxItems?: number;
+                    minItems?: number;
+                    properties?: {
+                        [key: string]: unknown;
+                    };
+                    required?: Array<string>;
+                    items?: unknown;
+                };
+            }>;
+        }>;
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+        safetySettings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        }>;
+        systemInstruction?: {
+            parts: Array<{
+                text: string;
+            }>;
+        };
+        generationConfig?: {
+            temperature?: number;
+            topP?: number;
+            topK?: number;
+            candidateCount?: number;
+            maxOutputTokens?: number;
+            stopSequences?: Array<string>;
+            responseMimeType?: string;
+            responseSchema?: unknown;
+        };
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/models/{model}:generateContent';
+};
+
+export type PostV1GeminiModelsByModelGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
+
+export type PostV1GeminiModelsByModelGenerateContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        candidates?: Array<{
+            content?: {
+                role: 'user' | 'model' | 'function';
+                parts: Array<{
+                    text: string;
+                } | {
+                    inlineData: {
+                        mimeType: string;
+                        data: string;
+                    };
+                } | {
+                    fileData: {
+                        mimeType: string;
+                        fileUri: string;
+                    };
+                } | {
+                    functionCall: {
+                        name: string;
+                        args: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        name: string;
+                        response: {
+                            [key: string]: unknown;
+                        };
+                    };
+                }>;
+            };
+            finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
+            index?: number;
+            safetyRatings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                blocked?: boolean;
+            }>;
+            citationMetadata?: {
+                citations?: Array<{
+                    startIndex?: number;
+                    endIndex?: number;
+                    uri?: string;
+                    license?: string;
+                }>;
+            };
+            tokenCount?: number;
+        }>;
+        promptFeedback?: {
+            blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
+            safetyRatings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                blocked?: boolean;
+            }>;
+        };
+        usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+            totalTokenCount?: number;
+        };
+        modelVersion?: string;
+    };
+};
+
+export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
+
+export type PostV1GeminiModelsByModelStreamGenerateContentData = {
+    body: {
+        contents: Array<{
+            role: 'user' | 'model' | 'function';
+            parts: Array<{
+                text: string;
+            } | {
+                inlineData: {
+                    mimeType: string;
+                    data: string;
+                };
+            } | {
+                fileData: {
+                    mimeType: string;
+                    fileUri: string;
+                };
+            } | {
+                functionCall: {
+                    name: string;
+                    args: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        }>;
+        tools?: Array<{
+            functionDeclarations: Array<{
+                name: string;
+                description?: string;
+                parameters?: {
+                    type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                    format?: string;
+                    description?: string;
+                    nullable?: boolean;
+                    enum?: Array<string>;
+                    maxItems?: number;
+                    minItems?: number;
+                    properties?: {
+                        [key: string]: unknown;
+                    };
+                    required?: Array<string>;
+                    items?: unknown;
+                };
+            }>;
+        }>;
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+        safetySettings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        }>;
+        systemInstruction?: {
+            parts: Array<{
+                text: string;
+            }>;
+        };
+        generationConfig?: {
+            temperature?: number;
+            topP?: number;
+            topK?: number;
+            candidateCount?: number;
+            maxOutputTokens?: number;
+            stopSequences?: Array<string>;
+            responseMimeType?: string;
+            responseSchema?: unknown;
+        };
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/models/{model}:streamGenerateContent';
+};
+
+export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
+    body: {
+        contents: Array<{
+            role: 'user' | 'model' | 'function';
+            parts: Array<{
+                text: string;
+            } | {
+                inlineData: {
+                    mimeType: string;
+                    data: string;
+                };
+            } | {
+                fileData: {
+                    mimeType: string;
+                    fileUri: string;
+                };
+            } | {
+                functionCall: {
+                    name: string;
+                    args: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        }>;
+        tools?: Array<{
+            functionDeclarations: Array<{
+                name: string;
+                description?: string;
+                parameters?: {
+                    type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                    format?: string;
+                    description?: string;
+                    nullable?: boolean;
+                    enum?: Array<string>;
+                    maxItems?: number;
+                    minItems?: number;
+                    properties?: {
+                        [key: string]: unknown;
+                    };
+                    required?: Array<string>;
+                    items?: unknown;
+                };
+            }>;
+        }>;
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+        safetySettings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        }>;
+        systemInstruction?: {
+            parts: Array<{
+                text: string;
+            }>;
+        };
+        generationConfig?: {
+            temperature?: number;
+            topP?: number;
+            topK?: number;
+            candidateCount?: number;
+            maxOutputTokens?: number;
+            stopSequences?: Array<string>;
+            responseMimeType?: string;
+            responseSchema?: unknown;
+        };
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        agentId: string;
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        candidates?: Array<{
+            content?: {
+                role: 'user' | 'model' | 'function';
+                parts: Array<{
+                    text: string;
+                } | {
+                    inlineData: {
+                        mimeType: string;
+                        data: string;
+                    };
+                } | {
+                    fileData: {
+                        mimeType: string;
+                        fileUri: string;
+                    };
+                } | {
+                    functionCall: {
+                        name: string;
+                        args: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        name: string;
+                        response: {
+                            [key: string]: unknown;
+                        };
+                    };
+                }>;
+            };
+            finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
+            index?: number;
+            safetyRatings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                blocked?: boolean;
+            }>;
+            citationMetadata?: {
+                citations?: Array<{
+                    startIndex?: number;
+                    endIndex?: number;
+                    uri?: string;
+                    license?: string;
+                }>;
+            };
+            tokenCount?: number;
+        }>;
+        promptFeedback?: {
+            blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
+            safetyRatings?: Array<{
+                category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+                probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+                blocked?: boolean;
+            }>;
+        };
+        usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+            totalTokenCount?: number;
+        };
+        modelVersion?: string;
+    };
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
+    body: {
+        contents: Array<{
+            role: 'user' | 'model' | 'function';
+            parts: Array<{
+                text: string;
+            } | {
+                inlineData: {
+                    mimeType: string;
+                    data: string;
+                };
+            } | {
+                fileData: {
+                    mimeType: string;
+                    fileUri: string;
+                };
+            } | {
+                functionCall: {
+                    name: string;
+                    args: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        }>;
+        tools?: Array<{
+            functionDeclarations: Array<{
+                name: string;
+                description?: string;
+                parameters?: {
+                    type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                    format?: string;
+                    description?: string;
+                    nullable?: boolean;
+                    enum?: Array<string>;
+                    maxItems?: number;
+                    minItems?: number;
+                    properties?: {
+                        [key: string]: unknown;
+                    };
+                    required?: Array<string>;
+                    items?: unknown;
+                };
+            }>;
+        }>;
+        toolConfig?: {
+            functionCallingConfig: {
+                mode: 'AUTO' | 'ANY' | 'NONE';
+                allowedFunctionNames?: Array<string>;
+            };
+        };
+        safetySettings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        }>;
+        systemInstruction?: {
+            parts: Array<{
+                text: string;
+            }>;
+        };
+        generationConfig?: {
+            temperature?: number;
+            topP?: number;
+            topK?: number;
+            candidateCount?: number;
+            maxOutputTokens?: number;
+            stopSequences?: Array<string>;
+            responseMimeType?: string;
+            responseSchema?: unknown;
+        };
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        agentId: string;
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
+};
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
 
 export type GetToolsData = {
     body?: never;

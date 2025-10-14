@@ -642,6 +642,7 @@ export function generateMockInteraction(
     request,
     response,
     createdAt: new Date(response.created * 1000),
+    provider: "openai",
   };
 }
 

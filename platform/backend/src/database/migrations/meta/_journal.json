@@ -113,13 +113,6 @@
       "when": 1760452345921,
       "tag": "0015_left_lizard",
       "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1760452382975,
-      "tag": "0016_update-interactions-provider",
-      "breakpoints": true
     }
   ]
 }

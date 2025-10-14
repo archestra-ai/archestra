@@ -1,1 +1,1 @@
-ALTER TABLE "interactions" ADD COLUMN "provider" varchar NOT NULL;
+ALTER TABLE "interactions" ADD COLUMN "provider" varchar NOT NULL DEFAULT 'openai';

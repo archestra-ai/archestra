@@ -125,7 +125,7 @@ The `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` environment variable is used specifical
 The platform includes two example CLI chat applications for testing:
 
 ```bash
-# 1. Experiments CLI Chat (TypeScript with OpenAI SDK)
+# 1. Experiments CLI Chat (TypeScript with OpenAI/Gemini SDKs)
 cd experiments
 pnpm cli-chat-with-guardrails
 # Interactive CLI - supports commands:
@@ -136,7 +136,8 @@ pnpm cli-chat-with-guardrails
 #   --include-external-email  # Include external email in mock Gmail data
 #   --include-malicious-email # Include malicious email with prompt injection
 #   --stream                  # Stream the response
-#   --model <model>           # Specify model (default: gpt-4o)
+#   --model <model>           # Specify model (default: gpt-4o for OpenAI, gemini-1.5-pro for Gemini)
+#   --provider <provider>     # Provider selection: "openai" or "gemini" (default: openai)
 #   --debug                   # Print debug messages
 
 # 2. AI SDK Express Example (TypeScript with Vercel AI SDK)
@@ -409,8 +410,9 @@ The `experiments/` workspace contains prototype features:
 
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
   - Supports `--agent-id <agent-id>` flag to specify an agent (required)
-  - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`
-- Requires `OPENAI_API_KEY` in `.env` (copy from `.env.example`)
+  - Supports `--provider <provider>` flag to select between "openai" or "gemini" (default: openai)
+  - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`, `--stream`
+- Requires `OPENAI_API_KEY` or `GEMINI_API_KEY` in `.env` (copy from `.env.example`)
 
 ### Code Quality Tools
 

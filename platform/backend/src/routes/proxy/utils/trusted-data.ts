@@ -23,8 +23,12 @@ const extractToolNameFromMessages = (
 
     if (message.role === "assistant" && message.tool_calls) {
       for (const toolCall of message.tool_calls) {
-        if (toolCall.type === "function" && toolCall.id === toolCallId) {
-          return toolCall.function.name;
+        if (toolCall.id === toolCallId) {
+          if (toolCall.type === "function") {
+            return toolCall.function.name;
+          } else {
+            return toolCall.custom.name;
+          }
         }
       }
     }

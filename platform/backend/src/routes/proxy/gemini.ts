@@ -141,7 +141,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Convert to common format for SSE
-          const commonChunk = converter.chunkToCommon(chunk as any);
+          const commonChunk = converter.chunkToCommon ? converter.chunkToCommon(chunk as any) : chunk;
 
           reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
           await new Promise((resolve) =>

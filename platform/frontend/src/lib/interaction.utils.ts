@@ -241,6 +241,7 @@ export class DynamicInteraction implements InteractionUtils {
 
   id: string;
   agentId: string;
+  provider: string;
   createdAt: string;
   modelName: string;
 
@@ -249,6 +250,7 @@ export class DynamicInteraction implements InteractionUtils {
 
     this.id = interaction.id;
     this.agentId = interaction.agentId;
+    this.provider = interaction.provider;
     this.createdAt = interaction.createdAt;
     this.modelName = this.interactionClass.modelName;
   }

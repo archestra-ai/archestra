@@ -82,7 +82,7 @@ function LogsTable({
             <TableRow>
               <TableHead className="w-[140px]">Date</TableHead>
               <TableHead className="w-[140px]">Agent</TableHead>
-              <TableHead className="w-[100px]">Model</TableHead>
+              <TableHead className="w-[140px]">Provider + Model</TableHead>
               <TableHead className="w-[180px]">User Message</TableHead>
               <TableHead className="w-[180px]">Assistant Response</TableHead>
               <TableHead className="w-[160px]">Tools</TableHead>
@@ -124,7 +124,6 @@ function LogRow({
 
   const formattedDate = formatDate({ date: interaction.createdAt });
   const agentName = agent?.name ?? "Unknown";
-  const modelName = interaction.modelName;
 
   return (
     <TableRow>
@@ -134,7 +133,7 @@ function LogRow({
       </TableCell>
       <TableCell>
         <Badge variant="secondary" className="text-xs">
-          {modelName}
+          {interaction.provider}:{interaction.modelName}
         </Badge>
       </TableCell>
       <TableCell className="text-xs">

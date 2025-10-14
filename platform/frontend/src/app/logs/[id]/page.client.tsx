@@ -183,8 +183,12 @@ function LogDetail({
                 <div className="font-medium">{agent?.name ?? "Unknown"}</div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground mb-2">Model</div>
-                <div className="font-medium">{interaction.modelName}</div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Provider + Model
+                </div>
+                <div className="font-medium">
+                  {interaction.provider} ({interaction.modelName})
+                </div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-2">

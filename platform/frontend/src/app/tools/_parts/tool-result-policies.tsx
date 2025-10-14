@@ -267,13 +267,15 @@ export function ToolResultPolicies({
           {willTriggerDualLlm ? (
             <Badge variant="default" asChild>
               <Link href="/dual-llm" className="cursor-pointer">
-                Dual LLM will activate
+                Dual LLM is active
               </Link>
             </Badge>
           ) : (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/dual-llm">Configure Dual LLM →</Link>
-            </Button>
+            <Badge variant="secondary" asChild>
+              <Link href="/dual-llm" className="cursor-pointer">
+                Dual LLM is inactive (Click to enable)
+              </Link>
+            </Badge>
           )}
         </div>
       </div>

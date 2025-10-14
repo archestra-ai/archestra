@@ -53,7 +53,6 @@ dotenv(
   './.env'
 )
 
-# pre
 local_resource(
   'pnpm-install',
   cmd='pnpm install',
@@ -98,7 +97,7 @@ local_resource(
   ''',
   deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
   resource_deps=['pnpm-install', 'postgresql'],
-  labels=['pre']
+  labels=['database']
 )
 
 # prod bundle

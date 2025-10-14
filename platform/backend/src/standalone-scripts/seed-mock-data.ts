@@ -26,7 +26,7 @@ async function seedMockData() {
   await db.insert(schema.toolsTable).values(toolData);
   console.log(`✅ Created ${toolData.length} tools`);
 
-  // Step 3: Create 100 mock interactions
+  // Step 3: Create 200 mock interactions
   console.log("\nCreating interactions...");
 
   // Group tools by agent for efficient lookup
@@ -39,7 +39,7 @@ async function seedMockData() {
   const interactionData = generateMockInteractions(
     agentIds,
     toolsByAgent,
-    100, // number of interactions
+    200, // number of interactions
     0.3, // 30% block probability
   );
 

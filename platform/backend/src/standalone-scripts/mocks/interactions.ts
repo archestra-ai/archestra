@@ -9,28 +9,41 @@ export interface ConversationTemplate {
 }
 
 export const CONVERSATION_TEMPLATES: ConversationTemplate[] = [
-  {
-    userPrompts: ["Can you analyze the logs?", "What errors do you see?"],
-    toolName: "analyze_logs",
-    systemPrompt: "You are a helpful assistant that analyzes system logs.",
-  },
+  // File operations
   {
     userPrompts: ["Read the config file", "What's in the configuration?"],
     toolName: "read_file",
     systemPrompt: "You are a helpful assistant that reads and explains files.",
   },
   {
-    userPrompts: [
-      "Send me a notification when done",
-      "Alert me if there's an issue",
-    ],
-    toolName: "send_notification",
-    systemPrompt: "You are a helpful assistant that manages notifications.",
+    userPrompts: ["Write this to a file", "Save the output"],
+    toolName: "write_file",
+    systemPrompt: "You are a helpful assistant that writes files.",
   },
   {
-    userPrompts: ["Fetch data from the API", "Get the latest API response"],
-    toolName: "fetch_api",
-    systemPrompt: "You are a helpful assistant that interacts with APIs.",
+    userPrompts: ["Delete the old logs", "Remove temporary files"],
+    toolName: "delete_file",
+    systemPrompt: "You are a helpful assistant that manages files.",
+  },
+  {
+    userPrompts: ["Copy the backup", "Duplicate this file"],
+    toolName: "copy_file",
+    systemPrompt: "You are a helpful assistant that manages files.",
+  },
+  {
+    userPrompts: [
+      "List the directory contents",
+      "Show me what's in this folder",
+    ],
+    toolName: "list_directory",
+    systemPrompt: "You are a helpful assistant that navigates filesystems.",
+  },
+
+  // Database operations
+  {
+    userPrompts: ["Execute this query", "Run the database query"],
+    toolName: "execute_query",
+    systemPrompt: "You are a database assistant.",
   },
   {
     userPrompts: ["Backup the database", "Can you backup the data?"],
@@ -38,16 +51,84 @@ export const CONVERSATION_TEMPLATES: ConversationTemplate[] = [
     systemPrompt: "You are a helpful assistant that manages data backups.",
   },
   {
+    userPrompts: ["Restore from backup", "Recover the data"],
+    toolName: "restore_data",
+    systemPrompt: "You are a database recovery assistant.",
+  },
+  {
+    userPrompts: ["Migrate the schema", "Update the database structure"],
+    toolName: "migrate_schema",
+    systemPrompt: "You are a database migration assistant.",
+  },
+  {
+    userPrompts: ["Export the data", "Download the dataset"],
+    toolName: "export_data",
+    systemPrompt: "You are a data export assistant.",
+  },
+
+  // API operations
+  {
+    userPrompts: ["Fetch data from the API", "Get the latest API response"],
+    toolName: "fetch_api",
+    systemPrompt: "You are a helpful assistant that interacts with APIs.",
+  },
+  {
+    userPrompts: ["Post this data", "Send the request"],
+    toolName: "post_api",
+    systemPrompt: "You are a helpful assistant that interacts with APIs.",
+  },
+  {
+    userPrompts: ["Upload the file", "Send this file to the server"],
+    toolName: "upload_file",
+    systemPrompt: "You are a file transfer assistant.",
+  },
+
+  // Monitoring
+  {
+    userPrompts: ["Can you analyze the logs?", "What errors do you see?"],
+    toolName: "analyze_logs",
+    systemPrompt: "You are a helpful assistant that analyzes system logs.",
+  },
+  {
+    userPrompts: ["Check the metrics", "Monitor the system"],
+    toolName: "monitor_metrics",
+    systemPrompt: "You are a monitoring assistant.",
+  },
+  {
+    userPrompts: ["Track performance", "How is the system performing?"],
+    toolName: "track_performance",
+    systemPrompt: "You are a performance tracking assistant.",
+  },
+  {
+    userPrompts: ["Check system health", "Is everything running ok?"],
+    toolName: "check_health",
+    systemPrompt: "You are a system health assistant.",
+  },
+  {
+    userPrompts: ["Generate a report", "Create a summary report"],
+    toolName: "generate_report",
+    systemPrompt: "You are a reporting assistant.",
+  },
+
+  // Security
+  {
     userPrompts: ["Scan for vulnerabilities", "Check security issues"],
     toolName: "scan_vulnerabilities",
     systemPrompt:
       "You are a security assistant that scans for vulnerabilities.",
   },
   {
-    userPrompts: ["Optimize the performance", "Can you improve the speed?"],
-    toolName: "optimize_performance",
-    systemPrompt: "You are a performance optimization assistant.",
+    userPrompts: ["Encrypt this data", "Secure the information"],
+    toolName: "encrypt_data",
+    systemPrompt: "You are a security encryption assistant.",
   },
+  {
+    userPrompts: ["Verify the signature", "Check authentication"],
+    toolName: "verify_signature",
+    systemPrompt: "You are a security verification assistant.",
+  },
+
+  // Code operations
   {
     userPrompts: [
       "Review this code",
@@ -57,14 +138,46 @@ export const CONVERSATION_TEMPLATES: ConversationTemplate[] = [
     systemPrompt: "You are a code review assistant.",
   },
   {
-    userPrompts: ["Generate a report", "Create a summary report"],
-    toolName: "generate_report",
-    systemPrompt: "You are a reporting assistant.",
+    userPrompts: ["Run the tests", "Execute the test suite"],
+    toolName: "run_tests",
+    systemPrompt: "You are a testing assistant.",
   },
   {
-    userPrompts: ["Execute this query", "Run the database query"],
-    toolName: "execute_query",
-    systemPrompt: "You are a database assistant.",
+    userPrompts: ["Deploy the code", "Push to production"],
+    toolName: "deploy_code",
+    systemPrompt: "You are a deployment assistant.",
+  },
+  {
+    userPrompts: ["Optimize the performance", "Can you improve the speed?"],
+    toolName: "optimize_performance",
+    systemPrompt: "You are a performance optimization assistant.",
+  },
+
+  // Data transformation
+  {
+    userPrompts: ["Transform the data", "Convert this format"],
+    toolName: "transform_data",
+    systemPrompt: "You are a data transformation assistant.",
+  },
+  {
+    userPrompts: ["Parse this JSON", "Read the JSON data"],
+    toolName: "parse_json",
+    systemPrompt: "You are a data parsing assistant.",
+  },
+
+  // Communication
+  {
+    userPrompts: [
+      "Send me a notification when done",
+      "Alert me if there's an issue",
+    ],
+    toolName: "send_notification",
+    systemPrompt: "You are a helpful assistant that manages notifications.",
+  },
+  {
+    userPrompts: ["Send an email", "Email the team"],
+    toolName: "send_email",
+    systemPrompt: "You are an email assistant.",
   },
 ];
 
@@ -197,6 +310,184 @@ function generateToolArguments(toolName: string): Record<string, unknown> {
       data: randomElement(["sensitive-info.txt", "credentials.json"]),
       algorithm: randomElement(["AES-256", "RSA-2048", "ChaCha20"]),
       key: randomElement(["key-001", "key-prod", "key-dev"]),
+    },
+    delete_file: {
+      path: randomElement([
+        "/tmp/old_cache.json",
+        "/var/log/old.log",
+        "~/Downloads/temp.txt",
+      ]),
+    },
+    copy_file: {
+      source: randomElement(["/etc/config.json", "/var/backup/data.db"]),
+      destination: randomElement(["/tmp/config.json", "/mnt/backup/data.db"]),
+    },
+    move_file: {
+      source: randomElement(["/tmp/upload.csv", "/var/temp/file.txt"]),
+      destination: randomElement([
+        "/var/data/upload.csv",
+        "/home/user/file.txt",
+      ]),
+    },
+    list_directory: {
+      path: randomElement(["/var/log", "/home/user/projects", "/etc"]),
+      recursive: randomBool(),
+    },
+    create_directory: {
+      path: randomElement([
+        "/var/app/cache",
+        "/home/user/new_project",
+        "/tmp/session",
+      ]),
+      mode: randomElement(["755", "644", "700"]),
+    },
+    compress_files: {
+      files: randomElement([
+        ["/var/log/app.log"],
+        ["/home/user/data.csv", "/home/user/report.pdf"],
+      ]),
+      output: randomElement(["archive.zip", "backup.tar.gz"]),
+    },
+    extract_archive: {
+      archive: randomElement(["backup.zip", "data.tar.gz"]),
+      destination: randomElement(["/tmp/extracted", "/var/restore"]),
+    },
+    restore_data: {
+      backup: randomElement([
+        "s3://backups/db-2024-01-15.sql",
+        "/mnt/backup/latest.dump",
+      ]),
+      target: randomElement(["production", "staging", "development"]),
+    },
+    migrate_schema: {
+      from: randomElement(["v1.0", "v2.0", "v3.0"]),
+      to: randomElement(["v2.0", "v3.0", "v4.0"]),
+      database: randomElement(["main", "analytics"]),
+    },
+    optimize_database: {
+      database: randomElement(["main", "analytics", "production"]),
+      tasks: randomElement([["vacuum"], ["reindex"], ["analyze", "vacuum"]]),
+    },
+    export_data: {
+      table: randomElement(["users", "products", "orders"]),
+      format: randomElement(["csv", "json", "xml"]),
+      destination: randomElement(["/tmp/export.csv", "s3://exports/data.json"]),
+    },
+    import_data: {
+      source: randomElement(["/tmp/import.csv", "s3://imports/data.json"]),
+      table: randomElement(["users", "products", "orders"]),
+      mode: randomElement(["append", "replace", "merge"]),
+    },
+    post_api: {
+      url: randomElement([
+        "https://api.example.com/users",
+        "https://webhook.site/unique-id",
+      ]),
+      data: randomElement([
+        { name: "John Doe", email: "john@example.com" },
+        { status: "completed", result: "success" },
+      ]),
+    },
+    delete_api: {
+      url: randomElement([
+        "https://api.example.com/users/123",
+        "https://api.example.com/posts/456",
+      ]),
+    },
+    upload_file: {
+      file: randomElement(["document.pdf", "image.png", "data.csv"]),
+      url: randomElement([
+        "https://upload.example.com/files",
+        "s3://bucket/uploads",
+      ]),
+    },
+    download_file: {
+      url: randomElement([
+        "https://example.com/files/document.pdf",
+        "https://cdn.example.com/assets/image.png",
+      ]),
+      destination: randomElement(["/tmp/downloads/", "~/Downloads/"]),
+    },
+    track_performance: {
+      application: randomElement(["web", "api", "worker"]),
+      metrics: randomElement([["cpu", "memory"], ["latency"], ["throughput"]]),
+    },
+    check_health: {
+      services: randomElement([["api"], ["database", "cache"], ["all"]]),
+      timeout: randomInt(5, 30),
+    },
+    create_dashboard: {
+      name: randomElement([
+        "System Overview",
+        "Performance Metrics",
+        "User Analytics",
+      ]),
+      widgets: randomElement([
+        ["cpu", "memory"],
+        ["requests", "latency"],
+        ["users", "revenue"],
+      ]),
+    },
+    decrypt_data: {
+      data: randomElement(["encrypted.bin", "secure.enc"]),
+      key: randomElement(["key-001", "key-prod", "key-dev"]),
+    },
+    verify_signature: {
+      data: randomElement(["document.pdf", "message.txt"]),
+      signature: randomElement(["sig.bin", "signature.asc"]),
+      publicKey: randomElement(["key.pub", "cert.pem"]),
+    },
+    audit_access: {
+      user: randomElement(["admin", "user123", "service-account"]),
+      resource: randomElement(["database", "api", "files"]),
+      since: randomElement(["1h", "24h", "7d"]),
+    },
+    run_tests: {
+      suite: randomElement(["unit", "integration", "e2e"]),
+      path: randomElement(["tests/", "src/**/*.test.ts"]),
+    },
+    deploy_code: {
+      environment: randomElement(["staging", "production", "development"]),
+      branch: randomElement(["main", "release-1.0", "hotfix/critical"]),
+      strategy: randomElement(["blue-green", "rolling", "canary"]),
+    },
+    rollback_deployment: {
+      environment: randomElement(["staging", "production"]),
+      version: randomElement(["v1.2.3", "v1.2.2", "v1.1.0"]),
+    },
+    parse_json: {
+      file: randomElement(["data.json", "config.json", "response.json"]),
+      schema: randomElement(["user", "product", "order"]),
+    },
+    parse_csv: {
+      file: randomElement(["data.csv", "export.csv", "users.csv"]),
+      delimiter: randomElement([",", ";", "|"]),
+      hasHeader: randomBool(),
+    },
+    convert_format: {
+      input: randomElement(["data.json", "file.xml", "doc.yaml"]),
+      output: randomElement(["csv", "json", "xml"]),
+    },
+    send_email: {
+      to: randomElement(["team@example.com", "support@company.com"]),
+      subject: randomElement([
+        "Weekly Report",
+        "System Alert",
+        "Deployment Notice",
+      ]),
+      body: randomElement([
+        "Please find attached the weekly report.",
+        "A system issue was detected and resolved.",
+        "The deployment to production is complete.",
+      ]),
+    },
+    send_slack_message: {
+      channel: randomElement(["#engineering", "#alerts", "#general"]),
+      message: randomElement([
+        "Deployment completed successfully",
+        "System health check failed",
+        "New feature released",
+      ]),
     },
   };
 

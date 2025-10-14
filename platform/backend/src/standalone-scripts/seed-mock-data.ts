@@ -47,9 +47,13 @@ async function seedMockData() {
   console.log(`✅ Created ${interactionData.length} interactions`);
 
   // Show statistics
-  const blockedCount = interactionData.filter(
-    (i) => i.response.choices[0]?.message?.refusal,
-  ).length;
+  const blockedCount = interactionData.filter((i) => {
+    // Handle discriminated union - check if it's an OpenAI response
+    if ("choices" in i.response) {
+      return i.response.choices[0]?.message?.refusal;
+    }
+    return false;
+  }).length;
   console.log(`   - ${blockedCount} blocked by policy`);
   console.log(`   - ${interactionData.length - blockedCount} allowed`);
 }

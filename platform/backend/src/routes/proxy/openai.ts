@@ -131,7 +131,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai",
+          provider: "openai" as const,
           request: body,
           response: {
             id: chunks[0]?.id || "chatcmpl-unknown",
@@ -186,7 +186,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai",
+          provider: "openai" as const,
           request: body,
           response,
         });

@@ -1,17 +1,17 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { GoogleGenAI } from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
-import { GeminiProxy } from "./types";
 import { getConverter } from "./converters";
+import { GeminiProxy } from "./types";
 import * as utils from "./utils";
 
 const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = "/v1";
-  
+
   /**
    * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent
    * This will proxy routes like /v1/gemini/models to https://generativelanguage.googleapis.com/v1beta/models
@@ -25,7 +25,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
-         request.url.includes(":streamGenerateContent"))
+          request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
         done(new Error("skip"));
@@ -64,18 +64,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { "x-goog-api-key": geminiApiKey } = headers;
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    
+    const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
+
     // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-pro";
-    const geminiModel = genAI.getGenerativeModel({ model: modelName });
 
     const converter = getConverter("gemini");
 
     try {
       // Convert Gemini request to common format for processing
       const commonRequest = converter.requestToCommon(body);
-      
+
       // Persist tools if present
       await utils.persistTools(commonRequest.tools, resolvedAgentId);
 
@@ -101,12 +100,19 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Connection", "keep-alive");
 
         // Handle streaming response
-        const result = await geminiModel.generateContentStream(geminiRequest);
-        
-        const chunks: z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema>[] = [];
-        let accumulatedResponse: z.infer<typeof Gemini.API.GenerateContentResponseSchema> | undefined;
+        const result = await genAI.models.generateContentStream({
+          model: modelName,
+          ...geminiRequest,
+        });
 
-        for await (const chunk of result.stream) {
+        const chunks: z.infer<
+          typeof Gemini.API.StreamGenerateContentChunkSchema
+        >[] = [];
+        let accumulatedResponse:
+          | z.infer<typeof Gemini.API.GenerateContentResponseSchema>
+          | undefined;
+
+        for await (const chunk of result) {
           chunks.push({
             candidates: chunk.candidates as any,
             modelVersion: modelName,
@@ -136,7 +142,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Convert to common format for SSE
           const commonChunk = converter.chunkToCommon(chunk as any);
-          
+
           reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.random() * 10),
@@ -145,8 +151,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Evaluate tool invocation policies on the accumulated response
         if (accumulatedResponse) {
-          const commonResponse = converter.responseToCommon(accumulatedResponse);
-          
+          const commonResponse =
+            converter.responseToCommon(accumulatedResponse);
+
           // Check if tool invocation is blocked
           const assistantMessage = commonResponse.choices[0]?.message;
           if (assistantMessage) {
@@ -173,9 +180,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   },
                 ],
               };
-              
+
               reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-              
+
               // Update response for persistence
               commonResponse.choices = [toolInvocationRefusal];
               accumulatedResponse = converter.responseFromCommon(
@@ -187,7 +194,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Store the complete interaction
           await InteractionModel.create({
             agentId: resolvedAgentId,
-            provider: "gemini",
+            provider: "gemini" as const,
             request: body,
             response: accumulatedResponse,
           });
@@ -198,9 +205,12 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply;
       } else {
         // Non-streaming response
-        const result = await geminiModel.generateContent(geminiRequest);
-        const response = result.response;
-        
+        const result = await genAI.models.generateContent({
+          model: modelName,
+          ...geminiRequest,
+        });
+        const response = result;
+
         const geminiResponse: z.infer<
           typeof Gemini.API.GenerateContentResponseSchema
         > = {
@@ -212,7 +222,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Convert to common format for policy evaluation
         const commonResponse = converter.responseToCommon(geminiResponse);
-        
+
         // Evaluate tool invocation policies
         const assistantMessage = commonResponse.choices[0]?.message;
         if (assistantMessage) {
@@ -229,11 +239,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const refusalResponse = converter.responseFromCommon(
               commonResponse,
             ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
-            
+
             // Store the interaction with refusal
             await InteractionModel.create({
               agentId: resolvedAgentId,
-              provider: "gemini",
+              provider: "gemini" as const,
               request: body,
               response: refusalResponse,
             });
@@ -245,7 +255,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "gemini",
+          provider: "gemini" as const,
           request: body,
           response: geminiResponse,
         });
@@ -392,7 +402,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/gemini/:agentId/models/:model\\:streamGenerateContent`,
     {
       schema: {
-        description: "Stream generated content using Gemini with specific agent",
+        description:
+          "Stream generated content using Gemini with specific agent",
         summary: "Stream generated content using Gemini (specific agent)",
         tags: ["Proxy"],
         params: z.object({

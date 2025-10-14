@@ -24,11 +24,13 @@ import {
 } from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
+type InteractionData = GetInteractionsResponses["200"]["data"][number];
+
 export function InteractionSummary({
   interaction,
   agent,
 }: {
-  interaction: GetInteractionsResponses["200"][number];
+  interaction: InteractionData;
   agent?: GetAgentsResponses["200"][number];
 }) {
   const [agentNameTruncated, _setAgentNameTruncated] = useState(false);
@@ -133,9 +135,7 @@ export function InteractionSummary({
   );
 }
 
-function findLastUserMessage(
-  interaction: GetInteractionsResponses["200"][number],
-): string {
+function findLastUserMessage(interaction: InteractionData): string {
   const reversedMessages = [...interaction.request.messages].reverse();
   for (const message of reversedMessages) {
     if (message.role !== "user") {

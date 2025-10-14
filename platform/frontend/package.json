@@ -36,6 +36,7 @@
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@shared": "workspace:*",
     "@tanstack/react-query": "^5.90.2",
+    "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
     "ai": "^5.0.57",
     "class-variance-authority": "^0.7.1",

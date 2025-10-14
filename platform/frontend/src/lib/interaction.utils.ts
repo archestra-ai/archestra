@@ -4,12 +4,12 @@ import type {
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 
+type InteractionData = GetInteractionsResponses["200"]["data"][number];
+
 /**
  * Check if the last message in an interaction is a tool message
  */
-export function isLastMessageToolCall(
-  interaction: GetInteractionsResponses["200"][number],
-): boolean {
+export function isLastMessageToolCall(interaction: InteractionData): boolean {
   const messages = interaction.request.messages;
   if (messages.length === 0) return false;
   const lastMessage = messages[messages.length - 1];
@@ -19,9 +19,7 @@ export function isLastMessageToolCall(
 /**
  * Get the tool_call_id from the last message if it's a tool message
  */
-export function getLastToolCallId(
-  interaction: GetInteractionsResponses["200"][number],
-): string | null {
+export function getLastToolCallId(interaction: InteractionData): string | null {
   const messages = interaction.request.messages;
   if (messages.length === 0) return null;
   const lastMessage = messages[messages.length - 1];
@@ -31,9 +29,7 @@ export function getLastToolCallId(
   return null;
 }
 
-export function toolNamesUsedForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
+export function toolNamesUsedForInteraction(interaction: InteractionData) {
   const toolsUsed = new Set<string>();
   for (const message of interaction.request.messages) {
     if (message.role === "assistant" && message.tool_calls) {
@@ -47,9 +43,7 @@ export function toolNamesUsedForInteraction(
   return Array.from(toolsUsed);
 }
 
-export function toolNamesRefusedForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
+export function toolNamesRefusedForInteraction(interaction: InteractionData) {
   const toolsRefused = new Set<string>();
   for (const message of interaction.request.messages) {
     if (message.role === "assistant") {
@@ -76,9 +70,7 @@ export function toolNamesRefusedForInteraction(
   return Array.from(toolsRefused);
 }
 
-export function toolsRefusedCountForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
+export function toolsRefusedCountForInteraction(interaction: InteractionData) {
   let count = 0;
   for (const message of interaction.request.messages) {
     if (message.role === "assistant") {

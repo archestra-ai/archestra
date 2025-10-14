@@ -1,19 +1,12 @@
 "use client";
 
+import type { ColumnDef } from "@tanstack/react-table";
 import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
-import { Suspense } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
 import { useAgents } from "@/lib/agent.query";
 import type {
   GetAgentsResponses,
@@ -24,12 +17,12 @@ import {
   toolNamesRefusedForInteraction,
   toolNamesUsedForInteraction,
 } from "@/lib/interaction.utils";
-import { formatDate } from "@/lib/utils";
+import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
-function findLastUserMessage(
-  interaction: GetInteractionsResponses["200"][number],
-): string {
+type InteractionData = GetInteractionsResponses["200"]["data"][number];
+
+function findLastUserMessage(interaction: InteractionData): string {
   const reversedMessages = [...interaction.request.messages].reverse();
   for (const message of reversedMessages) {
     if (message.role !== "user") {
@@ -54,10 +47,10 @@ export default function LogsPage({
   };
 }) {
   return (
-    <div className="w-full h-full overflow-y-auto">
+    <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight mb-2">Logs</h1>
+        <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+          <h1 className="mb-2 text-2xl font-semibold tracking-tight">Logs</h1>
           <p className="text-sm text-muted-foreground">
             View all interactions between your agents and LLMs, including
             requests, responses, and tool invocations.
@@ -65,11 +58,9 @@ export default function LogsPage({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
         <ErrorBoundary>
-          <Suspense fallback={<LoadingSpinner />}>
-            <LogsTable initialData={initialData} />
-          </Suspense>
+          <LogsTable initialData={initialData} />
         </ErrorBoundary>
       </div>
     </div>
@@ -84,93 +75,96 @@ function LogsTable({
     agents: GetAgentsResponses["200"];
   };
 }) {
-  const { data: interactions = [] } = useInteractions({
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: DEFAULT_TABLE_LIMIT,
+  });
+
+  const { data: interactionsResponse } = useInteractions({
+    limit: pagination.pageSize,
+    offset: pagination.pageIndex * pagination.pageSize,
     initialData: initialData?.interactions,
   });
+
   const { data: agents = [] } = useAgents({
     initialData: initialData?.agents,
   });
 
-  if (!interactions || interactions.length === 0) {
-    return <p className="text-muted-foreground">No logs found</p>;
-  }
+  const interactions = interactionsResponse?.data ?? [];
+  const paginationMeta = interactionsResponse?.pagination;
 
-  return (
-    <div className="border rounded-lg overflow-x-auto">
-      <div className="w-[fit-content]">
-        <Table className="overflow-x-auto">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[140px]">Date</TableHead>
-              <TableHead className="w-[140px]">Agent</TableHead>
-              <TableHead className="w-[100px]">Model</TableHead>
-              <TableHead className="w-[180px]">User Message</TableHead>
-              <TableHead className="w-[180px]">Assistant Response</TableHead>
-              <TableHead className="w-[160px]">Tools</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {interactions.map((interaction) => {
-              const agent = agents?.find((a) => a.id === interaction.agentId);
-              return (
-                <LogRow
-                  key={interaction.id}
-                  interaction={interaction}
-                  agent={agent}
-                />
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-function LogRow({
-  interaction,
-  agent,
-}: {
-  interaction: GetInteractionsResponses["200"][number];
-  agent?: GetAgentsResponses["200"][number];
-}) {
-  const toolsUsed = toolNamesUsedForInteraction(interaction);
-  const toolsBlocked = toolNamesRefusedForInteraction(interaction);
-
-  const userMessage = findLastUserMessage(interaction);
-  const assistantResponse =
-    interaction.response.choices[0]?.message?.content ?? "";
-
-  const formattedDate = formatDate({ date: interaction.createdAt });
-  const agentName = agent?.name ?? "Unknown";
-  const modelName = interaction.request.model;
-
-  return (
-    <TableRow>
-      <TableCell className="font-mono text-xs">{formattedDate}</TableCell>
-      <TableCell>
-        <TruncatedText message={agentName} maxLength={30} />
-      </TableCell>
-      <TableCell>
+  const columns: ColumnDef<InteractionData>[] = [
+    {
+      accessorKey: "createdAt",
+      header: "Date",
+      cell: ({ row }) => (
+        <div className="font-mono text-xs">
+          {formatDate({ date: row.original.createdAt })}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "agentId",
+      header: "Agent",
+      cell: ({ row }) => {
+        const agent = agents?.find((a) => a.id === row.original.agentId);
+        return (
+          <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
+        );
+      },
+    },
+    {
+      accessorKey: "request.model",
+      header: "Model",
+      cell: ({ row }) => (
         <Badge variant="secondary" className="text-xs">
-          {modelName}
+          {row.original.request.model}
         </Badge>
-      </TableCell>
-      <TableCell className="text-xs">
-        <TruncatedText message={userMessage} maxLength={80} />
-      </TableCell>
-      <TableCell className="text-xs">
-        <TruncatedText message={assistantResponse} maxLength={80} />
-      </TableCell>
-      <TableCell>
-        {toolsUsed.length > 0 || toolsBlocked.length > 0 ? (
+      ),
+    },
+    {
+      id: "userMessage",
+      header: "User Message",
+      cell: ({ row }) => {
+        const userMessage = findLastUserMessage(row.original);
+        return (
+          <div className="text-xs">
+            <TruncatedText message={userMessage} maxLength={80} />
+          </div>
+        );
+      },
+    },
+    {
+      id: "assistantResponse",
+      header: "Assistant Response",
+      cell: ({ row }) => {
+        const assistantResponse =
+          row.original.response.choices[0]?.message?.content ?? "";
+        return (
+          <div className="text-xs">
+            <TruncatedText message={assistantResponse} maxLength={80} />
+          </div>
+        );
+      },
+    },
+    {
+      id: "tools",
+      header: "Tools",
+      cell: ({ row }) => {
+        const toolsUsed = toolNamesUsedForInteraction(row.original);
+        const toolsBlocked = toolNamesRefusedForInteraction(row.original);
+
+        if (toolsUsed.length === 0 && toolsBlocked.length === 0) {
+          return <span className="text-xs text-muted-foreground">None</span>;
+        }
+
+        return (
           <div className="flex flex-wrap gap-1">
             {toolsUsed.map((toolName) => (
               <Badge
                 key={`used-${toolName}`}
                 variant="default"
-                className="text-xs whitespace-nowrap"
+                className="whitespace-nowrap text-xs"
               >
                 ✓ {toolName}
               </Badge>
@@ -179,25 +173,51 @@ function LogRow({
               <Badge
                 key={`blocked-${toolName}`}
                 variant="destructive"
-                className="text-xs whitespace-nowrap"
+                className="whitespace-nowrap text-xs"
               >
                 ✗ {toolName}
               </Badge>
             ))}
           </div>
-        ) : (
-          <span className="text-muted-foreground text-xs">None</span>
-        )}
-      </TableCell>
-      <TableCell>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
         <Link
-          href={`/logs/${interaction.id}`}
-          className="flex items-center gap-1 text-sm text-primary hover:underline whitespace-nowrap"
+          href={`/logs/${row.original.id}`}
+          className="flex items-center gap-1 whitespace-nowrap text-sm text-primary hover:underline"
         >
           View
-          <ChevronRightIcon className="w-3 h-3" />
+          <ChevronRightIcon className="h-3 w-3" />
         </Link>
-      </TableCell>
-    </TableRow>
+      ),
+    },
+  ];
+
+  if (!interactions || interactions.length === 0) {
+    return <p className="text-muted-foreground">No logs found</p>;
+  }
+
+  return (
+    <DataTable
+      columns={columns}
+      data={interactions}
+      pagination={
+        paginationMeta
+          ? {
+              pageIndex: pagination.pageIndex,
+              pageSize: pagination.pageSize,
+              total: paginationMeta.total,
+            }
+          : undefined
+      }
+      onPaginationChange={(newPagination) => {
+        setPagination(newPagination);
+      }}
+      manualPagination={true}
+    />
   );
 }

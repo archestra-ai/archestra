@@ -1,5 +1,8 @@
 import { AccountView } from "@daveyplate/better-auth-ui";
 import { accountViewPaths } from "@daveyplate/better-auth-ui/server";
+import { Suspense } from "react";
+import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { LoadingSpinner } from "@/components/loading";
 
 export const dynamicParams = false;
 
@@ -16,7 +19,11 @@ export default async function AccountPage({
 
   return (
     <main className="container p-4 md:p-6">
-      <AccountView path={path} />
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <AccountView path={path} />
+        </Suspense>
+      </ErrorBoundary>
     </main>
   );
 }

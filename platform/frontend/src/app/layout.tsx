@@ -8,7 +8,7 @@ import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from "./auth-provider";
+import { AuthProvider } from "./auth/auth-provider";
 
 const mainFont = Lato({
   subsets: ["latin"],

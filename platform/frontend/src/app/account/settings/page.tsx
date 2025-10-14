@@ -6,11 +6,12 @@ import {
   OrganizationMembersCard,
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { Shield, User, Users } from "lucide-react";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
-import { InvitePendingList } from "@/components/invite-pending-list";
 import { LoadingSpinner } from "@/components/loading";
 import {
   Card,
@@ -27,11 +28,13 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  organizationKeys,
   useActiveMemberRole,
   useActiveOrganization,
 } from "@/lib/organization.query";
 
 function SettingsContent() {
+  const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -86,7 +89,14 @@ function SettingsContent() {
                   activeMemberRole === "owner") && (
                   <Dialog
                     open={inviteDialogOpen}
-                    onOpenChange={setInviteDialogOpen}
+                    onOpenChange={(open) => {
+                      setInviteDialogOpen(open);
+                      if (!open) {
+                        queryClient.invalidateQueries({
+                          queryKey: organizationKeys.invitations(),
+                        });
+                      }
+                    }}
                   >
                     <DialogContent className="sm:max-w-[500px]">
                       <DialogHeader>
@@ -98,7 +108,7 @@ function SettingsContent() {
                           setRefreshKey((prev) => prev + 1)
                         }
                       />
-                      <InvitePendingList
+                      <InvitationsList
                         key={refreshKey}
                         organizationId={activeOrg.id}
                       />
@@ -114,6 +124,11 @@ function SettingsContent() {
                     setInviteDialogOpen(true);
                   }
                 }}
+              />
+              <InvitationsList
+                key={refreshKey}
+                organizationId={activeOrg.id}
+                showAllStatuses
               />
             </div>
           ) : (

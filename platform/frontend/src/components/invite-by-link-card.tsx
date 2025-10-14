@@ -1,8 +1,11 @@
 "use client";
 
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Link as LinkIcon, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,75 +23,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { authClient } from "@/lib/clients/auth/auth-client";
+import { useCreateInvitation } from "@/lib/organization.query";
 
 interface InviteByLinkCardProps {
   organizationId?: string;
   onInvitationCreated?: () => void;
 }
 
-export function InviteByLinkCard({
+function InviteByLinkCardContent({
   organizationId,
   onInvitationCreated,
 }: InviteByLinkCardProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
   const [invitationLink, setInvitationLink] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+
+  const createMutation = useCreateInvitation(organizationId);
 
   // Validate email format
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleGenerateLink = async () => {
-    setIsGenerating(true);
-    try {
-      const { data, error } = await authClient.organization.inviteMember({
-        email,
-        role,
-        organizationId,
-      });
+    const data = await createMutation.mutateAsync({ email, role });
 
-      if (error) {
-        toast.error("Error", {
-          description: error.message || "Failed to generate invitation link",
-        });
-        return;
-      }
-
-      if (data) {
-        const link = `${window.location.origin}/accept-invitation/${data.id}`;
-        setInvitationLink(link);
-        toast.success("Invitation link generated", {
-          description: "Share this link with the person you want to invite",
-        });
-        onInvitationCreated?.();
-      }
-    } catch (_err) {
-      toast.error("Error", {
-        description: "An unexpected error occurred",
-      });
-    } finally {
-      setIsGenerating(false);
+    if (data) {
+      const link = `${window.location.origin}/accept-invitation/${data.id}`;
+      setInvitationLink(link);
+      onInvitationCreated?.();
     }
   };
 
   const handleCopyLink = async () => {
     if (!invitationLink) return;
 
-    try {
-      await navigator.clipboard.writeText(invitationLink);
-      setIsCopied(true);
-      toast.success("Link copied", {
-        description: "Invitation link copied to clipboard",
-      });
+    await navigator.clipboard.writeText(invitationLink);
+    setIsCopied(true);
+    toast.success("Link copied", {
+      description: "Invitation link copied to clipboard",
+    });
 
-      setTimeout(() => setIsCopied(false), 2000);
-    } catch (_err) {
-      toast.error("Error", {
-        description: "Failed to copy link to clipboard",
-      });
-    }
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   const handleReset = () => {
@@ -121,7 +96,7 @@ export function InviteByLinkCard({
                 placeholder="user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isGenerating}
+                disabled={createMutation.isPending}
               />
               <p className="text-xs text-muted-foreground">
                 The email of the person you want to invite
@@ -133,7 +108,7 @@ export function InviteByLinkCard({
               <Select
                 value={role}
                 onValueChange={(value: "member" | "admin") => setRole(value)}
-                disabled={isGenerating}
+                disabled={createMutation.isPending}
               >
                 <SelectTrigger id="role">
                   <SelectValue placeholder="Select a role" />
@@ -150,10 +125,10 @@ export function InviteByLinkCard({
 
             <Button
               onClick={handleGenerateLink}
-              disabled={isGenerating || !isValidEmail}
+              disabled={createMutation.isPending || !isValidEmail}
               className="w-full"
             >
-              {isGenerating && (
+              {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               Generate Invitation Link
@@ -198,5 +173,44 @@ export function InviteByLinkCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function InviteByLinkCard({
+  organizationId,
+  onInvitationCreated,
+}: InviteByLinkCardProps) {
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={({ error, resetErrorBoundary }) => (
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle className="text-destructive">
+                  Error Creating Invitation
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {error?.message || "Failed to create invitation"}
+                </p>
+                <Button onClick={resetErrorBoundary} variant="outline">
+                  Try Again
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        >
+          <Suspense fallback={<LoadingSpinner />}>
+            <InviteByLinkCardContent
+              organizationId={organizationId}
+              onInvitationCreated={onInvitationCreated}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
   );
 }

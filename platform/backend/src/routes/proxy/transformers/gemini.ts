@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { z } from "zod";
 import type OpenAI from "openai";
+import type { z } from "zod";
 import type { Gemini } from "@/types";
 import type { ProviderTransformer } from "../types/common";
 
@@ -148,10 +148,10 @@ export class GeminiTransformer implements ProviderTransformer {
     const messages = this.contentsToOpenAIMessages(request.contents);
 
     // Extract system instruction if present
-    if (request.systemInstruction) {
+    if (request.systemInstruction?.parts?.[0]?.text) {
       const systemMessage: OpenAI.Chat.ChatCompletionMessageParam = {
         role: "system",
-        content: request.systemInstruction.parts[0]?.text || null,
+        content: request.systemInstruction.parts[0]?.text,
       };
       messages.unshift(systemMessage);
     }

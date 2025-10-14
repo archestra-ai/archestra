@@ -5,12 +5,17 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import { PROXY_API_PREFIX } from "./common";
 import { getTransformer } from "./transformers";
 import { GeminiProxy } from "./types";
 import * as utils from "./utils";
 
+/**
+ * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
+ * the route
+ */
 const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = "/v1";
+  const API_PREFIX = `${PROXY_API_PREFIX}/gemini`;
 
   /**
    * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent
@@ -18,10 +23,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://generativelanguage.googleapis.com",
-    prefix: `${API_PREFIX}/gemini`,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1beta",
     // Exclude generateContent routes since we handle them specially below
     preHandler: (request, _reply, done) => {
+      console.log("YOOO", request.method, request.url);
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
@@ -141,7 +147,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Convert to common format for SSE
-          const commonChunk = transformer.chunkToOpenAI ? transformer.chunkToOpenAI(chunk as any) : chunk;
+          const commonChunk = transformer.chunkToOpenAI
+            ? transformer.chunkToOpenAI(chunk as any)
+            : chunk;
 
           reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
           await new Promise((resolve) =>
@@ -284,10 +292,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   /**
    * Default agent endpoint for Gemini generateContent
-   * POST /v1/gemini/models/{model}:generateContent
    */
   fastify.post(
-    `${API_PREFIX}/gemini/models/:model\\:generateContent`,
+    `${API_PREFIX}/models/:model::generateContent`,
     {
       schema: {
         description: "Generate content using Gemini (default agent)",
@@ -321,10 +328,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   /**
    * Default agent endpoint for Gemini streamGenerateContent
-   * POST /v1/gemini/models/{model}:streamGenerateContent
    */
   fastify.post(
-    `${API_PREFIX}/gemini/models/:model\\:streamGenerateContent`,
+    `${API_PREFIX}/models/:model::streamGenerateContent`,
     {
       schema: {
         description: "Stream generated content using Gemini (default agent)",
@@ -358,10 +364,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   /**
    * Agent-specific endpoint for Gemini generateContent
-   * POST /v1/gemini/{agentId}/models/{model}:generateContent
    */
   fastify.post(
-    `${API_PREFIX}/gemini/:agentId/models/:model\\:generateContent`,
+    `${API_PREFIX}/gemini/:agentId/models/:model::generateContent`,
     {
       schema: {
         description: "Generate content using Gemini with specific agent",
@@ -396,10 +401,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   /**
    * Agent-specific endpoint for Gemini streamGenerateContent
-   * POST /v1/gemini/{agentId}/models/{model}:streamGenerateContent
    */
   fastify.post(
-    `${API_PREFIX}/gemini/:agentId/models/:model\\:streamGenerateContent`,
+    `${API_PREFIX}/:agentId/models/:model::streamGenerateContent`,
     {
       schema: {
         description:

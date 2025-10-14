@@ -5,11 +5,12 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import { PROXY_API_PREFIX } from "./common";
 import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = "/v1";
+  const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
 
   /**
@@ -18,13 +19,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.openai.com",
-    prefix: `${API_PREFIX}/:provider`,
+    prefix: API_PREFIX,
     rewritePrefix: "/v1",
     // Exclude chat/completions route since we handle it specially below
     preHandler: (request, _reply, done) => {
       if (
         request.method === "POST" &&
-        request.url.includes("/chat/completions")
+        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
         // Skip proxy for this route - we handle it below
         done(new Error("skip"));
@@ -218,7 +219,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * or if the user-agent header is not present, a default agent is used
    */
   fastify.post(
-    `${API_PREFIX}/openai/${CHAT_COMPLETIONS_SUFFIX}`,
+    `${API_PREFIX}/${CHAT_COMPLETIONS_SUFFIX}`,
     {
       schema: {
         operationId: "openAiChatCompletionsWithDefaultAgent",
@@ -245,7 +246,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * An agentId is provided -- agent is fetched based on the agentId
    */
   fastify.post(
-    `${API_PREFIX}/openai/:agentId/${CHAT_COMPLETIONS_SUFFIX}`,
+    `${API_PREFIX}/:agentId/${CHAT_COMPLETIONS_SUFFIX}`,
     {
       schema: {
         operationId: "openAiChatCompletionsWithAgent",

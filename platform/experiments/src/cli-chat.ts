@@ -28,6 +28,9 @@ Some examples:
 - if the user asks you to read Desktop/file.txt, you should read ~/Desktop/file.txt.
 - if the user asks you to read Desktop, you should read ~/Desktop.`;
 
+const HELP_COMMAND = "/help";
+const EXIT_COMMAND = "/exit";
+
 const terminal = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -286,6 +289,24 @@ const getAssistantMessageFromStream = async (
   };
 };
 
+const printStartMessage = () => {
+  console.log("Type /help to see the available commands");
+  console.log("Type /exit to exit");
+  console.log("\n");
+};
+
+const handleHelpCommand = () => {
+  console.log("Available commands:");
+  console.log("/help - Show this help message");
+  console.log("/exit - Exit the program");
+  console.log("\n");
+};
+
+const handleExitCommand = () => {
+  console.log("Exiting...");
+  process.exit(0);
+};
+
 /**
  * OpenAI-specific chat handler
  */
@@ -308,38 +329,23 @@ const cliChatWithOpenAI = async (options: {
   const { includeExternalEmail, includeMaliciousEmail, debug, stream, model } =
     options;
 
-  const terminal = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
   const systemPromptMessage: ChatCompletionMessageParam = {
     role: "system",
-    content: `If the user asks you to read a directory, or file, it should be relative to ~.
-
-Some examples:
-- if the user asks you to read Desktop/file.txt, you should read ~/Desktop/file.txt.
-- if the user asks you to read Desktop, you should read ~/Desktop.`,
+    content: SYSTEM_PROMPT,
   };
 
   const messages: ChatCompletionMessageParam[] = [systemPromptMessage];
 
-  console.log("Type /help to see the available commands");
-  console.log("Type /exit to exit");
-  console.log("\n");
+  printStartMessage();
 
   while (true) {
     const userInput = await terminal.question("You: ");
 
-    if (userInput === "/help") {
-      console.log("Available commands:");
-      console.log("/help - Show this help message");
-      console.log("/exit - Exit the program");
-      console.log("\n");
+    if (userInput === HELP_COMMAND) {
+      handleHelpCommand();
       continue;
-    } else if (userInput === "/exit") {
-      console.log("Exiting...");
-      process.exit(0);
+    } else if (userInput === EXIT_COMMAND) {
+      handleExitCommand();
     }
 
     messages.push({ role: "user", content: userInput });
@@ -500,22 +506,16 @@ const cliChatWithGemini = async (options: {
   // Gemini uses Content format instead of messages
   const contents: any[] = [];
 
-  console.log("Type /help to see the available commands");
-  console.log("Type /exit to exit");
-  console.log("\n");
+  printStartMessage();
 
   while (true) {
     const userInput = await terminal.question("You: ");
 
-    if (userInput === "/help") {
-      console.log("Available commands:");
-      console.log("/help - Show this help message");
-      console.log("/exit - Exit the program");
-      console.log("\n");
+    if (userInput === HELP_COMMAND) {
+      handleHelpCommand();
       continue;
-    } else if (userInput === "/exit") {
-      console.log("Exiting...");
-      process.exit(0);
+    } else if (userInput === EXIT_COMMAND) {
+      handleExitCommand();
     }
 
     // Add user message

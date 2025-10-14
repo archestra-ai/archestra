@@ -3,6 +3,8 @@ allow_k8s_contexts(['orbstack', 'docker-desktop'])
 load('ext://helm_remote', 'helm_remote')
 load('ext://dotenv', 'dotenv')
 
+is_prod = os.getenv('PROD') == 'true'
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -87,13 +89,24 @@ local_resource(
   labels=['pre']
 )
 
+# prod bundle
+if is_prod:
+  local_resource(
+    'pnpm-prod',
+    cmd='pnpm build',
+    serve_cmd='pnpm start',
+    labels=['prod'],
+    resource_deps=['db-migrate-and-seed']
+  )
+
 # dev
-local_resource(
-  'pnpm-dev',
-  serve_cmd='pnpm dev',
-  labels=['dev'],
-  resource_deps=['db-migrate-and-seed']
-)
+if not is_prod:
+  local_resource(
+    'pnpm-dev',
+    serve_cmd='pnpm dev',
+    labels=['dev'],
+    resource_deps=['db-migrate-and-seed']
+  )
 
 local_resource(
   'database-gui',

@@ -8,6 +8,10 @@
       "persistent": true,
       "cache": false
     },
+    "start": {
+      "persistent": true,
+      "cache": false
+    },
     "lint": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },

@@ -1,5 +1,11 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth";
+import {
+  getResourceFromPath,
+  METHOD_TO_ACTION,
+  type Permission,
+} from "@/types/permission";
+import { checkPermission } from "./permission-middleware";
 
 export const authMiddleware = async (
   request: FastifyRequest,
@@ -13,12 +19,41 @@ export const authMiddleware = async (
   });
 
   try {
-    const session = await auth.api.getSession({ headers });
+    const session = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+    });
     if (!session) {
       reply.status(401).send({ error: "Unauthorized" });
       return;
     }
     (request as any).user = session.user;
+    const hasExplicitPermissionCheck = (request.routeOptions as any)
+      ?.preHandler;
+
+    if (!hasExplicitPermissionCheck) {
+      const resource = getResourceFromPath(request.url);
+      const action = METHOD_TO_ACTION[request.method];
+
+      if (resource && action) {
+        const permission = `${resource}:${action}`;
+
+        try {
+          const permission = `${resource}:${action}` as Permission;
+          const hasPermission = await checkPermission(request, permission);
+          if (!hasPermission) {
+            return reply.status(403).send({
+              error: `Permission denied. Required permission: ${permission}`,
+            });
+          }
+        } catch (error) {
+          console.error(`Permission check failed for ${permission}:`, error);
+          return reply.status(403).send({
+            error: "Permission check failed",
+          });
+        }
+      }
+    }
   } catch (_err) {
     reply.status(401).send({ error: "Invalid session" });
   }

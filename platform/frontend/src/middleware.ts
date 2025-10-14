@@ -4,8 +4,8 @@ import { type NextRequest, NextResponse } from "next/server";
 /**
  * This middleware protects routes following below matcher config.
  * It checks for a valid session cookie and redirects to the sign-in page if not found.
- * @param req 
- * @returns 
+ * @param req
+ * @returns
  */
 export function middleware(req: NextRequest) {
   const session = getSessionCookie(req, {

@@ -9,10 +9,10 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { seedDatabase } from "./database/seed";
-import { authMiddleware } from "./middleware/auth-middleware";
-import * as routes from "./routes";
+import { authMiddleware } from "@/middleware/auth-middleware";
 import User from "@/models/user";
+import { seedDatabase } from "./database/seed";
+import * as routes from "./routes";
 
 const {
   api: { port, name, version, host },
@@ -49,7 +49,7 @@ const start = async () => {
       origin: [/http:\/\/localhost:\d+/],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-      credentials: true
+      credentials: true,
     });
 
     /**

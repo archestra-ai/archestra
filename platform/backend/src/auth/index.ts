@@ -4,14 +4,18 @@ import { createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { ac, adminRole, memberRole, ownerRole } from "./permission";
 
 export const auth = betterAuth({
   plugins: [
     organization({
       requireEmailVerificationOnInvitation: false,
       allowUserToCreateOrganization: false, // Disable organization creation by users
-      async onInvitationAccepted(_data: any) {
-        // TODO : add invitation accepted logic (e.g., send welcome notification)
+      ac,
+      roles: {
+        owner: ownerRole,
+        admin: adminRole,
+        member: memberRole,
       },
     }),
     admin(),
@@ -41,6 +45,9 @@ export const auth = betterAuth({
   },
   advanced: {
     cookiePrefix: "archestra",
+    defaultCookieAttributes: {
+      secure: true,
+    },
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {

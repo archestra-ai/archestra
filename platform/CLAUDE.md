@@ -101,7 +101,10 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 # Optional (not included in default Helm deployment)
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
-OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
+
+# Provider API Keys
+OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
+GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider
 ```
 
 The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
@@ -202,6 +205,7 @@ platform/
 │       ├── providers/           # LLM provider abstraction
 │       │   ├── factory.ts       # Provider factory pattern
 │       │   ├── openai.ts        # OpenAI provider implementation
+│       │   ├── gemini.ts        # Gemini provider implementation (pending)
 │       │   └── types.ts         # Provider interfaces
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
@@ -258,6 +262,14 @@ Tilt automatically manages dependencies and ensures services start in the correc
 ### Backend API
 
 The production backend provides:
+
+#### Supported LLM Providers
+
+- **OpenAI**: Fully implemented with chat completions, tools, and streaming support
+- **Google Gemini**: Type definitions and database support complete, proxy implementation pending
+  - Comprehensive TypeScript types for Gemini API (`platform/backend/src/types/llm-providers/gemini/`)
+  - Database schema supports provider field to distinguish between providers
+  - Requires `GEMINI_API_KEY` environment variable when implemented
 
 #### REST API Endpoints
 

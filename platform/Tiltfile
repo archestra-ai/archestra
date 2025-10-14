@@ -5,6 +5,9 @@ load('ext://dotenv', 'dotenv')
 
 is_prod = os.getenv('PROD') == 'true'
 
+# Disable analytics in local development
+os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')

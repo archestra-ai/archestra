@@ -43,12 +43,12 @@ async function seedMockData() {
     0.3, // 30% block probability
   );
 
-  await db.insert(schema.interactionsTable).values(interactionData);
+  // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
+  await db.insert(schema.interactionsTable).values(interactionData as any);
   console.log(`✅ Created ${interactionData.length} interactions`);
 
   // Show statistics
   const blockedCount = interactionData.filter((i) => {
-    // Handle discriminated union - check if it's an OpenAI response
     if ("choices" in i.response) {
       return i.response.choices[0]?.message?.refusal;
     }

@@ -346,6 +346,18 @@ export default function SettingsPage() {
                   </code>{" "}
                   environment variable
                 </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Archestra supports{" "}
+                  <a
+                    href="https://platform.openai.com/docs/api-reference/chat"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500"
+                  >
+                    Chat Completions API
+                  </a>{" "}
+                  so make sure to use it when connecting to Archestra.
+                </p>
               </div>
 
               <div className="border-t pt-6">

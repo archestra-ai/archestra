@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type OpenAI from "openai";
 import type { z } from "zod";
 import type { Gemini } from "@/types";
-import type { ProviderTransformer } from "../types/common";
+import type { ProviderTransformer } from "./common";
 
 /**
  * Gemini transformer implementation

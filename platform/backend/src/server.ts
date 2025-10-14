@@ -8,7 +8,9 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { z } from "zod";
 import config from "@/config";
+import { SupportedProvidersSchema } from "@/types";
 import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
@@ -32,6 +34,8 @@ const fastify = Fastify({
 // Set up Zod validation and serialization
 fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
+
+z.globalRegistry.add(SupportedProvidersSchema, { id: "SupportedProviders" });
 
 const start = async () => {
   try {

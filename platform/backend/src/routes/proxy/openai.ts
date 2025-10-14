@@ -11,10 +11,10 @@ import * as utils from "./utils";
 
 // Register schemas in global registry for OpenAPI generation
 z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
-  id: "OpenAiChatCompletionRequestSchema",
+  id: "OpenAiChatCompletionRequest",
 });
 z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
-  id: "OpenAiChatCompletionResponseSchema",
+  id: "OpenAiChatCompletionResponse",
 });
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {

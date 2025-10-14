@@ -1,11 +1,11 @@
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type {
-  GeminiGenerateContentRequestSchema,
-  GeminiGenerateContentResponseSchema,
+  GeminiGenerateContentRequest,
+  GeminiGenerateContentResponse,
   GetInteractionResponse,
   GetInteractionsResponses,
-  OpenAiChatCompletionRequestSchema,
-  OpenAiChatCompletionResponseSchema,
+  OpenAiChatCompletionRequest,
+  OpenAiChatCompletionResponse,
 } from "@/lib/clients/api";
 
 type Interaction = GetInteractionsResponses["200"][number];
@@ -45,13 +45,13 @@ interface InteractionUtils {
 }
 
 class OpenAiInteraction implements InteractionUtils {
-  private request: OpenAiChatCompletionRequestSchema;
-  private response: OpenAiChatCompletionResponseSchema;
+  private request: OpenAiChatCompletionRequest;
+  private response: OpenAiChatCompletionResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request = interaction.request as OpenAiChatCompletionRequestSchema;
-    this.response = interaction.response as OpenAiChatCompletionResponseSchema;
+    this.request = interaction.request as OpenAiChatCompletionRequest;
+    this.response = interaction.response as OpenAiChatCompletionResponse;
     this.modelName = this.request.model;
   }
 
@@ -168,13 +168,13 @@ class OpenAiInteraction implements InteractionUtils {
 }
 
 class GeminiInteraction implements InteractionUtils {
-  private request: GeminiGenerateContentRequestSchema;
-  private response: GeminiGenerateContentResponseSchema;
+  private request: GeminiGenerateContentRequest;
+  private response: GeminiGenerateContentResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request = interaction.request as GeminiGenerateContentRequestSchema;
-    this.response = interaction.response as GeminiGenerateContentResponseSchema;
+    this.request = interaction.request as GeminiGenerateContentRequest;
+    this.response = interaction.response as GeminiGenerateContentResponse;
     this.modelName = this.response.modelVersion as string;
   }
 

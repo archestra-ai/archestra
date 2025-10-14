@@ -4,7 +4,7 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type GeminiGenerateContentRequestSchemaInput = {
+export type GeminiGenerateContentRequestInput = {
     contents: Array<{
         role: 'user' | 'model' | 'function';
         parts: Array<{
@@ -82,7 +82,7 @@ export type GeminiGenerateContentRequestSchemaInput = {
     };
 };
 
-export type GeminiGenerateContentResponseSchemaInput = {
+export type GeminiGenerateContentResponseInput = {
     candidates?: Array<{
         content?: {
             role: 'user' | 'model' | 'function';
@@ -147,7 +147,7 @@ export type GeminiGenerateContentResponseSchemaInput = {
     modelVersion?: string;
 };
 
-export type OpenAiChatCompletionRequestSchemaInput = {
+export type OpenAiChatCompletionRequestInput = {
     model: string;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
@@ -426,7 +426,7 @@ export type OpenAiChatCompletionRequestSchemaInput = {
     stream?: boolean | unknown;
 };
 
-export type OpenAiChatCompletionResponseSchemaInput = {
+export type OpenAiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
@@ -497,7 +497,9 @@ export type OpenAiChatCompletionResponseSchemaInput = {
     };
 };
 
-export type GeminiGenerateContentRequestSchema = {
+export type SupportedProvidersInput = 'openai' | 'gemini';
+
+export type GeminiGenerateContentRequest = {
     contents: Array<{
         role: 'user' | 'model' | 'function';
         parts: Array<{
@@ -575,7 +577,7 @@ export type GeminiGenerateContentRequestSchema = {
     };
 };
 
-export type GeminiGenerateContentResponseSchema = {
+export type GeminiGenerateContentResponse = {
     candidates?: Array<{
         content?: {
             role: 'user' | 'model' | 'function';
@@ -640,7 +642,7 @@ export type GeminiGenerateContentResponseSchema = {
     modelVersion?: string;
 };
 
-export type OpenAiChatCompletionRequestSchema = {
+export type OpenAiChatCompletionRequest = {
     model: string;
     /**
      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
@@ -919,7 +921,7 @@ export type OpenAiChatCompletionRequestSchema = {
     stream?: boolean | unknown;
 };
 
-export type OpenAiChatCompletionResponseSchema = {
+export type OpenAiChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
@@ -989,6 +991,8 @@ export type OpenAiChatCompletionResponseSchema = {
         prompt_tokens_details?: unknown;
     };
 };
+
+export type SupportedProviders = 'openai' | 'gemini';
 
 export type GetOpenapiJsonData = {
     body?: never;
@@ -1252,15 +1256,15 @@ export type GetInteractionsResponses = {
     200: Array<{
         id: string;
         agentId: string;
-        request: OpenAiChatCompletionRequestSchema;
-        response: OpenAiChatCompletionResponseSchema;
+        request: OpenAiChatCompletionRequest;
+        response: OpenAiChatCompletionResponse;
         provider: 'openai';
         createdAt: string;
     } | {
         id: string;
         agentId: string;
-        request: GeminiGenerateContentRequestSchema;
-        response: GeminiGenerateContentResponseSchema;
+        request: GeminiGenerateContentRequest;
+        response: GeminiGenerateContentResponse;
         provider: 'gemini';
         createdAt: string;
     }>;
@@ -1298,15 +1302,15 @@ export type GetInteractionResponses = {
     200: {
         id: string;
         agentId: string;
-        request: OpenAiChatCompletionRequestSchema;
-        response: OpenAiChatCompletionResponseSchema;
+        request: OpenAiChatCompletionRequest;
+        response: OpenAiChatCompletionResponse;
         provider: 'openai';
         createdAt: string;
     } | {
         id: string;
         agentId: string;
-        request: GeminiGenerateContentRequestSchema;
-        response: GeminiGenerateContentResponseSchema;
+        request: GeminiGenerateContentRequest;
+        response: GeminiGenerateContentResponse;
         provider: 'gemini';
         createdAt: string;
     };
@@ -1525,7 +1529,7 @@ export type PutV1OpenaiBy__Responses = {
 };
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: OpenAiChatCompletionRequestSchemaInput;
+    body?: OpenAiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -1586,13 +1590,13 @@ export type OpenAiChatCompletionsWithDefaultAgentResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponseSchema;
+    200: OpenAiChatCompletionResponse;
 };
 
 export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
 
 export type OpenAiChatCompletionsWithAgentData = {
-    body?: OpenAiChatCompletionRequestSchemaInput;
+    body?: OpenAiChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -1655,7 +1659,7 @@ export type OpenAiChatCompletionsWithAgentResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponseSchema;
+    200: OpenAiChatCompletionResponse;
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
@@ -1871,7 +1875,7 @@ export type PutV1GeminiBy__Responses = {
 };
 
 export type PostV1GeminiModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestSchemaInput;
+    body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -1937,13 +1941,13 @@ export type PostV1GeminiModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
-    200: GeminiGenerateContentResponseSchema;
+    200: GeminiGenerateContentResponse;
 };
 
 export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestSchemaInput;
+    body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -2006,7 +2010,7 @@ export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
 export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
 
 export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestSchemaInput;
+    body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -2073,13 +2077,13 @@ export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
     /**
      * Default Response
      */
-    200: GeminiGenerateContentResponseSchema;
+    200: GeminiGenerateContentResponse;
 };
 
 export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
 
 export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestSchemaInput;
+    body?: GeminiGenerateContentRequestInput;
     headers: {
         /**
          * The user agent of the client

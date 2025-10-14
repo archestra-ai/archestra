@@ -1,5 +1,5 @@
 import type OpenAI from "openai";
-import type { ProviderTransformer } from "../types/common";
+import type { ProviderTransformer } from "./common";
 
 /**
  * OpenAI transformer implementation

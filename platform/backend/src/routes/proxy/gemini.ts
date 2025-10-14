@@ -12,10 +12,10 @@ import * as utils from "./utils";
 
 // Register schemas in global registry for OpenAPI generation
 z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
-  id: "GeminiGenerateContentRequestSchema",
+  id: "GeminiGenerateContentRequest",
 });
 z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
-  id: "GeminiGenerateContentResponseSchema",
+  id: "GeminiGenerateContentResponse",
 });
 
 /**

@@ -182,7 +182,11 @@ platform/
 │   └── src/
 │       ├── config.ts            # Application configuration
 │       ├── server.ts            # Main Fastify server (port 9000)
-│       ├── types.ts             # TypeScript type definitions
+│       ├── types/               # TypeScript type definitions
+│       │   ├── llm-providers/   # LLM provider type definitions
+│       │   │   ├── openai/      # OpenAI API types (messages, tools, etc.)
+│       │   │   └── gemini/      # Gemini API types (messages, tools, etc.)
+│       │   └── ...              # Other type definitions
 │       ├── database/            # Database layer
 │       │   ├── migrations/      # Drizzle migrations
 │       │   └── schema.ts        # Database schema
@@ -203,9 +207,10 @@ platform/
 │           ├── agent.ts         # Agent management endpoints
 │           ├── autonomy-policies.ts  # Autonomy policies endpoints
 │           ├── interaction.ts   # Interaction endpoints (list, get by ID)
-│           └── proxy/           # OpenAI proxy with integrated guardrails
-│               ├── openai.ts    # Main proxy route handler
-│               ├── types.ts     # TypeScript types for proxy
+│           └── proxy/           # LLM provider proxy with integrated guardrails
+│               ├── openai.ts    # OpenAI proxy route handler
+│               ├── gemini.ts    # Gemini proxy route handler (pending implementation)
+│               ├── types/       # TypeScript types for proxy routes
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
@@ -261,11 +266,12 @@ The production backend provides:
   - `GET /api/interactions/:id` - Get interaction by ID
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
-  - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
+  - `POST /v1/:provider/chat/completions` - Provider-agnostic chat endpoint (supports "openai" and "gemini")
   - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
   - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
   - `GET /v1/:provider/models` - List available models for a provider
   - Supports streaming responses for real-time AI interactions
+  - **Supported Providers**: OpenAI, Google Gemini
 - **Agent Management**:
   - `GET /api/agents` - List all agents
   - `POST /api/agents` - Create new agent
@@ -344,8 +350,9 @@ The backend integrates advanced security guardrails:
 - **Agent**: Stores AI agents with name and timestamps
 - **Interaction**: Stores LLM interactions with request/response data
   - `agentId`: Direct link to the agent (no longer through chat)
-  - `request`: JSONB field storing the full LLM API request (OpenAI ChatCompletionRequest format)
-  - `response`: JSONB field storing the full LLM API response (OpenAI ChatCompletionResponse format)
+  - `provider`: Provider used for the interaction ("openai" or "gemini")
+  - `request`: JSONB field storing the full LLM API request (provider-specific format)
+  - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage

@@ -27,7 +27,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1beta",
     // Exclude generateContent routes since we handle them specially below
     preHandler: (request, _reply, done) => {
-      console.log("YOOO", request.method, request.url);
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||

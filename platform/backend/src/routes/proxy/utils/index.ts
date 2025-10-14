@@ -1,5 +1,5 @@
-import type OpenAI from "openai";
 import { AgentModel, ToolModel } from "@/models";
+import type { OpenAiProxy } from "../types";
 
 /**
  * Get or create the default agent based on the user-agent header
@@ -13,18 +13,30 @@ export const getAgentIdFromRequest = async (
  * Persist tools if present in the request
  */
 export const persistTools = async (
-  tools: OpenAI.Chat.ChatCompletionTool[] | undefined,
+  tools: OpenAiProxy.ChatCompletionRequestTools,
   agentId: string,
 ) => {
   for (const tool of tools || []) {
+    let toolName = "";
+    let toolParameters: Record<string, unknown> | undefined;
+    let toolDescription: string | undefined;
+
     if (tool.type === "function") {
-      await ToolModel.createToolIfNotExists({
-        agentId,
-        name: tool.function.name,
-        parameters: tool.function.parameters,
-        description: tool.function.description,
-      });
+      toolName = tool.function.name;
+      toolParameters = tool.function.parameters;
+      toolDescription = tool.function.description;
+    } else {
+      toolName = tool.custom.name;
+      toolParameters = tool.custom.format;
+      toolDescription = tool.custom.description;
     }
+
+    await ToolModel.createToolIfNotExists({
+      agentId,
+      name: toolName,
+      parameters: toolParameters,
+      description: toolDescription,
+    });
   }
 };
 

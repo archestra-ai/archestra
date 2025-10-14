@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
-import { ChatCompletionsHeadersSchema } from "./types";
+import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -36,7 +36,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   const handleChatCompletion = async (
     body: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,
-    headers: z.infer<typeof ChatCompletionsHeadersSchema>,
+    headers: z.infer<typeof OpenAiProxy.ChatCompletionsHeadersSchema>,
     reply: FastifyReply,
     agentId?: string,
   ) => {
@@ -222,7 +222,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Create a chat completion with OpenAI (uses default agent)",
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
-        headers: ChatCompletionsHeadersSchema,
+        headers: OpenAiProxy.ChatCompletionsHeadersSchema,
         response: {
           200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,
@@ -252,7 +252,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
-        headers: ChatCompletionsHeadersSchema,
+        headers: OpenAiProxy.ChatCompletionsHeadersSchema,
         response: {
           200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,

@@ -75,6 +75,135 @@ interface ToolInfo {
 }
 
 /**
+ * Generate realistic arguments based on tool name
+ */
+function generateToolArguments(toolName: string): Record<string, unknown> {
+  const argumentsMap: Record<string, Record<string, unknown>> = {
+    read_file: {
+      path: randomElement([
+        "/var/log/app.log",
+        "/etc/config.json",
+        "/home/user/data.csv",
+        "~/Documents/report.pdf",
+      ]),
+    },
+    write_file: {
+      path: randomElement([
+        "/tmp/output.txt",
+        "/var/app/cache.json",
+        "~/Desktop/notes.md",
+      ]),
+      content: randomElement([
+        "Hello World",
+        "Configuration updated",
+        "Log entry saved",
+      ]),
+    },
+    execute_query: {
+      query: randomElement([
+        "SELECT * FROM users WHERE active = true",
+        "UPDATE products SET stock = stock - 1 WHERE id = 123",
+        "DELETE FROM logs WHERE created_at < '2024-01-01'",
+      ]),
+      database: randomElement(["main", "analytics", "production"]),
+    },
+    fetch_api: {
+      url: randomElement([
+        "https://api.example.com/users",
+        "https://jsonplaceholder.typicode.com/posts",
+        "https://api.github.com/repos/archestra-ai/archestra",
+      ]),
+      method: randomElement(["GET", "POST", "PUT"]),
+    },
+    send_notification: {
+      to: randomElement([
+        "user@example.com",
+        "admin@company.com",
+        "alert@monitoring.io",
+      ]),
+      subject: randomElement([
+        "Alert: System Issue Detected",
+        "Report Generated",
+        "Task Completed",
+      ]),
+      message: randomElement([
+        "The system has detected an anomaly",
+        "Your report is ready",
+        "The task has been completed successfully",
+      ]),
+    },
+    analyze_logs: {
+      path: randomElement([
+        "/var/log/syslog",
+        "/var/log/application.log",
+        "/var/log/error.log",
+      ]),
+      since: randomElement(["1h", "24h", "7d"]),
+      level: randomElement(["error", "warning", "info"]),
+    },
+    scan_vulnerabilities: {
+      target: randomElement(["192.168.1.100", "example.com", "/var/www/html"]),
+      scanType: randomElement(["quick", "full", "custom"]),
+    },
+    optimize_performance: {
+      component: randomElement(["database", "api", "cache", "frontend"]),
+      metric: randomElement(["latency", "throughput", "memory"]),
+    },
+    review_code: {
+      repository: randomElement([
+        "github.com/company/app",
+        "gitlab.com/team/project",
+      ]),
+      branch: randomElement(["main", "develop", "feature/new-ui"]),
+      files: randomElement([["src/app.ts"], ["lib/utils.js", "tests/unit.js"]]),
+    },
+    generate_report: {
+      type: randomElement(["daily", "weekly", "monthly"]),
+      format: randomElement(["pdf", "csv", "json"]),
+      metrics: randomElement([
+        ["sales", "revenue"],
+        ["users", "sessions"],
+        ["errors", "warnings"],
+      ]),
+    },
+    monitor_metrics: {
+      service: randomElement(["api", "database", "cache"]),
+      interval: randomElement(["1m", "5m", "15m"]),
+      threshold: randomInt(50, 95),
+    },
+    backup_data: {
+      source: randomElement([
+        "/var/lib/database",
+        "/home/user/documents",
+        "/etc/config",
+      ]),
+      destination: randomElement([
+        "s3://backups",
+        "/mnt/backup",
+        "ftp://backup-server",
+      ]),
+      compression: randomElement([true, false]),
+    },
+    validate_schema: {
+      schema: randomElement(["users", "products", "orders"]),
+      file: randomElement(["data.json", "input.csv", "config.yaml"]),
+    },
+    transform_data: {
+      input: randomElement(["data.csv", "raw.json", "logs.txt"]),
+      output: randomElement(["transformed.json", "processed.csv"]),
+      format: randomElement(["json", "csv", "xml"]),
+    },
+    encrypt_data: {
+      data: randomElement(["sensitive-info.txt", "credentials.json"]),
+      algorithm: randomElement(["AES-256", "RSA-2048", "ChaCha20"]),
+      key: randomElement(["key-001", "key-prod", "key-dev"]),
+    },
+  };
+
+  return argumentsMap[toolName] || {};
+}
+
+/**
  * Generate a single mock interaction
  */
 export function generateMockInteraction(
@@ -88,6 +217,7 @@ export function generateMockInteraction(
 
   const toolCallId = `call_${randomUUID().replace(/-/g, "").substring(0, 24)}`;
   const userPrompt = randomElement(template.userPrompts);
+  const toolArguments = generateToolArguments(selectedTool.name);
 
   // Create the messages array - start with system and initial user message
   // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible message structure
@@ -123,7 +253,7 @@ export function generateMockInteraction(
         type: "function",
         function: {
           name: selectedTool.name,
-          arguments: "{}",
+          arguments: JSON.stringify(toolArguments),
         },
       },
     ],
@@ -144,21 +274,22 @@ export function generateMockInteraction(
     tool_call_id: toolCallId,
   });
 
-  // Add final assistant response or blocked response
-  if (shouldBlock) {
-    messages.push({
-      role: "assistant",
-      content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
-      refusal: `\n<archestra-tool-name>${selectedTool.name}</archestra-tool-name>\n<archestra-tool-arguments>{}</archestra-tool-arguments>\n<archestra-tool-reason>Tool invocation blocked: context contains untrusted data</archestra-tool-reason>\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
-    });
-  } else {
-    messages.push({
-      role: "assistant",
-      content: `I've successfully executed the ${selectedTool.name} operation. The task is complete!`,
-      refusal: null,
-    });
-  }
+  // Create the final assistant response (but DON'T add it to request messages)
+  const argsString = JSON.stringify(toolArguments);
+  const responseMessage = shouldBlock
+    ? {
+        role: "assistant",
+        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
+        refusal: `\n<archestra-tool-name>${selectedTool.name}</archestra-tool-name>\n<archestra-tool-arguments>${argsString}</archestra-tool-arguments>\n<archestra-tool-reason>Tool invocation blocked: context contains untrusted data</archestra-tool-reason>\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: context contains untrusted data`,
+      }
+    : {
+        role: "assistant",
+        content: `I've successfully executed the ${selectedTool.name} operation. The task is complete!`,
+        refusal: null,
+      };
 
+  // The request should NOT include the final assistant response
+  // It should end with the tool response
   const request = {
     model: "gpt-4o",
     tools: tools.map((t) => ({
@@ -178,8 +309,6 @@ export function generateMockInteraction(
     messages: messages as any,
     tool_choice: "auto" as const,
   };
-
-  const responseMessage = messages[messages.length - 1];
   const response = {
     id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
     model: "gpt-4o-2024-08-06",

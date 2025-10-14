@@ -23,11 +23,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://generativelanguage.googleapis.com",
-    prefix: `${API_PREFIX}`,
+    prefix: API_PREFIX,
     rewritePrefix: "/v1beta",
     // Exclude generateContent routes since we handle them specially below
     preHandler: (request, _reply, done) => {
-      console.log("YOOO", request.method, request.url);
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
@@ -291,10 +290,25 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   };
 
   /**
+   * This was a big PITA to get the fastify syntax JUST right
+   *
+   * See https://fastify.dev/docs/latest/Reference/Routes/#url-building
+   *
+   * Otherwise, without the regex param syntax, we were running into errors like this 👇 when starting up the server:
+   *
+   * ERROR: Method 'POST' already declared for route '/v1/gemini/models/:model:streamGenerateContent'
+   */
+  const generateRouteEndpoint = (
+    verb: "generateContent" | "streamGenerateContent",
+    includeAgentId = false,
+  ) =>
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-]+$)::${verb}`;
+
+  /**
    * Default agent endpoint for Gemini generateContent
    */
   fastify.post(
-    `${API_PREFIX}/models/:model::generateContent`,
+    generateRouteEndpoint("generateContent"),
     {
       schema: {
         description: "Generate content using Gemini (default agent)",
@@ -330,7 +344,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Default agent endpoint for Gemini streamGenerateContent
    */
   fastify.post(
-    `${API_PREFIX}/models/:model::streamGenerateContent`,
+    generateRouteEndpoint("streamGenerateContent"),
     {
       schema: {
         description: "Stream generated content using Gemini (default agent)",
@@ -366,7 +380,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Agent-specific endpoint for Gemini generateContent
    */
   fastify.post(
-    `${API_PREFIX}/gemini/:agentId/models/:model::generateContent`,
+    generateRouteEndpoint("generateContent", true),
     {
       schema: {
         description: "Generate content using Gemini with specific agent",
@@ -403,7 +417,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Agent-specific endpoint for Gemini streamGenerateContent
    */
   fastify.post(
-    `${API_PREFIX}/:agentId/models/:model::streamGenerateContent`,
+    generateRouteEndpoint("streamGenerateContent", true),
     {
       schema: {
         description:

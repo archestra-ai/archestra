@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type { DualLlmConfig } from "@/types";
-import type { OpenAiProxy } from "../types";
+import type { CommonMessage } from "../types/common";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -14,16 +14,16 @@ import type { OpenAiProxy } from "../types";
  * - Information flows through structured Q&A, preventing prompt injection
  */
 export class DualLlmSubagent {
-  messages: OpenAiProxy.ChatCompletionRequestMessages; // Full conversation history
-  currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number]; // Current tool message being analyzed
+  messages: CommonMessage[]; // Full conversation history
+  currentMessage: CommonMessage; // Current tool message being analyzed
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
   openai: OpenAI; // OpenAI client instance
 
   constructor(
-    messages: OpenAiProxy.ChatCompletionRequestMessages,
-    currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number],
+    messages: CommonMessage[],
+    currentMessage: CommonMessage,
     config: DualLlmConfig,
     agentId: string,
     apiKey: string,
@@ -45,8 +45,8 @@ export class DualLlmSubagent {
    * Create a DualLlmSubagent instance with configuration loaded from database
    */
   static async create(
-    messages: OpenAiProxy.ChatCompletionRequestMessages,
-    currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number],
+    messages: CommonMessage[],
+    currentMessage: CommonMessage,
     agentId: string,
     apiKey: string,
   ): Promise<DualLlmSubagent> {

@@ -1,5 +1,8 @@
-import type OpenAI from "openai";
 import { ToolInvocationPolicyModel } from "@/models";
+import type {
+  CommonMessage,
+  CommonChatCompletionResponse,
+} from "../types/common";
 
 /**
  * This method will evaluate whether, based on the tool invocation policies assigned to the specified agent,
@@ -9,21 +12,18 @@ import { ToolInvocationPolicyModel } from "@/models";
  * (in the format of an assistant message with a refusal)
  */
 export const evaluatePolicies = async (
-  { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
+  { tool_calls: toolCalls }: CommonMessage,
   agentId: string,
   contextIsTrusted: boolean,
-): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
+): Promise<null | CommonChatCompletionResponse["choices"][0]> => {
   for (const toolCall of toolCalls || []) {
-    let toolCallName = "";
-    let toolCallArgs = "";
-
-    if (toolCall.type === "function") {
-      toolCallName = toolCall.function.name;
-      toolCallArgs = toolCall.function.arguments;
-    } else {
-      toolCallName = toolCall.custom.name;
-      toolCallArgs = toolCall.custom.input;
+    // Common format only supports function tool calls
+    if (toolCall.type !== "function") {
+      continue;
     }
+
+    const toolCallName = toolCall.function.name;
+    const toolCallArgs = toolCall.function.arguments;
 
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:

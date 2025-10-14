@@ -1,0 +1,426 @@
+import fastifyHttpProxy from "@fastify/http-proxy";
+import type { FastifyReply } from "fastify";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { z } from "zod";
+import { AgentModel, InteractionModel } from "@/models";
+import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import { GeminiProxy } from "./types";
+import { getConverter } from "./converters";
+import * as utils from "./utils";
+
+const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const API_PREFIX = "/v1";
+  
+  /**
+   * Register HTTP proxy for all Gemini routes EXCEPT generateContent and streamGenerateContent
+   * This will proxy routes like /v1/gemini/models to https://generativelanguage.googleapis.com/v1beta/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://generativelanguage.googleapis.com",
+    prefix: `${API_PREFIX}/gemini`,
+    rewritePrefix: "/v1beta",
+    // Exclude generateContent routes since we handle them specially below
+    preHandler: (request, _reply, done) => {
+      if (
+        request.method === "POST" &&
+        (request.url.includes(":generateContent") ||
+         request.url.includes(":streamGenerateContent"))
+      ) {
+        // Skip proxy for these routes - we handle them below
+        done(new Error("skip"));
+      } else {
+        done();
+      }
+    },
+  });
+
+  const handleGenerateContent = async (
+    body: z.infer<typeof Gemini.API.GenerateContentRequestSchema>,
+    headers: z.infer<typeof GeminiProxy.ChatCompletionsHeadersSchema>,
+    reply: FastifyReply,
+    agentId?: string,
+    model?: string,
+    stream = false,
+  ) => {
+    let resolvedAgentId: string;
+    if (agentId) {
+      // If agentId provided via URL, validate it exists
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) {
+        return reply.status(404).send({
+          error: {
+            message: `Agent with ID ${agentId} not found`,
+            type: "not_found",
+          },
+        });
+      }
+      resolvedAgentId = agentId;
+    } else {
+      // Otherwise get or create default agent
+      resolvedAgentId = await utils.getAgentIdFromRequest(
+        headers["user-agent"],
+      );
+    }
+
+    const { "x-goog-api-key": geminiApiKey } = headers;
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    
+    // Use the model from the URL path or default to gemini-pro
+    const modelName = model || "gemini-pro";
+    const geminiModel = genAI.getGenerativeModel({ model: modelName });
+
+    const converter = getConverter("gemini");
+
+    try {
+      // Convert Gemini request to common format for processing
+      const commonRequest = converter.requestToCommon(body);
+      
+      // Persist tools if present
+      await utils.persistTools(commonRequest.tools, resolvedAgentId);
+
+      // Process messages with trusted data policies dynamically
+      const { filteredMessages, contextIsTrusted } =
+        await utils.trustedData.evaluateIfContextIsTrusted(
+          commonRequest.messages,
+          resolvedAgentId,
+          geminiApiKey,
+        );
+
+      // Update common request with filtered messages
+      commonRequest.messages = filteredMessages;
+
+      // Convert back to Gemini format
+      const geminiRequest = converter.requestFromCommon(
+        commonRequest,
+      ) as z.infer<typeof Gemini.API.GenerateContentRequestSchema>;
+
+      if (stream) {
+        reply.header("Content-Type", "text/event-stream");
+        reply.header("Cache-Control", "no-cache");
+        reply.header("Connection", "keep-alive");
+
+        // Handle streaming response
+        const result = await geminiModel.generateContentStream(geminiRequest);
+        
+        const chunks: z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema>[] = [];
+        let accumulatedResponse: z.infer<typeof Gemini.API.GenerateContentResponseSchema> | undefined;
+
+        for await (const chunk of result.stream) {
+          chunks.push({
+            candidates: chunk.candidates as any,
+            modelVersion: modelName,
+          });
+
+          // Accumulate response for persistence
+          if (!accumulatedResponse) {
+            accumulatedResponse = {
+              candidates: chunk.candidates as any,
+              usageMetadata: chunk.usageMetadata as any,
+              modelVersion: modelName,
+            };
+          } else if (chunk.candidates) {
+            // Accumulate content from chunks
+            for (let i = 0; i < chunk.candidates.length; i++) {
+              const candidate = chunk.candidates[i];
+              const accCandidate = accumulatedResponse.candidates![i];
+              if (candidate.content && accCandidate?.content) {
+                // Append parts
+                accCandidate.content.parts = [
+                  ...(accCandidate.content.parts || []),
+                  ...(candidate.content.parts || []),
+                ];
+              }
+            }
+          }
+
+          // Convert to common format for SSE
+          const commonChunk = converter.chunkToCommon(chunk as any);
+          
+          reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.random() * 10),
+          );
+        }
+
+        // Evaluate tool invocation policies on the accumulated response
+        if (accumulatedResponse) {
+          const commonResponse = converter.responseToCommon(accumulatedResponse);
+          
+          // Check if tool invocation is blocked
+          const assistantMessage = commonResponse.choices[0]?.message;
+          if (assistantMessage) {
+            const toolInvocationRefusal =
+              await utils.toolInvocation.evaluatePolicies(
+                assistantMessage,
+                resolvedAgentId,
+                contextIsTrusted,
+              );
+
+            if (toolInvocationRefusal) {
+              // Send refusal as final chunk
+              const refusalChunk = {
+                id: "chatcmpl-blocked",
+                object: "chat.completion.chunk" as const,
+                created: Date.now() / 1000,
+                model: modelName,
+                choices: [
+                  {
+                    index: 0,
+                    delta: toolInvocationRefusal.message,
+                    finish_reason: "stop",
+                    logprobs: null,
+                  },
+                ],
+              };
+              
+              reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
+              
+              // Update response for persistence
+              commonResponse.choices = [toolInvocationRefusal];
+              accumulatedResponse = converter.responseFromCommon(
+                commonResponse,
+              ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
+            }
+          }
+
+          // Store the complete interaction
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            provider: "gemini",
+            request: body,
+            response: accumulatedResponse,
+          });
+        }
+
+        reply.raw.write("data: [DONE]\n\n");
+        reply.raw.end();
+        return reply;
+      } else {
+        // Non-streaming response
+        const result = await geminiModel.generateContent(geminiRequest);
+        const response = result.response;
+        
+        const geminiResponse: z.infer<
+          typeof Gemini.API.GenerateContentResponseSchema
+        > = {
+          candidates: response.candidates as any,
+          usageMetadata: response.usageMetadata as any,
+          promptFeedback: response.promptFeedback as any,
+          modelVersion: modelName,
+        };
+
+        // Convert to common format for policy evaluation
+        const commonResponse = converter.responseToCommon(geminiResponse);
+        
+        // Evaluate tool invocation policies
+        const assistantMessage = commonResponse.choices[0]?.message;
+        if (assistantMessage) {
+          const toolInvocationRefusal =
+            await utils.toolInvocation.evaluatePolicies(
+              assistantMessage,
+              resolvedAgentId,
+              contextIsTrusted,
+            );
+
+          if (toolInvocationRefusal) {
+            commonResponse.choices = [toolInvocationRefusal];
+            // Convert back to Gemini format
+            const refusalResponse = converter.responseFromCommon(
+              commonResponse,
+            ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
+            
+            // Store the interaction with refusal
+            await InteractionModel.create({
+              agentId: resolvedAgentId,
+              provider: "gemini",
+              request: body,
+              response: refusalResponse,
+            });
+
+            return reply.send(refusalResponse);
+          }
+        }
+
+        // Store the complete interaction
+        await InteractionModel.create({
+          agentId: resolvedAgentId,
+          provider: "gemini",
+          request: body,
+          response: geminiResponse,
+        });
+
+        return reply.send(geminiResponse);
+      }
+    } catch (error) {
+      fastify.log.error(error);
+
+      const statusCode =
+        error instanceof Error && "status" in error
+          ? (error.status as 200 | 400 | 404 | 403 | 500)
+          : 500;
+
+      return reply.status(statusCode).send({
+        error: {
+          message:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred",
+          type: "api_error",
+        },
+      });
+    }
+  };
+
+  /**
+   * Default agent endpoint for Gemini generateContent
+   * POST /v1/gemini/models/{model}:generateContent
+   */
+  fastify.post(
+    `${API_PREFIX}/gemini/models/:model\\:generateContent`,
+    {
+      schema: {
+        description: "Generate content using Gemini (default agent)",
+        summary: "Generate content using Gemini",
+        tags: ["Proxy"],
+        params: z.object({
+          model: z.string().describe("The model to use"),
+        }),
+        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        body: Gemini.API.GenerateContentRequestSchema,
+        response: {
+          200: Gemini.API.GenerateContentResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      return handleGenerateContent(
+        request.body,
+        request.headers,
+        reply,
+        undefined,
+        request.params.model,
+        false,
+      );
+    },
+  );
+
+  /**
+   * Default agent endpoint for Gemini streamGenerateContent
+   * POST /v1/gemini/models/{model}:streamGenerateContent
+   */
+  fastify.post(
+    `${API_PREFIX}/gemini/models/:model\\:streamGenerateContent`,
+    {
+      schema: {
+        description: "Stream generated content using Gemini (default agent)",
+        summary: "Stream generated content using Gemini",
+        tags: ["Proxy"],
+        params: z.object({
+          model: z.string().describe("The model to use"),
+        }),
+        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        body: Gemini.API.GenerateContentRequestSchema,
+        response: {
+          // Streaming responses don't have a schema
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      return handleGenerateContent(
+        request.body,
+        request.headers,
+        reply,
+        undefined,
+        request.params.model,
+        true,
+      );
+    },
+  );
+
+  /**
+   * Agent-specific endpoint for Gemini generateContent
+   * POST /v1/gemini/{agentId}/models/{model}:generateContent
+   */
+  fastify.post(
+    `${API_PREFIX}/gemini/:agentId/models/:model\\:generateContent`,
+    {
+      schema: {
+        description: "Generate content using Gemini with specific agent",
+        summary: "Generate content using Gemini (specific agent)",
+        tags: ["Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          model: z.string().describe("The model to use"),
+        }),
+        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        body: Gemini.API.GenerateContentRequestSchema,
+        response: {
+          200: Gemini.API.GenerateContentResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      return handleGenerateContent(
+        request.body,
+        request.headers,
+        reply,
+        request.params.agentId,
+        request.params.model,
+        false,
+      );
+    },
+  );
+
+  /**
+   * Agent-specific endpoint for Gemini streamGenerateContent
+   * POST /v1/gemini/{agentId}/models/{model}:streamGenerateContent
+   */
+  fastify.post(
+    `${API_PREFIX}/gemini/:agentId/models/:model\\:streamGenerateContent`,
+    {
+      schema: {
+        description: "Stream generated content using Gemini with specific agent",
+        summary: "Stream generated content using Gemini (specific agent)",
+        tags: ["Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          model: z.string().describe("The model to use"),
+        }),
+        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        body: Gemini.API.GenerateContentRequestSchema,
+        response: {
+          // Streaming responses don't have a schema
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      return handleGenerateContent(
+        request.body,
+        request.headers,
+        reply,
+        request.params.agentId,
+        request.params.model,
+        true,
+      );
+    },
+  );
+};
+
+export default geminiProxyRoutes;

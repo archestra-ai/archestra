@@ -1,20 +1,23 @@
-import type OpenAI from "openai";
 import type { Stream } from "openai/core/streaming";
+import type {
+  CommonChatCompletionChunk,
+  CommonMessage,
+  CommonToolCall,
+} from "../types/common";
 
 /**
  * Accumulate the assistant message, and tool calls from chunks
  */
 export const handleChatCompletions = async (
-  stream: Stream<OpenAI.Chat.Completions.ChatCompletionChunk>,
+  stream: Stream<CommonChatCompletionChunk>,
 ): Promise<{
-  message: OpenAI.Chat.Completions.ChatCompletionMessage;
-  chunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
+  message: CommonMessage;
+  chunks: CommonChatCompletionChunk[];
 }> => {
   let accumulatedContent = "";
   let accumulatedRefusal = "";
-  const accumulatedToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall[] =
-    [];
-  const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
+  const accumulatedToolCalls: CommonToolCall[] = [];
+  const chunks: CommonChatCompletionChunk[] = [];
 
   for await (const chunk of stream) {
     chunks.push(chunk);
@@ -32,7 +35,7 @@ export const handleChatCompletions = async (
     // Accumulate tool calls
     if (delta?.tool_calls) {
       for (const toolCallDelta of delta.tool_calls) {
-        const index = toolCallDelta.index;
+        const index = toolCallDelta.index ?? 0;
 
         // Initialize tool call if it doesn't exist
         if (!accumulatedToolCalls[index]) {

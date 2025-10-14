@@ -639,10 +639,10 @@ export function generateMockInteraction(
 
   return {
     agentId,
+    provider: "openai" as const,
     request,
     response,
     createdAt: new Date(response.created * 1000),
-    provider: "openai",
   };
 }
 

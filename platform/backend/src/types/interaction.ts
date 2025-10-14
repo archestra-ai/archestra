@@ -17,47 +17,44 @@ export const InteractionResponseSchema = z.union([
   Gemini.API.GenerateContentResponseSchema,
 ]);
 
-// Keep the old InteractionContentSchema for backward compatibility during migration
-const InteractionContentSchema = z.union([OpenAi.Messages.MessageParamSchema]);
-
 /**
- * Database select schema with discriminated union
- * This ensures type safety based on provider
+ * Base database schema without discriminated union
+ * This is what Drizzle actually returns from the database
  */
-export const SelectInteractionSchema = createSelectSchema(
+const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
   {
     request: InteractionRequestSchema,
     response: InteractionResponseSchema,
   },
-).transform((data) => {
-  // Transform to discriminated union for type safety
-  if (data.provider === "openai") {
-    return {
-      ...data,
-      provider: "openai" as const,
-      request: data.request as z.infer<
-        typeof OpenAi.API.ChatCompletionRequestSchema
-      >,
-      response: data.response as z.infer<
-        typeof OpenAi.API.ChatCompletionResponseSchema
-      >,
-    };
-  } else if (data.provider === "gemini") {
-    return {
-      ...data,
-      provider: "gemini" as const,
-      request: data.request as z.infer<
-        typeof Gemini.API.GenerateContentRequestSchema
-      >,
-      response: data.response as z.infer<
-        typeof Gemini.API.GenerateContentResponseSchema
-      >,
-    };
-  }
-  // Fallback for unknown providers (shouldn't happen with proper validation)
-  return data;
+);
+
+/**
+ * OpenAI-specific interaction schema for discriminated union
+ */
+const OpenAiInteractionSchema = BaseSelectInteractionSchema.extend({
+  provider: z.literal("openai"),
+  request: OpenAi.API.ChatCompletionRequestSchema,
+  response: OpenAi.API.ChatCompletionResponseSchema,
 });
+
+/**
+ * Gemini-specific interaction schema for discriminated union
+ */
+const GeminiInteractionSchema = BaseSelectInteractionSchema.extend({
+  provider: z.literal("gemini"),
+  request: Gemini.API.GenerateContentRequestSchema,
+  response: Gemini.API.GenerateContentResponseSchema,
+});
+
+/**
+ * Discriminated union schema for API responses
+ * This provides type safety based on the provider field
+ */
+export const SelectInteractionSchema = z.discriminatedUnion("provider", [
+  OpenAiInteractionSchema,
+  GeminiInteractionSchema,
+]);
 
 export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
@@ -72,4 +69,3 @@ export type InsertInteraction = z.infer<typeof InsertInteractionSchema>;
 
 export type InteractionRequest = z.infer<typeof InteractionRequestSchema>;
 export type InteractionResponse = z.infer<typeof InteractionResponseSchema>;
-export type InteractionContent = z.infer<typeof InteractionContentSchema>;

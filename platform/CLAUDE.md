@@ -205,7 +205,7 @@ platform/
 │       ├── providers/           # LLM provider abstraction
 │       │   ├── factory.ts       # Provider factory pattern
 │       │   ├── openai.ts        # OpenAI provider implementation
-│       │   ├── gemini.ts        # Gemini provider implementation (pending)
+│       │   ├── gemini.ts        # Gemini provider implementation
 │       │   └── types.ts         # Provider interfaces
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
@@ -213,7 +213,7 @@ platform/
 │           ├── interaction.ts   # Interaction endpoints (list, get by ID)
 │           └── proxy/           # LLM provider proxy with integrated guardrails
 │               ├── openai.ts    # OpenAI proxy route handler
-│               ├── gemini.ts    # Gemini proxy route handler (pending implementation)
+│               ├── gemini.ts    # Gemini proxy route handler
 │               ├── types/       # TypeScript types for proxy routes
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
@@ -266,10 +266,10 @@ The production backend provides:
 #### Supported LLM Providers
 
 - **OpenAI**: Fully implemented with chat completions, tools, and streaming support
-- **Google Gemini**: Type definitions and database support complete, proxy implementation pending
+- **Google Gemini**: Fully implemented with generateContent, tools, and streaming support
   - Comprehensive TypeScript types for Gemini API (`platform/backend/src/types/llm-providers/gemini/`)
   - Database schema supports provider field to distinguish between providers
-  - Requires `GEMINI_API_KEY` environment variable when implemented
+  - Requires `GEMINI_API_KEY` environment variable
 
 #### REST API Endpoints
 
@@ -278,10 +278,16 @@ The production backend provides:
   - `GET /api/interactions/:id` - Get interaction by ID
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
-  - `POST /v1/:provider/chat/completions` - Provider-agnostic chat endpoint (supports "openai" and "gemini")
-  - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
-  - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
-  - `GET /v1/:provider/models` - List available models for a provider
+  - OpenAI:
+    - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
+    - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
+    - `GET /v1/openai/models` - List available OpenAI models
+  - Gemini:
+    - `POST /v1/gemini/models/:model:generateContent` - Default agent generateContent endpoint
+    - `POST /v1/gemini/models/:model:streamGenerateContent` - Default agent streaming endpoint
+    - `POST /v1/gemini/:agentId/models/:model:generateContent` - Agent-specific generateContent
+    - `POST /v1/gemini/:agentId/models/:model:streamGenerateContent` - Agent-specific streaming
+    - `GET /v1/gemini/models` - List available Gemini models
   - Supports streaming responses for real-time AI interactions
   - **Supported Providers**: OpenAI, Google Gemini
 - **Agent Management**:

@@ -66,12 +66,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const openAiClient = new OpenAI({ apiKey: openAiApiKey });
 
     try {
-      // Filter out custom tools since CommonTool only supports function tools
-      const functionTools = tools?.filter(
-        (tool): tool is { type: "function"; function: any } =>
-          tool.type === "function",
-      );
-      await utils.persistTools(functionTools, resolvedAgentId);
+      await utils.persistTools(tools, resolvedAgentId);
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
@@ -93,73 +88,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           stream: true,
         });
 
-        // Collect chunks from OpenAI stream
-        const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [];
-        let accumulatedContent = "";
-        let accumulatedRefusal = "";
-        const accumulatedToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+        const chatCompletionChunksAndMessage =
+          await utils.streaming.handleChatCompletions(stream);
 
-        for await (const chunk of stream) {
-          chunks.push(chunk);
-          const delta = chunk.choices[0]?.delta;
-
-          // Accumulate content
-          if (delta?.content) {
-            accumulatedContent += delta.content;
-          }
-
-          if (delta?.refusal) {
-            accumulatedRefusal += delta.refusal;
-          }
-
-          // Accumulate tool calls
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index ?? 0;
-
-              // Initialize tool call if it doesn't exist
-              if (!accumulatedToolCalls[index]) {
-                accumulatedToolCalls[index] = {
-                  id: toolCallDelta.id || "",
-                  type: "function",
-                  function: {
-                    name: "",
-                    arguments: "",
-                  },
-                };
-              }
-
-              // Accumulate tool call fields
-              if (toolCallDelta.id) {
-                accumulatedToolCalls[index].id = toolCallDelta.id;
-              }
-              if (toolCallDelta.function?.name) {
-                accumulatedToolCalls[index].function.name =
-                  toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                accumulatedToolCalls[index].function.arguments +=
-                  toolCallDelta.function.arguments;
-              }
-            }
-          }
-        }
-
-        const assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessage = {
-          role: "assistant",
-          content: accumulatedContent || null,
-          refusal: accumulatedRefusal || null,
-          tool_calls:
-            accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
-        };
-
-        let finalAssistantMessage = assistantMessage;
-        let finalChunks = chunks;
+        let assistantMessage = chatCompletionChunksAndMessage.message;
+        let chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+          chatCompletionChunksAndMessage.chunks;
 
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
           await utils.toolInvocation.evaluatePolicies(
-            finalAssistantMessage,
+            assistantMessage,
             resolvedAgentId,
             contextIsTrusted,
           );
@@ -171,8 +110,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
            * Overwrite the assistant message that will be persisted
            * Plus send a single chunk, representing the refusal message instead of original chunks
            */
-          finalAssistantMessage = toolInvocationRefusal.message;
-          finalChunks = [
+          assistantMessage = toolInvocationRefusal.message;
+          chunks = [
             {
               id: "chatcmpl-blocked",
               object: "chat.completion.chunk",
@@ -194,7 +133,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai" as const,
+          provider: "openai",
           request: body,
           response: {
             id: chunks[0]?.id || "chatcmpl-unknown",
@@ -204,7 +143,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             choices: [
               {
                 index: 0,
-                message: finalAssistantMessage,
+                message: assistantMessage,
                 finish_reason: "stop",
                 logprobs: null,
               },
@@ -212,7 +151,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
 
-        for (const chunk of finalChunks) {
+        for (const chunk of chunks) {
           /**
            * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
            */
@@ -249,7 +188,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai" as const,
+          provider: "openai",
           request: body,
           response,
         });

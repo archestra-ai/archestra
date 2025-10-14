@@ -1,33 +1,27 @@
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
+import type OpenAI from "openai";
 import type { Gemini } from "@/types";
-import type {
-  CommonChatCompletionChunk,
-  CommonChatCompletionRequest,
-  CommonChatCompletionResponse,
-  CommonMessage,
-  CommonTool,
-  ProviderConverter,
-} from "../types/common";
+import type { ProviderTransformer } from "../types/common";
 
 /**
- * Gemini converter implementation
- * Converts between Gemini's Content/Part format and our common OpenAI-like format
+ * Gemini transformer implementation
+ * Converts between Gemini's Content/Part format and OpenAI format
  */
-export class GeminiConverter implements ProviderConverter {
+export class GeminiTransformer implements ProviderTransformer {
   provider = "gemini" as const;
 
   /**
    * Convert Gemini Content array to Common Messages
    */
-  private contentsToMessages(
+  private contentsToOpenAIMessages(
     contents: z.infer<typeof Gemini.Messages.ContentSchema>[],
-  ): CommonMessage[] {
-    const messages: CommonMessage[] = [];
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
     for (const content of contents) {
-      const message: CommonMessage = {
-        role: this.geminiRoleToCommon(content.role),
+      const message: OpenAI.Chat.ChatCompletionMessageParam = {
+        role: this.geminiRoleToOpenAI(content.role),
         content: null,
         tool_calls: undefined,
         tool_call_id: undefined,
@@ -68,8 +62,8 @@ export class GeminiConverter implements ProviderConverter {
   /**
    * Convert Common Messages to Gemini Contents
    */
-  private messagesToContents(
-    messages: CommonMessage[],
+  private openAIMessagesToContents(
+    messages: OpenAI.Chat.ChatCompletionMessageParam[],
   ): z.infer<typeof Gemini.Messages.ContentSchema>[] {
     const contents: z.infer<typeof Gemini.Messages.ContentSchema>[] = [];
 
@@ -103,7 +97,7 @@ export class GeminiConverter implements ProviderConverter {
       // Only add non-empty contents
       if (parts.length > 0) {
         contents.push({
-          role: this.commonRoleToGemini(message.role),
+          role: this.openAIRoleToGemini(message.role),
           parts,
         });
       }
@@ -115,9 +109,9 @@ export class GeminiConverter implements ProviderConverter {
   /**
    * Convert role from Gemini to common format
    */
-  private geminiRoleToCommon(
+  private geminiRoleToOpenAI(
     role: "user" | "model" | "function",
-  ): CommonMessage["role"] {
+  ): OpenAI.Chat.ChatCompletionMessageParam["role"] {
     switch (role) {
       case "model":
         return "assistant";
@@ -131,8 +125,8 @@ export class GeminiConverter implements ProviderConverter {
   /**
    * Convert role from common to Gemini format
    */
-  private commonRoleToGemini(
-    role: CommonMessage["role"],
+  private openAIRoleToGemini(
+    role: OpenAI.Chat.ChatCompletionMessageParam["role"],
   ): "user" | "model" | "function" {
     switch (role) {
       case "assistant":
@@ -148,21 +142,21 @@ export class GeminiConverter implements ProviderConverter {
     }
   }
 
-  requestToCommon(
+  requestToOpenAI(
     request: z.infer<typeof Gemini.API.GenerateContentRequestSchema>,
-  ): CommonChatCompletionRequest {
-    const messages = this.contentsToMessages(request.contents);
+  ): OpenAI.Chat.ChatCompletionCreateParams {
+    const messages = this.contentsToOpenAIMessages(request.contents);
 
     // Extract system instruction if present
     if (request.systemInstruction) {
-      const systemMessage: CommonMessage = {
+      const systemMessage: OpenAI.Chat.ChatCompletionMessageParam = {
         role: "system",
         content: request.systemInstruction.parts[0]?.text || null,
       };
       messages.unshift(systemMessage);
     }
 
-    const tools: CommonTool[] = [];
+    const tools: OpenAI.Chat.ChatCompletionTool[] = [];
     if (request.tools) {
       for (const tool of request.tools) {
         for (const func of tool.functionDeclarations) {
@@ -189,8 +183,8 @@ export class GeminiConverter implements ProviderConverter {
     };
   }
 
-  requestFromCommon(
-    request: CommonChatCompletionRequest,
+  requestFromOpenAI(
+    request: OpenAI.Chat.ChatCompletionCreateParams,
   ): z.infer<typeof Gemini.API.GenerateContentRequestSchema> {
     // Extract system message if present
     let systemInstruction:
@@ -205,7 +199,7 @@ export class GeminiConverter implements ProviderConverter {
       };
     }
 
-    const contents = this.messagesToContents(messages);
+    const contents = this.openAIMessagesToContents(messages);
 
     const tools: z.infer<
       typeof Gemini.API.GenerateContentRequestSchema
@@ -246,15 +240,15 @@ export class GeminiConverter implements ProviderConverter {
     };
   }
 
-  responseToCommon(
+  responseToOpenAI(
     response: z.infer<typeof Gemini.API.GenerateContentResponseSchema>,
-  ): CommonChatCompletionResponse {
-    const choices: CommonChatCompletionResponse["choices"] = [];
+  ): OpenAI.Chat.ChatCompletion {
+    const choices: OpenAI.Chat.ChatCompletion["choices"] = [];
 
     if (response.candidates) {
       for (const candidate of response.candidates) {
         if (candidate.content) {
-          const messages = this.contentsToMessages([candidate.content]);
+          const messages = this.contentsToOpenAIMessages([candidate.content]);
           const message = messages[0] || {
             role: "assistant" as const,
             content: null,
@@ -300,8 +294,8 @@ export class GeminiConverter implements ProviderConverter {
     };
   }
 
-  responseFromCommon(
-    response: CommonChatCompletionResponse,
+  responseFromOpenAI(
+    response: OpenAI.Chat.ChatCompletion,
   ): z.infer<typeof Gemini.API.GenerateContentResponseSchema> {
     const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
 
@@ -346,15 +340,15 @@ export class GeminiConverter implements ProviderConverter {
     };
   }
 
-  chunkToCommon(
+  chunkToOpenAI(
     chunk: z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema>,
-  ): CommonChatCompletionChunk {
-    const choices: CommonChatCompletionChunk["choices"] = [];
+  ): OpenAI.Chat.ChatCompletionChunk {
+    const choices: OpenAI.Chat.ChatCompletionChunk["choices"] = [];
 
     if (chunk.candidates) {
       for (const candidate of chunk.candidates) {
         if (candidate.content) {
-          const messages = this.contentsToMessages([candidate.content]);
+          const messages = this.contentsToOpenAIMessages([candidate.content]);
           const delta = messages[0] || {};
 
           choices.push({
@@ -380,8 +374,8 @@ export class GeminiConverter implements ProviderConverter {
     };
   }
 
-  chunkFromCommon(
-    chunk: CommonChatCompletionChunk,
+  chunkFromOpenAI(
+    chunk: OpenAI.Chat.ChatCompletionChunk,
   ): z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema> {
     const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
 

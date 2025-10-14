@@ -1,9 +1,9 @@
+import type OpenAI from "openai";
 import {
   DualLlmConfigModel,
   DualLlmResultModel,
   TrustedDataPolicyModel,
 } from "@/models";
-import type { CommonMessage } from "../types/common";
 import { DualLlmSubagent } from "./dual-llm-subagent";
 
 /**
@@ -14,7 +14,7 @@ import { DualLlmSubagent } from "./dual-llm-subagent";
  * (just the content and tool_call_id)
  */
 const extractToolNameFromMessages = (
-  messages: CommonMessage[],
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
   toolCallId: string,
 ): string | null => {
   // Find the most recent assistant message with tool_calls
@@ -23,7 +23,7 @@ const extractToolNameFromMessages = (
 
     if (message.role === "assistant" && message.tool_calls) {
       for (const toolCall of message.tool_calls) {
-        if (toolCall.id === toolCallId) {
+        if (toolCall.type === "function" && toolCall.id === toolCallId) {
           return toolCall.function.name;
         }
       }
@@ -39,17 +39,17 @@ const extractToolNameFromMessages = (
  * Returns both the filtered messages and whether the context is trusted
  */
 export const evaluateIfContextIsTrusted = async (
-  messages: CommonMessage[],
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
   agentId: string,
   apiKey: string,
 ): Promise<{
-  filteredMessages: CommonMessage[];
+  filteredMessages: OpenAI.Chat.ChatCompletionMessageParam[];
   contextIsTrusted: boolean;
 }> => {
   // Load dual LLM configuration to check if analysis is enabled
   const dualLlmConfig = await DualLlmConfigModel.getDefault();
 
-  const filteredMessages: CommonMessage[] = [];
+  const filteredMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
   const blockedToolCallIds = new Set<string>();
   const blockReasons = new Map<string, string>();
   let hasUntrustedData = false;

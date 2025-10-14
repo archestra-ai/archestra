@@ -1,5 +1,5 @@
+import type OpenAI from "openai";
 import { AgentModel, ToolModel } from "@/models";
-import type { CommonTool } from "../types/common";
 
 /**
  * Get or create the default agent based on the user-agent header
@@ -13,7 +13,7 @@ export const getAgentIdFromRequest = async (
  * Persist tools if present in the request
  */
 export const persistTools = async (
-  tools: CommonTool[] | undefined,
+  tools: OpenAI.Chat.ChatCompletionTool[] | undefined,
   agentId: string,
 ) => {
   for (const tool of tools || []) {

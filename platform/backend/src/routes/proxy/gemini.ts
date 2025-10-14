@@ -5,7 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
-import { getConverter } from "./converters";
+import { getTransformer } from "./transformers";
 import { GeminiProxy } from "./types";
 import * as utils from "./utils";
 
@@ -69,11 +69,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-pro";
 
-    const converter = getConverter("gemini");
+    const transformer = getTransformer("gemini");
 
     try {
       // Convert Gemini request to common format for processing
-      const commonRequest = converter.requestToCommon(body);
+      const commonRequest = transformer.requestToOpenAI(body);
 
       // Persist tools if present
       await utils.persistTools(commonRequest.tools, resolvedAgentId);
@@ -90,7 +90,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       commonRequest.messages = filteredMessages;
 
       // Convert back to Gemini format
-      const geminiRequest = converter.requestFromCommon(
+      const geminiRequest = transformer.requestFromOpenAI(
         commonRequest,
       ) as z.infer<typeof Gemini.API.GenerateContentRequestSchema>;
 
@@ -141,7 +141,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
 
           // Convert to common format for SSE
-          const commonChunk = converter.chunkToCommon ? converter.chunkToCommon(chunk as any) : chunk;
+          const commonChunk = transformer.chunkToOpenAI ? transformer.chunkToOpenAI(chunk as any) : chunk;
 
           reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
           await new Promise((resolve) =>
@@ -152,7 +152,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Evaluate tool invocation policies on the accumulated response
         if (accumulatedResponse) {
           const commonResponse =
-            converter.responseToCommon(accumulatedResponse);
+            transformer.responseToOpenAI(accumulatedResponse);
 
           // Check if tool invocation is blocked
           const assistantMessage = commonResponse.choices[0]?.message;
@@ -185,7 +185,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               // Update response for persistence
               commonResponse.choices = [toolInvocationRefusal];
-              accumulatedResponse = converter.responseFromCommon(
+              accumulatedResponse = transformer.responseFromOpenAI(
                 commonResponse,
               ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
             }
@@ -221,7 +221,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
 
         // Convert to common format for policy evaluation
-        const commonResponse = converter.responseToCommon(geminiResponse);
+        const commonResponse = transformer.responseToOpenAI(geminiResponse);
 
         // Evaluate tool invocation policies
         const assistantMessage = commonResponse.choices[0]?.message;
@@ -236,7 +236,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolInvocationRefusal) {
             commonResponse.choices = [toolInvocationRefusal];
             // Convert back to Gemini format
-            const refusalResponse = converter.responseFromCommon(
+            const refusalResponse = transformer.responseFromOpenAI(
               commonResponse,
             ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
 

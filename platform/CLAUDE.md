@@ -102,9 +102,13 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
 
-# Provider API Keys
+# Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
 GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider
+
+# Note: For client applications using the proxy:
+# - OpenAI: Pass API key in Authorization header as "Bearer <key>"
+# - Gemini: Pass API key in x-goog-api-key header
 ```
 
 The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
@@ -266,10 +270,12 @@ The production backend provides:
 #### Supported LLM Providers
 
 - **OpenAI**: Fully implemented with chat completions, tools, and streaming support
+  - Requires `OPENAI_API_KEY` environment variable
 - **Google Gemini**: Fully implemented with generateContent, tools, and streaming support
   - Comprehensive TypeScript types for Gemini API (`platform/backend/src/types/llm-providers/gemini/`)
   - Database schema supports provider field to distinguish between providers
   - Requires `GEMINI_API_KEY` environment variable
+  - Gemini API requests require `x-goog-api-key` header with API key
 
 #### REST API Endpoints
 
@@ -433,7 +439,22 @@ The `experiments/` workspace contains prototype features:
 - `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
 - `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
 
-### Examples
+#### Provider Implementation
+
+The platform uses a modular converter pattern to support multiple LLM providers:
+
+- **Converter Pattern**: Each provider has a converter class implementing `ProviderConverter` interface
+  - Transforms between provider-specific formats and common internal format
+  - Located in `platform/backend/src/routes/proxy/converters/`
+  - OpenAI converter: `openai.ts`
+  - Gemini converter: `gemini.ts`
+- **Common Format**: Internal representation based on OpenAI's format for consistency
+  - Enables unified processing of requests/responses across providers
+  - Facilitates security policy evaluation
+- **Provider Factory**: Located in `platform/backend/src/routes/proxy/converters/index.ts`
+  - Returns appropriate converter based on provider type
+
+## Examples
 
 The `platform/examples/` directory contains example integrations:
 

@@ -17,15 +17,15 @@ import type {
 } from "@/lib/clients/api";
 import { useDualLlmResultByToolCallId } from "@/lib/dual-llm-result.query";
 import {
+  DynamicInteraction,
   getLastToolCallId,
-  isLastMessageToolCall,
   toolNamesRefusedForInteraction,
   toolNamesUsedForInteraction,
 } from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 export function InteractionSummary({
-  interaction,
+  interaction: dynamicInteraction,
   agent,
 }: {
   interaction: GetInteractionsResponses["200"][number];
@@ -35,8 +35,9 @@ export function InteractionSummary({
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);
 
   // Check if this interaction is about a tool call
+  const interaction = new DynamicInteraction(dynamicInteraction);
   const lastToolCallId = getLastToolCallId(interaction);
-  const isDualLlmRelevant = isLastMessageToolCall(interaction);
+  const isDualLlmRelevant = interaction.isLastMessageToolCall();
 
   // Fetch dual LLM result if relevant
   const { data: dualLlmResult } = useDualLlmResultByToolCallId(lastToolCallId);
@@ -52,7 +53,7 @@ export function InteractionSummary({
         />
         <RawLogDetail
           label="Model"
-          value={interaction.request.model}
+          value={interaction.modelName}
           icon={<BrainIcon className={iconClassName} />}
         />
         <RawLogDetail

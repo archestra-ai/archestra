@@ -9,6 +9,14 @@ import { PROXY_API_PREFIX } from "./common";
 import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
+// Register schemas in global registry for OpenAPI generation
+z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+  id: "OpenAiChatCompletionRequestSchema",
+});
+z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+  id: "OpenAiChatCompletionResponseSchema",
+});
+
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";

@@ -20,30 +20,9 @@ import type {
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 import { useInteractions } from "@/lib/interaction.query";
-import {
-  toolNamesRefusedForInteraction,
-  toolNamesUsedForInteraction,
-} from "@/lib/interaction.utils";
+import { DynamicInteraction } from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
-
-function findLastUserMessage(
-  interaction: GetInteractionsResponses["200"][number],
-): string {
-  const reversedMessages = [...interaction.request.messages].reverse();
-  for (const message of reversedMessages) {
-    if (message.role !== "user") {
-      continue;
-    }
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    if (message.content?.[0]?.type === "text") {
-      return message.content[0].text;
-    }
-  }
-  return "";
-}
 
 export default function LogsPage({
   initialData,
@@ -129,22 +108,23 @@ function LogsTable({
 }
 
 function LogRow({
-  interaction,
+  interaction: dynamicInteraction,
   agent,
 }: {
   interaction: GetInteractionsResponses["200"][number];
   agent?: GetAgentsResponses["200"][number];
 }) {
-  const toolsUsed = toolNamesUsedForInteraction(interaction);
-  const toolsBlocked = toolNamesRefusedForInteraction(interaction);
+  const interaction = new DynamicInteraction(dynamicInteraction);
 
-  const userMessage = findLastUserMessage(interaction);
-  const assistantResponse =
-    interaction.response.choices[0]?.message?.content ?? "";
+  const toolsUsed = interaction.getToolNamesUsed();
+  const toolsBlocked = interaction.getToolNamesRefused();
+
+  const userMessage = interaction.getLastUserMessage();
+  const assistantResponse = interaction.getLastAssistantResponse();
 
   const formattedDate = formatDate({ date: interaction.createdAt });
   const agentName = agent?.name ?? "Unknown";
-  const modelName = interaction.request.model;
+  const modelName = interaction.modelName;
 
   return (
     <TableRow>

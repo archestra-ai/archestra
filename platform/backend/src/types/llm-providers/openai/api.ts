@@ -45,7 +45,7 @@ const ChoiceSchema = z
       .object({
         content: z.string().nullable(),
         refusal: z.string().nullable(),
-        role: z.literal("assistant"),
+        role: z.enum(["assistant"]),
         annotations: z.array(z.any()).optional(),
         audio: z.any().nullable().optional(),
         function_call: z
@@ -88,7 +88,7 @@ export const ChatCompletionResponseSchema = z
     choices: z.array(ChoiceSchema),
     created: z.number(),
     model: z.string(),
-    object: z.literal("chat.completion"),
+    object: z.enum(["chat.completion"]),
     server_tier: z.string().optional(),
     system_fingerprint: z.string().nullable().optional(),
     usage: ChatCompletionUsageSchema.optional(),

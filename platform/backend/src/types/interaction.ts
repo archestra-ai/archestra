@@ -33,7 +33,7 @@ const BaseSelectInteractionSchema = createSelectSchema(
  * OpenAI-specific interaction schema for discriminated union
  */
 const OpenAiInteractionSchema = BaseSelectInteractionSchema.extend({
-  provider: z.literal("openai"),
+  provider: z.enum(["openai"]),
   request: OpenAi.API.ChatCompletionRequestSchema,
   response: OpenAi.API.ChatCompletionResponseSchema,
 });
@@ -42,7 +42,7 @@ const OpenAiInteractionSchema = BaseSelectInteractionSchema.extend({
  * Gemini-specific interaction schema for discriminated union
  */
 const GeminiInteractionSchema = BaseSelectInteractionSchema.extend({
-  provider: z.literal("gemini"),
+  provider: z.enum(["gemini"]),
   request: Gemini.API.GenerateContentRequestSchema,
   response: Gemini.API.GenerateContentResponseSchema,
 });

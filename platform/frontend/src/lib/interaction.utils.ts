@@ -1,99 +1,14 @@
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type {
+  GeminiGenerateContentRequestSchema,
+  GeminiGenerateContentResponseSchema,
   GetInteractionResponse,
   GetInteractionsResponses,
+  OpenAiChatCompletionRequestSchema,
+  OpenAiChatCompletionResponseSchema,
 } from "@/lib/clients/api";
 
-/**
- * Check if the last message in an interaction is a tool message
- */
-export function isLastMessageToolCall(
-  interaction: GetInteractionsResponses["200"][number],
-): boolean {
-  const messages = interaction.request.messages;
-  if (messages.length === 0) return false;
-  const lastMessage = messages[messages.length - 1];
-  return lastMessage.role === "tool";
-}
-
-/**
- * Get the tool_call_id from the last message if it's a tool message
- */
-export function getLastToolCallId(
-  interaction: GetInteractionsResponses["200"][number],
-): string | null {
-  const messages = interaction.request.messages;
-  if (messages.length === 0) return null;
-  const lastMessage = messages[messages.length - 1];
-  if (lastMessage.role === "tool") {
-    return lastMessage.tool_call_id;
-  }
-  return null;
-}
-
-export function toolNamesUsedForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
-  const toolsUsed = new Set<string>();
-  for (const message of interaction.request.messages) {
-    if (message.role === "assistant" && message.tool_calls) {
-      for (const toolCall of message.tool_calls) {
-        if ("function" in toolCall) {
-          toolsUsed.add(toolCall.function.name);
-        }
-      }
-    }
-  }
-  return Array.from(toolsUsed);
-}
-
-export function toolNamesRefusedForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
-  const toolsRefused = new Set<string>();
-  for (const message of interaction.request.messages) {
-    if (message.role === "assistant") {
-      if (message.refusal && message.refusal.length > 0) {
-        const toolName = message.refusal.match(
-          /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-        )?.[1];
-        if (toolName) {
-          toolsRefused.add(toolName);
-        }
-      }
-    }
-  }
-  for (const message of interaction.response.choices) {
-    if (message.message.refusal && message.message.refusal.length > 0) {
-      const toolName = message.message.refusal.match(
-        /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-      )?.[1];
-      if (toolName) {
-        toolsRefused.add(toolName);
-      }
-    }
-  }
-  return Array.from(toolsRefused);
-}
-
-export function toolsRefusedCountForInteraction(
-  interaction: GetInteractionsResponses["200"][number],
-) {
-  let count = 0;
-  for (const message of interaction.request.messages) {
-    if (message.role === "assistant") {
-      if (message.refusal && message.refusal.length > 0) {
-        count++;
-      }
-    }
-  }
-  for (const message of interaction.response.choices) {
-    if (message.message.refusal && message.message.refusal.length > 0) {
-      count++;
-    }
-  }
-  return count;
-}
+type Interaction = GetInteractionsResponses["200"][number];
 
 export interface RefusalInfo {
   toolName?: string;
@@ -101,7 +16,288 @@ export interface RefusalInfo {
   reason?: string;
 }
 
-export function parseRefusalMessage(refusal: string): RefusalInfo {
+interface InteractionUtils {
+  modelName: string;
+
+  /**
+   * Check if the last message in an interaction is a tool message
+   */
+  isLastMessageToolCall(): boolean;
+
+  /**
+   * Get the tool_call_id from the last message if it's a tool message
+   */
+  getLastToolCallId(): string | null;
+
+  /**
+   * Get the names of the tools used in the interaction
+   */
+  getToolNamesUsed(): string[];
+
+  getToolNamesRefused(): string[];
+
+  getToolRefusedCount(): number;
+
+  getLastUserMessage(): string;
+  getLastAssistantResponse(): string;
+
+  mapToUiMessage(): PartialUIMessage;
+}
+
+class OpenAiInteraction implements InteractionUtils {
+  private request: OpenAiChatCompletionRequestSchema;
+  private response: OpenAiChatCompletionResponseSchema;
+  modelName: string;
+
+  constructor(interaction: Interaction) {
+    this.request = interaction.request as OpenAiChatCompletionRequestSchema;
+    this.response = interaction.response as OpenAiChatCompletionResponseSchema;
+    this.modelName = this.request.model;
+  }
+
+  isLastMessageToolCall(): boolean {
+    const messages = this.request.messages;
+
+    if (messages.length === 0) {
+      return false;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage.role === "tool";
+  }
+
+  getLastToolCallId(): string | null {
+    const messages = this.request.messages;
+    if (messages.length === 0) {
+      return null;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role === "tool") {
+      return lastMessage.tool_call_id;
+    }
+    return null;
+  }
+
+  getToolNamesUsed(): string[] {
+    const toolsUsed = new Set<string>();
+    for (const message of this.request.messages) {
+      if (message.role === "assistant" && message.tool_calls) {
+        for (const toolCall of message.tool_calls) {
+          if ("function" in toolCall) {
+            toolsUsed.add(toolCall.function.name);
+          }
+        }
+      }
+    }
+    return Array.from(toolsUsed);
+  }
+
+  getToolNamesRefused(): string[] {
+    const toolsRefused = new Set<string>();
+    for (const message of this.request.messages) {
+      if (message.role === "assistant") {
+        if (message.refusal && message.refusal.length > 0) {
+          const toolName = message.refusal.match(
+            /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
+          )?.[1];
+          if (toolName) {
+            toolsRefused.add(toolName);
+          }
+        }
+      }
+    }
+
+    for (const message of this.response.choices) {
+      if (message.message.refusal && message.message.refusal.length > 0) {
+        const toolName = message.message.refusal.match(
+          /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
+        )?.[1];
+        if (toolName) {
+          toolsRefused.add(toolName);
+        }
+      }
+    }
+    return Array.from(toolsRefused);
+  }
+
+  getLastUserMessage(): string {
+    const reversedMessages = [...this.request.messages].reverse();
+    for (const message of reversedMessages) {
+      if (message.role !== "user") {
+        continue;
+      }
+      if (typeof message.content === "string") {
+        return message.content;
+      }
+      if (message.content?.[0]?.type === "text") {
+        return message.content[0].text;
+      }
+    }
+    return "";
+  }
+
+  getLastAssistantResponse(): string {
+    return this.response.choices[0]?.message?.content ?? "";
+  }
+
+  getToolRefusedCount(): number {
+    let count = 0;
+    for (const message of this.request.messages) {
+      if (message.role === "assistant") {
+        if (message.refusal && message.refusal.length > 0) {
+          count++;
+        }
+      }
+    }
+    for (const message of this.response.choices) {
+      if (message.message.refusal && message.message.refusal.length > 0) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // TODO: Implement this
+  mapToUiMessage(): PartialUIMessage {
+    return {
+      role: "assistant",
+      parts: [],
+    };
+  }
+}
+
+class GeminiInteraction implements InteractionUtils {
+  private request: GeminiGenerateContentRequestSchema;
+  private response: GeminiGenerateContentResponseSchema;
+  modelName: string;
+
+  constructor(interaction: Interaction) {
+    this.request = interaction.request as GeminiGenerateContentRequestSchema;
+    this.response = interaction.response as GeminiGenerateContentResponseSchema;
+    this.modelName = this.response.modelVersion as string;
+  }
+
+  isLastMessageToolCall(): boolean {
+    const messages = this.request.contents;
+
+    if (messages.length === 0) {
+      return false;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage.role === "function";
+  }
+
+  // TODO: Implement this
+  getLastToolCallId(): string | null {
+    const messages = this.request.contents;
+    if (messages.length === 0) {
+      return null;
+    }
+    return null;
+  }
+
+  // TODO: Implement this
+  getToolNamesUsed(): string[] {
+    const messages = this.request.contents;
+    if (messages.length === 0) {
+      return [];
+    }
+    return [];
+  }
+
+  // TODO: Implement this
+  getToolNamesRefused(): string[] {
+    return [];
+  }
+
+  // TODO: Implement this
+  getToolRefusedCount(): number {
+    return 0;
+  }
+
+  // TODO: Implement this
+  getLastUserMessage(): string {
+    return "";
+  }
+
+  // TODO: Implement this
+  getLastAssistantResponse(): string {
+    return "";
+  }
+
+  // TODO: Implement this
+  mapToUiMessage(): PartialUIMessage {
+    return {
+      role: "assistant",
+      parts: [],
+    };
+  }
+}
+
+export class DynamicInteraction implements InteractionUtils {
+  private interactionClass: InteractionUtils;
+
+  id: string;
+  agentId: string;
+  createdAt: string;
+  modelName: string;
+
+  constructor(interaction: Interaction) {
+    this.interactionClass = this.getInteractionClass(interaction);
+
+    this.id = interaction.id;
+    this.agentId = interaction.agentId;
+    this.createdAt = interaction.createdAt;
+    this.modelName = this.interactionClass.modelName;
+  }
+
+  private getInteractionClass(interaction: Interaction): InteractionUtils {
+    if (interaction.provider === "openai") {
+      return new OpenAiInteraction(interaction);
+    } else if (interaction.provider === "gemini") {
+      return new GeminiInteraction(interaction);
+    }
+
+    // This should never happen...
+    throw new Error(`Unsupported provider`);
+  }
+
+  isLastMessageToolCall(): boolean {
+    return this.interactionClass.isLastMessageToolCall();
+  }
+
+  getLastToolCallId(): string | null {
+    return this.interactionClass.getLastToolCallId();
+  }
+
+  getToolNamesRefused(): string[] {
+    return this.interactionClass.getToolNamesRefused();
+  }
+
+  getToolNamesUsed(): string[] {
+    return this.interactionClass.getToolNamesUsed();
+  }
+
+  getToolRefusedCount(): number {
+    return this.interactionClass.getToolRefusedCount();
+  }
+
+  getLastUserMessage(): string {
+    return this.interactionClass.getLastUserMessage();
+  }
+
+  getLastAssistantResponse(): string {
+    return this.interactionClass.getLastAssistantResponse();
+  }
+
+  mapToUiMessage(): PartialUIMessage {
+    return this.interactionClass.mapToUiMessage();
+  }
+}
+
+function parseRefusalMessage(refusal: string): RefusalInfo {
   const toolNameMatch = refusal.match(
     /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
   );

@@ -10,6 +10,14 @@ import { getTransformer } from "./transformers";
 import { GeminiProxy } from "./types";
 import * as utils from "./utils";
 
+// Register schemas in global registry for OpenAPI generation
+z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
+  id: "GeminiGenerateContentRequestSchema",
+});
+z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
+  id: "GeminiGenerateContentResponseSchema",
+});
+
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
  * the route

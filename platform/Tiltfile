@@ -62,6 +62,15 @@ local_resource(
 )
 
 local_resource(
+  'db-seed-mock-data',
+  cmd='pnpm db:seed:mock-data',
+  resource_deps=['pnpm-install', 'postgresql'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database']
+)
+
+local_resource(
   'db-migrate-and-seed',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly

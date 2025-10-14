@@ -48,6 +48,9 @@
     "db:studio": {
       "persistent": true,
       "cache": false
+    },
+    "db:seed:mock-data": {
+      "cache": false
     }
   }
 }

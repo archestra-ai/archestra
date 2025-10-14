@@ -33,6 +33,7 @@ export function DataTablePagination<TData>({
   const handlePageSizeChange = (value: string) => {
     const newPageSize = Number(value);
     // Reset to first page when changing page size
+    // This will trigger onPaginationChange with both pageSize and pageIndex updated
     table.setPageSize(newPageSize);
   };
 

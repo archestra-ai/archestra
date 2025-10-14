@@ -332,6 +332,70 @@ fastify.get(
 );
 ```
 
+### Adding Sorting to Pagination
+
+Extend pagination with sorting capabilities:
+
+```typescript
+// Define sort options
+interface SortOptions {
+  sortBy?: "createdAt" | "name" | "status";
+  sortDirection?: "asc" | "desc";
+}
+
+static async findAllPaginated(
+  pagination: PaginationQuery,
+  sort: SortOptions = { sortBy: "createdAt", sortDirection: "desc" },
+): Promise<PaginatedResult<YourType>> {
+  // Build order clause
+  const orderColumn = sort.sortBy === "name" 
+    ? schema.yourTable.name
+    : sort.sortBy === "status"
+    ? schema.yourTable.status
+    : schema.yourTable.createdAt;
+  
+  const orderFn = sort.sortDirection === "asc" ? asc : desc;
+
+  const [data, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(schema.yourTable)
+      .orderBy(orderFn(orderColumn))
+      .limit(pagination.limit)
+      .offset(pagination.offset),
+    db.select({ total: count() }).from(schema.yourTable),
+  ]);
+
+  return createPaginatedResult(data, Number(total), pagination);
+}
+```
+
+Route with sorting:
+
+```typescript
+fastify.get(
+  "/api/your-endpoint",
+  {
+    schema: {
+      querystring: z.object({
+        sortBy: z.enum(["createdAt", "name", "status"]).optional(),
+        sortDirection: z.enum(["asc", "desc"]).default("desc"),
+      }).merge(PaginationQuerySchema),
+      response: {
+        200: createPaginatedResponseSchema(SelectYourSchema),
+      },
+    },
+  },
+  async ({ query: { limit, offset, sortBy, sortDirection } }, reply) => {
+    const result = await YourModel.findAllPaginated(
+      { limit, offset },
+      { sortBy, sortDirection },
+    );
+    return reply.send(result);
+  },
+);
+```
+
 ### Adding Pagination to Existing Methods
 
 Keep your old non-paginated methods for backward compatibility:
@@ -478,7 +542,41 @@ fastify.get(
 );
 ```
 
-### Example 2: Pagination with Filtering
+### Example 2: Pagination with Sorting
+
+See `backend/src/models/interaction.ts` for a real implementation with sorting:
+
+```typescript
+static async findAllPaginated(
+  pagination: PaginationQuery,
+  sort: { sortBy?: "createdAt" | "model" | "agentId"; sortDirection?: "asc" | "desc" } = {},
+): Promise<PaginatedResult<Interaction>> {
+  const { sortBy = "createdAt", sortDirection = "desc" } = sort;
+  
+  // Map sortBy to actual column
+  const orderColumn = sortBy === "model"
+    ? schema.interactionsTable.model
+    : sortBy === "agentId"
+    ? schema.interactionsTable.agentId
+    : schema.interactionsTable.createdAt;
+  
+  const orderFn = sortDirection === "asc" ? asc : desc;
+
+  const [data, [{ total }]] = await Promise.all([
+    db
+      .select()
+      .from(schema.interactionsTable)
+      .orderBy(orderFn(orderColumn))
+      .limit(pagination.limit)
+      .offset(pagination.offset),
+    db.select({ total: count() }).from(schema.interactionsTable),
+  ]);
+
+  return createPaginatedResult(data, Number(total), pagination);
+}
+```
+
+### Example 3: Pagination with Filtering
 
 ```typescript
 // Model with agentId filter
@@ -533,7 +631,7 @@ fastify.get(
 );
 ```
 
-### Example 3: Complex Filters
+### Example 4: Complex Filters
 
 ```typescript
 interface TaskFilters {

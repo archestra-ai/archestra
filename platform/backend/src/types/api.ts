@@ -14,7 +14,7 @@ export const ErrorResponseSchema = z.object({
 
 /**
  * Pagination query parameters schema
- * Supports both offset-based and cursor-based pagination
+ * Supports offset-based pagination
  */
 export const PaginationQuerySchema = z.object({
   /** Number of items per page (default: 20, max: 100) */
@@ -56,3 +56,37 @@ export const createPaginatedResponseSchema = <T extends z.ZodTypeAny>(
 
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 export type PaginationMeta = z.infer<typeof PaginationMetaSchema>;
+
+/**
+ * Sorting query parameters schema
+ * Supports sorting by a single column
+ */
+export const SortingQuerySchema = z.object({
+  /** Column to sort by */
+  sortBy: z.string().optional(),
+  /** Sort direction (default: desc for descending) */
+  sortDirection: z.enum(["asc", "desc"]).optional().default("desc"),
+});
+
+export type SortingQuery = z.infer<typeof SortingQuerySchema>;
+
+/**
+ * Factory for a sorting query schema constrained to specific columns
+ * Pass a readonly tuple of allowed column names (non-empty)
+ */
+export const createSortingQuerySchema = <
+  T extends readonly [string, ...string[]],
+>(
+  allowedSortByValues: T,
+) =>
+  z.object({
+    /** Column to sort by (restricted to allowed values) */
+    sortBy: z.enum(allowedSortByValues).optional(),
+    /** Sort direction (default: desc for descending) */
+    sortDirection: z.enum(["asc", "desc"]).optional().default("desc"),
+  });
+
+export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
+  sortBy?: T[number];
+  sortDirection?: "asc" | "desc";
+};

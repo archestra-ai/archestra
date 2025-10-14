@@ -3,6 +3,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   type GetInteractionResponses,
+  type GetInteractionsData,
   type GetInteractionsResponses,
   getInteraction,
   getInteractions,
@@ -13,27 +14,39 @@ export function useInteractions({
   agentId,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
+  sortBy,
+  sortDirection = "desc",
   initialData,
 }: {
   agentId?: string;
   limit?: number;
   offset?: number;
+  sortBy?: NonNullable<GetInteractionsData["query"]>["sortBy"];
+  sortDirection?: "asc" | "desc";
   initialData?: GetInteractionsResponses["200"];
 } = {}) {
   return useSuspenseQuery({
-    queryKey: ["interactions", agentId, limit, offset],
+    queryKey: ["interactions", agentId, limit, offset, sortBy, sortDirection],
     queryFn: async () => {
       const response = await getInteractions({
         query: {
           ...(agentId ? { agentId } : {}),
           limit,
           offset,
+          ...(sortBy ? { sortBy } : {}),
+          sortDirection,
         },
       });
       return response.data;
     },
-    // Only use initialData for the first page (offset 0)
-    initialData: offset === 0 ? initialData : undefined,
+    // Only use initialData for the first page (offset 0) with default sorting and default limit
+    initialData:
+      offset === 0 &&
+      limit === DEFAULT_TABLE_LIMIT &&
+      sortBy === "createdAt" &&
+      sortDirection === "desc"
+        ? initialData
+        : undefined,
     // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
   });
 }

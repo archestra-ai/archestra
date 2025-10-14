@@ -257,6 +257,8 @@ export type GetInteractionsData = {
         agentId?: string;
         limit?: number;
         offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
 };

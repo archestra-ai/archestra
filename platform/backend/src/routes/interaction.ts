@@ -3,6 +3,7 @@ import { z } from "zod";
 import { InteractionModel } from "@/models";
 import {
   createPaginatedResponseSchema,
+  createSortingQuerySchema,
   ErrorResponseSchema,
   PaginationQuerySchema,
   SelectInteractionSchema,
@@ -15,31 +16,46 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: "getInteractions",
-        description: "Get all interactions with optional pagination",
+        description: "Get all interactions with pagination and sorting",
         tags: ["Interaction"],
         querystring: z
           .object({
             agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
           })
-          .merge(PaginationQuerySchema),
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema([
+              "createdAt",
+              "agentId",
+              "model",
+            ] as const),
+          ),
         response: {
           200: createPaginatedResponseSchema(SelectInteractionSchema),
         },
       },
     },
-    async ({ query: { agentId, limit, offset } }, reply) => {
+    async (
+      { query: { agentId, limit, offset, sortBy, sortDirection } },
+      reply,
+    ) => {
       const pagination = { limit, offset };
+      const sorting = { sortBy, sortDirection };
 
       if (agentId) {
         const result =
           await InteractionModel.getAllInteractionsForAgentPaginated(
             agentId,
             pagination,
+            sorting,
           );
         return reply.send(result);
       }
 
-      const result = await InteractionModel.findAllPaginated(pagination);
+      const result = await InteractionModel.findAllPaginated(
+        pagination,
+        sorting,
+      );
       return reply.send(result);
     },
   );

@@ -1,15 +1,17 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronRightIcon } from "lucide-react";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import { ChevronDown, ChevronRightIcon, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useAgents } from "@/lib/agent.query";
 import type {
   GetAgentsResponses,
+  GetInteractionsData,
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 import { useInteractions } from "@/lib/interaction.query";
@@ -21,6 +23,23 @@ import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
 type InteractionData = GetInteractionsResponses["200"]["data"][number];
+
+function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground/50 flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
+    </div>
+  );
+}
 
 function findLastUserMessage(interaction: InteractionData): string {
   const reversedMessages = [...interaction.request.messages].reverse();
@@ -79,10 +98,28 @@ function LogsTable({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
   });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "createdAt", desc: true },
+  ]);
+
+  // Convert TanStack sorting to API format
+  const sortBy = sorting[0]?.id;
+  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
+  // Map UI column ids to API sort fields
+  const apiSortBy: NonNullable<GetInteractionsData["query"]>["sortBy"] =
+    sortBy === "agent"
+      ? "agentId"
+      : sortBy === "request.model"
+        ? "model"
+        : sortBy === "createdAt"
+          ? "createdAt"
+          : undefined;
 
   const { data: interactionsResponse } = useInteractions({
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
+    sortBy: apiSortBy,
+    sortDirection,
     initialData: initialData?.interactions,
   });
 
@@ -95,8 +132,18 @@ function LogsTable({
 
   const columns: ColumnDef<InteractionData>[] = [
     {
-      accessorKey: "createdAt",
-      header: "Date",
+      id: "createdAt",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Date
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
       cell: ({ row }) => (
         <div className="font-mono text-xs">
           {formatDate({ date: row.original.createdAt })}
@@ -104,8 +151,22 @@ function LogsTable({
       ),
     },
     {
-      accessorKey: "agentId",
-      header: "Agent",
+      id: "agent",
+      accessorFn: (row) => {
+        const agent = agents?.find((a) => a.id === row.agentId);
+        return agent?.name ?? "Unknown";
+      },
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Agent
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
       cell: ({ row }) => {
         const agent = agents?.find((a) => a.id === row.original.agentId);
         return (
@@ -115,7 +176,17 @@ function LogsTable({
     },
     {
       accessorKey: "request.model",
-      header: "Model",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Model
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
       cell: ({ row }) => (
         <Badge variant="secondary" className="text-xs">
           {row.original.request.model}
@@ -214,10 +285,13 @@ function LogsTable({
             }
           : undefined
       }
+      manualPagination
       onPaginationChange={(newPagination) => {
         setPagination(newPagination);
       }}
-      manualPagination={true}
+      manualSorting
+      sorting={sorting}
+      onSortingChange={setSorting}
     />
   );
 }

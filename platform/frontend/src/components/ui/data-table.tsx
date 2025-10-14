@@ -36,6 +36,9 @@ interface DataTableProps<TData, TValue> {
     pageSize: number;
   }) => void;
   manualPagination?: boolean;
+  onSortingChange?: (sorting: SortingState) => void;
+  manualSorting?: boolean;
+  sorting?: SortingState;
 }
 
 export function DataTable<TData, TValue>({
@@ -44,20 +47,36 @@ export function DataTable<TData, TValue>({
   pagination,
   onPaginationChange,
   manualPagination = false,
+  onSortingChange,
+  manualSorting = false,
+  sorting: controlledSorting,
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  // Use controlled sorting if provided, otherwise use internal state
+  const sorting = controlledSorting ?? internalSorting;
 
   const table = useReactTable({
     data,
     columns,
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+
+      if (onSortingChange) {
+        onSortingChange(newSorting);
+      } else {
+        setInternalSorting(newSorting);
+      }
+    },
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     manualPagination,
+    manualSorting,
     pageCount: pagination
       ? Math.ceil(pagination.total / pagination.pageSize)
       : undefined,
@@ -71,10 +90,14 @@ export function DataTable<TData, TValue>({
     onPaginationChange: (updater) => {
       if (!onPaginationChange) return;
 
+      const currentPagination = table.getState().pagination;
       const newPagination =
-        typeof updater === "function"
-          ? updater(table.getState().pagination)
-          : updater;
+        typeof updater === "function" ? updater(currentPagination) : updater;
+
+      // Auto-reset to first page when page size changes
+      if (newPagination.pageSize !== currentPagination.pageSize) {
+        newPagination.pageIndex = 0;
+      }
 
       onPaginationChange(newPagination);
     },

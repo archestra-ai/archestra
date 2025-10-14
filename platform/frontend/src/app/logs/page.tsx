@@ -31,7 +31,12 @@ export default async function LogsPageServer() {
     initialData = {
       interactions: (
         await getInteractions({
-          query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
+          query: {
+            limit: DEFAULT_TABLE_LIMIT,
+            offset: 0,
+            sortBy: "createdAt",
+            sortDirection: "desc",
+          },
         })
       ).data || {
         data: [],

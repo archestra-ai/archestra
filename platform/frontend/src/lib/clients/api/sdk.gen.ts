@@ -91,7 +91,7 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 };
 
 /**
- * Get all interactions with optional pagination
+ * Get all interactions with pagination and sorting
  */
 export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetInteractionsResponses, unknown, ThrowOnError>({

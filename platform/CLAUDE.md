@@ -441,18 +441,18 @@ The `experiments/` workspace contains prototype features:
 
 #### Provider Implementation
 
-The platform uses a modular converter pattern to support multiple LLM providers:
+The platform uses a modular transformer pattern to support multiple LLM providers:
 
-- **Converter Pattern**: Each provider has a converter class implementing `ProviderConverter` interface
+- **Transformer Pattern**: Each provider has a transformer class implementing `ProviderTransformer` interface
   - Transforms between provider-specific formats and common internal format
-  - Located in `platform/backend/src/routes/proxy/converters/`
-  - OpenAI converter: `openai.ts`
-  - Gemini converter: `gemini.ts`
+  - Located in `platform/backend/src/routes/proxy/transformers/`
+  - OpenAI transformer: `openai.ts`
+  - Gemini transformer: `gemini.ts`
 - **Common Format**: Internal representation based on OpenAI's format for consistency
   - Enables unified processing of requests/responses across providers
   - Facilitates security policy evaluation
-- **Provider Factory**: Located in `platform/backend/src/routes/proxy/converters/index.ts`
-  - Returns appropriate converter based on provider type
+- **Provider Factory**: Located in `platform/backend/src/routes/proxy/transformers/index.ts`
+  - Returns appropriate transformer based on provider type
 
 ## Examples
 

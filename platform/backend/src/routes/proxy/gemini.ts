@@ -25,17 +25,19 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     upstream: "https://generativelanguage.googleapis.com",
     prefix: API_PREFIX,
     rewritePrefix: "/v1beta",
-    // Exclude generateContent routes since we handle them specially below
-    preHandler: (request, _reply, done) => {
+    /**
+     * Exclude generateContent and streamGenerateContent routes since we handle them below
+     */
+    preHandler: (request, _reply, next) => {
       if (
         request.method === "POST" &&
         (request.url.includes(":generateContent") ||
           request.url.includes(":streamGenerateContent"))
       ) {
         // Skip proxy for these routes - we handle them below
-        done(new Error("skip"));
+        next(new Error("skip"));
       } else {
-        done();
+        next();
       }
     },
   });
@@ -302,7 +304,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-]+$)::${verb}`;
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent

@@ -67,7 +67,8 @@ Options:
     providerIndex !== -1 ? process.argv[providerIndex + 1] : "openai"
   ) as Provider;
 
-  const defaultModel = provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o";
+  const isGoogle = ["gemini", "google"].includes(provider.toLowerCase());
+  const defaultModel = isGoogle ? "gemini-2.5-flash" : "gpt-4o";
 
   return {
     includeExternalEmail: process.argv.includes("--include-external-email"),
@@ -289,7 +290,9 @@ const getAssistantMessageFromStream = async (
   };
 };
 
-const printStartMessage = () => {
+const printStartMessage = (model: string, provider: Provider) => {
+  console.log(`Using ${model} with ${provider}`);
+  console.log(`\n`);
   console.log("Type /help to see the available commands");
   console.log("Type /exit to exit");
   console.log("\n");
@@ -336,7 +339,7 @@ const cliChatWithOpenAI = async (options: {
 
   const messages: ChatCompletionMessageParam[] = [systemPromptMessage];
 
-  printStartMessage();
+  printStartMessage(model, "openai");
 
   while (true) {
     const userInput = await terminal.question("You: ");
@@ -494,6 +497,7 @@ const cliChatWithGemini = async (options: {
     apiKey: process.env.GEMINI_API_KEY,
     httpOptions: {
       baseUrl: `${ARCHESTRA_API_BASE_PROXY_URL}/gemini`,
+      apiVersion: "",
       headers: {
         "User-Agent": USER_AGENT,
       },
@@ -506,7 +510,7 @@ const cliChatWithGemini = async (options: {
   // Gemini uses Content format instead of messages
   const contents: any[] = [];
 
-  printStartMessage();
+  printStartMessage(model, "gemini");
 
   while (true) {
     const userInput = await terminal.question("You: ");

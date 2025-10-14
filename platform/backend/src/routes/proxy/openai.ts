@@ -22,15 +22,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     prefix: API_PREFIX,
     rewritePrefix: "/v1",
     // Exclude chat/completions route since we handle it specially below
-    preHandler: (request, _reply, done) => {
+    preHandler: (request, _reply, next) => {
       if (
         request.method === "POST" &&
         request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
         // Skip proxy for this route - we handle it below
-        done(new Error("skip"));
+        next(new Error("skip"));
       } else {
-        done();
+        next();
       }
     },
   });

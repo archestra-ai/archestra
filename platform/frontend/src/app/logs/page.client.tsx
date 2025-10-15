@@ -137,6 +137,7 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Date
@@ -160,6 +161,7 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Agent
@@ -180,6 +182,7 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Model

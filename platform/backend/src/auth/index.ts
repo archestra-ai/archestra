@@ -1,8 +1,9 @@
-import { APIError, betterAuth, z } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import db, { schema } from "@/database";
 import { ac, adminRole, memberRole, ownerRole } from "./permission";
 
@@ -52,7 +53,7 @@ export const auth = betterAuth({
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === "/organization/invite-member" && ctx.method === "POST") {
-        const body = ctx.body as any;
+        const body = ctx.body;
         const emailValidation = z.email().safeParse(body.email);
         if (!emailValidation.success) {
           throw new APIError("BAD_REQUEST", {

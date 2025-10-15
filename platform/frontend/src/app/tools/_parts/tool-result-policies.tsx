@@ -1,6 +1,7 @@
 import { toPath } from "lodash-es";
 import { ArrowRightIcon, Plus, Trash2Icon } from "lucide-react";
 import Link from "next/link";
+import { CodeText } from "@/components/code-text";
 import { DebouncedInput } from "@/components/debounced-input";
 import {
   Accordion,
@@ -57,8 +58,8 @@ function AttributePathExamples() {
                 lodash get syntax
               </a>{" "}
               to target specific fields in tool responses. You can use{" "}
-              <code className="bg-muted px-1 py-0.5 rounded">*</code> as a
-              wildcard to match all items in an array.
+              <CodeText>*</CodeText> as a wildcard to match all items in an
+              array.
             </p>
 
             <div className="space-y-6">
@@ -80,22 +81,16 @@ function AttributePathExamples() {
                   <p className="text-muted-foreground">Attribute paths:</p>
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
                     <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        location
-                      </code>{" "}
-                      → <span className="text-foreground">"San Francisco"</span>
+                      <CodeText>location</CodeText> →{" "}
+                      <span className="text-foreground">"San Francisco"</span>
                     </li>
                     <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        current.temperature
-                      </code>{" "}
-                      → <span className="text-foreground">72</span>
+                      <CodeText>current.temperature</CodeText> →{" "}
+                      <span className="text-foreground">72</span>
                     </li>
                     <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        current.conditions
-                      </code>{" "}
-                      → <span className="text-foreground">"Sunny"</span>
+                      <CodeText>current.conditions</CodeText> →{" "}
+                      <span className="text-foreground">"Sunny"</span>
                     </li>
                   </ul>
                 </div>
@@ -128,25 +123,18 @@ function AttributePathExamples() {
                   <p className="text-muted-foreground">Attribute paths:</p>
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
                     <li>
-                      <code className="bg-muted-px-1 py-0.5 rounded">
-                        emails[*].from
-                      </code>{" "}
-                      → Matches all "from" fields in the emails array
+                      <CodeText>emails[*].from</CodeText> → Matches all "from"
+                      fields in the emails array
                     </li>
                     <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        emails[0].from
-                      </code>{" "}
-                      →{" "}
+                      <CodeText>emails[0].from</CodeText> →{" "}
                       <span className="text-foreground">
                         "alice@company.com"
                       </span>
                     </li>
                     <li>
-                      <code className="bg-muted px-1 py-0.5 rounded">
-                        emails[*].body
-                      </code>{" "}
-                      → Matches all "body" fields in the emails array
+                      <CodeText>emails[*].body</CodeText> → Matches all "body"
+                      fields in the emails array
                     </li>
                   </ul>
                   <p className="text-muted-foreground mt-2 italic">

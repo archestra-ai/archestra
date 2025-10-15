@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
 import config from "@/lib/config";
 
@@ -341,22 +342,30 @@ export default function SettingsPage() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   This value is configured via the{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     ARCHESTRA_API_BASE_URL
-                  </code>{" "}
+                  </CodeText>{" "}
                   environment variable
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Archestra supports{" "}
+                  OpenAI provides{" "}
+                  <CodeText className="text-xs">/chat/completions</CodeText> and{" "}
+                  <CodeText className="text-xs">/responses</CodeText> API's.
+                  Archestra doesn't support{" "}
+                  <CodeText className="text-xs">/responses</CodeText> yet. We're
+                  working on it (here is a GH issue), meanwhile please make sure
+                  that your agent uses
+                  <CodeText className="text-xs">/chat/completions</CodeText>,{" "}
+                  check{" "}
                   <a
-                    href="https://platform.openai.com/docs/api-reference/chat"
+                    href="https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500"
                   >
-                    Chat Completions API
+                    this
                   </a>{" "}
-                  so make sure to use it when connecting to Archestra.
+                  for an example
                 </p>
               </div>
 

@@ -66,7 +66,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
-      ? (new MockOpenAIClient() as unknown as OpenAI)
+      ? (new MockOpenAIClient() as unknown as OpenAIProvider)
       : new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {

@@ -111,10 +111,12 @@ NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific 
 # Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
 GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider
+ANTHROPIC_API_KEY=your-api-key-here  # Required for Anthropic provider
 
 # Note: For client applications using the proxy:
 # - OpenAI: Pass API key in Authorization header as "Bearer <key>"
 # - Gemini: Pass API key in x-goog-api-key header
+# - Anthropic: Pass API key in Authorization header
 ```
 
 The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
@@ -143,7 +145,7 @@ pnpm cli-chat-with-guardrails
 #   --include-malicious-email # Include malicious email with prompt injection
 #   --stream                  # Stream the response
 #   --model <model>           # Specify model (default: gpt-4o for OpenAI, gemini-1.5-pro for Gemini)
-#   --provider <provider>     # Provider selection: "openai" or "gemini" (default: openai)
+#   --provider <provider>     # Provider selection: "openai", "gemini", or "anthropic" (default: openai)
 #   --debug                   # Print debug messages
 
 # 2. AI SDK Express Example (TypeScript with Vercel AI SDK)
@@ -283,6 +285,11 @@ The production backend provides:
   - Database schema supports provider field to distinguish between providers
   - Requires `GEMINI_API_KEY` environment variable
   - Gemini API requests require `x-goog-api-key` header with API key
+- **Anthropic**: Partially implemented with messages API support
+  - TypeScript types for Anthropic API (`platform/backend/src/types/llm-providers/anthropic/`)
+  - Requires `ANTHROPIC_API_KEY` environment variable
+  - Anthropic API requests require `Authorization` header with API key
+  - Note: Transformer implementation is partially complete
 
 #### REST API Endpoints
 
@@ -301,8 +308,12 @@ The production backend provides:
     - `POST /v1/gemini/:agentId/models/:model:generateContent` - Agent-specific generateContent
     - `POST /v1/gemini/:agentId/models/:model:streamGenerateContent` - Agent-specific streaming
     - `GET /v1/gemini/models` - List available Gemini models
+  - Anthropic:
+    - `POST /v1/anthropic/messages` - Default agent messages endpoint
+    - `POST /v1/anthropic/:agentId/messages` - Agent-specific messages endpoint
+    - Routes for other Anthropic API endpoints are proxied directly (e.g., `/v1/anthropic/models`)
   - Supports streaming responses for real-time AI interactions
-  - **Supported Providers**: OpenAI, Google Gemini
+  - **Supported Providers**: OpenAI, Google Gemini, Anthropic (partial)
 - **Agent Management**:
   - `GET /api/agents` - List all agents
   - `POST /api/agents` - Create new agent
@@ -381,7 +392,7 @@ The backend integrates advanced security guardrails:
 - **Agent**: Stores AI agents with name and timestamps
 - **Interaction**: Stores LLM interactions with request/response data
   - `agentId`: Direct link to the agent (no longer through chat)
-  - `provider`: Provider used for the interaction ("openai" or "gemini")
+  - `provider`: Provider used for the interaction ("openai", "gemini", or "anthropic")
   - `request`: JSONB field storing the full LLM API request (provider-specific format)
   - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
@@ -416,9 +427,9 @@ The `experiments/` workspace contains prototype features:
 
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
   - Supports `--agent-id <agent-id>` flag to specify an agent (required)
-  - Supports `--provider <provider>` flag to select between "openai" or "gemini" (default: openai)
+  - Supports `--provider <provider>` flag to select between "openai", "gemini", or "anthropic" (default: openai)
   - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`, `--stream`
-- Requires `OPENAI_API_KEY` or `GEMINI_API_KEY` in `.env` (copy from `.env.example`)
+- Requires `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY` in `.env` (copy from `.env.example`)
 
 ### Code Quality Tools
 

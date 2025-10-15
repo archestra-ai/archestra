@@ -353,8 +353,17 @@ export default function SettingsPage() {
                   <CodeText className="text-xs">/responses</CodeText> API's.
                   Archestra doesn't support{" "}
                   <CodeText className="text-xs">/responses</CodeText> yet. We're
-                  working on it (here is a GH issue), meanwhile please make sure
-                  that your agent uses
+                  working on it (
+                  <a
+                    href="https://github.com/archestra-ai/archestra/issues/720"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500"
+                  >
+                    here
+                  </a>{" "}
+                  is a GH issue ), meanwhile please make sure that your agent
+                  uses
                   <CodeText className="text-xs">/chat/completions</CodeText>,{" "}
                   check{" "}
                   <a

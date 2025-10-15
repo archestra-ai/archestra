@@ -2,12 +2,11 @@ import type { SupportedProviderDiscriminator } from "@/types";
 import { GeminiGenerateContentTransformer } from "./gemini";
 import { OpenAIChatCompletionsTransformer } from "./openai";
 
-type AnyTransformer = OpenAIChatCompletionsTransformer | GeminiGenerateContentTransformer;
+type AnyTransformer =
+  | OpenAIChatCompletionsTransformer
+  | GeminiGenerateContentTransformer;
 
-const transformers: Record<
-  SupportedProviderDiscriminator,
-  AnyTransformer
-> = {
+const transformers: Record<SupportedProviderDiscriminator, AnyTransformer> = {
   "openai:chatCompletions": new OpenAIChatCompletionsTransformer(),
   "gemini:generateContent": new GeminiGenerateContentTransformer(),
 };

@@ -1,5 +1,17 @@
 import type OpenAI from "openai";
-import type { SupportedProviderDiscriminator } from "@/types";
+import type { z } from "zod";
+import type { OpenAi, SupportedProviderDiscriminator } from "@/types";
+
+export type OpenAiRequest = z.infer<
+  typeof OpenAi.API.ChatCompletionRequestSchema
+>;
+export type OpenAiResponse = z.infer<
+  typeof OpenAi.API.ChatCompletionResponseSchema
+>;
+export type OpenAiChunk = OpenAI.Chat.Completions.ChatCompletionChunk;
+export type OpenAiMessage = z.infer<typeof OpenAi.Messages.MessageParamSchema>;
+export type OpenAiRole = OpenAiMessage["role"];
+export type OpenAiFinishReason = z.infer<typeof OpenAi.API.FinishReasonSchema>;
 
 /**
  * Provider transformer interface
@@ -13,25 +25,25 @@ export interface ProviderTransformer<Request, Chunk, Response> {
   /**
    * Convert provider-specific request to OpenAI format
    */
-  requestToOpenAI(request: Request): OpenAI.Chat.ChatCompletionCreateParams;
+  requestToOpenAI(request: Request): OpenAiRequest;
 
   /**
    * Convert OpenAI format request to provider-specific format
    */
-  requestFromOpenAI(request: OpenAI.Chat.ChatCompletionCreateParams): Request;
+  requestFromOpenAI(request: OpenAiRequest): Request;
 
   /**
    * Convert provider-specific response to OpenAI format
    */
-  responseToOpenAI(response: Response): OpenAI.Chat.ChatCompletion;
+  responseToOpenAI(response: Response): OpenAiResponse;
 
   /**
    * Convert OpenAI format response to provider-specific format
    */
-  responseFromOpenAI(response: OpenAI.Chat.ChatCompletion): Response;
+  responseFromOpenAI(response: OpenAiResponse): Response;
 
   /**
    * Convert provider-specific streaming chunk to OpenAI format
    */
-  chunkToOpenAI?(chunk: Chunk): OpenAI.Chat.ChatCompletionChunk;
+  chunkToOpenAI?(chunk: Chunk): OpenAiChunk;
 }

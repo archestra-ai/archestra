@@ -54,8 +54,8 @@ const GoogleSearchRetrievalSchema = z
 
 export const ToolSchema = z
   .object({
-    functionDeclarations: z.array(FunctionDeclarationSchema),
-    googleSearchRetrieval: GoogleSearchRetrievalSchema,
+    functionDeclarations: z.array(FunctionDeclarationSchema).optional(),
+    googleSearchRetrieval: GoogleSearchRetrievalSchema.optional(),
     codeExecution: z.any().optional(),
     googleSearch: z.any().optional(),
     urlContext: z.any().optional(),

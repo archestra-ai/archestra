@@ -2106,7 +2106,12 @@ export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAg
 export type GetToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'agentName';
+        sortDirection?: 'asc' | 'desc';
+    };
     url: '/api/tools';
 };
 
@@ -2128,34 +2133,44 @@ export type GetToolsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
-        createdAt: string;
-        updatedAt: string;
-        agent: {
+    200: {
+        data: Array<{
             id: string;
             name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+            agent: {
+                id: string;
+                name: string;
+            };
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
         };
-    }>;
+    };
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];

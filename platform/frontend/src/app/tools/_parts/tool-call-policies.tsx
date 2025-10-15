@@ -27,7 +27,7 @@ import { PolicyCard } from "./policy-card";
 export function ToolCallPolicies({
   tool,
 }: {
-  tool: GetToolsResponses["200"][number];
+  tool: GetToolsResponses["200"]["data"][number];
 }) {
   const {
     data: { byToolId },

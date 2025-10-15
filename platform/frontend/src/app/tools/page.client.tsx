@@ -1,16 +1,22 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { Suspense, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
-import type { GetToolsResponses } from "@/lib/clients/api";
+import { SortIcon } from "@/components/sort-icon";
+import { TruncatedText } from "@/components/truncated-text";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import type { GetToolsData, GetToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
   prefetchToolResultPolicies,
 } from "@/lib/policy.query";
 import { useTools } from "@/lib/tool.query";
-import { cn } from "@/lib/utils";
+import { cn, DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolCallPolicies } from "./_parts/tool-call-policies";
 import { ToolReadonlyDetails } from "./_parts/tool-readonly-details";
@@ -56,19 +62,217 @@ function Tools({ initialData }: { initialData?: GetToolsResponses["200"] }) {
         </div>
       </div>
       <div className="max-w-7xl mx-auto px-8 py-8">
-        <ToolsList initialData={initialData} />
+        <ToolsTable initialData={initialData} />
       </div>
     </div>
   );
 }
 
-function ToolsList({
+type ToolData = GetToolsResponses["200"]["data"][number];
+
+function ToolsTable({
   initialData,
 }: {
   initialData?: GetToolsResponses["200"];
 }) {
-  const { data: tools } = useTools({ initialData });
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: DEFAULT_TABLE_LIMIT,
+  });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "createdAt", desc: true },
+  ]);
+
+  // Convert TanStack sorting to API format
+  const sortBy = sorting[0]?.id;
+  const sortDirection = sorting[0]?.desc ? "desc" : "asc";
+  // Map UI column ids to API sort fields
+  const apiSortBy: NonNullable<GetToolsData["query"]>["sortBy"] =
+    sortBy === "name"
+      ? "name"
+      : sortBy === "createdAt"
+        ? "createdAt"
+        : sortBy === "updatedAt"
+          ? "updatedAt"
+          : sortBy === "agentName"
+            ? "agentName"
+            : undefined;
+
+  const { data: toolsResponse } = useTools({
+    limit: pagination.pageSize,
+    offset: pagination.pageIndex * pagination.pageSize,
+    sortBy: apiSortBy,
+    sortDirection,
+    initialData,
+  });
+
+  const tools = toolsResponse?.data ?? [];
+  const paginationMeta = toolsResponse?.pagination;
+
+  const columns: ColumnDef<ToolData>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Tool Name
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => (
+        <div className="font-medium">
+          <TruncatedText message={row.original.name} maxLength={40} />
+        </div>
+      ),
+    },
+    {
+      id: "agentName",
+      accessorFn: (row) => row.agent.name,
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Agent
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => (
+        <TruncatedText message={row.original.agent.name} maxLength={30} />
+      ),
+    },
+    {
+      id: "description",
+      accessorKey: "description",
+      header: "Description",
+      cell: ({ row }) => {
+        const description = row.original.description || "No description";
+        return (
+          <div className="text-xs text-muted-foreground">
+            <TruncatedText message={description} maxLength={60} />
+          </div>
+        );
+      },
+    },
+    {
+      id: "trustSettings",
+      header: "Trust Settings",
+      cell: ({ row }) => {
+        const isSafe =
+          row.original.allowUsageWhenUntrustedDataIsPresent &&
+          row.original.dataIsTrustedByDefault;
+        return (
+          <div className="flex flex-wrap gap-1">
+            <Badge
+              variant={
+                row.original.allowUsageWhenUntrustedDataIsPresent
+                  ? "default"
+                  : "secondary"
+              }
+              className="text-xs"
+            >
+              {row.original.allowUsageWhenUntrustedDataIsPresent
+                ? "✓ Untrusted Data"
+                : "✗ Untrusted Data"}
+            </Badge>
+            <Badge
+              variant={
+                row.original.dataIsTrustedByDefault ? "default" : "secondary"
+              }
+              className="text-xs"
+            >
+              {row.original.dataIsTrustedByDefault
+                ? "✓ Trusted Output"
+                : "✗ Trusted Output"}
+            </Badge>
+          </div>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Created At
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => (
+        <div className="font-mono text-xs">
+          {formatDate({ date: row.original.createdAt })}
+        </div>
+      ),
+    },
+    {
+      id: "updatedAt",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Updated At
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        );
+      },
+      cell: ({ row }) => (
+        <div className="font-mono text-xs">
+          {formatDate({ date: row.original.updatedAt })}
+        </div>
+      ),
+    },
+  ];
+
+  if (!tools || tools.length === 0) {
+    return <p className="text-muted-foreground">No tools found</p>;
+  }
+
+  return (
+    <DataTable
+      columns={columns}
+      data={tools}
+      pagination={
+        paginationMeta
+          ? {
+              pageIndex: pagination.pageIndex,
+              pageSize: pagination.pageSize,
+              total: paginationMeta.total,
+            }
+          : undefined
+      }
+      manualPagination
+      onPaginationChange={(newPagination) => {
+        setPagination(newPagination);
+      }}
+      manualSorting
+      sorting={sorting}
+      onSortingChange={setSorting}
+    />
+  );
+}
+
+function ToolsListToDeprecate({
+  initialData,
+}: {
+  initialData?: GetToolsResponses["200"];
+}) {
+  const { data: toolsResponse } = useTools({ initialData });
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
+
+  const tools = toolsResponse?.data ?? [];
 
   if (!tools?.length) {
     return <p className="text-muted-foreground">No tools found</p>;
@@ -144,7 +348,11 @@ function ToolsList({
   );
 }
 
-function ToolCard({ tool }: { tool: GetToolsResponses["200"][number] }) {
+function ToolCard({
+  tool,
+}: {
+  tool: GetToolsResponses["200"]["data"][number];
+}) {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">

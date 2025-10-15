@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/utils";
 export function ToolReadonlyDetails({
   tool,
 }: {
-  tool: GetToolsResponses["200"][number];
+  tool: GetToolsResponses["200"]["data"][number];
 }) {
   return (
     <div className="border border-border rounded-lg p-6 bg-card">

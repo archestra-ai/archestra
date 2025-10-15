@@ -237,7 +237,7 @@ export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
 };
 
 /**
- * Get all tools
+ * Get all tools with pagination and sorting
  */
 export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({

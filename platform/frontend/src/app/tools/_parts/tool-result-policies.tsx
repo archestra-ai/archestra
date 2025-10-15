@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type {
-  GetToolsResponse,
+  GetToolsResponses,
   GetTrustedDataPoliciesResponse,
 } from "@/lib/clients/api";
 import { useDualLlmConfig } from "@/lib/dual-llm-config.query";
@@ -154,7 +154,7 @@ function AttributePathExamples() {
 export function ToolResultPolicies({
   tool,
 }: {
-  tool: GetToolsResponse["200"];
+  tool: GetToolsResponses["200"]["data"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();

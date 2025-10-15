@@ -57,7 +57,7 @@ const navigationItems: MenuItem[] = [
     icon: MessagesSquare,
   },
   {
-    title: "Tools",
+    title: "Tools & Policies",
     url: "/tools",
     icon: FileJson2,
   },

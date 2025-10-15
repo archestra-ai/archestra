@@ -9,14 +9,6 @@ import { PROXY_API_PREFIX } from "./common";
 import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
-// Register schemas in global registry for OpenAPI generation
-z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
-  id: "OpenAiChatCompletionRequest",
-});
-z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
-  id: "OpenAiChatCompletionResponse",
-});
-
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
@@ -142,7 +134,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai",
+          type: "openai:chatCompletions",
           request: body,
           response: {
             id: chunks[0]?.id || "chatcmpl-unknown",
@@ -197,7 +189,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "openai",
+          type: "openai:chatCompletions",
           request: body,
           response,
         });

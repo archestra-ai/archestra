@@ -4,19 +4,16 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
+import {
+  ErrorResponseSchema,
+  Gemini,
+  type SupportedProviderDiscriminator,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { getTransformer } from "./transformers";
 import { GeminiProxy } from "./types";
 import * as utils from "./utils";
-
-// Register schemas in global registry for OpenAPI generation
-z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
-  id: "GeminiGenerateContentRequest",
-});
-z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
-  id: "GeminiGenerateContentResponse",
-});
 
 /**
  * NOTE: Gemini uses colon-literals in their routes. For fastify, double colon is used to escape the colon-literal in
@@ -84,7 +81,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-pro";
 
-    const transformer = getTransformer("gemini");
+    const providerDiscriminator: SupportedProviderDiscriminator =
+      "gemini:generateContent";
+    const transformer = getTransformer(providerDiscriminator);
 
     try {
       // Convert Gemini request to common format for processing
@@ -211,7 +210,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Store the complete interaction
           await InteractionModel.create({
             agentId: resolvedAgentId,
-            provider: "gemini" as const,
+            type: providerDiscriminator,
             request: body,
             response: accumulatedResponse,
           });
@@ -260,7 +259,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Store the interaction with refusal
             await InteractionModel.create({
               agentId: resolvedAgentId,
-              provider: "gemini" as const,
+              type: providerDiscriminator,
               request: body,
               response: refusalResponse,
             });
@@ -272,7 +271,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          provider: "gemini" as const,
+          type: providerDiscriminator,
           request: body,
           response: geminiResponse,
         });

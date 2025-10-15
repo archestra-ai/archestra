@@ -2,11 +2,11 @@ import type OpenAI from "openai";
 import type { ProviderTransformer } from "./common";
 
 /**
- * OpenAI transformer implementation
- * Since OpenAI format is our internal format, this is a simple pass-through
+ * OpenAI chatCompletions transformer implementation
+ * Since OpenAI's chatCompletions format is our internal format, this is a simple pass-through
  */
-export class OpenAITransformer implements ProviderTransformer {
-  provider = "openai" as const;
+export class OpenAIChatCompletionsTransformer implements ProviderTransformer {
+  provider = "openai:chatCompletions" as const;
 
   requestToOpenAI = (
     request: OpenAI.Chat.ChatCompletionCreateParams,

@@ -4,148 +4,9 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type GeminiGenerateContentRequestInput = {
-    contents: Array<{
-        role: 'user' | 'model' | 'function';
-        parts: Array<{
-            text: string;
-        } | {
-            inlineData: {
-                mimeType: string;
-                data: string;
-            };
-        } | {
-            fileData: {
-                mimeType: string;
-                fileUri: string;
-            };
-        } | {
-            functionCall: {
-                name: string;
-                args: {
-                    [key: string]: unknown;
-                };
-            };
-        } | {
-            functionResponse: {
-                name: string;
-                response: {
-                    [key: string]: unknown;
-                };
-            };
-        }>;
-    }>;
-    tools?: Array<{
-        functionDeclarations: Array<{
-            name: string;
-            description?: string;
-            parameters?: {
-                type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
-                format?: string;
-                description?: string;
-                nullable?: boolean;
-                enum?: Array<string>;
-                maxItems?: number;
-                minItems?: number;
-                properties?: {
-                    [key: string]: unknown;
-                };
-                required?: Array<string>;
-                items?: unknown;
-            };
-        }>;
-    }>;
-    toolConfig?: {
-        functionCallingConfig: {
-            mode: 'AUTO' | 'ANY' | 'NONE';
-            allowedFunctionNames?: Array<string>;
-        };
-    };
-    safetySettings?: Array<{
-        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
-        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
-    }>;
-    systemInstruction?: {
-        parts: Array<{
-            text: string;
-        }>;
-    };
-    generationConfig?: {
-        temperature?: number;
-        topP?: number;
-        topK?: number;
-        candidateCount?: number;
-        maxOutputTokens?: number;
-        stopSequences?: Array<string>;
-        responseMimeType?: string;
-        responseSchema?: unknown;
-    };
-};
+export type SupportedProvidersInput = 'openai' | 'gemini';
 
-export type GeminiGenerateContentResponseInput = {
-    candidates?: Array<{
-        content?: {
-            role: 'user' | 'model' | 'function';
-            parts: Array<{
-                text: string;
-            } | {
-                inlineData: {
-                    mimeType: string;
-                    data: string;
-                };
-            } | {
-                fileData: {
-                    mimeType: string;
-                    fileUri: string;
-                };
-            } | {
-                functionCall: {
-                    name: string;
-                    args: {
-                        [key: string]: unknown;
-                    };
-                };
-            } | {
-                functionResponse: {
-                    name: string;
-                    response: {
-                        [key: string]: unknown;
-                    };
-                };
-            }>;
-        };
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
-        index?: number;
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
-            probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
-        }>;
-        citationMetadata?: {
-            citations?: Array<{
-                startIndex?: number;
-                endIndex?: number;
-                uri?: string;
-                license?: string;
-            }>;
-        };
-        tokenCount?: number;
-    }>;
-    promptFeedback?: {
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
-            probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
-        }>;
-    };
-    usageMetadata?: {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-        totalTokenCount?: number;
-    };
-    modelVersion?: string;
-};
+export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent';
 
 export type OpenAiChatCompletionRequestInput = {
     model: string;
@@ -497,9 +358,7 @@ export type OpenAiChatCompletionResponseInput = {
     };
 };
 
-export type SupportedProvidersInput = 'openai' | 'gemini';
-
-export type GeminiGenerateContentRequest = {
+export type GeminiGenerateContentRequestInput = {
     contents: Array<{
         role: 'user' | 'model' | 'function';
         parts: Array<{
@@ -577,7 +436,7 @@ export type GeminiGenerateContentRequest = {
     };
 };
 
-export type GeminiGenerateContentResponse = {
+export type GeminiGenerateContentResponseInput = {
     candidates?: Array<{
         content?: {
             role: 'user' | 'model' | 'function';
@@ -641,6 +500,10 @@ export type GeminiGenerateContentResponse = {
     };
     modelVersion?: string;
 };
+
+export type SupportedProviders = 'openai' | 'gemini';
+
+export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent';
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -992,7 +855,148 @@ export type OpenAiChatCompletionResponse = {
     };
 };
 
-export type SupportedProviders = 'openai' | 'gemini';
+export type GeminiGenerateContentRequest = {
+    contents: Array<{
+        role: 'user' | 'model' | 'function';
+        parts: Array<{
+            text: string;
+        } | {
+            inlineData: {
+                mimeType: string;
+                data: string;
+            };
+        } | {
+            fileData: {
+                mimeType: string;
+                fileUri: string;
+            };
+        } | {
+            functionCall: {
+                name: string;
+                args: {
+                    [key: string]: unknown;
+                };
+            };
+        } | {
+            functionResponse: {
+                name: string;
+                response: {
+                    [key: string]: unknown;
+                };
+            };
+        }>;
+    }>;
+    tools?: Array<{
+        functionDeclarations: Array<{
+            name: string;
+            description?: string;
+            parameters?: {
+                type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
+                format?: string;
+                description?: string;
+                nullable?: boolean;
+                enum?: Array<string>;
+                maxItems?: number;
+                minItems?: number;
+                properties?: {
+                    [key: string]: unknown;
+                };
+                required?: Array<string>;
+                items?: unknown;
+            };
+        }>;
+    }>;
+    toolConfig?: {
+        functionCallingConfig: {
+            mode: 'AUTO' | 'ANY' | 'NONE';
+            allowedFunctionNames?: Array<string>;
+        };
+    };
+    safetySettings?: Array<{
+        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+    }>;
+    systemInstruction?: {
+        parts: Array<{
+            text: string;
+        }>;
+    };
+    generationConfig?: {
+        temperature?: number;
+        topP?: number;
+        topK?: number;
+        candidateCount?: number;
+        maxOutputTokens?: number;
+        stopSequences?: Array<string>;
+        responseMimeType?: string;
+        responseSchema?: unknown;
+    };
+};
+
+export type GeminiGenerateContentResponse = {
+    candidates?: Array<{
+        content?: {
+            role: 'user' | 'model' | 'function';
+            parts: Array<{
+                text: string;
+            } | {
+                inlineData: {
+                    mimeType: string;
+                    data: string;
+                };
+            } | {
+                fileData: {
+                    mimeType: string;
+                    fileUri: string;
+                };
+            } | {
+                functionCall: {
+                    name: string;
+                    args: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    name: string;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            }>;
+        };
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
+        index?: number;
+        safetyRatings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+            blocked?: boolean;
+        }>;
+        citationMetadata?: {
+            citations?: Array<{
+                startIndex?: number;
+                endIndex?: number;
+                uri?: string;
+                license?: string;
+            }>;
+        };
+        tokenCount?: number;
+    }>;
+    promptFeedback?: {
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
+        safetyRatings?: Array<{
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+            probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
+            blocked?: boolean;
+        }>;
+    };
+    usageMetadata?: {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        totalTokenCount?: number;
+    };
+    modelVersion?: string;
+};
 
 export type GetOpenapiJsonData = {
     body?: never;
@@ -1263,14 +1267,14 @@ export type GetInteractionsResponses = {
             agentId: string;
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
-            provider: 'openai';
+            type: 'openai:chatCompletions';
             createdAt: string;
         } | {
             id: string;
             agentId: string;
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
-            provider: 'gemini';
+            type: 'gemini:generateContent';
             createdAt: string;
         }>;
         pagination: {
@@ -1318,14 +1322,14 @@ export type GetInteractionResponses = {
         agentId: string;
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
-        provider: 'openai';
+        type: 'openai:chatCompletions';
         createdAt: string;
     } | {
         id: string;
         agentId: string;
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
-        provider: 'gemini';
+        type: 'gemini:generateContent';
         createdAt: string;
     };
 };

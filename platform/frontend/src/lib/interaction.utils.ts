@@ -2,13 +2,15 @@ import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type {
   GeminiGenerateContentRequest,
   GeminiGenerateContentResponse,
-  GetInteractionResponse,
+  GetDualLlmResultsByInteractionResponses,
   GetInteractionsResponses,
   OpenAiChatCompletionRequest,
   OpenAiChatCompletionResponse,
+  SupportedProviders,
 } from "@/lib/clients/api";
 
 type Interaction = GetInteractionsResponses["200"]["data"][number];
+type DualLlmResult = GetDualLlmResultsByInteractionResponses["200"][number];
 
 export interface RefusalInfo {
   toolName?: string;
@@ -41,10 +43,28 @@ interface InteractionUtils {
   getLastUserMessage(): string;
   getLastAssistantResponse(): string;
 
-  mapToUiMessage(): PartialUIMessage;
+  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[];
 }
 
-class OpenAiInteraction implements InteractionUtils {
+function parseRefusalMessage(refusal: string): RefusalInfo {
+  const toolNameMatch = refusal.match(
+    /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
+  );
+  const toolArgsMatch = refusal.match(
+    /<archestra-tool-arguments>(.*?)<\/archestra-tool-arguments>/,
+  );
+  const toolReasonMatch = refusal.match(
+    /<archestra-tool-reason>(.*?)<\/archestra-tool-reason>/,
+  );
+
+  return {
+    toolName: toolNameMatch?.[1],
+    toolArguments: toolArgsMatch?.[1],
+    reason: toolReasonMatch?.[1] || "Blocked by policy",
+  };
+}
+
+class OpenAiChatCompletionInteraction implements InteractionUtils {
   private request: OpenAiChatCompletionRequest;
   private response: OpenAiChatCompletionResponse;
   modelName: string;
@@ -158,16 +178,227 @@ class OpenAiInteraction implements InteractionUtils {
     return count;
   }
 
-  // TODO: Implement this
-  mapToUiMessage(): PartialUIMessage {
+  private mapToUiMessage(
+    message: OpenAiChatCompletionRequest | OpenAiChatCompletionResponse,
+  ): PartialUIMessage {
+    const content = message.content;
+
+    // Map content to UIMessage parts
+    const parts: PartialUIMessage["parts"] = [];
+
+    if (message.role === "assistant" && "tool_calls" in message) {
+      // Handle assistant messages with tool calls
+      const toolCalls = message.tool_calls;
+
+      // Add text content if present
+      if (typeof content === "string" && content) {
+        parts.push({ type: "text", text: content });
+      } else if (Array.isArray(content)) {
+        for (const part of content) {
+          if (part.type === "text") {
+            parts.push({ type: "text", text: part.text });
+          } else if (part.type === "refusal") {
+            parts.push({ type: "text", text: part.refusal });
+          }
+        }
+      }
+
+      // Add tool invocation parts
+      if (toolCalls) {
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === "function") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.function.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.function.arguments),
+            });
+          } else if (toolCall.type === "custom") {
+            parts.push({
+              type: "dynamic-tool",
+              toolName: toolCall.custom.name,
+              toolCallId: toolCall.id,
+              state: "input-available",
+              input: JSON.parse(toolCall.custom.input),
+            });
+          }
+        }
+      }
+    }
+    // Handle assistant messages with refusals (but no tool calls)
+    else if (
+      message.role === "assistant" &&
+      "refusal" in message &&
+      message.refusal
+    ) {
+      // Parse the refusal message to extract tool information
+      const refusalInfo = parseRefusalMessage(message.refusal);
+
+      // Check if this is a tool invocation policy block
+      if (refusalInfo.toolName) {
+        // Create a special blocked tool part
+        parts.push({
+          type: "blocked-tool",
+          toolName: refusalInfo.toolName,
+          toolArguments: refusalInfo.toolArguments,
+          reason: refusalInfo.reason || "Tool invocation blocked by policy",
+          fullRefusal: message.refusal,
+        });
+      } else {
+        // Regular refusal text
+        parts.push({ type: "text", text: message.refusal });
+      }
+    }
+    // Handle tool response messages
+    else if (message.role === "tool") {
+      const toolContent = message.content;
+      const toolCallId = message.tool_call_id;
+
+      // Parse the tool output
+      let output: unknown;
+      try {
+        output =
+          typeof toolContent === "string"
+            ? JSON.parse(toolContent)
+            : toolContent;
+      } catch {
+        output = toolContent;
+      }
+
+      parts.push({
+        type: "dynamic-tool",
+        toolName: "tool-result",
+        toolCallId,
+        state: "output-available",
+        input: {},
+        output,
+      });
+    }
+    // Handle regular content
+    else {
+      if (typeof content === "string") {
+        parts.push({ type: "text", text: content });
+      } else if (Array.isArray(content)) {
+        for (const part of content) {
+          if (part.type === "text") {
+            parts.push({ type: "text", text: part.text });
+          } else if (part.type === "image_url") {
+            parts.push({
+              type: "file",
+              mediaType: "image/*",
+              url: part.image_url.url,
+            });
+          } else if (part.type === "refusal") {
+            parts.push({ type: "text", text: part.refusal });
+          }
+          // Note: input_audio and file types from API would need additional handling
+        }
+      }
+    }
+
+    // Map role to UIMessage role (only system, user, assistant are allowed)
+    let role: "system" | "user" | "assistant";
+    if (message.role === "developer" || message.role === "system") {
+      role = "system";
+    } else if (message.role === "function" || message.role === "tool") {
+      role = "assistant";
+    } else {
+      role = message.role;
+    }
+
     return {
-      role: "assistant",
-      parts: [],
+      role,
+      parts,
     };
+  }
+
+  private mapRequestToUiMessages(
+    dualLlmResults?: DualLlmResult[],
+  ): PartialUIMessage[] {
+    const messages = this.request.messages;
+    const uiMessages: PartialUIMessage[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+
+      // Skip tool messages - they'll be merged with their assistant message
+      if (msg.role === "tool") {
+        continue;
+      }
+
+      const uiMessage = this.mapToUiMessage(msg);
+
+      // If this is an assistant message with tool_calls, look ahead for tool results
+      if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
+        const toolCallParts: PartialUIMessage["parts"] = [...uiMessage.parts];
+
+        // For each tool call, find its corresponding tool result
+        for (const toolCall of msg.tool_calls) {
+          // Find the tool result message
+          const toolResultMsg = messages
+            .slice(i + 1)
+            .find(
+              (m) =>
+                m.role === "tool" &&
+                "tool_call_id" in m &&
+                m.tool_call_id === toolCall.id,
+            );
+
+          if (toolResultMsg && toolResultMsg.role === "tool") {
+            // Map the tool result to a UI part
+            const toolResultUiMsg = this.mapToUiMessage(toolResultMsg);
+            toolCallParts.push(...toolResultUiMsg.parts);
+
+            // Check if there's a dual LLM result for this tool call
+            const dualLlmResultForTool = dualLlmResults?.find(
+              (result) => result.toolCallId === toolCall.id,
+            );
+
+            if (dualLlmResultForTool) {
+              const dualLlmPart = {
+                type: "dual-llm-analysis" as const,
+                toolCallId: dualLlmResultForTool.toolCallId,
+                safeResult: dualLlmResultForTool.result,
+                conversations: Array.isArray(dualLlmResultForTool.conversations)
+                  ? (dualLlmResultForTool.conversations as Array<{
+                      role: "user" | "assistant";
+                      content: string | unknown;
+                    }>)
+                  : [],
+              };
+              toolCallParts.push(dualLlmPart);
+            }
+          }
+        }
+
+        uiMessages.push({
+          ...uiMessage,
+          parts: toolCallParts,
+        });
+      } else {
+        uiMessages.push(uiMessage);
+      }
+    }
+
+    return uiMessages;
+  }
+
+  private mapResponseToUiMessages(): PartialUIMessage[] {
+    return this.response.choices.map((choice) =>
+      this.mapToUiMessage(choice.message),
+    );
+  }
+
+  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+    return [
+      ...this.mapRequestToUiMessages(dualLlmResults),
+      ...this.mapResponseToUiMessages(),
+    ];
   }
 }
 
-class GeminiInteraction implements InteractionUtils {
+class GeminiGenerateContentInteraction implements InteractionUtils {
   private request: GeminiGenerateContentRequest;
   private response: GeminiGenerateContentResponse;
   modelName: string;
@@ -228,11 +459,34 @@ class GeminiInteraction implements InteractionUtils {
   }
 
   // TODO: Implement this
-  mapToUiMessage(): PartialUIMessage {
+  private mapToUiMessage(
+    content: GeminiGenerateContentRequest | GeminiGenerateContentResponse,
+  ): PartialUIMessage {
     return {
       role: "assistant",
       parts: [],
     };
+  }
+
+  private mapRequestToUiMessages(
+    _dualLlmResults?: DualLlmResult[],
+  ): PartialUIMessage[] {
+    return this.request.contents.map((content) => this.mapToUiMessage(content));
+  }
+
+  private mapResponseToUiMessages(): PartialUIMessage[] {
+    return (
+      this.response?.candidates?.map((candidate) =>
+        this.mapToUiMessage(candidate),
+      ) ?? []
+    );
+  }
+
+  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+    return [
+      ...this.mapRequestToUiMessages(dualLlmResults),
+      ...this.mapResponseToUiMessages(),
+    ];
   }
 }
 
@@ -241,29 +495,32 @@ export class DynamicInteraction implements InteractionUtils {
 
   id: string;
   agentId: string;
-  provider: string;
+  type: Interaction["type"];
+  provider: SupportedProviders;
+  endpoint: string;
   createdAt: string;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.interactionClass = this.getInteractionClass(interaction);
+    const [provider, endpoint] = interaction.type.split(":");
 
     this.id = interaction.id;
     this.agentId = interaction.agentId;
-    this.provider = interaction.provider;
+    this.type = interaction.type;
+    this.provider = provider as SupportedProviders;
+    this.endpoint = endpoint;
     this.createdAt = interaction.createdAt;
+
+    this.interactionClass = this.getInteractionClass(interaction);
+
     this.modelName = this.interactionClass.modelName;
   }
 
   private getInteractionClass(interaction: Interaction): InteractionUtils {
-    if (interaction.provider === "openai") {
-      return new OpenAiInteraction(interaction);
-    } else if (interaction.provider === "gemini") {
-      return new GeminiInteraction(interaction);
+    if (this.type === "openai:chatCompletions") {
+      return new OpenAiChatCompletionInteraction(interaction);
     }
-
-    // This should never happen...
-    throw new Error(`Unsupported provider`);
+    return new GeminiGenerateContentInteraction(interaction);
   }
 
   isLastMessageToolCall(): boolean {
@@ -294,160 +551,10 @@ export class DynamicInteraction implements InteractionUtils {
     return this.interactionClass.getLastAssistantResponse();
   }
 
-  mapToUiMessage(): PartialUIMessage {
-    return this.interactionClass.mapToUiMessage();
+  /**
+   * Map request messages, combining tool calls with their results and dual LLM analysis
+   */
+  mapToUiMessages(dualLlmResults?: DualLlmResult[]): PartialUIMessage[] {
+    return this.interactionClass.mapToUiMessages(dualLlmResults);
   }
-}
-
-function parseRefusalMessage(refusal: string): RefusalInfo {
-  const toolNameMatch = refusal.match(
-    /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
-  );
-  const toolArgsMatch = refusal.match(
-    /<archestra-tool-arguments>(.*?)<\/archestra-tool-arguments>/,
-  );
-  const toolReasonMatch = refusal.match(
-    /<archestra-tool-reason>(.*?)<\/archestra-tool-reason>/,
-  );
-
-  return {
-    toolName: toolNameMatch?.[1],
-    toolArguments: toolArgsMatch?.[1],
-    reason: toolReasonMatch?.[1] || "Blocked by policy",
-  };
-}
-
-export function mapInteractionToUiMessage(
-  message:
-    | GetInteractionResponse["request"]["messages"][number]
-    | GetInteractionResponse["response"]["choices"][number]["message"],
-): PartialUIMessage {
-  const content = message.content;
-
-  // Map content to UIMessage parts
-  const parts: PartialUIMessage["parts"] = [];
-
-  // Handle assistant messages with tool calls
-  if (message.role === "assistant" && "tool_calls" in message) {
-    const toolCalls = message.tool_calls;
-
-    // Add text content if present
-    if (typeof content === "string" && content) {
-      parts.push({ type: "text", text: content });
-    } else if (Array.isArray(content)) {
-      for (const part of content) {
-        if (part.type === "text") {
-          parts.push({ type: "text", text: part.text });
-        } else if (part.type === "refusal") {
-          parts.push({ type: "text", text: part.refusal });
-        }
-      }
-    }
-
-    // Add tool invocation parts
-    if (toolCalls) {
-      for (const toolCall of toolCalls) {
-        if (toolCall.type === "function") {
-          parts.push({
-            type: "dynamic-tool",
-            toolName: toolCall.function.name,
-            toolCallId: toolCall.id,
-            state: "input-available",
-            input: JSON.parse(toolCall.function.arguments),
-          });
-        } else if (toolCall.type === "custom") {
-          parts.push({
-            type: "dynamic-tool",
-            toolName: toolCall.custom.name,
-            toolCallId: toolCall.id,
-            state: "input-available",
-            input: JSON.parse(toolCall.custom.input),
-          });
-        }
-      }
-    }
-  }
-  // Handle assistant messages with refusals (but no tool calls)
-  else if (
-    message.role === "assistant" &&
-    "refusal" in message &&
-    message.refusal
-  ) {
-    // Parse the refusal message to extract tool information
-    const refusalInfo = parseRefusalMessage(message.refusal);
-
-    // Check if this is a tool invocation policy block
-    if (refusalInfo.toolName) {
-      // Create a special blocked tool part
-      parts.push({
-        type: "blocked-tool",
-        toolName: refusalInfo.toolName,
-        toolArguments: refusalInfo.toolArguments,
-        reason: refusalInfo.reason || "Tool invocation blocked by policy",
-        fullRefusal: message.refusal,
-      });
-    } else {
-      // Regular refusal text
-      parts.push({ type: "text", text: message.refusal });
-    }
-  }
-  // Handle tool response messages
-  else if (message.role === "tool") {
-    const toolContent = message.content;
-    const toolCallId = message.tool_call_id;
-
-    // Parse the tool output
-    let output: unknown;
-    try {
-      output =
-        typeof toolContent === "string" ? JSON.parse(toolContent) : toolContent;
-    } catch {
-      output = toolContent;
-    }
-
-    parts.push({
-      type: "dynamic-tool",
-      toolName: "tool-result",
-      toolCallId,
-      state: "output-available",
-      input: {},
-      output,
-    });
-  }
-  // Handle regular content
-  else {
-    if (typeof content === "string") {
-      parts.push({ type: "text", text: content });
-    } else if (Array.isArray(content)) {
-      for (const part of content) {
-        if (part.type === "text") {
-          parts.push({ type: "text", text: part.text });
-        } else if (part.type === "image_url") {
-          parts.push({
-            type: "file",
-            mediaType: "image/*",
-            url: part.image_url.url,
-          });
-        } else if (part.type === "refusal") {
-          parts.push({ type: "text", text: part.refusal });
-        }
-        // Note: input_audio and file types from API would need additional handling
-      }
-    }
-  }
-
-  // Map role to UIMessage role (only system, user, assistant are allowed)
-  let role: "system" | "user" | "assistant";
-  if (message.role === "developer" || message.role === "system") {
-    role = "system";
-  } else if (message.role === "function" || message.role === "tool") {
-    role = "assistant";
-  } else {
-    role = message.role;
-  }
-
-  return {
-    role,
-    parts,
-  };
 }

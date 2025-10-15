@@ -5,11 +5,12 @@ import type { Gemini } from "@/types";
 import type { ProviderTransformer } from "./common";
 
 /**
- * Gemini transformer implementation
- * Converts between Gemini's Content/Part format and OpenAI format
+ * Gemini generateContent/streamGenerateContent transformer implementation
+ * Converts between Gemini's generateContent/streamGenerateContent
+ * Content/Part format and OpenAI's chatCompletions format
  */
-export class GeminiTransformer implements ProviderTransformer {
-  provider = "gemini" as const;
+export class GeminiGenerateContentTransformer implements ProviderTransformer {
+  provider = "gemini:generateContent" as const;
 
   /**
    * Convert Gemini Content array to Common Messages

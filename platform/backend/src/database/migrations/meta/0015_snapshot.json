@@ -1,5 +1,5 @@
 {
-  "id": "97d83575-990a-42b5-94ae-844439444f10",
+  "id": "e884f580-5076-48cd-97a8-dd7578fdd51b",
   "prevId": "7dbda3e6-5360-4086-a6b5-c46f031d38ef",
   "version": "7",
   "dialect": "postgresql",
@@ -227,8 +227,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "provider": {
-          "name": "provider",
+        "type": {
+          "name": "type",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true

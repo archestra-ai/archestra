@@ -10,7 +10,12 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { SupportedProvidersSchema } from "@/types";
+import {
+  Gemini,
+  OpenAi,
+  SupportedProvidersDiscriminatorSchema,
+  SupportedProvidersSchema,
+} from "@/types";
 import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
@@ -35,7 +40,25 @@ const fastify = Fastify({
 fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
 
-z.globalRegistry.add(SupportedProvidersSchema, { id: "SupportedProviders" });
+// Register schemas in global registry for OpenAPI generation
+z.globalRegistry.add(SupportedProvidersSchema, {
+  id: "SupportedProviders",
+});
+z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
+  id: "SupportedProvidersDiscriminator",
+});
+z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+  id: "OpenAiChatCompletionRequest",
+});
+z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+  id: "OpenAiChatCompletionResponse",
+});
+z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
+  id: "GeminiGenerateContentRequest",
+});
+z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
+  id: "GeminiGenerateContentResponse",
+});
 
 const start = async () => {
   try {

@@ -4,10 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import ChatBotDemo, {
-  type DualLlmPart,
-  type PartialUIMessage,
-} from "@/components/chatbot-demo";
+import ChatBotDemo from "@/components/chatbot-demo";
 import { LoadingSpinner } from "@/components/loading";
 import {
   Accordion,
@@ -82,76 +79,12 @@ function LogDetail({
     (r) => r.toolCallId === lastToolCallId,
   );
 
-  // Map request messages, combining tool calls with their results and dual LLM analysis
-  const requestMessages: PartialUIMessage[] = [];
-
-  // TODO: Implement this
-  // const messages = interaction.request.messages;
-
-  // for (let i = 0; i < messages.length; i++) {
-  //   const msg = messages[i];
-
-  //   // Skip tool messages - they'll be merged with their assistant message
-  //   if (msg.role === "tool") {
-  //     continue;
-  //   }
-
-  //   const uiMessage = mapInteractionToUiMessage(msg);
-
-  //   // If this is an assistant message with tool_calls, look ahead for tool results
-  //   if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
-  //     const toolCallParts: PartialUIMessage["parts"] = [...uiMessage.parts];
-
-  //     // For each tool call, find its corresponding tool result
-  //     for (const toolCall of msg.tool_calls) {
-  //       // Find the tool result message
-  //       const toolResultMsg = messages
-  //         .slice(i + 1)
-  //         .find((m) => m.role === "tool" && m.tool_call_id === toolCall.id);
-
-  //       if (toolResultMsg) {
-  //         // Map the tool result to a UI part
-  //         const toolResultUiMsg = mapInteractionToUiMessage(toolResultMsg);
-  //         toolCallParts.push(...toolResultUiMsg.parts);
-
-  //         // Check if there's a dual LLM result for this tool call
-  //         const dualLlmResultForTool = allDualLlmResults.find(
-  //           (result) => result.toolCallId === toolCall.id,
-  //         );
-
-  //         if (dualLlmResultForTool) {
-  //           const dualLlmPart: DualLlmPart = {
-  //             type: "dual-llm-analysis",
-  //             toolCallId: dualLlmResultForTool.toolCallId,
-  //             safeResult: dualLlmResultForTool.result,
-  //             conversations: Array.isArray(dualLlmResultForTool.conversations)
-  //               ? (dualLlmResultForTool.conversations as DualLlmPart["conversations"])
-  //               : [],
-  //           };
-  //           toolCallParts.push(dualLlmPart);
-  //         }
-  //       }
-  //     }
-
-  //     requestMessages.push({
-  //       ...uiMessage,
-  //       parts: toolCallParts,
-  //     });
-  //   } else {
-  //     requestMessages.push(uiMessage);
-  //   }
-  // }
-
-  // TODO: Implement this
-  // Add response message if available
-  // const responseMessage = interaction.response?.choices?.[0]?.message;
-  // if (responseMessage) {
-  //   requestMessages.push(mapInteractionToUiMessage(responseMessage));
-  // }
+  const requestMessages = new DynamicInteraction(
+    dynamicInteraction,
+  ).mapToUiMessages(allDualLlmResults);
 
   return (
     <>
-      {/* Header */}
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
           <div className="flex items-center gap-4 mb-2">
@@ -171,7 +104,6 @@ function LogDetail({
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
-        {/* Metadata Section */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Metadata</h2>
           <div className="border border-border rounded-lg p-6 bg-card">
@@ -246,7 +178,6 @@ function LogDetail({
           </div>
         </div>
 
-        {/* Conversation Section */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Conversation</h2>
           <div className="border border-border rounded-lg bg-card overflow-hidden">
@@ -258,7 +189,6 @@ function LogDetail({
           </div>
         </div>
 
-        {/* Raw Data Section */}
         <div>
           <h2 className="text-xl font-semibold mb-4">Raw Data</h2>
           <Accordion type="single" collapsible defaultValue="response">

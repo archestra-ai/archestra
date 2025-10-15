@@ -1,21 +1,29 @@
-import type { SupportedProvider } from "@/types";
+import type { SupportedProviderDiscriminator } from "@/types";
 import type { ProviderTransformer } from "./common";
-import { GeminiTransformer } from "./gemini";
-import { OpenAITransformer } from "./openai";
+import { GeminiGenerateContentTransformer } from "./gemini";
+import { OpenAIChatCompletionsTransformer } from "./openai";
 
-const transformers: Record<SupportedProvider, ProviderTransformer> = {
-  openai: new OpenAITransformer(),
-  gemini: new GeminiTransformer(),
+const transformers: Record<
+  SupportedProviderDiscriminator,
+  ProviderTransformer
+> = {
+  "openai:chatCompletions": new OpenAIChatCompletionsTransformer(),
+  "gemini:generateContent": new GeminiGenerateContentTransformer(),
 };
 
 export function getTransformer(
-  provider: SupportedProvider,
+  providerDiscriminator: SupportedProviderDiscriminator,
 ): ProviderTransformer {
-  const transformer = transformers[provider];
+  const transformer = transformers[providerDiscriminator];
   if (!transformer) {
-    throw new Error(`Unsupported provider: ${provider}`);
+    throw new Error(
+      `Unsupported provider discriminator: ${providerDiscriminator}`,
+    );
   }
   return transformer;
 }
 
-export { GeminiTransformer, OpenAITransformer };
+export type {
+  GeminiGenerateContentTransformer,
+  OpenAIChatCompletionsTransformer,
+};

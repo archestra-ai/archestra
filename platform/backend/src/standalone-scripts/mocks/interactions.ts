@@ -639,7 +639,7 @@ export function generateMockInteraction(
 
   return {
     agentId,
-    provider: "openai" as const,
+    type: "openai:chatCompletions",
     request,
     response,
     createdAt: new Date(response.created * 1000),

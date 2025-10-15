@@ -9,7 +9,7 @@ import {
 import type {
   InteractionRequest,
   InteractionResponse,
-  SupportedProvider,
+  SupportedProviderDiscriminator,
 } from "@/types";
 import agentsTable from "./agent";
 
@@ -22,7 +22,7 @@ const interactionsTable = pgTable(
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
-    provider: varchar("provider").$type<SupportedProvider>().notNull(),
+    type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

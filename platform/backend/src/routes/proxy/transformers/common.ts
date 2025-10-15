@@ -1,5 +1,5 @@
 import type OpenAI from "openai";
-import type { SupportedProvider } from "@/types";
+import type { SupportedProviderDiscriminator } from "@/types";
 
 /**
  * Provider transformer interface
@@ -8,7 +8,7 @@ import type { SupportedProvider } from "@/types";
  * OpenAI types are used as the internal "common" format for utilities.
  */
 export interface ProviderTransformer {
-  provider: SupportedProvider;
+  provider: SupportedProviderDiscriminator;
 
   /**
    * Convert provider-specific request to OpenAI format

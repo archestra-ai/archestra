@@ -1,7 +1,11 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { Gemini, OpenAi } from "./llm-providers";
+import {
+  Gemini,
+  OpenAi,
+  SupportedProvidersDiscriminatorSchema,
+} from "./llm-providers";
 
 /**
  * Request/Response schemas that accept any provider type
@@ -32,33 +36,36 @@ const BaseSelectInteractionSchema = createSelectSchema(
 /**
  * OpenAI-specific interaction schema for discriminated union
  */
-const OpenAiInteractionSchema = BaseSelectInteractionSchema.extend({
-  provider: z.enum(["openai"]),
-  request: OpenAi.API.ChatCompletionRequestSchema,
-  response: OpenAi.API.ChatCompletionResponseSchema,
-});
+const OpenAiChatCompletionsInteractionSchema =
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openai:chatCompletions"]),
+    request: OpenAi.API.ChatCompletionRequestSchema,
+    response: OpenAi.API.ChatCompletionResponseSchema,
+  });
 
 /**
  * Gemini-specific interaction schema for discriminated union
  */
-const GeminiInteractionSchema = BaseSelectInteractionSchema.extend({
-  provider: z.enum(["gemini"]),
-  request: Gemini.API.GenerateContentRequestSchema,
-  response: Gemini.API.GenerateContentResponseSchema,
-});
+const GeminiGenerateContentInteractionSchema =
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["gemini:generateContent"]),
+    request: Gemini.API.GenerateContentRequestSchema,
+    response: Gemini.API.GenerateContentResponseSchema,
+  });
 
 /**
  * Discriminated union schema for API responses
- * This provides type safety based on the provider field
+ * This provides type safety based on the type field
  */
-export const SelectInteractionSchema = z.discriminatedUnion("provider", [
-  OpenAiInteractionSchema,
-  GeminiInteractionSchema,
+export const SelectInteractionSchema = z.discriminatedUnion("type", [
+  OpenAiChatCompletionsInteractionSchema,
+  GeminiGenerateContentInteractionSchema,
 ]);
 
 export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
+    type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     response: InteractionResponseSchema,
   },

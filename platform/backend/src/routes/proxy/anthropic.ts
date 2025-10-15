@@ -5,10 +5,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { Anthropic, ErrorResponseSchema, UuidIdSchema } from "@/types";
-import type {
-  MessagesHeaders,
-  MessagesRequest,
-} from "@/types/llm-providers/anthropic/api";
 import { PROXY_API_PREFIX } from "./common";
 import { AnthropicMessagesTransformer } from "./transformers";
 import * as utils from "./utils";
@@ -37,8 +33,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   const handleMessages = async (
-    body: MessagesRequest,
-    headers: MessagesHeaders,
+    body: Anthropic.Types.MessagesRequest,
+    headers: Anthropic.Types.MessagesHeaders,
     reply: FastifyReply,
     agentId?: string,
   ) => {
@@ -185,12 +181,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           stream: false,
         });
 
-        const anthropicResponse: z.infer<
-          typeof Anthropic.API.MessagesResponseSchema
-        > = {};
-
         // Convert to common format for policy evaluation
-        const commonResponse = transformer.responseToOpenAI(anthropicResponse);
+        const commonResponse = transformer.responseToOpenAI(response);
 
         // Evaluate tool invocation policies
         const assistantMessage = commonResponse.choices[0]?.message;
@@ -205,9 +197,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolInvocationRefusal) {
             commonResponse.choices = [toolInvocationRefusal];
             // Convert back to Anthropic format
-            const refusalResponse = transformer.responseFromOpenAI(
-              commonResponse,
-            ) as z.infer<typeof Anthropic.API.MessagesResponseSchema>;
+            const refusalResponse =
+              transformer.responseFromOpenAI(commonResponse);
 
             // Store the interaction with refusal
             await InteractionModel.create({
@@ -226,10 +217,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
-          response: anthropicResponse,
+          response: response,
         });
 
-        return reply.send(anthropicResponse);
+        return reply.send(response);
       }
     } catch (error) {
       fastify.log.error(error);

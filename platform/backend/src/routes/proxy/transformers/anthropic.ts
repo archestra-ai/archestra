@@ -1,27 +1,24 @@
 import { randomUUID } from "node:crypto";
-import type { z } from "zod";
-import type { Anthropic } from "@/types";
-import type {
-  OpenAiChunk,
-  OpenAiRequest,
-  OpenAiResponse,
-  ProviderTransformer,
-} from "./common";
-
-type MessagesRequest = z.infer<typeof Anthropic.API.MessagesRequestSchema>;
-type MessagesResponse = z.infer<typeof Anthropic.API.MessagesResponseSchema>;
+import type { Anthropic, OpenAi } from "@/types";
+import type { ProviderTransformer } from "./common";
 
 /**
  * Converts between Anthropic's messages format and OpenAI's chatCompletions format
  */
 export class AnthropicMessagesTransformer
   implements
-    ProviderTransformer<MessagesRequest, MessagesResponse, MessagesResponse>
+    ProviderTransformer<
+      Anthropic.Types.MessagesRequest,
+      Anthropic.Types.MessagesResponse,
+      Anthropic.Types.MessagesResponse
+    >
 {
   provider = "anthropic:messages" as const;
 
   // TODO: Implement
-  requestToOpenAI(_request: MessagesRequest): OpenAiRequest {
+  requestToOpenAI(
+    _request: Anthropic.Types.MessagesRequest,
+  ): OpenAi.Types.ChatCompletionsRequest {
     return {
       model: "gemini-pro", // Default model, should be passed separately
       messages: [],
@@ -33,11 +30,15 @@ export class AnthropicMessagesTransformer
     };
   }
 
-  requestFromOpenAI(_request: OpenAiRequest): MessagesRequest {
+  requestFromOpenAI(
+    _request: OpenAi.Types.ChatCompletionsRequest,
+  ): Anthropic.Types.MessagesRequest {
     return {};
   }
 
-  responseToOpenAI(response: MessagesResponse): OpenAiResponse {
+  responseToOpenAI(
+    response: Anthropic.Types.MessagesResponse,
+  ): OpenAi.Types.ChatCompletionsResponse {
     return {
       id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
       model: response.modelVersion,
@@ -50,11 +51,15 @@ export class AnthropicMessagesTransformer
   }
 
   // TODO: Implement
-  responseFromOpenAI(_response: OpenAiResponse): MessagesResponse {
+  responseFromOpenAI(
+    _response: OpenAi.Types.ChatCompletionsResponse,
+  ): Anthropic.Types.MessagesResponse {
     return {};
   }
 
-  chunkToOpenAI(chunk: MessagesResponse): OpenAiChunk {
+  chunkToOpenAI(
+    chunk: Anthropic.Types.MessagesResponse,
+  ): OpenAi.Types.ChatCompletionChunk {
     return {
       id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
       object: "chat.completion.chunk",

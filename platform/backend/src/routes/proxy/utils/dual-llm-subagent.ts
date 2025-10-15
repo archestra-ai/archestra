@@ -1,8 +1,7 @@
-import OpenAI from "openai";
+import OpenAIProvider from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig } from "@/types";
-import type { OpenAiProxy } from "../types";
+import type { DualLlmConfig, OpenAi } from "@/types";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -14,16 +13,16 @@ import type { OpenAiProxy } from "../types";
  * - Information flows through structured Q&A, preventing prompt injection
  */
 export class DualLlmSubagent {
-  messages: OpenAiProxy.ChatCompletionRequestMessages; // Full conversation history
-  currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number]; // Current tool message being analyzed
+  messages: OpenAi.Types.ChatCompletionsRequest["messages"]; // Full conversation history
+  currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number]; // Current tool message being analyzed
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
-  openai: OpenAI; // OpenAI client instance
+  openai: OpenAIProvider; // OpenAI client instance
 
   constructor(
-    messages: OpenAiProxy.ChatCompletionRequestMessages,
-    currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number],
+    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
+    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
     config: DualLlmConfig,
     agentId: string,
     apiKey: string,
@@ -32,7 +31,7 @@ export class DualLlmSubagent {
     this.currentMessage = currentMessage;
     this.config = config;
     this.agentId = agentId;
-    this.openai = new OpenAI({ apiKey });
+    this.openai = new OpenAIProvider({ apiKey });
 
     // Extract tool_call_id from current message
     if (currentMessage.role !== "tool") {
@@ -45,8 +44,8 @@ export class DualLlmSubagent {
    * Create a DualLlmSubagent instance with configuration loaded from database
    */
   static async create(
-    messages: OpenAiProxy.ChatCompletionRequestMessages,
-    currentMessage: OpenAiProxy.ChatCompletionRequestMessages[number],
+    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
+    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
     agentId: string,
     apiKey: string,
   ): Promise<DualLlmSubagent> {

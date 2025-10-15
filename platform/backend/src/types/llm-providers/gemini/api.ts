@@ -277,7 +277,7 @@ Response from the model supporting multiple candidate responses.
 https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
 `);
 
-export const ChatCompletionsHeadersSchema = z.object({
+export const GenerateContentHeadersSchema = z.object({
   "user-agent": z.string().optional().describe("The user agent of the client"),
   "x-goog-api-key": z.string().describe("API key for Google Gemini"),
 });

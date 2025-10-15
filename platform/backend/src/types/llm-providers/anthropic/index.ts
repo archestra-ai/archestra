@@ -4,6 +4,8 @@
  *
  * the anthropic ts sdk doesn't expose zod schemas for all of this..
  */
+
+import type { z } from "zod";
 import * as AnthropicAPI from "./api";
 import * as AnthropicMessages from "./messages";
 import * as AnthropicTools from "./tools";
@@ -12,6 +14,18 @@ namespace Anthropic {
   export const API = AnthropicAPI;
   export const Messages = AnthropicMessages;
   export const Tools = AnthropicTools;
+
+  export namespace Types {
+    export type MessagesHeaders = z.infer<
+      typeof AnthropicAPI.MessagesHeadersSchema
+    >;
+    export type MessagesRequest = z.infer<
+      typeof AnthropicAPI.MessagesRequestSchema
+    >;
+    export type MessagesResponse = z.infer<
+      typeof AnthropicAPI.MessagesResponseSchema
+    >;
+  }
 }
 
 export default Anthropic;

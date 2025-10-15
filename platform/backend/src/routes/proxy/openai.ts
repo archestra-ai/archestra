@@ -35,8 +35,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   const handleChatCompletion = async (
-    body: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,
-    headers: z.infer<typeof OpenAi.API.ChatCompletionsHeadersSchema>,
+    body: OpenAi.Types.ChatCompletionsRequest,
+    headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
     agentId?: string,
   ) => {

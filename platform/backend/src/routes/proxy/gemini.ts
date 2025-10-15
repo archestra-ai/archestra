@@ -43,8 +43,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   const handleGenerateContent = async (
-    body: z.infer<typeof Gemini.API.GenerateContentRequestSchema>,
-    headers: z.infer<typeof Gemini.API.ChatCompletionsHeadersSchema>,
+    body: Gemini.Types.GenerateContentRequest,
+    headers: Gemini.Types.GenerateContentHeaders,
     reply: FastifyReply,
     agentId?: string,
     model?: string,
@@ -97,9 +97,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       commonRequest.messages = filteredMessages;
 
       // Convert back to Gemini format
-      const geminiRequest = transformer.requestFromOpenAI(
-        commonRequest,
-      ) as z.infer<typeof Gemini.API.GenerateContentRequestSchema>;
+      const geminiRequest = transformer.requestFromOpenAI(commonRequest);
 
       if (stream) {
         // reply.header("Content-Type", "text/event-stream");
@@ -112,11 +110,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   ...geminiRequest,
         // });
 
-        // const chunks: z.infer<
-        //   typeof Gemini.API.GenerateContentResponseSchema
-        // >[] = [];
+        // const chunks: Gemini.Types.GenerateContentResponse[] = [];
         // let accumulatedResponse:
-        //   | z.infer<typeof Gemini.API.GenerateContentResponseSchema>
+        //   | Gemini.Types.GenerateContentResponse
         //   | undefined;
 
         // for await (const chunk of result) {
@@ -196,7 +192,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //       commonResponse.choices = [toolInvocationRefusal];
         //       accumulatedResponse = transformer.responseFromOpenAI(
         //         commonResponse,
-        //       ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
+        //       );
         //     }
         //   }
 
@@ -226,9 +222,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...geminiRequest,
         });
 
-        const geminiResponse: z.infer<
-          typeof Gemini.API.GenerateContentResponseSchema
-        > = {
+        const geminiResponse: Gemini.Types.GenerateContentResponse = {
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
           candidates: response.candidates as any,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
@@ -254,9 +248,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (toolInvocationRefusal) {
             commonResponse.choices = [toolInvocationRefusal];
             // Convert back to Gemini format
-            const refusalResponse = transformer.responseFromOpenAI(
-              commonResponse,
-            ) as z.infer<typeof Gemini.API.GenerateContentResponseSchema>;
+            const refusalResponse =
+              transformer.responseFromOpenAI(commonResponse);
 
             // Store the interaction with refusal
             await InteractionModel.create({
@@ -330,7 +323,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
-        headers: Gemini.API.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           200: Gemini.API.GenerateContentResponseSchema,
@@ -366,7 +359,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
-        headers: Gemini.API.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           // Streaming responses don't have a schema
@@ -403,7 +396,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
-        headers: Gemini.API.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           200: Gemini.API.GenerateContentResponseSchema,
@@ -441,7 +434,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
-        headers: Gemini.API.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.GenerateContentHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           // Streaming responses don't have a schema

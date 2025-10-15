@@ -10,6 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
 
+## Documentation
+
+**Documentation files are located at `../../website/app/app/docs/content/`** (relative to the `platform/` directory). When asked to update or create documentation, edit or create files in that directory.
+
+**Important**: When using tools that require absolute paths (like Read, Write, Edit), you must convert the relative path to an absolute path. Use `realpath ../../website/app/app/docs/content/` to get the absolute path, then use that with file operation tools.
+
 ## Important Rules
 
 1. **ALWAYS use pnpm** (not npm or yarn) for package management

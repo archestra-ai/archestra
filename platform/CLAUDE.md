@@ -647,20 +647,7 @@ export interface Agent {
 - Run `pnpm type-check` before committing to catch type errors
 - Use `tilt up` for the best development experience with hot reload
 
-### Release Process
-
-The platform uses [release-please](https://github.com/googleapis/release-please) for automated release management:
-
-- **Version**: Currently at v0.0.0 (initial version)
-- **Release PRs**: Automatically created when conventional commits are merged
-- **Platform Releases**: When a platform release is merged:
-  1. Docker image is built and published to DockerHub (archestra/platform)
-  2. Helm chart is published to Google Artifact Registry
-- **Changelog**: Maintained in `platform/CHANGELOG.md`
-- **Release Configuration**: See `.github/release-please/release-please-config.json`
-- **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
-
-#### Performance Benchmarking
+### Performance Benchmarking
 
 The platform includes performance benchmarking infrastructure for measuring platform overhead:
 
@@ -692,11 +679,24 @@ The platform includes performance benchmarking infrastructure for measuring plat
 
 4. **Metrics Collected**:
    - Throughput (requests/second)
-   - Latency percentiles (p50, p95)
+   - Latency percentiles (p50, p95, p99)
    - Error rates
    - Time per request statistics
 
 See `platform/benchmarks/README.md` for detailed documentation.
+
+### Release Process
+
+The platform uses [release-please](https://github.com/googleapis/release-please) for automated release management:
+
+- **Version**: Currently at v0.0.0 (initial version)
+- **Release PRs**: Automatically created when conventional commits are merged
+- **Platform Releases**: When a platform release is merged:
+  1. Docker image is built and published to DockerHub (archestra/platform)
+  2. Helm chart is published to Google Artifact Registry
+- **Changelog**: Maintained in `platform/CHANGELOG.md`
+- **Release Configuration**: See `.github/release-please/release-please-config.json`
+- **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
 
 ### Release Workflow Details
 

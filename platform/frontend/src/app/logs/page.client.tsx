@@ -166,16 +166,19 @@ function LogsTable({
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Model
+            Provider + Model
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         );
       },
-      cell: ({ row }) => (
-        <Badge variant="secondary" className="text-xs">
-          {new DynamicInteraction(row.original).modelName}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const interaction = new DynamicInteraction(row.original);
+        return (
+          <Badge variant="secondary" className="text-xs">
+            {interaction.provider} ({interaction.modelName})
+          </Badge>
+        );
+      },
     },
     {
       id: "userMessage",

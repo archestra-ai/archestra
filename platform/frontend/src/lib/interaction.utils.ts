@@ -8,7 +8,7 @@ import type {
   OpenAiChatCompletionResponse,
 } from "@/lib/clients/api";
 
-type Interaction = GetInteractionsResponses["200"][number];
+type Interaction = GetInteractionsResponses["200"]["data"][number];
 
 export interface RefusalInfo {
   toolName?: string;

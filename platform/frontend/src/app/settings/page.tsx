@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -345,9 +346,9 @@ export default function SettingsPage() {
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
                 <p className="text-sm mb-3">
                   This value is configurable via the{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     ARCHESTRA_API_BASE_URL
-                  </code>{" "}
+                  </CodeText>{" "}
                   environment variable
                 </p>
                 <div className="space-y-3">
@@ -369,7 +370,9 @@ export default function SettingsPage() {
                     </Select>
                   </div>
                   <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-                    <code className="text-sm">{`${apiProxyUrl}/${selectedProvider}`}</code>
+                    <CodeText className="text-sm">
+                      {`${apiProxyUrl}/${selectedProvider}`}
+                    </CodeText>
                     <Button variant="ghost" size="icon" onClick={handleCopy}>
                       {copied ? (
                         <Check className="h-4 w-4 text-green-500" />
@@ -380,25 +383,35 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {selectedProvider === "openai" && (
-                  <>
-                    <p className="text-sm mt-2">
-                      Configure your agents to use this endpoint instead of
-                      directly calling OpenAI (default should be
-                      https://api.openai.com/v1/)
-                    </p>
-                    <p className="text-sm mt-2">
-                      Archestra supports{" "}
-                      <a
-                        href="https://platform.openai.com/docs/api-reference/chat"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500"
-                      >
-                        Chat Completions API
-                      </a>{" "}
-                      so make sure to use it when connecting to Archestra.
-                    </p>
-                  </>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    OpenAI provides{" "}
+                    <CodeText className="text-xs">/chat/completions</CodeText>{" "}
+                    and <CodeText className="text-xs">/responses</CodeText>{" "}
+                    API's. Archestra doesn't support{" "}
+                    <CodeText className="text-xs">/responses</CodeText> yet.
+                    We're working on it (
+                    <a
+                      href="https://github.com/archestra-ai/archestra/issues/720"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500"
+                    >
+                      here
+                    </a>{" "}
+                    is a GH issue ), meanwhile please make sure that your agent
+                    uses{" "}
+                    <CodeText className="text-xs">/chat/completions</CodeText>,{" "}
+                    check{" "}
+                    <a
+                      href="https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500"
+                    >
+                      this
+                    </a>{" "}
+                    for an example
+                  </p>
                 )}
                 {selectedProvider === "gemini" && (
                   <>

@@ -1245,6 +1245,10 @@ export type GetInteractionsData = {
          * Filter by agent ID
          */
         agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/interactions';
 };
@@ -1253,21 +1257,31 @@ export type GetInteractionsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        agentId: string;
-        request: OpenAiChatCompletionRequest;
-        response: OpenAiChatCompletionResponse;
-        provider: 'openai';
-        createdAt: string;
-    } | {
-        id: string;
-        agentId: string;
-        request: GeminiGenerateContentRequest;
-        response: GeminiGenerateContentResponse;
-        provider: 'gemini';
-        createdAt: string;
-    }>;
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            request: OpenAiChatCompletionRequest;
+            response: OpenAiChatCompletionResponse;
+            provider: 'openai';
+            createdAt: string;
+        } | {
+            id: string;
+            agentId: string;
+            request: GeminiGenerateContentRequest;
+            response: GeminiGenerateContentResponse;
+            provider: 'gemini';
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
 };
 
 export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];

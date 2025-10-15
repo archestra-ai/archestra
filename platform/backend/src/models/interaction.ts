@@ -1,6 +1,15 @@
-import { and, asc, desc, eq, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertInteraction, Interaction } from "@/types";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
+import type {
+  InsertInteraction,
+  Interaction,
+  PaginationQuery,
+  SortingQuery,
+} from "@/types";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {
@@ -17,6 +26,52 @@ class InteractionModel {
       .select()
       .from(schema.interactionsTable)
       .orderBy(desc(schema.interactionsTable.createdAt));
+  }
+
+  /**
+   * Find all interactions with pagination and sorting support
+   */
+  static async findAllPaginated(
+    pagination: PaginationQuery,
+    sorting?: SortingQuery,
+  ): Promise<PaginatedResult<Interaction>> {
+    // Determine the ORDER BY clause based on sorting params
+    const orderByClause = InteractionModel.getOrderByClause(sorting);
+
+    const [data, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(schema.interactionsTable)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db.select({ total: count() }).from(schema.interactionsTable),
+    ]);
+
+    return createPaginatedResult(data, Number(total), pagination);
+  }
+
+  /**
+   * Helper to get the appropriate ORDER BY clause based on sorting params
+   */
+  private static getOrderByClause(sorting?: SortingQuery) {
+    const direction = sorting?.sortDirection === "asc" ? asc : desc;
+
+    switch (sorting?.sortBy) {
+      case "createdAt":
+        return direction(schema.interactionsTable.createdAt);
+      case "agentId":
+        return direction(schema.interactionsTable.agentId);
+      case "model":
+        // Extract model from the JSONB request column
+        // Wrap in parentheses to ensure correct precedence for the JSON operator
+        return direction(
+          sql`(${schema.interactionsTable.request} ->> 'model')`,
+        );
+      default:
+        // Default: newest first
+        return desc(schema.interactionsTable.createdAt);
+    }
   }
 
   static async findById(id: string): Promise<Interaction | null> {
@@ -42,6 +97,39 @@ class InteractionModel {
         ),
       )
       .orderBy(asc(schema.interactionsTable.createdAt));
+  }
+
+  /**
+   * Get all interactions for an agent with pagination and sorting support
+   */
+  static async getAllInteractionsForAgentPaginated(
+    agentId: string,
+    pagination: PaginationQuery,
+    sorting?: SortingQuery,
+    whereClauses?: SQL[],
+  ): Promise<PaginatedResult<Interaction>> {
+    const whereCondition = and(
+      eq(schema.interactionsTable.agentId, agentId),
+      ...(whereClauses ?? []),
+    );
+
+    const orderByClause = InteractionModel.getOrderByClause(sorting);
+
+    const [data, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(schema.interactionsTable)
+        .where(whereCondition)
+        .orderBy(orderByClause)
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.interactionsTable)
+        .where(whereCondition),
+    ]);
+
+    return createPaginatedResult(data, Number(total), pagination);
   }
 }
 

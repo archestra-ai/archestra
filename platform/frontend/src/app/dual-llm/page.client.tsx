@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { CodeText } from "@/components/code-text";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -505,10 +506,10 @@ function DualLLMContent({
                   All instructions for the main agent in a single user message.
                   This agent asks questions to understand quarantined data
                   without direct access to it. Use{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     {"{"}
                     {"{"}originalUserRequest{"}}"}
-                  </code>{" "}
+                  </CodeText>{" "}
                   for user request.
                 </p>
               </div>
@@ -543,25 +544,25 @@ function DualLLMContent({
                 <p className="text-xs text-muted-foreground mt-1">
                   This agent has access to potentially malicious data but can
                   only answer multiple choice questions. Variables:{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     {"{"}
                     {"{"}toolResultData{"}}"}
-                  </code>
+                  </CodeText>
                   ,{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     {"{"}
                     {"{"}question{"}}"}
-                  </code>
+                  </CodeText>
                   ,{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     {"{"}
                     {"{"}options{"}}"}
-                  </code>
+                  </CodeText>
                   ,{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  <CodeText className="text-xs">
                     {"{"}
                     {"{"}maxIndex{"}}"}
-                  </code>
+                  </CodeText>
                 </p>
               </div>
               {quarantinedAgentPrompt !== config?.quarantinedAgentPrompt && (

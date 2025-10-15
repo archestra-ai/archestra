@@ -1,23 +1,11 @@
-import type OpenAI from "openai";
-import type { z } from "zod";
 import type { OpenAi, SupportedProviderDiscriminator } from "@/types";
-
-export type OpenAiRequest = z.infer<
-  typeof OpenAi.API.ChatCompletionRequestSchema
->;
-export type OpenAiResponse = z.infer<
-  typeof OpenAi.API.ChatCompletionResponseSchema
->;
-export type OpenAiChunk = OpenAI.Chat.Completions.ChatCompletionChunk;
-export type OpenAiMessage = z.infer<typeof OpenAi.Messages.MessageParamSchema>;
-export type OpenAiRole = OpenAiMessage["role"];
-export type OpenAiFinishReason = z.infer<typeof OpenAi.API.FinishReasonSchema>;
 
 /**
  * Provider transformer interface
  *
- * Transformers convert between provider-specific formats and OpenAI format.
- * OpenAI types are used as the internal "common" format for utilities.
+ * Transformers convert between provider-specific formats and OpenAI's "chat completions" format.
+ * The OpenAI "chat completions" format is used as the internal "common" format for data operations
+ * (ex. static policy evaluation, dual-llm analysis, etc.).
  */
 export interface ProviderTransformer<Request, Chunk, Response> {
   provider: SupportedProviderDiscriminator;
@@ -25,25 +13,25 @@ export interface ProviderTransformer<Request, Chunk, Response> {
   /**
    * Convert provider-specific request to OpenAI format
    */
-  requestToOpenAI(request: Request): OpenAiRequest;
+  requestToOpenAI(request: Request): OpenAi.Types.ChatCompletionsRequest;
 
   /**
    * Convert OpenAI format request to provider-specific format
    */
-  requestFromOpenAI(request: OpenAiRequest): Request;
+  requestFromOpenAI(request: OpenAi.Types.ChatCompletionsRequest): Request;
 
   /**
    * Convert provider-specific response to OpenAI format
    */
-  responseToOpenAI(response: Response): OpenAiResponse;
+  responseToOpenAI(response: Response): OpenAi.Types.ChatCompletionsResponse;
 
   /**
    * Convert OpenAI format response to provider-specific format
    */
-  responseFromOpenAI(response: OpenAiResponse): Response;
+  responseFromOpenAI(response: OpenAi.Types.ChatCompletionsResponse): Response;
 
   /**
    * Convert provider-specific streaming chunk to OpenAI format
    */
-  chunkToOpenAI?(chunk: Chunk): OpenAiChunk;
+  chunkToOpenAI?(chunk: Chunk): OpenAi.Types.ChatCompletionChunk;
 }

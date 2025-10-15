@@ -1,27 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { z } from "zod";
-import type { Gemini } from "@/types";
-import type {
-  OpenAiChunk,
-  OpenAiFinishReason,
-  OpenAiMessage,
-  OpenAiRequest,
-  OpenAiResponse,
-  // OpenAiRole,
-  ProviderTransformer,
-} from "./common";
-
-type GenerateContentRequest = z.infer<
-  typeof Gemini.API.GenerateContentRequestSchema
->;
-type GenerateContentResponse = z.infer<
-  typeof Gemini.API.GenerateContentResponseSchema
->;
-// type GeminiRole = z.infer<typeof Gemini.Messages.RoleSchema>;
-type GeminiTool = z.infer<typeof Gemini.Tools.ToolSchema>;
-type GeminiFinishReason = z.infer<typeof Gemini.API.FinishReasonSchema>;
-type GeminiMessageContent = z.infer<typeof Gemini.Messages.ContentSchema>;
-type GeminiMessagePart = z.infer<typeof Gemini.Messages.PartSchema>;
+import type { Gemini, OpenAi } from "@/types";
+import type { ProviderTransformer } from "./common";
 
 /**
  * Gemini generateContent/streamGenerateContent transformer implementation
@@ -31,9 +10,9 @@ type GeminiMessagePart = z.infer<typeof Gemini.Messages.PartSchema>;
 export class GeminiGenerateContentTransformer
   implements
     ProviderTransformer<
-      GenerateContentRequest,
-      GenerateContentResponse,
-      GenerateContentResponse
+      Gemini.Types.GenerateContentRequest,
+      Gemini.Types.GenerateContentResponse,
+      Gemini.Types.GenerateContentResponse
     >
 {
   provider = "gemini:generateContent" as const;
@@ -42,9 +21,9 @@ export class GeminiGenerateContentTransformer
    * Convert Gemini Content array to OpenAI Messages
    */
   private contentsToOpenAIMessages(
-    _contents: GeminiMessageContent[],
-  ): OpenAiMessage[] {
-    const messages: OpenAiMessage[] = [];
+    _contents: Gemini.Types.MessageContent[],
+  ): OpenAi.Types.Message[] {
+    const messages: OpenAi.Types.Message[] = [];
 
     // for (const content of contents) {
     //   const message: OpenAiMessage = {
@@ -91,9 +70,9 @@ export class GeminiGenerateContentTransformer
    * Convert OpenAI Messages to Gemini Contents
    */
   private openAIMessagesToContents(
-    _messages: OpenAiMessage[],
-  ): GeminiMessageContent[] {
-    const contents: GeminiMessageContent[] = [];
+    _messages: OpenAi.Types.Message[],
+  ): Gemini.Types.MessageContent[] {
+    const contents: Gemini.Types.MessageContent[] = [];
 
     // for (const message of messages) {
     //   const parts: GeminiMessagePart[] = [];
@@ -181,19 +160,21 @@ export class GeminiGenerateContentTransformer
   //   }
   // }
 
-  requestToOpenAI(request: GenerateContentRequest): OpenAiRequest {
+  requestToOpenAI(
+    request: Gemini.Types.GenerateContentRequest,
+  ): OpenAi.Types.ChatCompletionsRequest {
     const messages = this.contentsToOpenAIMessages(request.contents);
 
     // Extract system instruction if present
     if (request.systemInstruction?.parts?.[0]?.text) {
-      const systemMessage: OpenAiMessage = {
+      const systemMessage: OpenAi.Types.Message = {
         role: "system",
         content: request.systemInstruction.parts[0]?.text,
       };
       messages.unshift(systemMessage);
     }
 
-    const tools: OpenAiRequest["tools"] = [];
+    const tools: OpenAi.Types.ChatCompletionsRequest["tools"] = [];
     if (request.tools) {
       for (const tool of request.tools) {
         for (const func of tool.functionDeclarations || []) {
@@ -217,15 +198,15 @@ export class GeminiGenerateContentTransformer
       temperature: request.generationConfig?.temperature,
       max_tokens: request.generationConfig?.maxOutputTokens,
       tool_choice: request.toolConfig?.functionCallingConfig
-        ?.mode as OpenAiRequest["tool_choice"],
+        ?.mode as OpenAi.Types.ChatCompletionsRequest["tool_choice"],
     };
   }
 
-  requestFromOpenAI(request: OpenAiRequest): GenerateContentRequest {
+  requestFromOpenAI(
+    request: OpenAi.Types.ChatCompletionsRequest,
+  ): Gemini.Types.GenerateContentRequest {
     // Extract system message if present
-    let systemInstruction:
-      | z.infer<typeof Gemini.API.SystemInstructionSchema>
-      | undefined;
+    let systemInstruction: Gemini.Types.SystemInstruction | undefined;
     const messages = [...request.messages];
 
     if (messages[0]?.role === "system") {
@@ -240,10 +221,11 @@ export class GeminiGenerateContentTransformer
     }
 
     const contents = this.openAIMessagesToContents(messages);
-    const tools: GeminiTool[] = [];
+    const tools: Gemini.Types.Tool[] = [];
 
     if (request.tools) {
-      const functionDeclarations: GeminiTool["functionDeclarations"] = [];
+      const functionDeclarations: Gemini.Types.Tool["functionDeclarations"] =
+        [];
       for (const tool of request.tools) {
         if (tool.type === "function") {
           functionDeclarations.push({
@@ -276,8 +258,10 @@ export class GeminiGenerateContentTransformer
     };
   }
 
-  responseToOpenAI(response: GenerateContentResponse): OpenAiResponse {
-    const choices: OpenAiResponse["choices"] = [];
+  responseToOpenAI(
+    response: Gemini.Types.GenerateContentResponse,
+  ): OpenAi.Types.ChatCompletionsResponse {
+    const choices: OpenAi.Types.ChatCompletionsResponse["choices"] = [];
 
     // for (const candidate of response.candidates) {
     //   if (candidate.content) {
@@ -334,11 +318,13 @@ export class GeminiGenerateContentTransformer
     };
   }
 
-  responseFromOpenAI(response: OpenAiResponse): GenerateContentResponse {
-    const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
+  responseFromOpenAI(
+    response: OpenAi.Types.ChatCompletionsResponse,
+  ): Gemini.Types.GenerateContentResponse {
+    const candidates: Gemini.Types.Candidate[] = [];
 
     for (const choice of response.choices) {
-      const parts: GeminiMessagePart[] = [];
+      const parts: Gemini.Types.MessagePart[] = [];
 
       if (choice.message.content) {
         parts.push({
@@ -400,8 +386,10 @@ export class GeminiGenerateContentTransformer
     };
   }
 
-  chunkToOpenAI(chunk: GenerateContentResponse): OpenAiChunk {
-    const choices: OpenAiChunk["choices"] = [];
+  chunkToOpenAI(
+    chunk: Gemini.Types.GenerateContentResponse,
+  ): OpenAi.Types.ChatCompletionChunk {
+    const choices: OpenAi.Types.ChatCompletionChunk["choices"] = [];
 
     // for (const candidate of chunk.candidates) {
     //   if (candidate.content) {
@@ -444,8 +432,8 @@ export class GeminiGenerateContentTransformer
   // }
 
   private mapFinishReasonToGemini(
-    reason: OpenAiFinishReason,
-  ): GeminiFinishReason {
+    reason: OpenAi.Types.FinishReason,
+  ): Gemini.Types.FinishReason {
     switch (reason) {
       case "stop":
         return "STOP";

@@ -3,6 +3,7 @@ export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as interactionRoutes } from "./interaction";
+export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";
 export { default as toolRoutes } from "./tool";

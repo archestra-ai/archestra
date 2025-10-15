@@ -4,9 +4,9 @@ export type ClientOptions = {
     baseUrl: 'http://localhost:9000' | (string & {});
 };
 
-export type SupportedProvidersInput = 'openai' | 'gemini';
+export type SupportedProvidersInput = 'openai' | 'gemini' | 'anthropic';
 
-export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent';
+export type SupportedProvidersDiscriminatorInput = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
 
 export type OpenAiChatCompletionRequestInput = {
     model: string;
@@ -497,7 +497,7 @@ export type GeminiGenerateContentRequestInput = {
      * A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.
      */
     tools?: Array<{
-        functionDeclarations: Array<{
+        functionDeclarations?: Array<{
             /**
              * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
              */
@@ -523,7 +523,7 @@ export type GeminiGenerateContentRequestInput = {
         /**
          * https://ai.google.dev/api/caching#GoogleSearchRetrieval
          */
-        googleSearchRetrieval: {
+        googleSearchRetrieval?: {
             /**
              *
              * Specifies the dynamic retrieval configuration for the given source.
@@ -899,9 +899,13 @@ export type GeminiGenerateContentResponseInput = {
     modelVersion: string;
 };
 
-export type SupportedProviders = 'openai' | 'gemini';
+export type AnthropicMessagesRequestInput = unknown;
 
-export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent';
+export type AnthropicMessagesResponseInput = unknown;
+
+export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
+
+export type SupportedProvidersDiscriminator = 'openai:chatCompletions' | 'gemini:generateContent' | 'anthropic:messages';
 
 export type OpenAiChatCompletionRequest = {
     model: string;
@@ -1392,7 +1396,7 @@ export type GeminiGenerateContentRequest = {
      * A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.
      */
     tools?: Array<{
-        functionDeclarations: Array<{
+        functionDeclarations?: Array<{
             /**
              * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
              */
@@ -1418,7 +1422,7 @@ export type GeminiGenerateContentRequest = {
         /**
          * https://ai.google.dev/api/caching#GoogleSearchRetrieval
          */
-        googleSearchRetrieval: {
+        googleSearchRetrieval?: {
             /**
              *
              * Specifies the dynamic retrieval configuration for the given source.
@@ -1794,6 +1798,10 @@ export type GeminiGenerateContentResponse = {
     modelVersion: string;
 };
 
+export type AnthropicMessagesRequest = unknown;
+
+export type AnthropicMessagesResponse = unknown;
+
 export type GetOpenapiJsonData = {
     body?: never;
     path?: never;
@@ -1822,280 +1830,249 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
-export type GetAgentsData = {
+export type DeleteV1AnthropicData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/agents';
+    url: '/v1/anthropic/';
 };
 
-export type GetAgentsErrors = {
+export type DeleteV1AnthropicResponses = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
+    200: unknown;
 };
 
-export type GetAgentsError = GetAgentsErrors[keyof GetAgentsErrors];
-
-export type GetAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
-
-export type CreateAgentData = {
-    body: {
-        name: string;
-        isDemo?: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agents';
-};
-
-export type CreateAgentErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateAgentError = CreateAgentErrors[keyof CreateAgentErrors];
-
-export type CreateAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
-
-export type DeleteAgentData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type DeleteAgentErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
-
-export type DeleteAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
-
-export type GetAgentData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type GetAgentErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
-
-export type GetAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
-
-export type UpdateAgentData = {
-    body?: {
-        name?: string;
-        isDemo?: boolean;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type UpdateAgentErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateAgentError = UpdateAgentErrors[keyof UpdateAgentErrors];
-
-export type UpdateAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
-
-export type GetInteractionsData = {
+export type GetV1AnthropicData = {
     body?: never;
     path?: never;
-    query?: {
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type GetV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type HeadV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type OptionsV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PatchV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PostV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PutV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type DeleteV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type GetV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type HeadV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type OptionsV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PatchV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PostV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PutV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AnthropicMessagesWithDefaultAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
         /**
-         * Filter by agent ID
+         * The user agent of the client
          */
-        agentId?: string;
-        limit?: number;
-        offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
-        sortDirection?: 'asc' | 'desc';
+        'user-agent'?: string;
+        authorization: string;
     };
-    url: '/api/interactions';
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic//messages';
 };
 
-export type GetInteractionsResponses = {
+export type AnthropicMessagesWithDefaultAgentErrors = {
     /**
      * Default Response
      */
-    200: {
-        data: Array<{
-            id: string;
-            agentId: string;
-            request: OpenAiChatCompletionRequest;
-            response: OpenAiChatCompletionResponse;
-            type: 'openai:chatCompletions';
-            createdAt: string;
-        } | {
-            id: string;
-            agentId: string;
-            request: GeminiGenerateContentRequest;
-            response: GeminiGenerateContentResponse;
-            type: 'gemini:generateContent';
-            createdAt: string;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
+    400: {
+        error: string | {
+            message: string;
+            type: string;
         };
     };
-};
-
-export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
-
-export type GetInteractionData = {
-    body?: never;
-    path: {
-        interactionId: string;
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
     };
-    query?: never;
-    url: '/api/interactions/{interactionId}';
-};
-
-export type GetInteractionErrors = {
     /**
      * Default Response
      */
@@ -2105,32 +2082,93 @@ export type GetInteractionErrors = {
             type: string;
         };
     };
-};
-
-export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
-
-export type GetInteractionResponses = {
     /**
      * Default Response
      */
-    200: {
-        id: string;
-        agentId: string;
-        request: OpenAiChatCompletionRequest;
-        response: OpenAiChatCompletionResponse;
-        type: 'openai:chatCompletions';
-        createdAt: string;
-    } | {
-        id: string;
-        agentId: string;
-        request: GeminiGenerateContentRequest;
-        response: GeminiGenerateContentResponse;
-        type: 'gemini:generateContent';
-        createdAt: string;
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
     };
 };
 
-export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+export type AnthropicMessagesWithDefaultAgentError = AnthropicMessagesWithDefaultAgentErrors[keyof AnthropicMessagesWithDefaultAgentErrors];
+
+export type AnthropicMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
+
+export type AnthropicMessagesWithAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{agentId}//messages';
+};
+
+export type AnthropicMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AnthropicMessagesWithAgentError = AnthropicMessagesWithAgentErrors[keyof AnthropicMessagesWithAgentErrors];
+
+export type AnthropicMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
 
 export type DeleteV1OpenaiData = {
     body?: never;
@@ -2959,6 +2997,330 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
 };
 
 export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
+
+export type GetAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents';
+};
+
+export type GetAgentsErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentsError = GetAgentsErrors[keyof GetAgentsErrors];
+
+export type GetAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
+
+export type CreateAgentData = {
+    body: {
+        name: string;
+        isDemo?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents';
+};
+
+export type CreateAgentErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateAgentError = CreateAgentErrors[keyof CreateAgentErrors];
+
+export type CreateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type DeleteAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type DeleteAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
+
+export type DeleteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
+
+export type GetAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type GetAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
+
+export type GetAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
+
+export type UpdateAgentData = {
+    body?: {
+        name?: string;
+        isDemo?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type UpdateAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateAgentError = UpdateAgentErrors[keyof UpdateAgentErrors];
+
+export type UpdateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetInteractionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent ID
+         */
+        agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/interactions';
+};
+
+export type GetInteractionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            request: OpenAiChatCompletionRequest;
+            response: OpenAiChatCompletionResponse;
+            type: 'openai:chatCompletions';
+            createdAt: string;
+        } | {
+            id: string;
+            agentId: string;
+            request: GeminiGenerateContentRequest;
+            response: GeminiGenerateContentResponse;
+            type: 'gemini:generateContent';
+            createdAt: string;
+        } | {
+            id: string;
+            agentId: string;
+            request: AnthropicMessagesRequest;
+            response: AnthropicMessagesResponse;
+            type: 'anthropic:messages';
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetInteractionData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/{interactionId}';
+};
+
+export type GetInteractionErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
+
+export type GetInteractionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        request: OpenAiChatCompletionRequest;
+        response: OpenAiChatCompletionResponse;
+        type: 'openai:chatCompletions';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: GeminiGenerateContentRequest;
+        response: GeminiGenerateContentResponse;
+        type: 'gemini:generateContent';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: AnthropicMessagesRequest;
+        response: AnthropicMessagesResponse;
+        type: 'anthropic:messages';
+        createdAt: string;
+    };
+};
+
+export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
 export type GetToolsData = {
     body?: never;

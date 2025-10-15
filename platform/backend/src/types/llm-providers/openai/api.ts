@@ -3,11 +3,6 @@ import { z } from "zod";
 import { MessageParamSchema, ToolCallSchema } from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
-export const ApiKeySchema = z
-  .string()
-  .describe("Bearer token for OpenAI")
-  .transform((authorization) => authorization.replace("Bearer ", ""));
-
 const ChatCompletionUsageSchema = z
   .object({
     completion_tokens: z.number(),
@@ -98,3 +93,11 @@ export const ChatCompletionResponseSchema = z
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248`,
   );
+
+export const ChatCompletionsHeadersSchema = z.object({
+  "user-agent": z.string().optional().describe("The user agent of the client"),
+  authorization: z
+    .string()
+    .describe("Bearer token for OpenAI")
+    .transform((authorization) => authorization.replace("Bearer ", "")),
+});

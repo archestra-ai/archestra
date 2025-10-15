@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
-// TODO: uncomment this out when we have > 1 provider
+// TODO: uncomment out once we officially have 100% support for 2nd provider
 // import {
 //   Select,
 //   SelectContent,
@@ -22,6 +22,7 @@ const { proxyUrl: apiProxyUrl } = config.api;
 const providerDisplayNames: Record<SupportedProviders, string> = {
   openai: "OpenAI",
   gemini: "Gemini",
+  anthropic: "Anthropic",
 };
 
 export default function SettingsPage() {
@@ -34,7 +35,7 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  // TODO: uncomment this out when we have > 1 provider
+  // TODO: remove _ when we have 100% support for all providers
   const [selectedProvider, _setSelectedProvider] =
     useState<SupportedProviders>("openai");
 
@@ -347,7 +348,7 @@ export default function SettingsPage() {
               <div className="border-t pt-6">
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
                 <div className="space-y-3">
-                  {/* TODO: uncomment this out when we have > 1 provider */}
+                  {/* TODO: uncomment out once we officially have 100% support for Anthropic */}
                   {/* <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Provider:</span>
                     <Select
@@ -362,6 +363,7 @@ export default function SettingsPage() {
                       <SelectContent>
                         <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="gemini">Gemini</SelectItem>
+                        <SelectItem value="anthropic">Anthropic</SelectItem>
                       </SelectContent>
                     </Select>
                   </div> */}
@@ -428,6 +430,27 @@ export default function SettingsPage() {
                         className="text-blue-500"
                       >
                         Gemini generateContent API
+                      </a>{" "}
+                      so make sure to use it when connecting to Archestra.
+                    </p>
+                  </>
+                )}
+                {selectedProvider === "anthropic" && (
+                  <>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Configure your agents to use this endpoint instead of
+                      directly calling Anthropic (default should be
+                      https://api.anthropic.com/v1/)
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Archestra supports{" "}
+                      <a
+                        href="https://docs.anthropic.com/en/api/messages"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500"
+                      >
+                        Anthropic messages API
                       </a>{" "}
                       so make sure to use it when connecting to Archestra.
                     </p>

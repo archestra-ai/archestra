@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import {
+  Anthropic,
   Gemini,
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
@@ -58,6 +59,12 @@ z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
 });
 z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
   id: "GeminiGenerateContentResponse",
+});
+z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
+  id: "AnthropicMessagesRequest",
+});
+z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+  id: "AnthropicMessagesResponse",
 });
 
 const start = async () => {
@@ -107,10 +114,12 @@ const start = async () => {
       version,
     }));
 
-    fastify.register(routes.agentRoutes);
-    fastify.register(routes.interactionRoutes);
+    fastify.register(routes.anthropicProxyRoutes);
     fastify.register(routes.openAiProxyRoutes);
     fastify.register(routes.geminiProxyRoutes);
+
+    fastify.register(routes.agentRoutes);
+    fastify.register(routes.interactionRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);
     fastify.register(routes.dualLlmConfigRoutes);

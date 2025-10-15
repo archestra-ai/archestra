@@ -93,9 +93,9 @@ apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io
 
 echo "Starting Archestra Platform..."
-docker run -d -p 9000:9000 -p 3000:3000 --name archestra archestra/platform:latest
+docker run -d -p 9000:9000 -p 3000:3000 -e BENCHMARK_MOCK_MODE=true --name archestra archestra/platform:latest
 
-echo "✅ Archestra Platform is running"
+echo "✅ Archestra Platform is running (mock mode enabled)"
 echo "API: http://$(hostname -I | awk "{print \$1}"):9000"
 '
 

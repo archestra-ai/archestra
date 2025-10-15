@@ -6,14 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
-// TODO: uncomment this out when we have > 1 provider
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { SupportedProviders } from "@/lib/clients/api/types.gen";
 import config from "@/lib/config";
 
@@ -22,6 +21,7 @@ const { proxyUrl: apiProxyUrl } = config.api;
 const providerDisplayNames: Record<SupportedProviders, string> = {
   openai: "OpenAI",
   gemini: "Gemini",
+  anthropic: "Anthropic",
 };
 
 export default function SettingsPage() {
@@ -34,8 +34,7 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  // TODO: uncomment this out when we have > 1 provider
-  const [selectedProvider, _setSelectedProvider] =
+  const [selectedProvider, setSelectedProvider] =
     useState<SupportedProviders>("openai");
 
   const particleIdRef = useRef(0);
@@ -347,8 +346,7 @@ export default function SettingsPage() {
               <div className="border-t pt-6">
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
                 <div className="space-y-3">
-                  {/* TODO: uncomment this out when we have > 1 provider */}
-                  {/* <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Provider:</span>
                     <Select
                       value={selectedProvider}
@@ -361,10 +359,12 @@ export default function SettingsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="gemini">Gemini</SelectItem>
+                        {/* TODO: uncomment this out when we officially have 100% Gemini support */}
+                        {/* <SelectItem value="gemini">Gemini</SelectItem> */}
+                        <SelectItem value="anthropic">Anthropic</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div> */}
+                  </div>
                   <div className="bg-muted rounded-md p-3 flex items-center justify-between">
                     <CodeText className="text-sm">
                       {`${apiProxyUrl}/${selectedProvider}`}
@@ -428,6 +428,27 @@ export default function SettingsPage() {
                         className="text-blue-500"
                       >
                         Gemini generateContent API
+                      </a>{" "}
+                      so make sure to use it when connecting to Archestra.
+                    </p>
+                  </>
+                )}
+                {selectedProvider === "anthropic" && (
+                  <>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Configure your agents to use this endpoint instead of
+                      directly calling Anthropic (default should be
+                      https://api.anthropic.com/v1/)
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Archestra supports{" "}
+                      <a
+                        href="https://docs.anthropic.com/en/api/messages"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500"
+                      >
+                        Anthropic messages API
                       </a>{" "}
                       so make sure to use it when connecting to Archestra.
                     </p>

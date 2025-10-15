@@ -1,11 +1,12 @@
 import type { SupportedProviderDiscriminator } from "@/types";
-import type { ProviderTransformer } from "./common";
 import { GeminiGenerateContentTransformer } from "./gemini";
 import { OpenAIChatCompletionsTransformer } from "./openai";
 
+type AnyTransformer = OpenAIChatCompletionsTransformer | GeminiGenerateContentTransformer;
+
 const transformers: Record<
   SupportedProviderDiscriminator,
-  ProviderTransformer
+  AnyTransformer
 > = {
   "openai:chatCompletions": new OpenAIChatCompletionsTransformer(),
   "gemini:generateContent": new GeminiGenerateContentTransformer(),
@@ -13,7 +14,7 @@ const transformers: Record<
 
 export function getTransformer(
   providerDiscriminator: SupportedProviderDiscriminator,
-): ProviderTransformer {
+): AnyTransformer {
   const transformer = transformers[providerDiscriminator];
   if (!transformer) {
     throw new Error(

@@ -5,7 +5,14 @@ import type { ProviderTransformer } from "./common";
  * OpenAI chatCompletions transformer implementation
  * Since OpenAI's chatCompletions format is our internal format, this is a simple pass-through
  */
-export class OpenAIChatCompletionsTransformer implements ProviderTransformer {
+export class OpenAIChatCompletionsTransformer
+  implements
+    ProviderTransformer<
+      OpenAI.Chat.ChatCompletionCreateParams,
+      OpenAI.Chat.ChatCompletionChunk,
+      OpenAI.Chat.ChatCompletion
+    >
+{
   provider = "openai:chatCompletions" as const;
 
   requestToOpenAI = (
@@ -25,10 +32,6 @@ export class OpenAIChatCompletionsTransformer implements ProviderTransformer {
   ): OpenAI.Chat.ChatCompletion => response;
 
   chunkToOpenAI = (
-    chunk: OpenAI.Chat.ChatCompletionChunk,
-  ): OpenAI.Chat.ChatCompletionChunk => chunk;
-
-  chunkFromOpenAI = (
     chunk: OpenAI.Chat.ChatCompletionChunk,
   ): OpenAI.Chat.ChatCompletionChunk => chunk;
 }

@@ -30,15 +30,17 @@ const ChatCompletionUsageSchema = z
     `https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113`,
   );
 
+export const FinishReasonSchema = z.enum([
+  "stop",
+  "length",
+  "tool_calls",
+  "content_filter",
+  "function_call",
+]);
+
 const ChoiceSchema = z
   .object({
-    finish_reason: z.enum([
-      "stop",
-      "length",
-      "tool_calls",
-      "content_filter",
-      "function_call",
-    ]),
+    finish_reason: FinishReasonSchema,
     index: z.number(),
     logprobs: z.any().nullable(),
     message: z

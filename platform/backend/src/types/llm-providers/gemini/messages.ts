@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const RoleSchema = z.enum(["user", "model", "function"]);
+export const RoleSchema = z.enum(["user", "model", "function"]);
 
 const TextPartSchema = z
   .object({

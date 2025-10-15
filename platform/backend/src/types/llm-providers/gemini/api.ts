@@ -124,38 +124,40 @@ const CitationMetadataSchema = z
   })
   .describe(`https://ai.google.dev/api/generate-content#citationmetadata`);
 
+export const FinishReasonSchema = z
+  .enum([
+    "FINISH_REASON_UNSPECIFIED",
+    "STOP",
+    "MAX_TOKENS",
+    "SAFETY",
+    "RECITATION",
+    "LANGUAGE",
+    "OTHER",
+    "BLOCKLIST",
+    "PROHIBITED_CONTENT",
+    "SPII",
+    "MALFORMED_FUNCTION_CALL",
+    "IMAGE_SAFETY",
+    "IMAGE_PROHIBITED_CONTENT",
+    "IMAGE_OTHER",
+    "NO_IMAGE",
+    "IMAGE_RECITATION",
+    "UNEXPECTED_TOOL_CALL",
+    "TOO_MANY_TOOL_CALLS",
+  ])
+  .optional()
+  .describe(`
+  The reason why the model stopped generating tokens.
+
+  If empty, the model has not stopped generating tokens.
+
+  https://ai.google.dev/api/generate-content#FinishReason
+`);
+
 export const CandidateSchema = z
   .object({
     content: ContentSchema,
-    finishReason: z
-      .enum([
-        "FINISH_REASON_UNSPECIFIED",
-        "STOP",
-        "MAX_TOKENS",
-        "SAFETY",
-        "RECITATION",
-        "LANGUAGE",
-        "OTHER",
-        "BLOCKLIST",
-        "PROHIBITED_CONTENT",
-        "SPII",
-        "MALFORMED_FUNCTION_CALL",
-        "IMAGE_SAFETY",
-        "IMAGE_PROHIBITED_CONTENT",
-        "IMAGE_OTHER",
-        "NO_IMAGE",
-        "IMAGE_RECITATION",
-        "UNEXPECTED_TOOL_CALL",
-        "TOO_MANY_TOOL_CALLS",
-      ])
-      .optional()
-      .describe(`
-      The reason why the model stopped generating tokens.
-
-      If empty, the model has not stopped generating tokens.
-
-      https://ai.google.dev/api/generate-content#FinishReason
-    `),
+    finishReason: FinishReasonSchema,
     safetyRatings: z.array(SafetyRatingSchema),
     citationMetadata: CitationMetadataSchema,
     tokenCount: z.number(),

@@ -27,10 +27,6 @@ export const InteractionResponseSchema = z.union([
  */
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
-  {
-    request: InteractionRequestSchema,
-    response: InteractionResponseSchema,
-  },
 );
 
 /**

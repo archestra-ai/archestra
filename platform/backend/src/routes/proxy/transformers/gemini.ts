@@ -1,27 +1,53 @@
 import { randomUUID } from "node:crypto";
-import type OpenAI from "openai";
+import type OpenAIProvider from "openai";
 import type { z } from "zod";
-import type { Gemini } from "@/types";
+import type { Gemini, OpenAi } from "@/types";
 import type { ProviderTransformer } from "./common";
+
+type GenerateContentRequest = z.infer<
+  typeof Gemini.API.GenerateContentRequestSchema
+>;
+type GenerateContentResponse = z.infer<
+  typeof Gemini.API.GenerateContentResponseSchema
+>;
+type GeminiRole = z.infer<typeof Gemini.Messages.RoleSchema>;
+type GeminiTool = z.infer<typeof Gemini.Tools.ToolSchema>;
+type GeminiFinishReason = z.infer<typeof Gemini.API.FinishReasonSchema>;
+type GeminiMessageContent = z.infer<typeof Gemini.Messages.ContentSchema>;
+type GeminiMessagePart = z.infer<typeof Gemini.Messages.PartSchema>;
+
+type OpenAiMessage = z.infer<typeof OpenAi.Messages.MessageParamSchema>;
+type OpenAiRole = OpenAiMessage["role"];
+type OpenAiFinishReason = z.infer<typeof OpenAi.API.FinishReasonSchema>;
+type OpenAiRequest = OpenAIProvider.Chat.ChatCompletionCreateParams;
+type OpenAiResponse = OpenAIProvider.Chat.ChatCompletion;
+type OpenAiChunk = OpenAIProvider.Chat.ChatCompletionChunk;
 
 /**
  * Gemini generateContent/streamGenerateContent transformer implementation
  * Converts between Gemini's generateContent/streamGenerateContent
  * Content/Part format and OpenAI's chatCompletions format
  */
-export class GeminiGenerateContentTransformer implements ProviderTransformer {
+export class GeminiGenerateContentTransformer
+  implements
+    ProviderTransformer<
+      GenerateContentRequest,
+      GenerateContentResponse,
+      GenerateContentResponse
+    >
+{
   provider = "gemini:generateContent" as const;
 
   /**
-   * Convert Gemini Content array to Common Messages
+   * Convert Gemini Content array to OpenAI Messages
    */
   private contentsToOpenAIMessages(
-    contents: z.infer<typeof Gemini.Messages.ContentSchema>[],
-  ): OpenAI.Chat.ChatCompletionMessageParam[] {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+    contents: GeminiMessageContent[],
+  ): OpenAiMessage[] {
+    const messages: OpenAiMessage[] = [];
 
     for (const content of contents) {
-      const message: OpenAI.Chat.ChatCompletionMessageParam = {
+      const message: OpenAiMessage = {
         role: this.geminiRoleToOpenAI(content.role),
         content: null,
         tool_calls: undefined,
@@ -30,9 +56,10 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
 
       // Process parts
       for (const part of content.parts) {
-        if ("text" in part) {
-          message.content = part.text;
-        } else if ("functionCall" in part) {
+        const partData = part.data;
+        if ("text" in partData) {
+          message.content = partData.text;
+        } else if ("functionCall" in partData) {
           if (!message.tool_calls) {
             message.tool_calls = [];
           }
@@ -40,16 +67,16 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
             id: `call_${randomUUID().replace(/-/g, "").substring(0, 24)}`,
             type: "function",
             function: {
-              name: part.functionCall.name,
-              arguments: JSON.stringify(part.functionCall.args),
+              name: partData.functionCall.name,
+              arguments: JSON.stringify(partData.functionCall.args),
             },
           });
-        } else if ("functionResponse" in part) {
+        } else if ("functionResponse" in partData) {
           // Function responses in Gemini become tool messages
           messages.push({
             role: "tool",
-            content: JSON.stringify(part.functionResponse.response),
-            tool_call_id: part.functionResponse.name, // Using name as ID for now
+            content: JSON.stringify(partData.functionResponse.response),
+            tool_call_id: partData.functionResponse.name, // Using name as ID for now
           });
         }
       }
@@ -61,37 +88,46 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
   }
 
   /**
-   * Convert Common Messages to Gemini Contents
+   * Convert OpenAI Messages to Gemini Contents
    */
   private openAIMessagesToContents(
-    messages: OpenAI.Chat.ChatCompletionMessageParam[],
-  ): z.infer<typeof Gemini.Messages.ContentSchema>[] {
-    const contents: z.infer<typeof Gemini.Messages.ContentSchema>[] = [];
+    messages: OpenAiMessage[],
+  ): GeminiMessageContent[] {
+    const contents: GeminiMessageContent[] = [];
 
     for (const message of messages) {
-      const parts: z.infer<typeof Gemini.Messages.PartSchema>[] = [];
+      const parts: GeminiMessagePart[] = [];
 
       if (message.content) {
-        parts.push({ text: message.content });
+        parts.push({
+          data: { text: message.content },
+          metadata: {} as any,
+        });
       }
 
       if (message.tool_calls) {
         for (const toolCall of message.tool_calls) {
           parts.push({
-            functionCall: {
-              name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
+            data: {
+              functionCall: {
+                name: toolCall.function.name,
+                args: JSON.parse(toolCall.function.arguments),
+              },
             },
+            metadata: {} as any,
           });
         }
       }
 
       if (message.role === "tool" && message.tool_call_id) {
         parts.push({
-          functionResponse: {
-            name: message.tool_call_id,
-            response: JSON.parse(message.content || "{}"),
+          data: {
+            functionResponse: {
+              name: message.tool_call_id,
+              response: JSON.parse(message.content || "{}"),
+            },
           },
+          metadata: {} as any,
         });
       }
 
@@ -108,14 +144,14 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
   }
 
   /**
-   * Convert role from Gemini to common format
+   * Convert role from Gemini to openai format
    */
-  private geminiRoleToOpenAI(
-    role: "user" | "model" | "function",
-  ): OpenAI.Chat.ChatCompletionMessageParam["role"] {
+  private geminiRoleToOpenAI(role: GeminiRole): OpenAiRole {
     switch (role) {
       case "model":
         return "assistant";
+      case "user":
+        return "user";
       case "function":
         return "tool";
       default:
@@ -124,11 +160,9 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
   }
 
   /**
-   * Convert role from common to Gemini format
+   * Convert role from openai to Gemini format
    */
-  private openAIRoleToGemini(
-    role: OpenAI.Chat.ChatCompletionMessageParam["role"],
-  ): "user" | "model" | "function" {
+  private openAIRoleToGemini(role: OpenAiRole): GeminiRole {
     switch (role) {
       case "assistant":
         return "model";
@@ -143,21 +177,19 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
     }
   }
 
-  requestToOpenAI(
-    request: z.infer<typeof Gemini.API.GenerateContentRequestSchema>,
-  ): OpenAI.Chat.ChatCompletionCreateParams {
+  requestToOpenAI(request: GenerateContentRequest): OpenAiRequest {
     const messages = this.contentsToOpenAIMessages(request.contents);
 
     // Extract system instruction if present
     if (request.systemInstruction?.parts?.[0]?.text) {
-      const systemMessage: OpenAI.Chat.ChatCompletionMessageParam = {
+      const systemMessage: OpenAiMessage = {
         role: "system",
         content: request.systemInstruction.parts[0]?.text,
       };
       messages.unshift(systemMessage);
     }
 
-    const tools: OpenAI.Chat.ChatCompletionTool[] = [];
+    const tools: OpenAiRequest["tools"] = [];
     if (request.tools) {
       for (const tool of request.tools) {
         for (const func of tool.functionDeclarations) {
@@ -184,9 +216,7 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
     };
   }
 
-  requestFromOpenAI(
-    request: OpenAI.Chat.ChatCompletionCreateParams,
-  ): z.infer<typeof Gemini.API.GenerateContentRequestSchema> {
+  requestFromOpenAI(request: OpenAiRequest): GenerateContentRequest {
     // Extract system message if present
     let systemInstruction:
       | z.infer<typeof Gemini.API.SystemInstructionSchema>
@@ -202,18 +232,14 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
 
     const contents = this.openAIMessagesToContents(messages);
 
-    const tools: z.infer<
-      typeof Gemini.API.GenerateContentRequestSchema
-    >["tools"] = [];
+    const tools: GeminiTool[] = [];
     if (request.tools) {
-      const functionDeclarations: z.infer<
-        typeof Gemini.Tools.FunctionDeclarationSchema
-      >[] = [];
+      const functionDeclarations: GeminiTool["functionDeclarations"] = [];
       for (const tool of request.tools) {
         if (tool.type === "function") {
           functionDeclarations.push({
             name: tool.function.name,
-            description: tool.function.description,
+            description: tool.function.description || "",
             parameters: tool.function.parameters as any,
           });
         }
@@ -241,10 +267,8 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
     };
   }
 
-  responseToOpenAI(
-    response: z.infer<typeof Gemini.API.GenerateContentResponseSchema>,
-  ): OpenAI.Chat.ChatCompletion {
-    const choices: OpenAI.Chat.ChatCompletion["choices"] = [];
+  responseToOpenAI(response: GenerateContentResponse): OpenAiResponse {
+    const choices: OpenAiResponse["choices"] = [];
 
     if (response.candidates) {
       for (const candidate of response.candidates) {
@@ -281,7 +305,7 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
 
     return {
       id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
-      model: response.modelVersion || "gemini-pro",
+      model: response.modelVersion,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       choices,
@@ -295,25 +319,29 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
     };
   }
 
-  responseFromOpenAI(
-    response: OpenAI.Chat.ChatCompletion,
-  ): z.infer<typeof Gemini.API.GenerateContentResponseSchema> {
+  responseFromOpenAI(response: OpenAiResponse): GenerateContentResponse {
     const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
 
     for (const choice of response.choices) {
-      const parts: z.infer<typeof Gemini.Messages.PartSchema>[] = [];
+      const parts: GeminiMessagePart[] = [];
 
       if (choice.message.content) {
-        parts.push({ text: choice.message.content });
+        parts.push({
+          data: { text: choice.message.content },
+          metadata: {} as any,
+        });
       }
 
       if (choice.message.tool_calls) {
         for (const toolCall of choice.message.tool_calls) {
           parts.push({
-            functionCall: {
-              name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
+            data: {
+              functionCall: {
+                name: toolCall.function.name,
+                args: JSON.parse(toolCall.function.arguments),
+              },
             },
+            metadata: {} as any,
           });
         }
       }
@@ -325,6 +353,14 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
         },
         finishReason: this.mapFinishReasonToGemini(choice.finish_reason),
         index: choice.index,
+        safetyRatings: [],
+        citationMetadata: { citationSources: [] },
+        tokenCount: 0,
+        groundingAttributions: [],
+        groundingMetadata: undefined,
+        avgLogprobs: 0,
+        logprobsResult: undefined,
+        urlContextMetadata: undefined,
       });
     }
 
@@ -333,36 +369,49 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
       usageMetadata: response.usage
         ? {
             promptTokenCount: response.usage.prompt_tokens,
+            cachedContentTokenCount: 0,
             candidatesTokenCount: response.usage.completion_tokens,
+            toolUsePromptTokenCount: 0,
+            thoughtsTokenCount: 0,
             totalTokenCount: response.usage.total_tokens,
+            promptTokensDetails: [],
+            cacheTokensDetails: [],
+            candidatesTokensDetails: [],
+            toolUsePromptTokensDetails: [],
           }
         : undefined,
       modelVersion: response.model,
+      promptFeedback: { safetyRatings: [] },
     };
   }
 
-  chunkToOpenAI(
-    chunk: z.infer<typeof Gemini.API.StreamGenerateContentResponseSchema>,
-  ): OpenAI.Chat.ChatCompletionChunk {
-    const choices: OpenAI.Chat.ChatCompletionChunk["choices"] = [];
+  chunkToOpenAI(chunk: GenerateContentResponse): OpenAiChunk {
+    const choices: OpenAiChunk["choices"] = [];
 
-    if (chunk.candidates) {
-      for (const candidate of chunk.candidates) {
-        if (candidate.content) {
-          const messages = this.contentsToOpenAIMessages([candidate.content]);
-          const delta = messages[0] || {};
+    for (const candidate of chunk.candidates) {
+      if (candidate.content) {
+        const messages = this.contentsToOpenAIMessages([candidate.content]);
+        const message = messages[0];
 
-          choices.push({
-            index: candidate.index || 0,
-            delta: {
-              role: delta.role,
-              content: delta.content,
-              tool_calls: delta.tool_calls,
-            },
-            finish_reason: this.mapFinishReason(candidate.finishReason),
-            logprobs: null,
-          });
+        const delta: OpenAiChunk["choices"][number]["delta"] = {};
+        if (message) {
+          if (message.role === "assistant" || message.role === "user" || message.role === "system" || message.role === "developer" || message.role === "tool") {
+            delta.role = message.role;
+          }
+          if (message.content) {
+            delta.content = message.content;
+          }
+          if ("tool_calls" in message && message.tool_calls) {
+            delta.tool_calls = message.tool_calls;
+          }
         }
+
+        choices.push({
+          index: candidate.index || 0,
+          delta,
+          finish_reason: this.mapFinishReason(candidate.finishReason) || null,
+          logprobs: null,
+        });
       }
     }
 
@@ -375,50 +424,7 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
     };
   }
 
-  chunkFromOpenAI(
-    chunk: OpenAI.Chat.ChatCompletionChunk,
-  ): z.infer<typeof Gemini.API.StreamGenerateContentResponseSchema> {
-    const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
-
-    for (const choice of chunk.choices) {
-      const parts: z.infer<typeof Gemini.Messages.PartSchema>[] = [];
-
-      if (choice.delta.content) {
-        parts.push({ text: choice.delta.content });
-      }
-
-      if (choice.delta.tool_calls) {
-        for (const toolCall of choice.delta.tool_calls) {
-          parts.push({
-            functionCall: {
-              name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
-            },
-          });
-        }
-      }
-
-      if (parts.length > 0) {
-        candidates.push({
-          content: {
-            role: "model",
-            parts,
-          },
-          finishReason: this.mapFinishReasonToGemini(choice.finish_reason),
-          index: choice.index,
-        });
-      }
-    }
-
-    return {
-      candidates,
-      modelVersion: chunk.model,
-    };
-  }
-
-  private mapFinishReason(reason?: string): string | null {
-    if (!reason) return null;
-
+  private mapFinishReason(reason?: GeminiFinishReason): OpenAiFinishReason {
     switch (reason) {
       case "STOP":
         return "stop";
@@ -432,17 +438,8 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
   }
 
   private mapFinishReasonToGemini(
-    reason: string | null,
-  ):
-    | "FINISH_REASON_UNSPECIFIED"
-    | "STOP"
-    | "MAX_TOKENS"
-    | "SAFETY"
-    | "RECITATION"
-    | "OTHER"
-    | undefined {
-    if (!reason) return undefined;
-
+    reason: OpenAiFinishReason,
+  ): GeminiFinishReason {
     switch (reason) {
       case "stop":
         return "STOP";

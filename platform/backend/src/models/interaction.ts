@@ -22,10 +22,11 @@ class InteractionModel {
   }
 
   static async findAll(): Promise<Interaction[]> {
-    return db
+    const rows = await db
       .select()
       .from(schema.interactionsTable)
       .orderBy(desc(schema.interactionsTable.createdAt));
+    return rows as Interaction[];
   }
 
   /**
@@ -48,7 +49,7 @@ class InteractionModel {
       db.select({ total: count() }).from(schema.interactionsTable),
     ]);
 
-    return createPaginatedResult(data, Number(total), pagination);
+    return createPaginatedResult(data as Interaction[], Number(total), pagination);
   }
 
   /**

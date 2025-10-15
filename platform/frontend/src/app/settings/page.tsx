@@ -363,7 +363,7 @@ export default function SettingsPage() {
                     here
                   </a>{" "}
                   is a GH issue ), meanwhile please make sure that your agent
-                  uses
+                  uses{" "}
                   <CodeText className="text-xs">/chat/completions</CodeText>,{" "}
                   check{" "}
                   <a

@@ -85,7 +85,7 @@ class InteractionModel {
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.id, id));
 
-    return interaction as Interaction | null;
+    return (interaction as Interaction) || null;
   }
 
   static async getAllInteractionsForAgent(

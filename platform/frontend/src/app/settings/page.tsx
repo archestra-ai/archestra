@@ -344,13 +344,6 @@ export default function SettingsPage() {
               </p>
               <div className="border-t pt-6">
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
-                <p className="text-sm mb-3">
-                  This value is configurable via the{" "}
-                  <CodeText className="text-xs">
-                    ARCHESTRA_API_BASE_URL
-                  </CodeText>{" "}
-                  environment variable
-                </p>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Provider:</span>
@@ -383,44 +376,47 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {selectedProvider === "openai" && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    OpenAI provides{" "}
-                    <CodeText className="text-xs">/chat/completions</CodeText>{" "}
-                    and <CodeText className="text-xs">/responses</CodeText>{" "}
-                    API's. Archestra doesn't support{" "}
-                    <CodeText className="text-xs">/responses</CodeText> yet.
-                    We're working on it (
-                    <a
-                      href="https://github.com/archestra-ai/archestra/issues/720"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500"
-                    >
-                      here
-                    </a>{" "}
-                    is a GH issue ), meanwhile please make sure that your agent
-                    uses{" "}
-                    <CodeText className="text-xs">/chat/completions</CodeText>,{" "}
-                    check{" "}
-                    <a
-                      href="https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500"
-                    >
-                      this
-                    </a>{" "}
-                    for an example
-                  </p>
+                  <>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      OpenAI provides{" "}
+                      <CodeText className="text-xs">/chat/completions</CodeText>{" "}
+                      and <CodeText className="text-xs">/responses</CodeText>{" "}
+                      API's. Archestra doesn't support{" "}
+                      <CodeText className="text-xs">/responses</CodeText> yet.
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      We're working on it (
+                      <a
+                        href="https://github.com/archestra-ai/archestra/issues/720"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500"
+                      >
+                        GitHub issue
+                      </a>
+                      ), meanwhile please make sure that your agent uses{" "}
+                      <CodeText className="text-xs">/chat/completions</CodeText>
+                      , check{" "}
+                      <a
+                        href="https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500"
+                      >
+                        this
+                      </a>{" "}
+                      for an example
+                    </p>
+                  </>
                 )}
                 {selectedProvider === "gemini" && (
                   <>
-                    <p className="text-sm mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Configure your agents to use this endpoint instead of
                       directly calling Google Gemini (default should be
                       https://generativelanguage.googleapis.com/v1/)
                     </p>
-                    <p className="text-sm mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Archestra supports{" "}
                       <a
                         href="https://ai.google.dev/api/generate-content"
@@ -434,6 +430,22 @@ export default function SettingsPage() {
                     </p>
                   </>
                 )}
+                <p className="text-sm text-muted-foreground mt-3">
+                  The host/port is configurable via the{" "}
+                  <CodeText className="text-xs">
+                    ARCHESTRA_API_BASE_URL
+                  </CodeText>{" "}
+                  environment variable. See{" "}
+                  <a
+                    href="https://www.archestra.ai/docs/platform-deployment#environment-variables"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500"
+                  >
+                    here
+                  </a>{" "}
+                  for more details.
+                </p>
               </div>
 
               <div className="border-t pt-6">

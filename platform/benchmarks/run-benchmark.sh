@@ -86,7 +86,6 @@ run_ab_test() {
 
     # Extract key metrics
     local requests_per_sec=$(grep "Requests per second" "$output_file" | awk '{print $4}')
-    local time_per_req=$(grep "Time per request" "$output_file" | grep -v concurrent | awk '{print $4}')
     local mean_time=$(grep "Time per request" "$output_file" | grep -v concurrent | awk '{print $4}')
     local p50=$(grep " 50%" "$output_file" | awk '{print $2}')
     local p95=$(grep " 95%" "$output_file" | awk '{print $2}')

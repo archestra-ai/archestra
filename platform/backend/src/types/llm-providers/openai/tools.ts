@@ -136,9 +136,7 @@ export const ToolSchema = z
 
 export const ToolChoiceOptionSchema = z
   .union([
-    z.enum(["none"]),
-    z.enum(["auto"]),
-    z.enum(["required"]),
+    z.enum(["none", "auto", "required"]),
     AllowedToolChoiceSchema,
     NamedToolChoiceSchema,
     CustomToolSchema,

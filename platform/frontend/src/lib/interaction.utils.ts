@@ -117,8 +117,13 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     const toolsRefused = new Set<string>();
     for (const message of this.request.messages) {
       if (message.role === "assistant") {
-        if (message.refusal && message.refusal.length > 0) {
-          const toolName = message.refusal.match(
+        /**
+         * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+         * (ie. there shouldn't be | unknown in the codegen'd type here..)
+         */
+        const refusal = message.refusal as string;
+        if (refusal && refusal.length > 0) {
+          const toolName = refusal.match(
             /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
           )?.[1];
           if (toolName) {
@@ -129,8 +134,13 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     }
 
     for (const message of this.response.choices) {
-      if (message.message.refusal && message.message.refusal.length > 0) {
-        const toolName = message.message.refusal.match(
+      /**
+       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+       * (ie. there shouldn't be | unknown in the codegen'd type here..)
+       */
+      const refusal = message.message.refusal as string;
+      if (refusal && refusal.length > 0) {
+        const toolName = refusal.match(
           /<archestra-tool-name>(.*?)<\/archestra-tool-name>/,
         )?.[1];
         if (toolName) {
@@ -158,20 +168,35 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    return this.response.choices[0]?.message?.content ?? "";
+    /**
+     * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+     * (ie. there shouldn't be | unknown in the codegen'd type here..)
+     */
+    const content = this.response.choices[0]?.message?.content as string;
+    return content ?? "";
   }
 
   getToolRefusedCount(): number {
     let count = 0;
     for (const message of this.request.messages) {
       if (message.role === "assistant") {
-        if (message.refusal && message.refusal.length > 0) {
+        /**
+         * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+         * (ie. there shouldn't be | unknown in the codegen'd type here..)
+         */
+        const refusal = message.refusal as string;
+        if (refusal && refusal.length > 0) {
           count++;
         }
       }
     }
     for (const message of this.response.choices) {
-      if (message.message.refusal && message.message.refusal.length > 0) {
+      /**
+       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+       * (ie. there shouldn't be | unknown in the codegen'd type here..)
+       */
+      const refusal = message.message.refusal as string;
+      if (refusal && refusal.length > 0) {
         count++;
       }
     }
@@ -183,77 +208,78 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
       | OpenAiChatCompletionRequest["messages"][number]
       | OpenAiChatCompletionResponse["choices"][number]["message"],
   ): PartialUIMessage {
-    const content = message.content;
-
-    // Map content to UIMessage parts
     const parts: PartialUIMessage["parts"] = [];
+    const { content, role } = message;
 
-    if (message.role === "assistant" && "tool_calls" in message) {
-      // Handle assistant messages with tool calls
-      const toolCalls = message.tool_calls;
+    if (role === "assistant") {
+      const { tool_calls: toolCalls } = message;
+      /**
+       * TODO: remove this as string assertion once we figure out the openapi/zod weirdness
+       * (ie. there shouldn't be | unknown in the codegen'd type here..)
+       */
+      const refusal = message.refusal as string;
 
-      // Add text content if present
-      if (typeof content === "string" && content) {
-        parts.push({ type: "text", text: content });
-      } else if (Array.isArray(content)) {
-        for (const part of content) {
-          if (part.type === "text") {
-            parts.push({ type: "text", text: part.text });
-          } else if (part.type === "refusal") {
-            parts.push({ type: "text", text: part.refusal });
-          }
-        }
-      }
-
-      // Add tool invocation parts
       if (toolCalls) {
-        for (const toolCall of toolCalls) {
-          if (toolCall.type === "function") {
-            parts.push({
-              type: "dynamic-tool",
-              toolName: toolCall.function.name,
-              toolCallId: toolCall.id,
-              state: "input-available",
-              input: JSON.parse(toolCall.function.arguments),
-            });
-          } else if (toolCall.type === "custom") {
-            parts.push({
-              type: "dynamic-tool",
-              toolName: toolCall.custom.name,
-              toolCallId: toolCall.id,
-              state: "input-available",
-              input: JSON.parse(toolCall.custom.input),
-            });
+        // Handle assistant messages with tool calls
+
+        // Add text content if present
+        if (typeof content === "string" && content) {
+          parts.push({ type: "text", text: content });
+        } else if (Array.isArray(content)) {
+          for (const part of content) {
+            if (part.type === "text") {
+              parts.push({ type: "text", text: part.text });
+            } else if (part.type === "refusal") {
+              parts.push({ type: "text", text: part.refusal });
+            }
           }
         }
-      }
-    }
-    // Handle assistant messages with refusals (but no tool calls)
-    else if (
-      message.role === "assistant" &&
-      "refusal" in message &&
-      message.refusal
-    ) {
-      // Parse the refusal message to extract tool information
-      const refusalInfo = parseRefusalMessage(message.refusal);
 
-      // Check if this is a tool invocation policy block
-      if (refusalInfo.toolName) {
-        // Create a special blocked tool part
-        parts.push({
-          type: "blocked-tool",
-          toolName: refusalInfo.toolName,
-          toolArguments: refusalInfo.toolArguments,
-          reason: refusalInfo.reason || "Tool invocation blocked by policy",
-          fullRefusal: message.refusal,
-        });
-      } else {
-        // Regular refusal text
-        parts.push({ type: "text", text: message.refusal });
+        // Add tool invocation parts
+        if (toolCalls) {
+          for (const toolCall of toolCalls) {
+            if (toolCall.type === "function") {
+              parts.push({
+                type: "dynamic-tool",
+                toolName: toolCall.function.name,
+                toolCallId: toolCall.id,
+                state: "input-available",
+                input: JSON.parse(toolCall.function.arguments),
+              });
+            } else if (toolCall.type === "custom") {
+              parts.push({
+                type: "dynamic-tool",
+                toolName: toolCall.custom.name,
+                toolCallId: toolCall.id,
+                state: "input-available",
+                input: JSON.parse(toolCall.custom.input),
+              });
+            }
+          }
+        }
+      } else if (refusal) {
+        // Handle assistant messages with refusals (but no tool calls)
+
+        // Parse the refusal message to extract tool information
+        const refusalInfo = parseRefusalMessage(refusal);
+
+        // Check if this is a tool invocation policy block
+        if (refusalInfo.toolName) {
+          // Create a special blocked tool part
+          parts.push({
+            type: "blocked-tool",
+            toolName: refusalInfo.toolName,
+            toolArguments: refusalInfo.toolArguments,
+            reason: refusalInfo.reason || "Tool invocation blocked by policy",
+            fullRefusal: refusal,
+          });
+        } else {
+          // Regular refusal text
+          parts.push({ type: "text", text: refusal });
+        }
       }
-    }
-    // Handle tool response messages
-    else if (message.role === "tool") {
+    } else if (message.role === "tool") {
+      // Handle tool response messages
       const toolContent = message.content;
       const toolCallId = message.tool_call_id;
 
@@ -276,9 +302,8 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
         input: {},
         output,
       });
-    }
-    // Handle regular content
-    else {
+    } else {
+      // Handle regular content
       if (typeof content === "string") {
         parts.push({ type: "text", text: content });
       } else if (Array.isArray(content)) {
@@ -300,17 +325,20 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     }
 
     // Map role to UIMessage role (only system, user, assistant are allowed)
-    let role: "system" | "user" | "assistant";
-    if (message.role === "developer" || message.role === "system") {
-      role = "system";
-    } else if (message.role === "function" || message.role === "tool") {
-      role = "assistant";
-    } else {
-      role = message.role;
-    }
+    const openAiRoleToUIMessageRoleMap: Record<
+      OpenAiChatCompletionRequest["messages"][number]["role"],
+      PartialUIMessage["role"]
+    > = {
+      developer: "system",
+      system: "system",
+      function: "assistant",
+      tool: "assistant",
+      user: "user",
+      assistant: "assistant",
+    };
 
     return {
-      role,
+      role: openAiRoleToUIMessageRoleMap[role],
       parts,
     };
   }
@@ -464,7 +492,7 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   private mapToUiMessage(
     _content:
       | GeminiGenerateContentRequest["contents"][number]
-      | GeminiGenerateContentResponse["candidates"],
+      | GeminiGenerateContentResponse["candidates"][number],
   ): PartialUIMessage {
     return {
       role: "assistant",

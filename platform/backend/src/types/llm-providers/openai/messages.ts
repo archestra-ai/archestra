@@ -205,7 +205,7 @@ const FunctionMessageParamSchema = z
   );
 
 export const MessageParamSchema = z
-  .discriminatedUnion("role", [
+  .union([
     DeveloperMessageParamSchema,
     SystemMessageParamSchema,
     UserMessageParamSchema,

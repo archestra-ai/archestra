@@ -342,7 +342,7 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
   }
 
   chunkToOpenAI(
-    chunk: z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema>,
+    chunk: z.infer<typeof Gemini.API.StreamGenerateContentResponseSchema>,
   ): OpenAI.Chat.ChatCompletionChunk {
     const choices: OpenAI.Chat.ChatCompletionChunk["choices"] = [];
 
@@ -377,7 +377,7 @@ export class GeminiGenerateContentTransformer implements ProviderTransformer {
 
   chunkFromOpenAI(
     chunk: OpenAI.Chat.ChatCompletionChunk,
-  ): z.infer<typeof Gemini.API.StreamGenerateContentChunkSchema> {
+  ): z.infer<typeof Gemini.API.StreamGenerateContentResponseSchema> {
     const candidates: z.infer<typeof Gemini.API.CandidateSchema>[] = [];
 
     for (const choice of chunk.choices) {

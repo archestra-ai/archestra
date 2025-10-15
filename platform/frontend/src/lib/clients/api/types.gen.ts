@@ -359,146 +359,544 @@ export type OpenAiChatCompletionResponseInput = {
 };
 
 export type GeminiGenerateContentRequestInput = {
+    /**
+     * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
+     */
     contents: Array<{
         role: 'user' | 'model' | 'function';
         parts: Array<{
-            text: string;
-        } | {
-            inlineData: {
-                mimeType: string;
-                data: string;
-            };
-        } | {
-            fileData: {
-                mimeType: string;
-                fileUri: string;
-            };
-        } | {
-            functionCall: {
-                name: string;
-                args: {
-                    [key: string]: unknown;
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            /**
+             * https://ai.google.dev/api/caching#Part
+             */
+            data: {
+                text: string;
+            } | {
+                inlineData: {
+                    /**
+                     * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
+                     */
+                    mimeType: string;
+                    /**
+                     * Raw bytes for media formats. Base64 encoded
+                     */
+                    data: string;
+                };
+            } | {
+                functionCall: {
+                    /**
+                     * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
+                     */
+                    id?: string;
+                    name: string;
+                    /**
+                     * The function parameters and values in JSON object format.
+                     */
+                    args?: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    /**
+                     * The id of the function call this response is for. Populated by the client to match the corresponding function call id
+                     */
+                    id?: string;
+                    /**
+                     * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                     */
+                    name: string;
+                    /**
+                     * The function response in JSON object format.
+                     */
+                    response: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
+                     */
+                    willContinue?: boolean;
+                    /**
+                     *
+                     * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
+                     *
+                     * https://ai.google.dev/api/caching#Scheduling
+                     *
+                     */
+                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                };
+            } | {
+                fileData: {
+                    /**
+                     * The IANA standard MIME type of the source data
+                     */
+                    mimeType?: string;
+                    /**
+                     * URI
+                     */
+                    fileUri: string;
+                };
+            } | {
+                /**
+                 *
+                 * Programming language of the code
+                 *
+                 * https://ai.google.dev/api/caching#Language
+                 *
+                 */
+                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                executableCode: {
+                    /**
+                     * The code to be executed
+                     */
+                    code: string;
+                };
+            } | {
+                codeExecutionResult: {
+                    /**
+                     *
+                     * Outcome of the code execution.
+                     *
+                     * https://ai.google.dev/api/caching#Outcome
+                     *
+                     */
+                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                    /**
+                     * Contains stdout when code execution is successful, stderr or other description otherwise
+                     */
+                    output?: string;
                 };
             };
-        } | {
-            functionResponse: {
-                name: string;
-                response: {
-                    [key: string]: unknown;
-                };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
             };
         }>;
     }>;
+    /**
+     * A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.
+     */
     tools?: Array<{
         functionDeclarations: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
             name: string;
-            description?: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
             parameters?: {
-                type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
-                format?: string;
-                description?: string;
-                nullable?: boolean;
-                enum?: Array<string>;
-                maxItems?: number;
-                minItems?: number;
-                properties?: {
-                    [key: string]: unknown;
-                };
-                required?: Array<string>;
-                items?: unknown;
+                [key: string]: unknown;
             };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
         }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
     }>;
+    /**
+     * Tool configuration for any Tool specified in the request.
+     */
     toolConfig?: {
         functionCallingConfig: {
             mode: 'AUTO' | 'ANY' | 'NONE';
             allowedFunctionNames?: Array<string>;
         };
     };
+    /**
+     * A list of unique SafetySetting instances for blocking unsafe content.
+     */
     safetySettings?: Array<{
-        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
-        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        /**
+         *
+         * The category for this setting
+         *
+         * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+         *
+         */
+        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+        /**
+         *
+         * Controls the probability threshold at which harm is blocked.
+         *
+         * https://ai.google.dev/api/generate-content#HarmBlockThreshold
+         *
+         */
+        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_LOW_AND_ABOVE' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_NONE' | 'OFF';
     }>;
+    /**
+     * Developer set system instruction(s). Currently, text only.
+     */
     systemInstruction?: {
         parts: Array<{
             text: string;
         }>;
     };
+    /**
+     * https://ai.google.dev/api/generate-content#v1beta.GenerationConfig
+     */
     generationConfig?: {
-        temperature?: number;
-        topP?: number;
-        topK?: number;
-        candidateCount?: number;
-        maxOutputTokens?: number;
         stopSequences?: Array<string>;
         responseMimeType?: string;
         responseSchema?: unknown;
+        _responseJsonSchema?: unknown;
+        responseJsonSchema?: unknown;
+        responseModalities?: Array<'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO'>;
+        candidateCount?: number;
+        maxOutputTokens?: number;
+        temperature?: number;
+        topP?: number;
+        topK?: number;
+        seed?: number;
+        presencePenalty?: number;
+        frequencyPenalty?: number;
+        responseLogprobs?: boolean;
+        logProbs?: number;
+        enableEnhancedCivicAnswers?: boolean;
+        speechConfig?: unknown;
+        thinkingConfig?: unknown;
+        imageConfig?: unknown;
+        /**
+         * https://ai.google.dev/api/generate-content#MediaResolution
+         */
+        mediaResolution?: 'MEDIA_RESOLUTION_UNSPECIFIED' | 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
     };
+    /**
+     * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
+     */
+    cachedContent?: string;
 };
 
 export type GeminiGenerateContentResponseInput = {
-    candidates?: Array<{
-        content?: {
+    /**
+     * Candidate responses from the model
+     */
+    candidates: Array<{
+        /**
+         *
+         * The base structured datatype containing multi-part content of a message.
+         *
+         * A Content includes a role field designating the producer of the Content and a parts field containing multi-part data that contains the content of the message turn.
+         *
+         * https://ai.google.dev/api/caching#Content
+         *
+         */
+        content: {
             role: 'user' | 'model' | 'function';
             parts: Array<{
-                text: string;
-            } | {
-                inlineData: {
-                    mimeType: string;
-                    data: string;
-                };
-            } | {
-                fileData: {
-                    mimeType: string;
-                    fileUri: string;
-                };
-            } | {
-                functionCall: {
-                    name: string;
-                    args: {
-                        [key: string]: unknown;
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                /**
+                 * https://ai.google.dev/api/caching#Part
+                 */
+                data: {
+                    text: string;
+                } | {
+                    inlineData: {
+                        /**
+                         * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
+                         */
+                        mimeType: string;
+                        /**
+                         * Raw bytes for media formats. Base64 encoded
+                         */
+                        data: string;
+                    };
+                } | {
+                    functionCall: {
+                        /**
+                         * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
+                         */
+                        id?: string;
+                        name: string;
+                        /**
+                         * The function parameters and values in JSON object format.
+                         */
+                        args?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        /**
+                         * The id of the function call this response is for. Populated by the client to match the corresponding function call id
+                         */
+                        id?: string;
+                        /**
+                         * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                         */
+                        name: string;
+                        /**
+                         * The function response in JSON object format.
+                         */
+                        response: {
+                            [key: string]: unknown;
+                        };
+                        /**
+                         * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
+                         */
+                        willContinue?: boolean;
+                        /**
+                         *
+                         * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
+                         *
+                         * https://ai.google.dev/api/caching#Scheduling
+                         *
+                         */
+                        scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                    };
+                } | {
+                    fileData: {
+                        /**
+                         * The IANA standard MIME type of the source data
+                         */
+                        mimeType?: string;
+                        /**
+                         * URI
+                         */
+                        fileUri: string;
+                    };
+                } | {
+                    /**
+                     *
+                     * Programming language of the code
+                     *
+                     * https://ai.google.dev/api/caching#Language
+                     *
+                     */
+                    language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                    executableCode: {
+                        /**
+                         * The code to be executed
+                         */
+                        code: string;
+                    };
+                } | {
+                    codeExecutionResult: {
+                        /**
+                         *
+                         * Outcome of the code execution.
+                         *
+                         * https://ai.google.dev/api/caching#Outcome
+                         *
+                         */
+                        outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                        /**
+                         * Contains stdout when code execution is successful, stderr or other description otherwise
+                         */
+                        output?: string;
                     };
                 };
-            } | {
-                functionResponse: {
-                    name: string;
-                    response: {
-                        [key: string]: unknown;
-                    };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
                 };
             }>;
         };
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
-        index?: number;
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+        /**
+         *
+         * The reason why the model stopped generating tokens.
+         *
+         * If empty, the model has not stopped generating tokens.
+         *
+         * https://ai.google.dev/api/generate-content#FinishReason
+         *
+         */
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        safetyRatings: Array<{
+            /**
+             *
+             * The category for this setting
+             *
+             * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+             *
+             */
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+            /**
+             * https://ai.google.dev/api/generate-content#HarmProbability
+             */
             probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
+            /**
+             * Was this content blocked because of this rating?
+             */
+            blocked: boolean;
         }>;
-        citationMetadata?: {
-            citations?: Array<{
+        /**
+         * https://ai.google.dev/api/generate-content#citationmetadata
+         */
+        citationMetadata: {
+            citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
                 uri?: string;
                 license?: string;
             }>;
         };
-        tokenCount?: number;
+        tokenCount: number;
+        groundingAttributions: Array<unknown>;
+        groundingMetadata: unknown;
+        avgLogprobs: number;
+        logprobsResult: unknown;
+        urlContextMetadata: unknown;
+        /**
+         * Index of the candidate in the list of response candidates.
+         */
+        index: number;
+        /**
+         * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
+         */
+        finishMessage?: string;
     }>;
-    promptFeedback?: {
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+    /**
+     * Returns the prompt's feedback related to the content filters
+     */
+    promptFeedback: {
+        /**
+         * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
+         */
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
+        safetyRatings: Array<{
+            /**
+             *
+             * The category for this setting
+             *
+             * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+             *
+             */
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+            /**
+             * https://ai.google.dev/api/generate-content#HarmProbability
+             */
             probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
+            /**
+             * Was this content blocked because of this rating?
+             */
+            blocked: boolean;
         }>;
     };
-    usageMetadata?: {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-        totalTokenCount?: number;
+    /**
+     * Metadata on the generation requests' token usage
+     */
+    usageMetadata: {
+        promptTokenCount: number;
+        cachedContentTokenCount: number;
+        candidatesTokenCount: number;
+        toolUsePromptTokenCount: number;
+        thoughtsTokenCount: number;
+        totalTokenCount: number;
+        promptTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        cacheTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        candidatesTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        toolUsePromptTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
     };
-    modelVersion?: string;
+    /**
+     * The model version used to generate the response.
+     */
+    modelVersion: string;
 };
 
 export type SupportedProviders = 'openai' | 'gemini';
@@ -856,146 +1254,544 @@ export type OpenAiChatCompletionResponse = {
 };
 
 export type GeminiGenerateContentRequest = {
+    /**
+     * The content of the current conversation with the model. For single-turn queries, this is a single instance. For multi-turn queries like chat, this is a repeated field that contains the conversation history and the latest request
+     */
     contents: Array<{
         role: 'user' | 'model' | 'function';
         parts: Array<{
-            text: string;
-        } | {
-            inlineData: {
-                mimeType: string;
-                data: string;
-            };
-        } | {
-            fileData: {
-                mimeType: string;
-                fileUri: string;
-            };
-        } | {
-            functionCall: {
-                name: string;
-                args: {
-                    [key: string]: unknown;
+            /**
+             * Indicates if the part is thought from the model
+             */
+            thought?: boolean;
+            /**
+             * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+             */
+            thoughtSignature?: string;
+            /**
+             * https://ai.google.dev/api/caching#Part
+             */
+            data: {
+                text: string;
+            } | {
+                inlineData: {
+                    /**
+                     * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
+                     */
+                    mimeType: string;
+                    /**
+                     * Raw bytes for media formats. Base64 encoded
+                     */
+                    data: string;
+                };
+            } | {
+                functionCall: {
+                    /**
+                     * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
+                     */
+                    id?: string;
+                    name: string;
+                    /**
+                     * The function parameters and values in JSON object format.
+                     */
+                    args?: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | {
+                functionResponse: {
+                    /**
+                     * The id of the function call this response is for. Populated by the client to match the corresponding function call id
+                     */
+                    id?: string;
+                    /**
+                     * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                     */
+                    name: string;
+                    /**
+                     * The function response in JSON object format.
+                     */
+                    response: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
+                     */
+                    willContinue?: boolean;
+                    /**
+                     *
+                     * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
+                     *
+                     * https://ai.google.dev/api/caching#Scheduling
+                     *
+                     */
+                    scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                };
+            } | {
+                fileData: {
+                    /**
+                     * The IANA standard MIME type of the source data
+                     */
+                    mimeType?: string;
+                    /**
+                     * URI
+                     */
+                    fileUri: string;
+                };
+            } | {
+                /**
+                 *
+                 * Programming language of the code
+                 *
+                 * https://ai.google.dev/api/caching#Language
+                 *
+                 */
+                language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                executableCode: {
+                    /**
+                     * The code to be executed
+                     */
+                    code: string;
+                };
+            } | {
+                codeExecutionResult: {
+                    /**
+                     *
+                     * Outcome of the code execution.
+                     *
+                     * https://ai.google.dev/api/caching#Outcome
+                     *
+                     */
+                    outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                    /**
+                     * Contains stdout when code execution is successful, stderr or other description otherwise
+                     */
+                    output?: string;
                 };
             };
-        } | {
-            functionResponse: {
-                name: string;
-                response: {
-                    [key: string]: unknown;
-                };
+            /**
+             * https://ai.google.dev/api/caching#VideoMetadata
+             */
+            metadata: {
+                /**
+                 * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                startOffset?: string;
+                /**
+                 * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                 */
+                endOffset?: string;
+                /**
+                 * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                 */
+                fps?: number;
             };
         }>;
     }>;
+    /**
+     * A list of Tools the Model may use to generate the next response. A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the Model. Supported Tools are Function and codeExecution. Refer to the Function calling and the Code execution guides to learn more.
+     */
     tools?: Array<{
         functionDeclarations: Array<{
+            /**
+             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             */
             name: string;
-            description?: string;
+            /**
+             * A brief description of the function.
+             */
+            description: string;
+            /**
+             * https://ai.google.dev/api/caching#Behavior
+             */
+            behavior?: 'UNSPECIFIED' | 'BLOCKING' | 'NON_BLOCKING';
+            /**
+             * Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.
+             */
             parameters?: {
-                type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' | 'NULL';
-                format?: string;
-                description?: string;
-                nullable?: boolean;
-                enum?: Array<string>;
-                maxItems?: number;
-                minItems?: number;
-                properties?: {
-                    [key: string]: unknown;
-                };
-                required?: Array<string>;
-                items?: unknown;
+                [key: string]: unknown;
             };
+            parametersJsonSchema?: unknown;
+            response?: unknown;
+            responseJsonSchema?: unknown;
         }>;
+        /**
+         * https://ai.google.dev/api/caching#GoogleSearchRetrieval
+         */
+        googleSearchRetrieval: {
+            /**
+             *
+             * Specifies the dynamic retrieval configuration for the given source.
+             *
+             * https://ai.google.dev/api/caching#DynamicRetrievalConfig
+             *
+             */
+            dynamicRetrievalConfig: {
+                /**
+                 * https://ai.google.dev/api/caching#Mode
+                 */
+                mode: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
+                dynamicThreshold: number;
+            };
+        };
+        codeExecution?: unknown;
+        googleSearch?: unknown;
+        urlContext?: unknown;
     }>;
+    /**
+     * Tool configuration for any Tool specified in the request.
+     */
     toolConfig?: {
         functionCallingConfig: {
             mode: 'AUTO' | 'ANY' | 'NONE';
             allowedFunctionNames?: Array<string>;
         };
     };
+    /**
+     * A list of unique SafetySetting instances for blocking unsafe content.
+     */
     safetySettings?: Array<{
-        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
-        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
+        /**
+         *
+         * The category for this setting
+         *
+         * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+         *
+         */
+        category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+        /**
+         *
+         * Controls the probability threshold at which harm is blocked.
+         *
+         * https://ai.google.dev/api/generate-content#HarmBlockThreshold
+         *
+         */
+        threshold: 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' | 'BLOCK_LOW_AND_ABOVE' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_NONE' | 'OFF';
     }>;
+    /**
+     * Developer set system instruction(s). Currently, text only.
+     */
     systemInstruction?: {
         parts: Array<{
             text: string;
         }>;
     };
+    /**
+     * https://ai.google.dev/api/generate-content#v1beta.GenerationConfig
+     */
     generationConfig?: {
-        temperature?: number;
-        topP?: number;
-        topK?: number;
-        candidateCount?: number;
-        maxOutputTokens?: number;
         stopSequences?: Array<string>;
         responseMimeType?: string;
         responseSchema?: unknown;
+        _responseJsonSchema?: unknown;
+        responseJsonSchema?: unknown;
+        responseModalities?: Array<'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO'>;
+        candidateCount?: number;
+        maxOutputTokens?: number;
+        temperature?: number;
+        topP?: number;
+        topK?: number;
+        seed?: number;
+        presencePenalty?: number;
+        frequencyPenalty?: number;
+        responseLogprobs?: boolean;
+        logProbs?: number;
+        enableEnhancedCivicAnswers?: boolean;
+        speechConfig?: unknown;
+        thinkingConfig?: unknown;
+        imageConfig?: unknown;
+        /**
+         * https://ai.google.dev/api/generate-content#MediaResolution
+         */
+        mediaResolution?: 'MEDIA_RESOLUTION_UNSPECIFIED' | 'MEDIA_RESOLUTION_LOW' | 'MEDIA_RESOLUTION_MEDIUM' | 'MEDIA_RESOLUTION_HIGH';
     };
+    /**
+     * The name of the content cached to use as context to serve the prediction. Format: cachedContents/{cachedContent}
+     */
+    cachedContent?: string;
 };
 
 export type GeminiGenerateContentResponse = {
-    candidates?: Array<{
-        content?: {
+    /**
+     * Candidate responses from the model
+     */
+    candidates: Array<{
+        /**
+         *
+         * The base structured datatype containing multi-part content of a message.
+         *
+         * A Content includes a role field designating the producer of the Content and a parts field containing multi-part data that contains the content of the message turn.
+         *
+         * https://ai.google.dev/api/caching#Content
+         *
+         */
+        content: {
             role: 'user' | 'model' | 'function';
             parts: Array<{
-                text: string;
-            } | {
-                inlineData: {
-                    mimeType: string;
-                    data: string;
-                };
-            } | {
-                fileData: {
-                    mimeType: string;
-                    fileUri: string;
-                };
-            } | {
-                functionCall: {
-                    name: string;
-                    args: {
-                        [key: string]: unknown;
+                /**
+                 * Indicates if the part is thought from the model
+                 */
+                thought?: boolean;
+                /**
+                 * An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string
+                 */
+                thoughtSignature?: string;
+                /**
+                 * https://ai.google.dev/api/caching#Part
+                 */
+                data: {
+                    text: string;
+                } | {
+                    inlineData: {
+                        /**
+                         * The IANA standard MIME type of the source data. Examples: - image/png - image/jpeg If an unsupported MIME type is provided, an error will be returned
+                         */
+                        mimeType: string;
+                        /**
+                         * Raw bytes for media formats. Base64 encoded
+                         */
+                        data: string;
+                    };
+                } | {
+                    functionCall: {
+                        /**
+                         * Optional. The unique id of the function call. If populated, the client to execute the functionCall and return the response with the matching id.
+                         */
+                        id?: string;
+                        name: string;
+                        /**
+                         * The function parameters and values in JSON object format.
+                         */
+                        args?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                } | {
+                    functionResponse: {
+                        /**
+                         * The id of the function call this response is for. Populated by the client to match the corresponding function call id
+                         */
+                        id?: string;
+                        /**
+                         * The name of the function to call. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                         */
+                        name: string;
+                        /**
+                         * The function response in JSON object format.
+                         */
+                        response: {
+                            [key: string]: unknown;
+                        };
+                        /**
+                         * Signals that function call continues, and more responses will be returned, turning the function call into a generator. Is only applicable to NON_BLOCKING function calls, is ignored otherwise. If set to false, future responses will not be considered. It is allowed to return empty response with willContinue=False to signal that the function call is finished. This may still trigger the model generation. To avoid triggering the generation and finish the function call, additionally set scheduling to SILENT
+                         */
+                        willContinue?: boolean;
+                        /**
+                         *
+                         * Specifies how the response should be scheduled in the conversation. Only applicable to NON_BLOCKING function calls, is ignored otherwise. Defaults to WHEN_IDLE.
+                         *
+                         * https://ai.google.dev/api/caching#Scheduling
+                         *
+                         */
+                        scheduling?: 'SCHEDULING_UNSPECIFIED' | 'SILENT' | 'WHEN_IDLE' | 'INTERRUPT';
+                    };
+                } | {
+                    fileData: {
+                        /**
+                         * The IANA standard MIME type of the source data
+                         */
+                        mimeType?: string;
+                        /**
+                         * URI
+                         */
+                        fileUri: string;
+                    };
+                } | {
+                    /**
+                     *
+                     * Programming language of the code
+                     *
+                     * https://ai.google.dev/api/caching#Language
+                     *
+                     */
+                    language: 'LANGUAGE_UNSPECIFIED' | 'PYTHON';
+                    executableCode: {
+                        /**
+                         * The code to be executed
+                         */
+                        code: string;
+                    };
+                } | {
+                    codeExecutionResult: {
+                        /**
+                         *
+                         * Outcome of the code execution.
+                         *
+                         * https://ai.google.dev/api/caching#Outcome
+                         *
+                         */
+                        outcome: 'OUTCOME_UNSPECIFIED' | 'OUTCOME_OK' | 'OUTCOME_FAILED' | 'OUTCOME_DEADLINE_EXCEEDED';
+                        /**
+                         * Contains stdout when code execution is successful, stderr or other description otherwise
+                         */
+                        output?: string;
                     };
                 };
-            } | {
-                functionResponse: {
-                    name: string;
-                    response: {
-                        [key: string]: unknown;
-                    };
+                /**
+                 * https://ai.google.dev/api/caching#VideoMetadata
+                 */
+                metadata: {
+                    /**
+                     * The start offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    startOffset?: string;
+                    /**
+                     * The end offset of the video. A duration in seconds with up to nine fractional digits, ending with 's'. Example: '3.5s'
+                     */
+                    endOffset?: string;
+                    /**
+                     * The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]
+                     */
+                    fps?: number;
                 };
             }>;
         };
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'OTHER';
-        index?: number;
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+        /**
+         *
+         * The reason why the model stopped generating tokens.
+         *
+         * If empty, the model has not stopped generating tokens.
+         *
+         * https://ai.google.dev/api/generate-content#FinishReason
+         *
+         */
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        safetyRatings: Array<{
+            /**
+             *
+             * The category for this setting
+             *
+             * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+             *
+             */
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+            /**
+             * https://ai.google.dev/api/generate-content#HarmProbability
+             */
             probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
+            /**
+             * Was this content blocked because of this rating?
+             */
+            blocked: boolean;
         }>;
-        citationMetadata?: {
-            citations?: Array<{
+        /**
+         * https://ai.google.dev/api/generate-content#citationmetadata
+         */
+        citationMetadata: {
+            citationSources: Array<{
                 startIndex?: number;
                 endIndex?: number;
                 uri?: string;
                 license?: string;
             }>;
         };
-        tokenCount?: number;
+        tokenCount: number;
+        groundingAttributions: Array<unknown>;
+        groundingMetadata: unknown;
+        avgLogprobs: number;
+        logprobsResult: unknown;
+        urlContextMetadata: unknown;
+        /**
+         * Index of the candidate in the list of response candidates.
+         */
+        index: number;
+        /**
+         * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
+         */
+        finishMessage?: string;
     }>;
-    promptFeedback?: {
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT';
-        safetyRatings?: Array<{
-            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_DANGEROUS_CONTENT';
+    /**
+     * Returns the prompt's feedback related to the content filters
+     */
+    promptFeedback: {
+        /**
+         * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
+         */
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
+        safetyRatings: Array<{
+            /**
+             *
+             * The category for this setting
+             *
+             * https://ai.google.dev/api/generate-content#v1beta.HarmCategory
+             *
+             */
+            category: 'HARM_CATEGORY_UNSPECIFIED' | 'HARM_CATEGORY_DEROGATORY' | 'HARM_CATEGORY_TOXICITY' | 'HARM_CATEGORY_VIOLENCE' | 'HARM_CATEGORY_SEXUAL' | 'HARM_CATEGORY_MEDICAL' | 'HARM_CATEGORY_DANGEROUS' | 'HARM_CATEGORY_HARASSMENT' | 'HARM_CATEGORY_HATE_SPEECH' | 'HARM_CATEGORY_SEXUALLY_EXPLICIT' | 'HARM_CATEGORY_DANGEROUS_CONTENT' | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+            /**
+             * https://ai.google.dev/api/generate-content#HarmProbability
+             */
             probability: 'HARM_PROBABILITY_UNSPECIFIED' | 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
-            blocked?: boolean;
+            /**
+             * Was this content blocked because of this rating?
+             */
+            blocked: boolean;
         }>;
     };
-    usageMetadata?: {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-        totalTokenCount?: number;
+    /**
+     * Metadata on the generation requests' token usage
+     */
+    usageMetadata: {
+        promptTokenCount: number;
+        cachedContentTokenCount: number;
+        candidatesTokenCount: number;
+        toolUsePromptTokenCount: number;
+        thoughtsTokenCount: number;
+        totalTokenCount: number;
+        promptTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        cacheTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        candidatesTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
+        toolUsePromptTokensDetails: Array<{
+            /**
+             * https://ai.google.dev/api/generate-content#Modality
+             */
+            modality: 'MODALITY_UNSPECIFIED' | 'TEXT' | 'IMAGE' | 'AUDIO';
+            /**
+             * Number of tokens
+             */
+            tokenCount: number;
+        }>;
     };
-    modelVersion?: string;
+    /**
+     * The model version used to generate the response.
+     */
+    modelVersion: string;
 };
 
 export type GetOpenapiJsonData = {

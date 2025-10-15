@@ -1,64 +1,69 @@
 import { z } from "zod";
 
-/**
- * Schema Type for function parameters
- */
-export const SchemaTypeSchema = z.enum([
-  "STRING",
-  "NUMBER",
-  "INTEGER",
-  "BOOLEAN",
-  "ARRAY",
-  "OBJECT",
-  "NULL",
-]);
+export const FunctionDeclarationSchema = z
+  .object({
+    name: z
+      .string()
+      .describe(
+        "The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.",
+      ),
+    description: z.string().describe("A brief description of the function."),
+    behavior: z
+      .enum(["UNSPECIFIED", "BLOCKING", "NON_BLOCKING"])
+      .optional()
+      .describe(`https://ai.google.dev/api/caching#Behavior`),
+    parameters: z
+      .record(z.string(), z.any())
+      .optional()
+      .describe(
+        "Describes the parameters to this function. Reflects the Open API 3.03 Parameter Object string Key: the name of the parameter. Parameter names are case sensitive. Schema Value: the Schema defining the type used for the parameter.",
+      ),
+    parametersJsonSchema: z.any().optional(),
+    response: z.any().optional(),
+    responseJsonSchema: z.any().optional(),
+  })
+  .describe(`https://ai.google.dev/api/caching#FunctionDeclaration`);
 
-/**
- * Function Parameter Schema (simplified OpenAPI 3.0 schema)
- * Represents the structure of function parameters in Gemini API
- *
- * Note: This uses z.any() for recursive properties (properties, items) to avoid
- * issues with OpenAPI schema generation. The runtime validation still works correctly,
- * but the OpenAPI docs won't show the full recursive structure.
- */
-export const FunctionParameterSchema = z.object({
-  type: SchemaTypeSchema,
-  format: z.string().optional(),
-  description: z.string().optional(),
-  nullable: z.boolean().optional(),
-  enum: z.array(z.string()).optional(),
-  maxItems: z.number().optional(),
-  minItems: z.number().optional(),
-  properties: z.record(z.string(), z.any()).optional(),
-  required: z.array(z.string()).optional(),
-  items: z.any().optional(),
-});
+const FunctionCallingModeSchema = z.enum(["AUTO", "ANY", "NONE"]);
 
-/**
- * Function Declaration Schema
- */
-export const FunctionDeclarationSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  parameters: FunctionParameterSchema.optional(),
-});
-
-/**
- * Function Calling Mode
- */
-export const FunctionCallingModeSchema = z.enum(["AUTO", "ANY", "NONE"]);
-
-/**
- * Function Calling Config
- */
-export const FunctionCallingConfigSchema = z.object({
+const FunctionCallingConfigSchema = z.object({
   mode: FunctionCallingModeSchema,
   allowedFunctionNames: z.array(z.string()).optional(),
 });
 
-/**
- * Tool Config Schema
- */
 export const ToolConfigSchema = z.object({
   functionCallingConfig: FunctionCallingConfigSchema,
 });
+
+const GoogleSearchRetrievalSchema = z
+  .object({
+    dynamicRetrievalConfig: z
+      .object({
+        mode: z
+          .enum(["MODE_UNSPECIFIED", "MODE_DYNAMIC"])
+          .describe(`https://ai.google.dev/api/caching#Mode`),
+        dynamicThreshold: z.number(),
+      })
+      .describe(`
+        Specifies the dynamic retrieval configuration for the given source.
+
+        https://ai.google.dev/api/caching#DynamicRetrievalConfig
+      `),
+  })
+  .describe(`https://ai.google.dev/api/caching#GoogleSearchRetrieval`);
+
+export const ToolSchema = z
+  .object({
+    functionDeclarations: z.array(FunctionDeclarationSchema),
+    googleSearchRetrieval: GoogleSearchRetrievalSchema,
+    codeExecution: z.any().optional(),
+    googleSearch: z.any().optional(),
+    urlContext: z.any().optional(),
+  })
+  .describe(`
+Tool details that the model may use to generate response.
+
+A Tool is a piece of code that enables the system to interact with external systems to perform an action, or set of actions, outside of knowledge and scope of the model.
+
+https://ai.google.dev/api/caching#Tool
+`);

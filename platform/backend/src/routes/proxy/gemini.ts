@@ -120,7 +120,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         const chunks: z.infer<
-          typeof Gemini.API.StreamGenerateContentChunkSchema
+          typeof Gemini.API.GenerateContentResponseSchema
         >[] = [];
         let accumulatedResponse:
           | z.infer<typeof Gemini.API.GenerateContentResponseSchema>

@@ -649,7 +649,45 @@ The platform uses [release-please](https://github.com/googleapis/release-please)
 - **Release Configuration**: See `.github/release-please/release-please-config.json`
 - **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
 
-#### Release Workflow Details
+#### Performance Benchmarking
+
+The platform includes performance benchmarking infrastructure for measuring platform overhead:
+
+- **Location**: `platform/benchmarks/`
+- **Purpose**: Measure platform performance in mock mode (without real LLM API calls)
+- **Infrastructure**: Uses GCP VMs for isolated, reproducible benchmarks
+- **Load Testing**: Apache Bench-based load testing with configurable concurrency
+
+#### Benchmark Setup
+
+1. **Configure Environment**:
+   ```bash
+   cd platform/benchmarks
+   cp .env.example .env
+   # Edit .env with your GCP project settings
+   ```
+
+2. **Run Benchmarks**:
+   ```bash
+   ./setup-gcp-benchmark.sh    # Provision GCP infrastructure
+   ./run-benchmark.sh          # Execute benchmarks
+   ./cleanup-gcp-benchmark.sh  # Clean up resources
+   ```
+
+3. **Test Scenarios**:
+   - Simple chat completions
+   - Chat with tool invocations
+   - Both scenarios use mock responses to isolate platform overhead
+
+4. **Metrics Collected**:
+   - Throughput (requests/second)
+   - Latency percentiles (p50, p95)
+   - Error rates
+   - Time per request statistics
+
+See `platform/benchmarks/README.md` for detailed documentation.
+
+### Release Workflow Details
 
 The release process is triggered automatically when:
 

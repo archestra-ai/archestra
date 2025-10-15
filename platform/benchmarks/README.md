@@ -2,6 +2,28 @@
 
 Performance benchmarking tools for measuring Archestra Platform overhead using GCP VMs and Apache Bench.
 
+## Local Testing
+
+To test benchmarks locally against your development environment:
+
+1. **Enable benchmark mock mode** in `platform/.env`:
+   ```bash
+   BENCHMARK_MOCK_MODE=true
+   ```
+
+2. **Create benchmark configuration** at `platform/benchmarks/benchmark-config.env`:
+   ```bash
+   export ARCHESTRA_API_URL=http://127.0.0.1:9000
+   ```
+
+3. **Run the benchmark**:
+   ```bash
+   cd platform/benchmarks
+   bash ./run-benchmark.sh
+   ```
+
+**Note**: Make sure your local platform is running (via `tilt up` or `pnpm dev`) before running benchmarks.
+
 ## Quick Start
 
 ### 1. Prerequisites
@@ -67,7 +89,7 @@ cat results/summary_<timestamp>.md
 
 ```bash
 # Delete all resources
-./cleanup-gcp-benchmark.sh
+bash ./cleanup-gcp-benchmark.sh
 ```
 
 ## Configuration

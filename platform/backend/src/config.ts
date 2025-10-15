@@ -45,4 +45,7 @@ export default {
     url: process.env.DATABASE_URL,
   },
   debug: process.env.NODE_ENV === "development",
+  benchmark: {
+    mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
+  },
 };

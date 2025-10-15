@@ -122,13 +122,7 @@ cat > "$RESULTS_DIR/summary_${TIMESTAMP}.md" <<EOF
 |---------------|-------------------|-------------------|----------|----------|----------|---------|
 EOF
 
-# Test 1: Simple Chat Completion
-run_ab_test \
-    "simple_chat" \
-    "${ARCHESTRA_API_URL}/v1/openai/chat/completions" \
-    "test-payloads/simple-chat.json"
-
-# Test 2: Chat with Tools
+# Test: Chat with Tools
 run_ab_test \
     "chat_with_tools" \
     "${ARCHESTRA_API_URL}/v1/openai/chat/completions" \

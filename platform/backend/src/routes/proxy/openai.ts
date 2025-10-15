@@ -3,9 +3,11 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAI from "openai";
 import { z } from "zod";
+import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
+import { MockOpenAIClient } from "./mock-openai-client";
 import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
@@ -64,7 +66,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { authorization: openAiApiKey } = headers;
-    const openAiClient = new OpenAI({ apiKey: openAiApiKey });
+    const openAiClient = config.benchmark.mockMode
+      ? (new MockOpenAIClient() as unknown as OpenAI)
+      : new OpenAI({ apiKey: openAiApiKey });
 
     try {
       await utils.persistTools(tools, resolvedAgentId);

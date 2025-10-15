@@ -49,11 +49,7 @@ export function useActiveMemberRole(organizationId?: string) {
     queryKey: organizationKeys.activeMemberRole(),
     queryFn: async () => {
       const { data } = await authClient.organization.getActiveMemberRole();
-      const role =
-        data && typeof data === "object" && "role" in data
-          ? (data as any).role
-          : (data as any);
-      return role as string | null;
+      return data?.role as string | null;
     },
     enabled: !!organizationId,
   });

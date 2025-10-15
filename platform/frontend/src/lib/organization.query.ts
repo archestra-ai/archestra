@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -19,12 +20,13 @@ export const organizationKeys = {
  * Fetch invitation details by ID
  */
 export function useInvitation(invitationId: string) {
-  if (!authClient.useSession()) {
-    return { data: null, error: null };
-  }
+  const session = authClient.useSession();
   return useSuspenseQuery({
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
+      if (!session) {
+        return { data: null, error: null };
+      }
       const response = await authClient.organization.getInvitation({
         query: { id: invitationId },
       });
@@ -49,7 +51,7 @@ export function useActiveMemberRole(organizationId?: string) {
     queryKey: organizationKeys.activeMemberRole(),
     queryFn: async () => {
       const { data } = await authClient.organization.getActiveMemberRole();
-      return data?.role as string | null;
+      return data?.role;
     },
     enabled: !!organizationId,
   });
@@ -70,7 +72,7 @@ export function useAcceptInvitation() {
     onSuccess: () => {
       router.push("/");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Error", {
         description: JSON.stringify(error) || "Failed to accept invitation",
       });
@@ -93,7 +95,7 @@ export function useRejectInvitation() {
     onSuccess: () => {
       router.push("/");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Error", {
         description: error.message || "Failed to reject invitation",
       });
@@ -125,10 +127,9 @@ export function useInvitationsList(
 
       const now = new Date();
       return response.data
-        .filter((inv: any) => showAllStatuses || inv.status === "pending")
-        .map((inv: any) => {
+        .filter((inv) => showAllStatuses || inv.status === "pending")
+        .map((inv: Invitation) => {
           const expiresAt = inv.expiresAt || null;
-          const createdAt = inv.createdAt || null;
           const isExpired = expiresAt ? new Date(expiresAt) < now : false;
 
           return {
@@ -136,12 +137,11 @@ export function useInvitationsList(
             email: inv.email,
             role: inv.role || "member",
             expiresAt,
-            createdAt,
             isExpired,
             status: inv.status || "pending",
           };
         })
-        .sort((a: any, b: any) => {
+        .sort((a, b) => {
           // Sort by status first (pending > accepted > rejected)
           const statusOrder: Record<string, number> = {
             pending: 0,
@@ -175,7 +175,7 @@ export function useCancelInvitation(organizationId: string | undefined) {
     onSuccess: () => {
       toast.success("Invitation cancelled");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Failed to cancel invitation", {
         description: error.message,
       });
@@ -214,7 +214,7 @@ export function useReinvite(organizationId: string | undefined) {
         description: `A fresh invitation link has been generated for ${variables.email}`,
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Failed to reinvite", {
         description: error.message,
       });
@@ -253,7 +253,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
         description: "Share this link with the person you want to invite",
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Error", {
         description: error.message || "Failed to generate invitation link",
       });

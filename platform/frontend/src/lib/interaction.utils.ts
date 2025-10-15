@@ -179,7 +179,9 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
   }
 
   private mapToUiMessage(
-    message: OpenAiChatCompletionRequest | OpenAiChatCompletionResponse,
+    message:
+      | OpenAiChatCompletionRequest["messages"][number]
+      | OpenAiChatCompletionResponse["choices"][number]["message"],
   ): PartialUIMessage {
     const content = message.content;
 
@@ -460,7 +462,9 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
 
   // TODO: Implement this
   private mapToUiMessage(
-    content: GeminiGenerateContentRequest | GeminiGenerateContentResponse,
+    _content:
+      | GeminiGenerateContentRequest["contents"][number]
+      | GeminiGenerateContentResponse["candidates"],
   ): PartialUIMessage {
     return {
       role: "assistant",

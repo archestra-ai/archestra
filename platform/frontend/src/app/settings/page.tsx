@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// TODO: uncomment this out when we have > 1 provider
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
 import type { SupportedProviders } from "@/lib/clients/api/types.gen";
 import config from "@/lib/config";
 
@@ -33,7 +34,8 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  const [selectedProvider, setSelectedProvider] =
+  // TODO: uncomment this out when we have > 1 provider
+  const [selectedProvider, _setSelectedProvider] =
     useState<SupportedProviders>("openai");
 
   const particleIdRef = useRef(0);
@@ -345,7 +347,8 @@ export default function SettingsPage() {
               <div className="border-t pt-6">
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
+                  {/* TODO: uncomment this out when we have > 1 provider */}
+                  {/* <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Provider:</span>
                     <Select
                       value={selectedProvider}
@@ -361,7 +364,7 @@ export default function SettingsPage() {
                         <SelectItem value="gemini">Gemini</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div> */}
                   <div className="bg-muted rounded-md p-3 flex items-center justify-between">
                     <CodeText className="text-sm">
                       {`${apiProxyUrl}/${selectedProvider}`}

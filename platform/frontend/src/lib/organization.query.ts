@@ -25,7 +25,7 @@ export function useInvitation(invitationId: string) {
     queryKey: organizationKeys.invitation(invitationId),
     queryFn: async () => {
       if (!session) {
-        return { data: null, error: null };
+        return undefined;
       }
       const response = await authClient.organization.getInvitation({
         query: { id: invitationId },

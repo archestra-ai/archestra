@@ -55,9 +55,9 @@ export const getResourceFromPath = (path: string): string | null => {
   const resourceMap: Record<string, string> = {
     agents: "agent",
     tools: "tool",
-    policies: "policy",
+    "autonomy-policies": "policy",
     interactions: "interaction",
-    "dual-llm-configs": "dualLlmConfig",
+    "dual-llm-config": "dualLlmConfig",
     "dual-llm-results": "dualLlmResult",
     settings: "settings",
     organizations: "organization",

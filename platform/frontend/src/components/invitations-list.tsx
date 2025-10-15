@@ -119,12 +119,6 @@ function InvitationsListContent({
                     </Badge>
                   </div>
                   <div className="space-y-0.5">
-                    {inv.createdAt && (
-                      <p className="text-xs text-muted-foreground">
-                        Sent {new Date(inv.createdAt).toLocaleDateString()} at{" "}
-                        {new Date(inv.createdAt).toLocaleTimeString()}
-                      </p>
-                    )}
                     {inv.expiresAt && (
                       <p className="text-xs text-muted-foreground">
                         Expires {new Date(inv.expiresAt).toLocaleDateString()}{" "}
@@ -189,12 +183,6 @@ function InvitationsListContent({
                         {inv.role}
                       </Badge>
                     </div>
-                    {inv.createdAt && (
-                      <p className="text-xs text-muted-foreground">
-                        Invited on{" "}
-                        {new Date(inv.createdAt).toLocaleDateString()}
-                      </p>
-                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Button

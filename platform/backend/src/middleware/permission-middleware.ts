@@ -1,6 +1,6 @@
+import type { Permission } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth";
-import type { Permission } from "@/types";
 
 /**
  * Cache for permission checks (in-memory, 72h TTL)
@@ -34,7 +34,7 @@ async function getRoleCacheKey(
     const session = await auth.api.getSession({ headers });
     if (!session?.user) return null;
 
-    const orgId = (session.session as any).activeOrganizationId || "no-org";
+    const orgId = session.session.activeOrganizationId || "no-org";
     return `${session.user.id}:${orgId}`;
   } catch {
     return null;

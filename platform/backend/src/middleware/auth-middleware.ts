@@ -1,10 +1,14 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
-import { auth } from "@/auth";
 import {
   getResourceFromPath,
   METHOD_TO_ACTION,
   type Permission,
-} from "@/types/permission";
+} from "@shared";
+import type {
+  FastifyReply,
+  FastifyRequest,
+  RouteShorthandOptions,
+} from "fastify";
+import { auth } from "@/auth";
 import { checkPermission } from "./permission-middleware";
 
 export const authMiddleware = async (
@@ -27,9 +31,9 @@ export const authMiddleware = async (
       reply.status(401).send({ error: "Unauthorized" });
       return;
     }
-    (request as any).user = session.user;
-    const hasExplicitPermissionCheck = (request.routeOptions as any)
-      ?.preHandler;
+    const hasExplicitPermissionCheck = (
+      request.routeOptions as RouteShorthandOptions
+    )?.preHandler;
 
     if (!hasExplicitPermissionCheck) {
       const resource = getResourceFromPath(request.url);

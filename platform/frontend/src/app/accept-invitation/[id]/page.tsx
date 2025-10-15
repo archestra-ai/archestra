@@ -42,7 +42,6 @@ function InvitationContent() {
 
   // Check if invitation is already accepted
   useEffect(() => {
-    console.log("Invitation status:", JSON.stringify(invitation));
     if (invitation?.status === "accepted") {
       router.push("/");
     }

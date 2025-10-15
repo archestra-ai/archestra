@@ -2,6 +2,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import {
+  Anthropic,
   Gemini,
   OpenAi,
   SupportedProvidersDiscriminatorSchema,
@@ -14,11 +15,13 @@ import {
 export const InteractionRequestSchema = z.union([
   OpenAi.API.ChatCompletionRequestSchema,
   Gemini.API.GenerateContentRequestSchema,
+  Anthropic.API.MessagesRequestSchema,
 ]);
 
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
+  Anthropic.API.MessagesResponseSchema,
 ]);
 
 /**
@@ -30,32 +33,25 @@ const BaseSelectInteractionSchema = createSelectSchema(
 );
 
 /**
- * OpenAI-specific interaction schema for discriminated union
- */
-const OpenAiChatCompletionsInteractionSchema =
-  BaseSelectInteractionSchema.extend({
-    type: z.enum(["openai:chatCompletions"]),
-    request: OpenAi.API.ChatCompletionRequestSchema,
-    response: OpenAi.API.ChatCompletionResponseSchema,
-  });
-
-/**
- * Gemini-specific interaction schema for discriminated union
- */
-const GeminiGenerateContentInteractionSchema =
-  BaseSelectInteractionSchema.extend({
-    type: z.enum(["gemini:generateContent"]),
-    request: Gemini.API.GenerateContentRequestSchema,
-    response: Gemini.API.GenerateContentResponseSchema,
-  });
-
-/**
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
-  OpenAiChatCompletionsInteractionSchema,
-  GeminiGenerateContentInteractionSchema,
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["openai:chatCompletions"]),
+    request: OpenAi.API.ChatCompletionRequestSchema,
+    response: OpenAi.API.ChatCompletionResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["gemini:generateContent"]),
+    request: Gemini.API.GenerateContentRequestSchema,
+    response: Gemini.API.GenerateContentResponseSchema,
+  }),
+  BaseSelectInteractionSchema.extend({
+    type: z.enum(["anthropic:messages"]),
+    request: Anthropic.API.MessagesRequestSchema,
+    response: Anthropic.API.MessagesResponseSchema,
+  }),
 ]);
 
 export const InsertInteractionSchema = createInsertSchema(

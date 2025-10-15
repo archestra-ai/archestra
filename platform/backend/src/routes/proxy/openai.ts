@@ -1,12 +1,11 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import OpenAI from "openai";
+import OpenAIProvider from "openai";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
-import { OpenAiProxy } from "./types";
 import * as utils from "./utils";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -37,7 +36,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   const handleChatCompletion = async (
     body: z.infer<typeof OpenAi.API.ChatCompletionRequestSchema>,
-    headers: z.infer<typeof OpenAiProxy.ChatCompletionsHeadersSchema>,
+    headers: z.infer<typeof OpenAi.API.ChatCompletionsHeadersSchema>,
     reply: FastifyReply,
     agentId?: string,
   ) => {
@@ -64,7 +63,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { authorization: openAiApiKey } = headers;
-    const openAiClient = new OpenAI({ apiKey: openAiApiKey });
+    const openAiClient = new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {
       await utils.persistTools(tools, resolvedAgentId);
@@ -93,7 +92,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await utils.streaming.handleChatCompletions(stream);
 
         let assistantMessage = chatCompletionChunksAndMessage.message;
-        let chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] =
+        let chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           chatCompletionChunksAndMessage.chunks;
 
         // Evaluate tool invocation policies dynamically
@@ -122,7 +121,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 {
                   index: 0,
                   delta:
-                    toolInvocationRefusal.message as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+                    toolInvocationRefusal.message as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
                   finish_reason: "stop",
                   logprobs: null,
                 },
@@ -227,7 +226,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Create a chat completion with OpenAI (uses default agent)",
         tags: ["llm-proxy"],
         body: OpenAi.API.ChatCompletionRequestSchema,
-        headers: OpenAiProxy.ChatCompletionsHeadersSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: {
           200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,
@@ -257,7 +256,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
         }),
         body: OpenAi.API.ChatCompletionRequestSchema,
-        headers: OpenAiProxy.ChatCompletionsHeadersSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: {
           200: OpenAi.API.ChatCompletionResponseSchema,
           400: ErrorResponseSchema,

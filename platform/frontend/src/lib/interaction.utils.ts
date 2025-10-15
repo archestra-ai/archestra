@@ -1,5 +1,7 @@
 import type { PartialUIMessage } from "@/components/chatbot-demo";
 import type {
+  AnthropicMessagesRequest,
+  AnthropicMessagesResponse,
   GeminiGenerateContentRequest,
   GeminiGenerateContentResponse,
   GetDualLlmResultsByInteractionResponses,
@@ -521,6 +523,12 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     ];
   }
 }
+
+// class AnthropicMessagesInteraction implements InteractionUtils {
+//   private request: AnthropicMessagesRequest;
+//   private response: AnthropicMessagesResponse;
+//   modelName: string;
+// }
 
 export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;

@@ -8,7 +8,6 @@ import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 
 import { GeminiGenerateContentTransformer } from "./transformers";
-import { GeminiProxy } from "./types";
 import * as utils from "./utils";
 
 /**
@@ -45,7 +44,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   const handleGenerateContent = async (
     body: z.infer<typeof Gemini.API.GenerateContentRequestSchema>,
-    headers: z.infer<typeof GeminiProxy.ChatCompletionsHeadersSchema>,
+    headers: z.infer<typeof Gemini.API.ChatCompletionsHeadersSchema>,
     reply: FastifyReply,
     agentId?: string,
     model?: string,
@@ -331,7 +330,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
-        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.ChatCompletionsHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           200: Gemini.API.GenerateContentResponseSchema,
@@ -367,7 +366,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
-        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.ChatCompletionsHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           // Streaming responses don't have a schema
@@ -404,7 +403,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
-        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.ChatCompletionsHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           200: Gemini.API.GenerateContentResponseSchema,
@@ -442,7 +441,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
         }),
-        headers: GeminiProxy.ChatCompletionsHeadersSchema,
+        headers: Gemini.API.ChatCompletionsHeadersSchema,
         body: Gemini.API.GenerateContentRequestSchema,
         response: {
           // Streaming responses don't have a schema

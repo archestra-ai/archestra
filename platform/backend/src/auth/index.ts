@@ -1,4 +1,4 @@
-import { APIError, betterAuth } from "better-auth";
+import { APIError, betterAuth, z } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
@@ -53,9 +53,8 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === "/organization/invite-member" && ctx.method === "POST") {
         const body = ctx.body as any;
-
-        // Validate email format
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+        const emailValidation = z.email().safeParse(body.email);
+        if (!emailValidation.success) {
           throw new APIError("BAD_REQUEST", {
             message: "Invalid email format",
           });

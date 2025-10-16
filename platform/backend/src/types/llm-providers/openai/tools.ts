@@ -27,7 +27,7 @@ const FunctionDefinitionSchema = z
 
 const FunctionToolSchema = z
   .object({
-    type: z.literal("function"),
+    type: z.enum(["function"]),
     function: FunctionDefinitionSchema,
   })
   .describe(
@@ -36,7 +36,7 @@ const FunctionToolSchema = z
 
 const CustomToolSchema = z
   .object({
-    type: z.literal("custom"),
+    type: z.enum(["custom"]),
     custom: z.object({
       name: z
         .string()
@@ -54,12 +54,12 @@ const CustomToolSchema = z
           z
             .object({
               type: z
-                .literal("text")
+                .enum(["text"])
                 .describe("Unconstrained text format. Always `text`"),
             })
             .describe("Unconstrained free-form text"),
           z.object({
-            type: z.literal("grammar"),
+            type: z.enum(["grammar"]),
             grammar: z
               .object({
                 definition: z.string().describe("The grammar definition"),
@@ -104,7 +104,7 @@ const AllowedToolsSchema = z
 
 const AllowedToolChoiceSchema = z
   .object({
-    type: z.literal("allowed_tools"),
+    type: z.enum(["allowed_tools"]),
     allowed_tools: AllowedToolsSchema,
   })
   .describe(`
@@ -115,7 +115,7 @@ const AllowedToolChoiceSchema = z
 
 const NamedToolChoiceSchema = z
   .object({
-    type: z.literal("function"),
+    type: z.enum(["function"]),
     function: z.object({
       name: z.string(),
     }),
@@ -136,9 +136,7 @@ export const ToolSchema = z
 
 export const ToolChoiceOptionSchema = z
   .union([
-    z.literal("none"),
-    z.literal("auto"),
-    z.literal("required"),
+    z.enum(["none", "auto", "required"]),
     AllowedToolChoiceSchema,
     NamedToolChoiceSchema,
     CustomToolSchema,

@@ -639,6 +639,7 @@ export function generateMockInteraction(
 
   return {
     agentId,
+    type: "openai:chatCompletions",
     request,
     response,
     createdAt: new Date(response.created * 1000),

@@ -27,15 +27,15 @@ jobs:
       - name: Type checking, linting, formatting checks
         run: pnpm check:ci
 
-  platform-integration-tests:
-    name: Platform Integration Tests
+  platform-e2e-tests:
+    name: Platform e2e Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      
+
       - name: Setup environment
         uses: ./.github/actions/setup-env
         with:
@@ -81,8 +81,6 @@ jobs:
           docker port archestra-platform-test || echo "Container not running"
           docker port archestra-platform-test-custom-api-base-url || echo "Container not running"
           docker port archestra-platform-test-custom-database-url || echo "Container not running"
-        
-
 
       # E2e tests start
       - name: Install Playwright browsers
@@ -138,18 +136,6 @@ jobs:
         if: always()
         run: |
           docker compose -f .github/testing/docker-compose-platform.yml down -v
-
-  build-platform-docker-image:
-    name: Build platform Docker image
-    uses: ./.github/workflows/build-dockerhub-image.yml
-    permissions:
-      contents: read
-      id-token: write
-    with:
-      image_directory: ./platform
-      image_name: platform
-      version: ${{ github.sha }}
-      push_image: false
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

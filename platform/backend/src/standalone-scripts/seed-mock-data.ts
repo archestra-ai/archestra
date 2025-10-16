@@ -43,13 +43,17 @@ async function seedMockData() {
     0.3, // 30% block probability
   );
 
-  await db.insert(schema.interactionsTable).values(interactionData);
+  // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
+  await db.insert(schema.interactionsTable).values(interactionData as any);
   console.log(`✅ Created ${interactionData.length} interactions`);
 
   // Show statistics
-  const blockedCount = interactionData.filter(
-    (i) => i.response.choices[0]?.message?.refusal,
-  ).length;
+  const blockedCount = interactionData.filter((i) => {
+    if ("choices" in i.response) {
+      return i.response.choices[0]?.message?.refusal;
+    }
+    return false;
+  }).length;
   console.log(`   - ${blockedCount} blocked by policy`);
   console.log(`   - ${interactionData.length - blockedCount} allowed`);
 }

@@ -10,6 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **ALWAYS run all commands from the `platform/` directory unless specifically instructed otherwise.**
 
+## Documentation
+
+**Documentation files are located at `../../website/app/app/docs/content/`** (relative to the `platform/` directory). When asked to update or create documentation, edit or create files in that directory.
+
+**Important**: When using tools that require absolute paths (like Read, Write, Edit), you must convert the relative path to an absolute path. Use `realpath ../../website/app/app/docs/content/` to get the absolute path, then use that with file operation tools.
+
 ## Important Rules
 
 1. **ALWAYS use pnpm** (not npm or yarn) for package management
@@ -101,7 +107,16 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 # Optional (not included in default Helm deployment)
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
-OPENAI_API_KEY=your-api-key-here  # Required for experiments/cli-chat
+
+# Provider API Keys (server-side configuration)
+OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
+GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider
+ANTHROPIC_API_KEY=your-api-key-here  # Required for Anthropic provider
+
+# Note: For client applications using the proxy:
+# - OpenAI: Pass API key in Authorization header as "Bearer <key>"
+# - Gemini: Pass API key in x-goog-api-key header
+# - Anthropic: Pass API key in Authorization header
 ```
 
 The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
@@ -118,7 +133,7 @@ The `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` environment variable is used specifical
 The platform includes two example CLI chat applications for testing:
 
 ```bash
-# 1. Experiments CLI Chat (TypeScript with OpenAI SDK)
+# 1. Experiments CLI Chat (TypeScript with OpenAI/Gemini SDKs)
 cd experiments
 pnpm cli-chat-with-guardrails
 # Interactive CLI - supports commands:
@@ -129,7 +144,8 @@ pnpm cli-chat-with-guardrails
 #   --include-external-email  # Include external email in mock Gmail data
 #   --include-malicious-email # Include malicious email with prompt injection
 #   --stream                  # Stream the response
-#   --model <model>           # Specify model (default: gpt-4o)
+#   --model <model>           # Specify model (default: gpt-4o for OpenAI, gemini-1.5-pro for Gemini)
+#   --provider <provider>     # Provider selection: "openai", "gemini", or "anthropic" (default: openai)
 #   --debug                   # Print debug messages
 
 # 2. AI SDK Express Example (TypeScript with Vercel AI SDK)
@@ -182,7 +198,11 @@ platform/
 │   └── src/
 │       ├── config.ts            # Application configuration
 │       ├── server.ts            # Main Fastify server (port 9000)
-│       ├── types.ts             # TypeScript type definitions
+│       ├── types/               # TypeScript type definitions
+│       │   ├── llm-providers/   # LLM provider type definitions
+│       │   │   ├── openai/      # OpenAI API types (messages, tools, etc.)
+│       │   │   └── gemini/      # Gemini API types (messages, tools, etc.)
+│       │   └── ...              # Other type definitions
 │       ├── database/            # Database layer
 │       │   ├── migrations/      # Drizzle migrations
 │       │   └── schema.ts        # Database schema
@@ -198,14 +218,16 @@ platform/
 │       ├── providers/           # LLM provider abstraction
 │       │   ├── factory.ts       # Provider factory pattern
 │       │   ├── openai.ts        # OpenAI provider implementation
+│       │   ├── gemini.ts        # Gemini provider implementation
 │       │   └── types.ts         # Provider interfaces
 │       └── routes/              # API routes
 │           ├── agent.ts         # Agent management endpoints
 │           ├── autonomy-policies.ts  # Autonomy policies endpoints
 │           ├── interaction.ts   # Interaction endpoints (list, get by ID)
-│           └── proxy/           # OpenAI proxy with integrated guardrails
-│               ├── openai.ts    # Main proxy route handler
-│               ├── types.ts     # TypeScript types for proxy
+│           └── proxy/           # LLM provider proxy with integrated guardrails
+│               ├── openai.ts    # OpenAI proxy route handler
+│               ├── gemini.ts    # Gemini proxy route handler
+│               ├── types/       # TypeScript types for proxy routes
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
@@ -254,6 +276,21 @@ Tilt automatically manages dependencies and ensures services start in the correc
 
 The production backend provides:
 
+#### Supported LLM Providers
+
+- **OpenAI**: Fully implemented with chat completions, tools, and streaming support
+  - Requires `OPENAI_API_KEY` environment variable
+- **Google Gemini**: Fully implemented with generateContent, tools, and streaming support
+  - Comprehensive TypeScript types for Gemini API (`platform/backend/src/types/llm-providers/gemini/`)
+  - Database schema supports provider field to distinguish between providers
+  - Requires `GEMINI_API_KEY` environment variable
+  - Gemini API requests require `x-goog-api-key` header with API key
+- **Anthropic**: Partially implemented with messages API support
+  - TypeScript types for Anthropic API (`platform/backend/src/types/llm-providers/anthropic/`)
+  - Requires `ANTHROPIC_API_KEY` environment variable
+  - Anthropic API requests require `Authorization` header with API key
+  - Note: Transformer implementation is partially complete
+
 #### REST API Endpoints
 
 - **Interaction Management**:
@@ -261,11 +298,22 @@ The production backend provides:
   - `GET /api/interactions/:id` - Get interaction by ID
   - Interactions are linked directly to agents (chat model has been removed)
 - **LLM Integration**:
-  - `POST /v1/:provider/chat/completions` - OpenAI-compatible chat endpoint
-  - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
-  - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
-  - `GET /v1/:provider/models` - List available models for a provider
+  - OpenAI:
+    - `POST /v1/openai/chat/completions` - Default agent endpoint (creates/uses agent based on user-agent header)
+    - `POST /v1/openai/:agentId/chat/completions` - Agent-specific endpoint for multi-agent scenarios
+    - `GET /v1/openai/models` - List available OpenAI models
+  - Gemini:
+    - `POST /v1/gemini/models/:model:generateContent` - Default agent generateContent endpoint
+    - `POST /v1/gemini/models/:model:streamGenerateContent` - Default agent streaming endpoint
+    - `POST /v1/gemini/:agentId/models/:model:generateContent` - Agent-specific generateContent
+    - `POST /v1/gemini/:agentId/models/:model:streamGenerateContent` - Agent-specific streaming
+    - `GET /v1/gemini/models` - List available Gemini models
+  - Anthropic:
+    - `POST /v1/anthropic/messages` - Default agent messages endpoint
+    - `POST /v1/anthropic/:agentId/messages` - Agent-specific messages endpoint
+    - Routes for other Anthropic API endpoints are proxied directly (e.g., `/v1/anthropic/models`)
   - Supports streaming responses for real-time AI interactions
+  - **Supported Providers**: OpenAI, Google Gemini, Anthropic (partial)
 - **Agent Management**:
   - `GET /api/agents` - List all agents
   - `POST /api/agents` - Create new agent
@@ -344,8 +392,9 @@ The backend integrates advanced security guardrails:
 - **Agent**: Stores AI agents with name and timestamps
 - **Interaction**: Stores LLM interactions with request/response data
   - `agentId`: Direct link to the agent (no longer through chat)
-  - `request`: JSONB field storing the full LLM API request (OpenAI ChatCompletionRequest format)
-  - `response`: JSONB field storing the full LLM API response (OpenAI ChatCompletionResponse format)
+  - `provider`: Provider used for the interaction ("openai", "gemini", or "anthropic")
+  - `request`: JSONB field storing the full LLM API request (provider-specific format)
+  - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
 - **ToolInvocationPolicy**: Policies for controlling tool usage
@@ -378,8 +427,9 @@ The `experiments/` workspace contains prototype features:
 
 - `pnpm cli-chat-with-guardrails` - Test the production guardrails via CLI
   - Supports `--agent-id <agent-id>` flag to specify an agent (required)
-  - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`
-- Requires `OPENAI_API_KEY` in `.env` (copy from `.env.example`)
+  - Supports `--provider <provider>` flag to select between "openai", "gemini", or "anthropic" (default: openai)
+  - Additional flags: `--include-external-email`, `--include-malicious-email`, `--debug`, `--stream`
+- Requires `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY` in `.env` (copy from `.env.example`)
 
 ### Code Quality Tools
 
@@ -408,7 +458,22 @@ The `experiments/` workspace contains prototype features:
 - `tool-invocation-policy.test.ts`: Comprehensive policy evaluation tests
 - `trusted-data-policy.test.ts`: Trust evaluation and taint tracking tests
 
-### Examples
+#### Provider Implementation
+
+The platform uses a modular transformer pattern to support multiple LLM providers:
+
+- **Transformer Pattern**: Each provider has a transformer class implementing `ProviderTransformer` interface
+  - Transforms between provider-specific formats and common internal format
+  - Located in `platform/backend/src/routes/proxy/transformers/`
+  - OpenAI transformer: `openai.ts`
+  - Gemini transformer: `gemini.ts`
+- **Common Format**: Internal representation based on OpenAI's format for consistency
+  - Enables unified processing of requests/responses across providers
+  - Facilitates security policy evaluation
+- **Provider Factory**: Located in `platform/backend/src/routes/proxy/transformers/index.ts`
+  - Returns appropriate transformer based on provider type
+
+## Examples
 
 The `platform/examples/` directory contains example integrations:
 
@@ -582,6 +647,44 @@ export interface Agent {
 - Run `pnpm type-check` before committing to catch type errors
 - Use `tilt up` for the best development experience with hot reload
 
+### Performance Benchmarking
+
+The platform includes performance benchmarking infrastructure for measuring platform overhead:
+
+- **Location**: `platform/benchmarks/`
+- **Purpose**: Measure platform performance in mock mode (without real LLM API calls)
+- **Infrastructure**: Uses GCP VMs for isolated, reproducible benchmarks
+- **Load Testing**: Apache Bench-based load testing with configurable concurrency
+
+#### Benchmark Setup
+
+1. **Configure Environment**:
+   ```bash
+   cd platform/benchmarks
+   cp .env.example .env
+   # Edit .env with your GCP project settings
+   ```
+
+2. **Run Benchmarks**:
+   ```bash
+   ./setup-gcp-benchmark.sh    # Provision GCP infrastructure
+   ./run-benchmark.sh          # Execute benchmarks
+   ./cleanup-gcp-benchmark.sh  # Clean up resources
+   ```
+
+3. **Test Scenarios**:
+   - Simple chat completions
+   - Chat with tool invocations
+   - Both scenarios use mock responses to isolate platform overhead
+
+4. **Metrics Collected**:
+   - Throughput (requests/second)
+   - Latency percentiles (p50, p95, p99)
+   - Error rates
+   - Time per request statistics
+
+See `platform/benchmarks/README.md` for detailed documentation.
+
 ### Release Process
 
 The platform uses [release-please](https://github.com/googleapis/release-please) for automated release management:
@@ -595,7 +698,7 @@ The platform uses [release-please](https://github.com/googleapis/release-please)
 - **Release Configuration**: See `.github/release-please/release-please-config.json`
 - **Release Manifest**: See `.github/release-please/.release-please-manifest.json`
 
-#### Release Workflow Details
+### Release Workflow Details
 
 The release process is triggered automatically when:
 

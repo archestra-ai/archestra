@@ -9,7 +9,7 @@ import { InteractionSummary } from "@/components/interaction-summary";
 import { LoadingSpinner } from "@/components/loading";
 import { useAgents } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interaction.query";
-import { mapInteractionToUiMessage } from "@/lib/interaction.utils";
+import { DynamicInteraction } from "@/lib/interaction.utils";
 
 export const dynamic = "force-dynamic";
 
@@ -26,26 +26,19 @@ export default function NotMitigatedPage() {
 }
 
 function NotMitigated() {
-  const { data: interaction } = useInteraction({
+  const { data: dynamicInteraction } = useInteraction({
     interactionId: ALLOWED_DEMO_INTERACTION_ID,
     refetchInterval: null,
   });
   const { data: agents } = useAgents();
 
-  if (!interaction) {
+  if (!dynamicInteraction) {
     return null;
   }
 
-  // Map request messages
-  const requestMessages = interaction.request.messages.map(
-    mapInteractionToUiMessage,
-  );
-
-  // Add response message if available
-  const responseMessage = interaction.response?.choices?.[0]?.message;
-  if (responseMessage) {
-    requestMessages.push(mapInteractionToUiMessage(responseMessage));
-  }
+  const requestMessages = new DynamicInteraction(
+    dynamicInteraction,
+  ).mapToUiMessages();
 
   return (
     <>
@@ -55,8 +48,10 @@ function NotMitigated() {
           messages={requestMessages}
           topPart={
             <InteractionSummary
-              interaction={interaction}
-              agent={agents?.find((agent) => agent.id === interaction.agentId)}
+              interaction={dynamicInteraction}
+              agent={agents?.find(
+                (agent) => agent.id === dynamicInteraction.agentId,
+              )}
             />
           }
         />

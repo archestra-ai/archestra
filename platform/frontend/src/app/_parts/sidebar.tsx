@@ -95,7 +95,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-2">
-          <Image src="/logo-light-mode.png" alt="Logo" width={28} height={28} />
+          <Image src="/logo.png" alt="Logo" width={28} height={28} />
           <span className="text-base font-semibold">Archestra.AI</span>
         </div>
       </SidebarHeader>

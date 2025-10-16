@@ -16,18 +16,13 @@ import type {
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 import { useDualLlmResultByToolCallId } from "@/lib/dual-llm-result.query";
-import {
-  getLastToolCallId,
-  isLastMessageToolCall,
-  toolNamesRefusedForInteraction,
-  toolNamesUsedForInteraction,
-} from "@/lib/interaction.utils";
+import { DynamicInteraction } from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
 type InteractionData = GetInteractionsResponses["200"]["data"][number];
 
 export function InteractionSummary({
-  interaction,
+  interaction: dynamicInteraction,
   agent,
 }: {
   interaction: InteractionData;
@@ -37,8 +32,11 @@ export function InteractionSummary({
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);
 
   // Check if this interaction is about a tool call
-  const lastToolCallId = getLastToolCallId(interaction);
-  const isDualLlmRelevant = isLastMessageToolCall(interaction);
+  const interaction = new DynamicInteraction(dynamicInteraction);
+  const lastToolCallId = interaction.getLastToolCallId();
+  const isDualLlmRelevant = interaction.isLastMessageToolCall();
+  const toolNamesUsed = interaction.getToolNamesUsed();
+  const toolNamesRefused = interaction.getToolNamesRefused();
 
   // Fetch dual LLM result if relevant
   const { data: dualLlmResult } = useDualLlmResultByToolCallId(lastToolCallId);
@@ -54,15 +52,15 @@ export function InteractionSummary({
         />
         <RawLogDetail
           label="Model"
-          value={interaction.request.model}
+          value={interaction.modelName}
           icon={<BrainIcon className={iconClassName} />}
         />
         <RawLogDetail
           label="Tools used"
           value={
             <div>
-              {toolNamesUsedForInteraction(interaction).length > 0 ? (
-                toolNamesUsedForInteraction(interaction).map((toolName) => (
+              {toolNamesUsed.length > 0 ? (
+                toolNamesUsed.map((toolName) => (
                   <Badge key={toolName} className="mt-2 mr-2">
                     {toolName}
                   </Badge>
@@ -78,8 +76,8 @@ export function InteractionSummary({
           label="Tools blocked"
           value={
             <div>
-              {toolNamesRefusedForInteraction(interaction).length > 0 ? (
-                toolNamesRefusedForInteraction(interaction).map((toolName) => (
+              {toolNamesRefused.length > 0 ? (
+                toolNamesRefused.map((toolName) => (
                   <Badge key={toolName} className="mt-2" variant="destructive">
                     {toolName}
                   </Badge>
@@ -116,16 +114,14 @@ export function InteractionSummary({
         />
         <RawLogDetail
           label="Last user message"
-          value={<TruncatedText message={findLastUserMessage(interaction)} />}
+          value={<TruncatedText message={interaction.getLastUserMessage()} />}
           icon={<MessageSquareMoreIcon className={iconClassName} />}
           isTruncated={lastMessageTruncated}
         />
         <RawLogDetail
           label="Response"
           value={
-            <TruncatedText
-              message={interaction.response.choices[0].message.content ?? ""}
-            />
+            <TruncatedText message={interaction.getLastAssistantResponse()} />
           }
           icon={<MessageSquareMoreIcon className={iconClassName} />}
           isTruncated={lastMessageTruncated}
@@ -133,22 +129,6 @@ export function InteractionSummary({
       </div>
     </div>
   );
-}
-
-function findLastUserMessage(interaction: InteractionData): string {
-  const reversedMessages = [...interaction.request.messages].reverse();
-  for (const message of reversedMessages) {
-    if (message.role !== "user") {
-      continue;
-    }
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    if (message.content?.[0]?.type === "text") {
-      return message.content[0].text;
-    }
-  }
-  return "";
 }
 
 function RawLogDetail({

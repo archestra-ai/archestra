@@ -8,7 +8,15 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { z } from "zod";
 import config from "@/config";
+import {
+  Anthropic,
+  Gemini,
+  OpenAi,
+  SupportedProvidersDiscriminatorSchema,
+  SupportedProvidersSchema,
+} from "@/types";
 import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
@@ -32,6 +40,32 @@ const fastify = Fastify({
 // Set up Zod validation and serialization
 fastify.setValidatorCompiler(validatorCompiler);
 fastify.setSerializerCompiler(serializerCompiler);
+
+// Register schemas in global registry for OpenAPI generation
+z.globalRegistry.add(SupportedProvidersSchema, {
+  id: "SupportedProviders",
+});
+z.globalRegistry.add(SupportedProvidersDiscriminatorSchema, {
+  id: "SupportedProvidersDiscriminator",
+});
+z.globalRegistry.add(OpenAi.API.ChatCompletionRequestSchema, {
+  id: "OpenAiChatCompletionRequest",
+});
+z.globalRegistry.add(OpenAi.API.ChatCompletionResponseSchema, {
+  id: "OpenAiChatCompletionResponse",
+});
+z.globalRegistry.add(Gemini.API.GenerateContentRequestSchema, {
+  id: "GeminiGenerateContentRequest",
+});
+z.globalRegistry.add(Gemini.API.GenerateContentResponseSchema, {
+  id: "GeminiGenerateContentResponse",
+});
+z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
+  id: "AnthropicMessagesRequest",
+});
+z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+  id: "AnthropicMessagesResponse",
+});
 
 const start = async () => {
   try {
@@ -80,9 +114,12 @@ const start = async () => {
       version,
     }));
 
+    fastify.register(routes.anthropicProxyRoutes);
+    fastify.register(routes.openAiProxyRoutes);
+    fastify.register(routes.geminiProxyRoutes);
+
     fastify.register(routes.agentRoutes);
     fastify.register(routes.interactionRoutes);
-    fastify.register(routes.openAiProxyRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);
     fastify.register(routes.dualLlmConfigRoutes);

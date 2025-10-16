@@ -16,10 +16,9 @@ import type {
   GetInteractionsResponses,
 } from "@/lib/clients/api";
 import { useInteractions } from "@/lib/interaction.query";
-import {
-  toolNamesRefusedForInteraction,
-  toolNamesUsedForInteraction,
-} from "@/lib/interaction.utils";
+
+import { DynamicInteraction } from "@/lib/interaction.utils";
+
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
@@ -39,6 +38,23 @@ function findLastUserMessage(interaction: InteractionData): string {
     }
   }
   return "";
+}
+        
+function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground/50 flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
+    </div>
+  );
 }
 
 export default function LogsPage({
@@ -121,6 +137,7 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Date
@@ -130,7 +147,7 @@ function LogsTable({
       },
       cell: ({ row }) => (
         <div className="font-mono text-xs">
-          {formatDate({ date: row.original.createdAt })}
+          {formatDate({ date: new DynamicInteraction(row.original).createdAt })}
         </div>
       ),
     },
@@ -144,6 +161,7 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Agent
@@ -152,7 +170,8 @@ function LogsTable({
         );
       },
       cell: ({ row }) => {
-        const agent = agents?.find((a) => a.id === row.original.agentId);
+        const interaction = new DynamicInteraction(row.original);
+        const agent = agents?.find((a) => a.id === interaction.agentId);
         return (
           <TruncatedText message={agent?.name ?? "Unknown"} maxLength={30} />
         );
@@ -164,24 +183,30 @@ function LogsTable({
         return (
           <Button
             variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Model
+            Provider + Model
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         );
       },
-      cell: ({ row }) => (
-        <Badge variant="secondary" className="text-xs">
-          {row.original.request.model}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const interaction = new DynamicInteraction(row.original);
+        return (
+          <Badge variant="secondary" className="text-xs">
+            {interaction.provider} ({interaction.modelName})
+          </Badge>
+        );
+      },
     },
     {
       id: "userMessage",
       header: "User Message",
       cell: ({ row }) => {
-        const userMessage = findLastUserMessage(row.original);
+        const userMessage = new DynamicInteraction(
+          row.original,
+        ).getLastUserMessage();
         return (
           <div className="text-xs">
             <TruncatedText message={userMessage} maxLength={80} />
@@ -193,8 +218,9 @@ function LogsTable({
       id: "assistantResponse",
       header: "Assistant Response",
       cell: ({ row }) => {
-        const assistantResponse =
-          row.original.response.choices[0]?.message?.content ?? "";
+        const assistantResponse = new DynamicInteraction(
+          row.original,
+        ).getLastAssistantResponse();
         return (
           <div className="text-xs">
             <TruncatedText message={assistantResponse} maxLength={80} />
@@ -206,8 +232,9 @@ function LogsTable({
       id: "tools",
       header: "Tools",
       cell: ({ row }) => {
-        const toolsUsed = toolNamesUsedForInteraction(row.original);
-        const toolsBlocked = toolNamesRefusedForInteraction(row.original);
+        const interaction = new DynamicInteraction(row.original);
+        const toolsUsed = interaction.getToolNamesUsed();
+        const toolsBlocked = interaction.getToolNamesRefused();
 
         if (toolsUsed.length === 0 && toolsBlocked.length === 0) {
           return <span className="text-xs text-muted-foreground">None</span>;
@@ -242,7 +269,7 @@ function LogsTable({
       header: "Actions",
       cell: ({ row }) => (
         <Link
-          href={`/logs/${row.original.id}`}
+          href={`/logs/${new DynamicInteraction(row.original).id}`}
           className="flex items-center gap-1 whitespace-nowrap text-sm text-primary hover:underline"
         >
           View

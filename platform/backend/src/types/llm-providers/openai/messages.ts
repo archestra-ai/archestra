@@ -3,7 +3,7 @@ import { z } from "zod";
 const FunctionToolCallSchema = z
   .object({
     id: z.string(),
-    type: z.literal("function"),
+    type: z.enum(["function"]),
     function: z
       .object({
         arguments: z.string(),
@@ -20,7 +20,7 @@ const FunctionToolCallSchema = z
 const CustomToolCallSchema = z
   .object({
     id: z.string(),
-    type: z.literal("custom"),
+    type: z.enum(["custom"]),
     custom: z
       .object({
         input: z.string(),
@@ -42,7 +42,7 @@ export const ToolCallSchema = z
 
 const ContentPartRefusalSchema = z
   .object({
-    type: z.literal("refusal"),
+    type: z.enum(["refusal"]),
     refusal: z.string(),
   })
   .describe(
@@ -51,7 +51,7 @@ const ContentPartRefusalSchema = z
 
 const ContentPartTextSchema = z
   .object({
-    type: z.literal("text"),
+    type: z.enum(["text"]),
     text: z.string(),
   })
   .describe(
@@ -60,7 +60,7 @@ const ContentPartTextSchema = z
 
 const ContentPartImageSchema = z
   .object({
-    type: z.literal("image_url"),
+    type: z.enum(["image_url"]),
     image_url: z
       .object({
         url: z.string(),
@@ -76,7 +76,7 @@ const ContentPartImageSchema = z
 
 const ContentPartInputAudioSchema = z
   .object({
-    type: z.literal("input_audio"),
+    type: z.enum(["input_audio"]),
     input_audio: z
       .object({
         data: z.string(),
@@ -92,7 +92,7 @@ const ContentPartInputAudioSchema = z
 
 const ContentPartFileSchema = z
   .object({
-    type: z.literal("file"),
+    type: z.enum(["file"]),
     file: z
       .object({
         file_data: z.string().optional(),
@@ -121,7 +121,7 @@ const ContentPartSchema = z
 const DeveloperMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
-    role: z.literal("developer"),
+    role: z.enum(["developer"]),
     name: z.string().optional(),
   })
   .describe(
@@ -131,7 +131,7 @@ const DeveloperMessageParamSchema = z
 const SystemMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
-    role: z.literal("system"),
+    role: z.enum(["system"]),
     name: z.string().optional(),
   })
   .describe(
@@ -141,7 +141,7 @@ const SystemMessageParamSchema = z
 const UserMessageParamSchema = z
   .object({
     content: z.union([z.string(), z.array(ContentPartSchema)]),
-    role: z.literal("user"),
+    role: z.enum(["user"]),
     name: z.string().optional(),
   })
   .describe(
@@ -150,7 +150,7 @@ const UserMessageParamSchema = z
 
 const AssistantMessageParamSchema = z
   .object({
-    role: z.literal("assistant"),
+    role: z.enum(["assistant"]),
     audio: z
       .object({
         id: z.string(),
@@ -186,7 +186,7 @@ const AssistantMessageParamSchema = z
 
 const ToolMessageParamSchema = z
   .object({
-    role: z.literal("tool"),
+    role: z.enum(["tool"]),
     content: z.union([z.string(), z.array(ContentPartTextSchema)]),
     tool_call_id: z.string(),
   })
@@ -196,7 +196,7 @@ const ToolMessageParamSchema = z
 
 const FunctionMessageParamSchema = z
   .object({
-    role: z.literal("function"),
+    role: z.enum(["function"]),
     content: z.string().nullable(),
     name: z.string(),
   })

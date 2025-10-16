@@ -1,13 +1,12 @@
 "use client";
 
 import {
-  AccountSettingsCards,
   DeleteAccountCard,
   OrganizationMembersCard,
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { Shield, User, Users } from "lucide-react";
+import { CircleUser, Users } from "lucide-react";
 import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
@@ -40,6 +39,67 @@ function SettingsContent() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const showMembersTab =
+    activeMemberRole &&
+    (activeMemberRole === "admin" || activeMemberRole === "owner");
+
+  const members = activeOrg ? (
+    <div className="space-y-6">
+      {activeMemberRole &&
+        (activeMemberRole === "admin" || activeMemberRole === "owner") && (
+          <Dialog
+            open={inviteDialogOpen}
+            onOpenChange={(open) => {
+              setInviteDialogOpen(open);
+              if (!open) {
+                queryClient.invalidateQueries({
+                  queryKey: organizationKeys.invitations(),
+                });
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Invite Member</DialogTitle>
+              </DialogHeader>
+              <InviteByLinkCard
+                organizationId={activeOrg.id}
+                onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
+              />
+              <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
+            </DialogContent>
+          </Dialog>
+        )}
+      <OrganizationMembersCard
+        action={() => {
+          if (activeMemberRole === "admin" || activeMemberRole === "owner") {
+            setInviteDialogOpen(true);
+          }
+        }}
+      />
+      <InvitationsList
+        key={refreshKey}
+        organizationId={activeOrg.id}
+        showAllStatuses
+      />
+    </div>
+  ) : (
+    <Card>
+      <CardHeader>
+        <CardTitle>No Organization</CardTitle>
+        <CardDescription>
+          You are not part of any organization yet.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          An organization will be created for you automatically. Please refresh
+          the page or sign out and sign in again.
+        </p>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
       <div className="mb-6">
@@ -50,106 +110,32 @@ function SettingsContent() {
           Manage your account settings and preferences
         </p>
       </div>
-
-      <Tabs defaultValue="account" className="w-full">
+      <Tabs defaultValue="account">
         <TabsList
-          className={`grid w-full ${activeMemberRole && (activeMemberRole === "admin" || activeMemberRole === "owner") ? "grid-cols-3" : "grid-cols-2"}`}
+          className={`grid ${showMembersTab ? "grid-cols-2" : "grid-cols-1"}`}
         >
           <TabsTrigger value="account" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Account
+            <CircleUser className="h-4 w-4" />
+            Your Account
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Security
-          </TabsTrigger>
-          {activeMemberRole &&
-            (activeMemberRole === "admin" || activeMemberRole === "owner") && (
-              <TabsTrigger value="members" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Members
-              </TabsTrigger>
-            )}
-        </TabsList>
-
-        <TabsContent value="account" className="mt-6">
-          <div className="space-y-6">
-            <AccountSettingsCards />
-            <DeleteAccountCard />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="security" className="mt-6">
-          <SecuritySettingsCards />
-        </TabsContent>
-
-        <TabsContent value="members" className="mt-6">
-          {activeOrg ? (
-            <div className="space-y-6">
-              {activeMemberRole &&
-                (activeMemberRole === "admin" ||
-                  activeMemberRole === "owner") && (
-                  <Dialog
-                    open={inviteDialogOpen}
-                    onOpenChange={(open) => {
-                      setInviteDialogOpen(open);
-                      if (!open) {
-                        queryClient.invalidateQueries({
-                          queryKey: organizationKeys.invitations(),
-                        });
-                      }
-                    }}
-                  >
-                    <DialogContent className="sm:max-w-[500px]">
-                      <DialogHeader>
-                        <DialogTitle>Invite Member</DialogTitle>
-                      </DialogHeader>
-                      <InviteByLinkCard
-                        organizationId={activeOrg.id}
-                        onInvitationCreated={() =>
-                          setRefreshKey((prev) => prev + 1)
-                        }
-                      />
-                      <InvitationsList
-                        key={refreshKey}
-                        organizationId={activeOrg.id}
-                      />
-                    </DialogContent>
-                  </Dialog>
-                )}
-              <OrganizationMembersCard
-                action={() => {
-                  if (
-                    activeMemberRole === "admin" ||
-                    activeMemberRole === "owner"
-                  ) {
-                    setInviteDialogOpen(true);
-                  }
-                }}
-              />
-              <InvitationsList
-                key={refreshKey}
-                organizationId={activeOrg.id}
-                showAllStatuses
-              />
-            </div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>No Organization</CardTitle>
-                <CardDescription>
-                  You are not part of any organization yet.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  An organization will be created for you automatically. Please
-                  refresh the page or sign out and sign in again.
-                </p>
-              </CardContent>
-            </Card>
+          {showMembersTab && (
+            <TabsTrigger value="members" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Members
+            </TabsTrigger>
           )}
-        </TabsContent>
+        </TabsList>
+        <div className="max-w-3xl">
+          <TabsContent value="account">
+            <div className="space-y-6">
+              <SecuritySettingsCards />
+              <DeleteAccountCard />
+            </div>
+          </TabsContent>
+          {showMembersTab && (
+            <TabsContent value="members">{members}</TabsContent>
+          )}
+        </div>
       </Tabs>
     </div>
   );

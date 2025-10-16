@@ -93,94 +93,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
       if (stream) {
-        // reply.header("Content-Type", "text/event-stream");
-        // reply.header("Cache-Control", "no-cache");
-        // reply.header("Connection", "keep-alive");
-
-        // // Handle streaming response
-        // const stream = await anthropicClient.messages.create({
-        //   ...body,
-        //   messages: filteredMessages,
-        //   stream: true,
-        // });
-
-        // const chatCompletionChunksAndMessage =
-        //   await utils.streaming.handleChatCompletions(stream);
-
-        // let assistantMessage = chatCompletionChunksAndMessage.message;
-        // // Chat.Completions.ChatCompletionChunk
-        // let chunks: AnthropicProvider[] = chatCompletionChunksAndMessage.chunks;
-
-        // // Evaluate tool invocation policies dynamically
-        // const toolInvocationRefusal =
-        //   await utils.toolInvocation.evaluatePolicies(
-        //     assistantMessage,
-        //     resolvedAgentId,
-        //     contextIsTrusted,
-        //   );
-
-        // if (toolInvocationRefusal) {
-        //   /**
-        //    * Tool invocation was blocked
-        //    *
-        //    * Overwrite the assistant message that will be persisted
-        //    * Plus send a single chunk, representing the refusal message instead of original chunks
-        //    */
-        //   assistantMessage = toolInvocationRefusal.message;
-        //   chunks = [
-        //     {
-        //       id: "chatcmpl-blocked",
-        //       object: "chat.completion.chunk",
-        //       created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
-        //       model: body.model,
-        //       choices: [
-        //         {
-        //           index: 0,
-        //           delta:
-        //             toolInvocationRefusal.message as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-        //           finish_reason: "stop",
-        //           logprobs: null,
-        //         },
-        //       ],
-        //     },
-        //   ];
-        // }
-
-        // // Store the complete interaction
-        // await InteractionModel.create({
-        //   agentId: resolvedAgentId,
-        //   type: "anthropic:messages",
-        //   request: body,
-        //   response: {
-        //     id: chunks[0]?.id || "chatcmpl-unknown",
-        //     object: "chat.completion",
-        //     created: chunks[0]?.created || Date.now() / 1000,
-        //     model: body.model,
-        //     choices: [
-        //       {
-        //         index: 0,
-        //         message: assistantMessage,
-        //         finish_reason: "stop",
-        //         logprobs: null,
-        //       },
-        //     ],
-        //   },
-        // });
-
-        // for (const chunk of chunks) {
-        //   /**
-        //    * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
-        //    */
-        //   reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-        //   await new Promise((resolve) =>
-        //     setTimeout(resolve, Math.random() * 10),
-        //   );
-        // }
-
-        // reply.raw.write("data: [DONE]\n\n");
-        // reply.raw.end();
-        // return reply;
-
         return reply.code(400).send({
           error: {
             message: "Streaming is not supported for Anthropic. Coming soon!",
@@ -188,6 +100,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } else {
+        const anthropicRequest = transformer.requestFromOpenAI(commonRequest);
+
         // Non-streaming response
         const response = await anthropicClient.messages.create({
           ...body,
@@ -196,23 +110,34 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         // Convert to common format for policy evaluation
-        const commonResponse = transformer.responseToOpenAI(response);
+        // const commonResponse = transformer.responseToOpenAI(response);
 
         // Evaluate tool invocation policies
-        const assistantMessage = commonResponse.choices[0]?.message;
-        if (assistantMessage) {
+        // const assistantMessage = commonResponse.choices[0]?.message;
+
+        const toolCalls = response.content.filter(
+          (content) => content.type === "tool_use",
+        );
+
+        if (toolCalls) {
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
-              assistantMessage,
+              toolCalls.map((toolCall) => ({
+                toolCallName: toolCall.name,
+                toolCallArgs: JSON.stringify(toolCall.input),
+              })),
               resolvedAgentId,
               contextIsTrusted,
             );
 
           if (toolInvocationRefusal) {
-            commonResponse.choices = [toolInvocationRefusal];
-            // Convert back to Anthropic format
-            const refusalResponse =
-              transformer.responseFromOpenAI(commonResponse);
+            const [refusalMessage, contentMessage] = toolInvocationRefusal;
+            response.content = [
+              {
+                type: "text",
+                text: refusalMessage,
+              },
+            ];
 
             // Store the interaction with refusal
             await InteractionModel.create({

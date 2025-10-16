@@ -121,6 +121,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (content) => content.type === "tool_use",
         );
 
+        console.log("response", response);
+        console.log("toolCalls", toolCalls);
+
         if (toolCalls) {
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(

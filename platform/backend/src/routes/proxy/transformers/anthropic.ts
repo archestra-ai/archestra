@@ -33,6 +33,16 @@ export class AnthropicMessagesTransformer
       }
     }
 
+    if (request.system) {
+      openAiMessages.push({
+        role: "system",
+        content:
+          typeof request.system === "string"
+            ? request.system
+            : request.system.text,
+      });
+    }
+
     for (const message of request.messages) {
       if (message.role === "user") {
         openAiMessages.push({
@@ -75,12 +85,18 @@ export class AnthropicMessagesTransformer
   requestFromOpenAI(
     request: OpenAi.Types.ChatCompletionsRequest,
   ): Anthropic.Types.MessagesRequest {
-    const anthropicTools: Anthropic.Types.MessagesRequest["tools"] = [];
-    const anthropicMessages: Anthropic.Types.MessagesRequest["messages"] = [];
+    const anthropicRequest: Anthropic.Types.MessagesRequest = {
+      model: request.model,
+      messages: [],
+      tools: [],
+      stream: request.stream ?? false,
+      temperature: request.temperature ?? 0,
+      max_tokens: request.max_tokens ?? 100_000, // NOTE: what to set this to?
+    };
 
     for (const tool of request.tools || []) {
       if (tool.type === "function") {
-        anthropicTools.push({
+        anthropicRequest.tools?.push({
           name: tool.function.name,
           input_schema: tool.function.parameters as any,
         });
@@ -88,27 +104,23 @@ export class AnthropicMessagesTransformer
     }
 
     for (const message of request.messages) {
-      if (message.role === "user") {
-        anthropicMessages.push({
+      if (message.role === "system") {
+        anthropicRequest.system =
+          typeof message.content === "string"
+            ? message.content
+            : message.content[0].text;
+      } else if (message.role === "user") {
+        anthropicRequest.messages?.push({
           role: "user",
           content: message.content,
         });
       } else if (message.role === "assistant") {
-        anthropicMessages.push({
+        anthropicRequest.messages?.push({
           role: "assistant",
           content: message.content as any,
         });
       }
     }
-
-    const anthropicRequest: Anthropic.Types.MessagesRequest = {
-      model: request.model,
-      messages: anthropicMessages,
-      tools: anthropicTools,
-      stream: request.stream ?? false,
-      temperature: request.temperature ?? 0,
-      max_tokens: request.max_tokens ?? 100_000, // NOTE: what to set this to?
-    };
 
     if (request.tool_choice) {
       switch (request.tool_choice) {

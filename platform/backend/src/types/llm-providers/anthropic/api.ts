@@ -44,7 +44,17 @@ export const MessagesRequestSchema = z.object({
   service_tier: z.any().optional(),
   stop_sequences: z.array(z.string()).optional(),
   stream: z.boolean().optional(),
-  system: z.any().optional(),
+  system: z
+    .union([
+      z.string(),
+      z.object({
+        type: z.enum(["text"]),
+        text: z.string(),
+        cache_control: z.any().nullable().optional(),
+        citations: z.array(z.any()).optional(),
+      }),
+    ])
+    .optional(),
   temperature: z.number().optional(),
   thinking: z.any().optional(),
   tool_choice: ToolChoiceSchema.optional(),

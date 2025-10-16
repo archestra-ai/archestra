@@ -1,3 +1,4 @@
+import type { VercelTools } from "@shared/vercel-ai/openai/conversion";
 import { AgentModel, ToolModel } from "@/models";
 import type { MagicalType } from "@/types";
 
@@ -22,6 +23,23 @@ export const persistTools = async (
       name,
       parameters: tool.inputSchema,
       description: tool.description,
+    });
+  }
+};
+
+/**
+ * Persist tools if present in the request
+ */
+export const persistToolsVercel = async (
+  tools: VercelTools,
+  agentId: string,
+) => {
+  for (const tool of tools || []) {
+    await ToolModel.createToolIfNotExists({
+      agentId,
+      name: tool.name,
+      parameters: "inputSchema" in tool ? tool.inputSchema : undefined,
+      description: "description" in tool ? tool.description : undefined,
     });
   }
 };

@@ -31,7 +31,7 @@
     "@fastify/swagger": "^9.5.2",
     "@google/genai": "^1.24.0",
     "@shared": "workspace:*",
-    "ai": "^5.0.60",
+    "ai": "5.1.0-beta.27",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.5",
     "drizzle-orm": "^0.44.5",

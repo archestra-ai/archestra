@@ -1,61 +1,16 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { jsonSchema } from "@ai-sdk/provider-utils";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import {
-  generateText,
-  type ModelMessage,
-  type ToolChoice,
-  type ToolSet,
-} from "ai";
+  OpenAIChatLanguageModelExtended,
+  type OpenAIChatRequest,
+} from "@shared/vercel-ai/openai/conversion";
+import { generateText } from "ai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
-import {
-  ErrorResponseSchema,
-  type MagicalType,
-  OpenAi,
-  UuidIdSchema,
-} from "@/types";
+import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
-
-const convertOpenAiFormatToAiSdkFormat = (
-  request: OpenAi.Types.ChatCompletionsRequest,
-): MagicalType => {
-  // Convert OpenAI tools array format to AI SDK Record format
-  const tools: MagicalType["tools"] = {};
-
-  if (request.tools && Array.isArray(request.tools)) {
-    for (const tool of request.tools) {
-      if (tool.type === "function") {
-        const { name, description, parameters } = tool.function;
-
-        // Ensure parameters has type: "object" at the root and wrap in jsonSchema()
-        const schema = parameters
-          ? { type: "object" as const, ...parameters }
-          : {
-              type: "object" as const,
-              properties: {},
-              additionalProperties: false,
-            };
-
-        tools[name] = {
-          description,
-          inputSchema: jsonSchema(schema),
-        };
-      }
-    }
-  }
-
-  return {
-    messages: request.messages as unknown as ModelMessage[],
-    tools,
-    toolChoice: request.tool_choice as ToolChoice<ToolSet>,
-    temperature: request.temperature ?? undefined,
-    maxOutputTokens: request.max_tokens ?? undefined,
-  };
-};
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -84,7 +39,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   const handleChatCompletion = async (
-    body: OpenAi.Types.ChatCompletionsRequest,
+    body: OpenAIChatRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
     reply: FastifyReply,
     agentId?: string,
@@ -110,17 +65,35 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { authorization: openAiApiKey } = headers;
-    const openAiProvider = createOpenAI({ apiKey: openAiApiKey });
+    const openAIChatCompletionsModelExtended =
+      new OpenAIChatLanguageModelExtended(body.model, {
+        provider: `openai.chat`,
+        url: ({ path }) => `https://api.openai.com/v1${path}`,
+        headers: () => ({
+          Authorization: `Bearer ${openAiApiKey}`,
+        }),
+      });
 
-    const vercelAiSdkRequest = convertOpenAiFormatToAiSdkFormat(body);
+    const vercelAiSdkRequest =
+      await openAIChatCompletionsModelExtended.convertRequestProviderToVercel(
+        body,
+      );
 
     try {
-      await utils.persistTools(vercelAiSdkRequest.tools, resolvedAgentId);
+      if (vercelAiSdkRequest.tools) {
+        await utils.persistToolsVercel(
+          vercelAiSdkRequest.tools,
+          resolvedAgentId,
+        );
+      }
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
+        // we would need to improve evaluateIfContextIsTrusted typing as remove assertion
         await utils.trustedData.evaluateIfContextIsTrusted(
-          vercelAiSdkRequest.messages,
+          vercelAiSdkRequest.prompt as Parameters<
+            typeof utils.trustedData.evaluateIfContextIsTrusted
+          >[0],
           resolvedAgentId,
           openAiApiKey,
         );
@@ -211,10 +184,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   messages: filteredMessages,
         //   stream: false,
         // });
+
+        // ... rest of the code ...
+
+        // const results = await openAIChatCompletionsModelExtended.doGenerate({
+        //   ...vercelAiSdkRequest,
+        //   prompt: filteredMessages,
+        // });
         const results = await generateText({
-          model: openAiProvider.chat(body.model), // use OpenAI chat completions API
-          ...vercelAiSdkRequest,
-          messages: filteredMessages,
+          model: openAIChatCompletionsModelExtended,
+          prompt: filteredMessages,
         });
 
         // const rawResponse = results.response

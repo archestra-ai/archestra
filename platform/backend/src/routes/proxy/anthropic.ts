@@ -107,7 +107,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else {
         // Non-streaming response
         const response = await anthropicClient.messages.create({
-          ...body,
+          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+          ...(body as any),
           messages: filteredMessages,
           stream: false,
         });

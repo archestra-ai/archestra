@@ -1,10 +1,11 @@
-import {
-  DualLlmConfigModel,
-  DualLlmResultModel,
-  TrustedDataPolicyModel,
-} from "@/models";
+// import {
+//   DualLlmConfigModel,
+//   DualLlmResultModel,
+//   TrustedDataPolicyModel,
+// } from "@/models";
 import type { Anthropic } from "@/types";
-import { DualLlmSubagent } from "./dual-llm-subagent";
+
+// import { DualLlmSubagent } from "./dual-llm-subagent";
 
 type Messages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -15,7 +16,7 @@ type Messages = Anthropic.Types.MessagesRequest["messages"];
  * We need to do this because the name of the tool is not included in the "tool" message (ie. tool call result)
  * (just the content and tool_call_id)
  */
-const extractToolNameFromMessages = (
+const _extractToolNameFromMessages = (
   messages: Messages,
   toolCallId: string,
 ): string | null => {
@@ -48,8 +49,8 @@ const extractToolNameFromMessages = (
  */
 export const evaluateIfContextIsTrusted = async (
   messages: Messages,
-  agentId: string,
-  apiKey: string,
+  _agentId: string,
+  _apiKey: string,
 ): Promise<{
   filteredMessages: Messages;
   contextIsTrusted: boolean;

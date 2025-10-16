@@ -149,7 +149,7 @@ export const putV1AnthropicBy__ = <ThrowOnError extends boolean = false>(options
  */
 export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => {
     return (options.client ?? client).post<AnthropicMessagesWithDefaultAgentResponses, AnthropicMessagesWithDefaultAgentErrors, ThrowOnError>({
-        url: '/v1/anthropic//messages',
+        url: '/v1/anthropic/v1/messages',
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -163,7 +163,7 @@ export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean =
  */
 export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => {
     return (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
-        url: '/v1/anthropic/{agentId}//messages',
+        url: '/v1/anthropic/v1/{agentId}/messages',
         ...options,
         headers: {
             'Content-Type': 'application/json',

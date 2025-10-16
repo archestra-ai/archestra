@@ -899,9 +899,131 @@ export type GeminiGenerateContentResponseInput = {
     modelVersion: string;
 };
 
-export type AnthropicMessagesRequestInput = unknown;
+export type AnthropicMessagesRequestInput = {
+    model: string;
+    messages: Array<{
+        content: string | Array<{
+            text: string;
+            type: 'text';
+            cache_control?: unknown;
+            citations?: Array<unknown> | unknown;
+        } | {
+            id: string;
+            input: unknown;
+            name: string;
+            type: 'tool_use';
+            cache_control?: unknown;
+        } | {
+            tool_use_id: string;
+            type: 'tool_result';
+            cache_control?: unknown;
+            content?: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | unknown;
+            }>;
+            is_error?: boolean;
+        }>;
+        role: 'user' | 'assistant';
+    }>;
+    max_tokens: number;
+    container?: string | unknown;
+    context_management?: {
+        [key: string]: unknown;
+    } | unknown;
+    mcp_servers?: Array<unknown>;
+    metadata?: {
+        user_id: string | unknown;
+    };
+    service_tier?: unknown;
+    stop_sequences?: Array<string>;
+    stream?: boolean;
+    system?: string | {
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    };
+    temperature?: number;
+    thinking?: unknown;
+    tool_choice?: {
+        type: 'auto';
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'any';
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'tool';
+        name: string;
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'none';
+    };
+    tools?: Array<{
+        name: string;
+        type?: 'custom' | unknown;
+        cache_control?: unknown;
+        input_schema: {
+            [key: string]: unknown;
+        };
+        description?: string;
+    } | {
+        name: 'bash';
+        type: 'bash_20250124';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_editor';
+        type: 'text_editor_20250124';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_based_edit_tool';
+        type: 'text_editor_20250429';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_based_edit_tool';
+        type: 'text_editor_20250728';
+        cache_control?: unknown;
+        max_characters?: number | unknown;
+    } | {
+        name: 'web_search';
+        type: 'web_search_20250305';
+        allowed_domains?: Array<string> | unknown;
+        blocked_domains?: Array<string> | unknown;
+        cache_control?: unknown;
+        max_uses?: number | unknown;
+        user_location?: unknown;
+    }>;
+    top_k?: number;
+    top_p?: number;
+};
 
-export type AnthropicMessagesResponseInput = unknown;
+export type AnthropicMessagesResponseInput = {
+    id: string;
+    content: Array<{
+        citations: Array<unknown> | unknown;
+        text: string;
+        type: 'text';
+    } | {
+        signature: string;
+        thinking: string;
+        type: 'thinking';
+    } | {
+        data: string;
+        type: 'redacted_thinking';
+    } | {
+        id: string;
+        input: unknown;
+        name: string;
+        type: 'tool_use';
+    }>;
+    model: string;
+    role: 'assistant';
+    stop_reason: unknown;
+    stop_sequence: string | unknown;
+    type: 'message';
+    usage: unknown;
+};
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
 
@@ -1798,9 +1920,131 @@ export type GeminiGenerateContentResponse = {
     modelVersion: string;
 };
 
-export type AnthropicMessagesRequest = unknown;
+export type AnthropicMessagesRequest = {
+    model: string;
+    messages: Array<{
+        content: string | Array<{
+            text: string;
+            type: 'text';
+            cache_control?: unknown;
+            citations?: Array<unknown> | unknown;
+        } | {
+            id: string;
+            input: unknown;
+            name: string;
+            type: 'tool_use';
+            cache_control?: unknown;
+        } | {
+            tool_use_id: string;
+            type: 'tool_result';
+            cache_control?: unknown;
+            content?: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | unknown;
+            }>;
+            is_error?: boolean;
+        }>;
+        role: 'user' | 'assistant';
+    }>;
+    max_tokens: number;
+    container?: string | unknown;
+    context_management?: {
+        [key: string]: never;
+    } | unknown;
+    mcp_servers?: Array<unknown>;
+    metadata?: {
+        user_id: string | unknown;
+    };
+    service_tier?: unknown;
+    stop_sequences?: Array<string>;
+    stream?: boolean;
+    system?: string | {
+        type: 'text';
+        text: string;
+        cache_control?: unknown;
+        citations?: Array<unknown> | unknown;
+    };
+    temperature?: number;
+    thinking?: unknown;
+    tool_choice?: {
+        type: 'auto';
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'any';
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'tool';
+        name: string;
+        disable_parallel_tool_use?: boolean;
+    } | {
+        type: 'none';
+    };
+    tools?: Array<{
+        name: string;
+        type?: 'custom' | unknown;
+        cache_control?: unknown;
+        input_schema: {
+            [key: string]: unknown;
+        };
+        description?: string;
+    } | {
+        name: 'bash';
+        type: 'bash_20250124';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_editor';
+        type: 'text_editor_20250124';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_based_edit_tool';
+        type: 'text_editor_20250429';
+        cache_control?: unknown;
+    } | {
+        name: 'str_replace_based_edit_tool';
+        type: 'text_editor_20250728';
+        cache_control?: unknown;
+        max_characters?: number | unknown;
+    } | {
+        name: 'web_search';
+        type: 'web_search_20250305';
+        allowed_domains?: Array<string> | unknown;
+        blocked_domains?: Array<string> | unknown;
+        cache_control?: unknown;
+        max_uses?: number | unknown;
+        user_location?: unknown;
+    }>;
+    top_k?: number;
+    top_p?: number;
+};
 
-export type AnthropicMessagesResponse = unknown;
+export type AnthropicMessagesResponse = {
+    id: string;
+    content: Array<{
+        citations: Array<unknown> | unknown;
+        text: string;
+        type: 'text';
+    } | {
+        signature: string;
+        thinking: string;
+        type: 'thinking';
+    } | {
+        data: string;
+        type: 'redacted_thinking';
+    } | {
+        id: string;
+        input: unknown;
+        name: string;
+        type: 'tool_use';
+    }>;
+    model: string;
+    role: 'assistant';
+    stop_reason: unknown;
+    stop_sequence: string | unknown;
+    type: 'message';
+    usage: unknown;
+};
 
 export type GetOpenapiJsonData = {
     body?: never;
@@ -2079,11 +2323,12 @@ export type AnthropicMessagesWithDefaultAgentData = {
          * The user agent of the client
          */
         'user-agent'?: string;
-        authorization: string;
+        'anthropic-version': string;
+        'x-api-key': string;
     };
     path?: never;
     query?: never;
-    url: '/v1/anthropic//messages';
+    url: '/v1/anthropic/v1/messages';
 };
 
 export type AnthropicMessagesWithDefaultAgentErrors = {
@@ -2143,13 +2388,14 @@ export type AnthropicMessagesWithAgentData = {
          * The user agent of the client
          */
         'user-agent'?: string;
-        authorization: string;
+        'anthropic-version': string;
+        'x-api-key': string;
     };
     path: {
         agentId: string;
     };
     query?: never;
-    url: '/v1/anthropic/{agentId}//messages';
+    url: '/v1/anthropic/v1/{agentId}/messages';
 };
 
 export type AnthropicMessagesWithAgentErrors = {

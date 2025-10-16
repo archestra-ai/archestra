@@ -116,7 +116,7 @@ ANTHROPIC_API_KEY=your-api-key-here  # Required for Anthropic provider
 # Note: For client applications using the proxy:
 # - OpenAI: Pass API key in Authorization header as "Bearer <key>"
 # - Gemini: Pass API key in x-goog-api-key header
-# - Anthropic: Pass API key in Authorization header
+# - Anthropic: Pass API key in x-api-key header
 ```
 
 The `ARCHESTRA_API_BASE_URL` environment variable allows customizing the proxy URL that users see in the Settings page. The platform intelligently handles various URL formats:
@@ -288,7 +288,7 @@ The production backend provides:
 - **Anthropic**: Partially implemented with messages API support
   - TypeScript types for Anthropic API (`platform/backend/src/types/llm-providers/anthropic/`)
   - Requires `ANTHROPIC_API_KEY` environment variable
-  - Anthropic API requests require `Authorization` header with API key
+  - Anthropic API requests require `x-api-key` header with API key
   - Note: Transformer implementation is partially complete
 
 #### REST API Endpoints

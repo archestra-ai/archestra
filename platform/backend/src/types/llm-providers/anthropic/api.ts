@@ -16,6 +16,8 @@ export const MessagesRequestSchema = z.object({
     .optional(),
   service_tier: z.any().optional(),
   stop_sequences: z.array(z.string()).optional(),
+  stream: z.boolean().optional(),
+  system: z.any().optional(),
   temperature: z.number().optional(),
   thinking: z.any().optional(),
   tool_choice: z.any().optional(),

@@ -82,8 +82,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Convert Gemini request to common format for processing
       const commonRequest = transformer.requestToOpenAI(body);
 
-      // Persist tools if present
-      await utils.persistTools(commonRequest.tools, resolvedAgentId);
+      // TODO: Persist tools if present
+      // await utils.persistTools(commonRequest.tools, resolvedAgentId);
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
@@ -233,35 +233,36 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
 
         // Convert to common format for policy evaluation
-        const commonResponse = transformer.responseToOpenAI(geminiResponse);
+        // const commonResponse = transformer.responseToOpenAI(geminiResponse);
 
+        // TODO:
         // Evaluate tool invocation policies
-        const assistantMessage = commonResponse.choices[0]?.message;
-        if (assistantMessage) {
-          const toolInvocationRefusal =
-            await utils.toolInvocation.evaluatePolicies(
-              assistantMessage,
-              resolvedAgentId,
-              contextIsTrusted,
-            );
+        // const assistantMessage = commonResponse.choices[0]?.message;
+        // if (assistantMessage) {
+        //   const toolInvocationRefusal =
+        //     await utils.toolInvocation.evaluatePolicies(
+        //       assistantMessage,
+        //       resolvedAgentId,
+        //       contextIsTrusted,
+        //     );
 
-          if (toolInvocationRefusal) {
-            commonResponse.choices = [toolInvocationRefusal];
-            // Convert back to Gemini format
-            const refusalResponse =
-              transformer.responseFromOpenAI(commonResponse);
+        //   if (toolInvocationRefusal) {
+        //     commonResponse.choices = [toolInvocationRefusal];
+        //     // Convert back to Gemini format
+        //     const refusalResponse =
+        //       transformer.responseFromOpenAI(commonResponse);
 
-            // Store the interaction with refusal
-            await InteractionModel.create({
-              agentId: resolvedAgentId,
-              type: "gemini:generateContent",
-              request: body,
-              response: refusalResponse,
-            });
+        //     // Store the interaction with refusal
+        //     await InteractionModel.create({
+        //       agentId: resolvedAgentId,
+        //       type: "gemini:generateContent",
+        //       request: body,
+        //       response: refusalResponse,
+        //     });
 
-            return reply.send(refusalResponse);
-          }
-        }
+        //     return reply.send(refusalResponse);
+        //   }
+        // }
 
         // Store the complete interaction
         await InteractionModel.create({

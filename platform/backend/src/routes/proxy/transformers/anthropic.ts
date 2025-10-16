@@ -47,14 +47,29 @@ export class AnthropicMessagesTransformer
       }
     }
 
-    return {
+    const openAiRequest: OpenAi.Types.ChatCompletionsRequest = {
       model: request.model,
       messages: openAiMessages,
       tools: openAiTools,
       stream: request.stream ?? false,
       temperature: request.temperature ?? 0,
-      tool_choice: request.tool_choice ?? "none",
+      max_tokens: request.max_tokens,
     };
+
+    if (request.tool_choice) {
+      switch (request.tool_choice.type) {
+        case "any":
+        case "tool":
+        case "auto":
+          openAiRequest.tool_choice = "auto";
+          break;
+        case "none":
+          openAiRequest.tool_choice = "none";
+          break;
+      }
+    }
+
+    return openAiRequest;
   }
 
   requestFromOpenAI(
@@ -86,15 +101,32 @@ export class AnthropicMessagesTransformer
       }
     }
 
-    return {
+    const anthropicRequest: Anthropic.Types.MessagesRequest = {
       model: request.model,
       messages: anthropicMessages,
       tools: anthropicTools,
       stream: request.stream ?? false,
       temperature: request.temperature ?? 0,
-      tool_choice: request.tool_choice ?? "none",
-      max_tokens: request.max_tokens ?? 0,
+      max_tokens: request.max_tokens ?? 100_000, // NOTE: what to set this to?
     };
+
+    if (request.tool_choice) {
+      switch (request.tool_choice) {
+        case "required":
+        case "auto":
+          anthropicRequest.tool_choice = {
+            type: "auto",
+          };
+          break;
+        case "none":
+          anthropicRequest.tool_choice = {
+            type: "none",
+          };
+          break;
+      }
+    }
+
+    return anthropicRequest;
   }
 
   chunkToOpenAI(

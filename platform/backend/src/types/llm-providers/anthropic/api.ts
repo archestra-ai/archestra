@@ -2,6 +2,33 @@ import { z } from "zod";
 import { MessageContentBlockSchema, MessageParamSchema } from "./messages";
 import { ToolSchema } from "./tools";
 
+const ToolChoiceAutoSchema = z.object({
+  type: z.enum(["auto"]),
+  disable_parallel_tool_use: z.boolean().optional(),
+});
+
+const ToolChoiceAnySchema = z.object({
+  type: z.enum(["any"]),
+  disable_parallel_tool_use: z.boolean().optional(),
+});
+
+const ToolChoiceToolSchema = z.object({
+  type: z.enum(["tool"]),
+  name: z.string(),
+  disable_parallel_tool_use: z.boolean().optional(),
+});
+
+const ToolChoiceNoneSchema = z.object({
+  type: z.enum(["none"]),
+});
+
+const ToolChoiceSchema = z.union([
+  ToolChoiceAutoSchema,
+  ToolChoiceAnySchema,
+  ToolChoiceToolSchema,
+  ToolChoiceNoneSchema,
+]);
+
 export const MessagesRequestSchema = z.object({
   model: z.string(),
   messages: z.array(MessageParamSchema),
@@ -20,7 +47,7 @@ export const MessagesRequestSchema = z.object({
   system: z.any().optional(),
   temperature: z.number().optional(),
   thinking: z.any().optional(),
-  tool_choice: z.any().optional(),
+  tool_choice: ToolChoiceSchema.optional(),
   tools: z.array(ToolSchema).optional(),
   top_k: z.number().optional(),
   top_p: z.number().optional(),

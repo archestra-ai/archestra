@@ -76,19 +76,17 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const commonRequest = transformer.requestToOpenAI(body);
 
       if (body.tools) {
-        const transformedTools = body.tools
-          .map((tool) => {
-            if (tool.type === "custom") {
-              return {
-                toolName: tool.name,
-                toolParameters: tool.input_schema,
-                toolDescription: tool.description,
-              };
-            } else {
-              return null;
-            }
-          })
-          .filter((tool) => tool !== null);
+        const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
+
+        for (const tool of body.tools) {
+          if (tool.type === "custom") {
+            transformedTools.push({
+              toolName: tool.name,
+              toolParameters: tool.input_schema,
+              toolDescription: tool.description,
+            });
+          }
+        }
 
         await utils.persistTools(transformedTools, resolvedAgentId);
       }

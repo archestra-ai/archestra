@@ -265,7 +265,7 @@ function ToolsList({
     },
     {
       id: "agent",
-      accessorFn: (row) => row.agent.name,
+      accessorFn: (row) => row.agent?.name || "",
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -277,7 +277,9 @@ function ToolsList({
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="text-sm text-muted-foreground truncate">{row.original.agent.name}</div>
+        <div className="text-sm text-muted-foreground truncate">
+          {row.original.agent?.name || "-"}
+        </div>
       ),
       size: 150,
     },
@@ -551,7 +553,7 @@ function ToolsList({
         )}
 
         <ToolDetailsDialog
-          tool={selectedToolForDialog}
+          tool={selectedToolForDialog ? tools.find(t => t.id === selectedToolForDialog.id) || selectedToolForDialog : null}
           open={!!selectedToolForDialog}
           onOpenChange={(open) => !open && setSelectedToolForDialog(null)}
         />

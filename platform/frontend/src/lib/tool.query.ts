@@ -34,31 +34,22 @@ export function useToolPatchMutation() {
     onSuccess: (data, variables) => {
       // Update the cache directly without invalidating
       queryClient.setQueryData<GetToolsResponses["200"]>(["tools"], (old) => {
-        if (!old) return old;
+        if (!old || !data) return old;
 
-        // Only create a new array if we actually need to update something
+        // Find and update the tool with the response data
         const toolIndex = old.findIndex((tool) => tool.id === variables.id);
         if (toolIndex === -1) {
           return old;
         }
 
-        // Check if the tool actually changed
+        // Create a new array with the updated tool from the server response
+        // Preserve the agent relationship if not included in response
         const existingTool = old[toolIndex];
-        const hasChanges = Object.keys(variables).some(
-          (key) =>
-            key !== "id" &&
-            existingTool[key as keyof typeof existingTool] !==
-              variables[key as keyof typeof variables],
-        );
-
-        // If no changes, return the same reference
-        if (!hasChanges) {
-          return old;
-        }
-
-        // Create a new array only if there are changes
         const newTools = [...old];
-        newTools[toolIndex] = { ...existingTool, ...variables };
+        newTools[toolIndex] = {
+          ...data,
+          agent: data.agent || existingTool.agent
+        };
         return newTools;
       });
     }

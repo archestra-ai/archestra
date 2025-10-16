@@ -4,7 +4,7 @@ import {
   TrustedDataPolicyModel,
 } from "@/models";
 import type { OpenAi } from "@/types";
-import { DualLlmSubagent } from "./dual-llm-subagent";
+import { DualLlmSubagent } from "../dual-llm-subagent";
 
 type Messages = OpenAi.Types.ChatCompletionsRequest["messages"];
 

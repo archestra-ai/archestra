@@ -1,10 +1,10 @@
 import { AgentModel, ToolModel, TrustedDataPolicyModel } from "@/models";
-import type { OpenAi, Tool } from "@/types";
-import { evaluateIfContextIsTrusted } from "./trusted-data.openai";
+import type { Anthropic, Tool } from "@/types";
+import { evaluateIfContextIsTrusted } from "./anthropic";
 
-type Messages = OpenAi.Types.ChatCompletionsRequest["messages"];
+type Messages = Anthropic.Types.MessagesRequest["messages"];
 
-describe("trusted-data openai utils", () => {
+describe("trusted-data anthropic utils", () => {
   let agentId: string;
   let toolId: string;
 

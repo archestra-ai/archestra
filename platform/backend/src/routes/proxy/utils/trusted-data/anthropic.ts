@@ -5,7 +5,7 @@
 // } from "@/models";
 import type { Anthropic } from "@/types";
 
-// import { DualLlmSubagent } from "./dual-llm-subagent";
+// import { DualLlmSubagent } from "../dual-llm-subagent";
 
 type Messages = Anthropic.Types.MessagesRequest["messages"];
 

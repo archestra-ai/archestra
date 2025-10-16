@@ -1,6 +1,6 @@
 import type { Anthropic, OpenAi } from "@/types";
-import * as anthropic from "./trusted-data.anthropic";
-import * as openai from "./trusted-data.openai";
+import * as anthropic from "./anthropic";
+import * as openai from "./openai";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];

@@ -1,11 +1,11 @@
-import { Agent } from '@mastra/core/agent';
-import { createOpenAI, openai as defaultOpenAi } from '@ai-sdk/openai';
-import { PinoLogger } from '@mastra/loggers';
-import { githubTool } from '../tools/github-tool';
+import { createOpenAI, openai as defaultOpenAi } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { PinoLogger } from "@mastra/loggers";
+import { githubTool } from "../tools/github-tool";
 
 const logger = new PinoLogger({
-  name: 'GitHubAgent',
-  level: 'debug',
+  name: "GitHubAgent",
+  level: "debug",
 });
 
 let openai;
@@ -17,12 +17,12 @@ if (process.env.OPENAI_PROXY_URL) {
     apiKey: process.env.OPENAI_API_KEY,
   });
 } else {
-  logger.info('Using direct OpenAI connection');
+  logger.info("Using direct OpenAI connection");
   openai = defaultOpenAi;
 }
 
 export const githubAgent = new Agent({
-  name: 'Github Agent',
+  name: "Github Agent",
   instructions: `You are a helpful GitHub assistant that can interact with GitHub repositories. You can:
 
 1. **Retrieve GitHub issues** - Get detailed information about specific issues
@@ -48,7 +48,7 @@ You have access to public GitHub repositories and can perform read operations wi
 
   // We are using .chat to switch to /chat/completions api from the default /responses api
   // to be compatible with the platform proxy.
-  model: openai.chat('gpt-4o-mini'),
+  model: openai.chat("gpt-4o-mini"),
 
   tools: {
     githubTool,

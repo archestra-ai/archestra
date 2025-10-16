@@ -52,12 +52,64 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      // Validate email format for invitations
       if (ctx.path === "/organization/invite-member" && ctx.method === "POST") {
         const body = ctx.body;
         const emailValidation = z.email().safeParse(body.email);
         if (!emailValidation.success) {
           throw new APIError("BAD_REQUEST", {
             message: "Invalid email format",
+          });
+        }
+
+        return ctx;
+      }
+
+      // Block direct sign-up without invitation (invitation-only registration)
+      if (ctx.path.startsWith("/sign-up/email") && ctx.method === "POST") {
+        const body = ctx.body;
+        const invitationId = body.callbackURL
+          ?.split("invitationId=")[1]
+          ?.split("&")[0];
+
+        if (!invitationId) {
+          throw new APIError("FORBIDDEN", {
+            message:
+              "Direct sign-up is disabled. You need an invitation to create an account.",
+          });
+        }
+
+        // Validate the invitation exists and is pending
+        const invitation = await db
+          .select()
+          .from(schema.invitation)
+          .where(eq(schema.invitation.id, invitationId))
+          .limit(1);
+
+        if (!invitation[0]) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Invalid invitation ID",
+          });
+        }
+
+        if (invitation[0].status !== "pending") {
+          throw new APIError("BAD_REQUEST", {
+            message: `This invitation has already been ${invitation[0].status}`,
+          });
+        }
+
+        // Check if invitation is expired
+        if (invitation[0].expiresAt && invitation[0].expiresAt < new Date()) {
+          throw new APIError("BAD_REQUEST", {
+            message: "This invitation has expired",
+          });
+        }
+
+        // Validate email matches invitation
+        if (body.email && invitation[0].email !== body.email) {
+          throw new APIError("BAD_REQUEST", {
+            message:
+              "Email address does not match the invitation. You must use the invited email address.",
           });
         }
 

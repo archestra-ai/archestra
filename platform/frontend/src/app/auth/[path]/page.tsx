@@ -20,7 +20,7 @@ export default async function AuthPage({
   return (
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
-        <main className="container flex grow flex-col items-center justify-center self-center p-4 md:p-6">
+        <main className="container flex grow flex-col items-center justify-center self-center p-4 md:p-6 h-full">
           <AuthView path={path} />
         </main>
       </Suspense>

@@ -25,19 +25,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  joey-claude-pull-requests:
-    name: Claude Pull Requests for Joey
-    if: |
-      github.event.pull_request.user.login == 'joeyorlando'
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
-    uses: ./.github/workflows/claude-pull-requests.yml
-    secrets:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEYORLANDO_CLAUDE_CODE_OAUTH_TOKEN }}
+  # joey-claude-pull-requests:
+  #   name: Claude Pull Requests for Joey
+  #   if: |
+  #     github.event.pull_request.user.login == 'joeyorlando'
+  #   permissions:
+  #     contents: write
+  #     pull-requests: write
+  #     issues: write
+  #     id-token: write
+  #     actions: read # Required for Claude to read CI results on PRs
+  #   uses: ./.github/workflows/claude-pull-requests.yml
+  #   secrets:
+  #     CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.JOEYORLANDO_CLAUDE_CODE_OAUTH_TOKEN }}
 
   ildar-claude-pull-requests:
     name: Claude Pull Requests for Ildar

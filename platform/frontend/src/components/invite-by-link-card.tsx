@@ -48,7 +48,7 @@ function InviteByLinkCardContent({
     const data = await createMutation.mutateAsync({ email, role });
 
     if (data) {
-      const link = `${window.location.origin}/accept-invitation/${data.id}?email=${encodeURIComponent(email)}`;
+      const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${data.id}&email=${encodeURIComponent(email)}`;
       setInvitationLink(link);
       onInvitationCreated?.();
     }

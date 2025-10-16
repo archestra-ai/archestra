@@ -31,7 +31,7 @@ describe("trusted-data anthropic utils", () => {
     test("returns trusted context when no tool messages exist", async () => {
       const messages: Messages = [
         { role: "user", content: "Hello" },
-        { role: "assistant", content: "Hi there!" },
+        { role: "assistant", content: [{ type: "text", text: "Hi there!" }] },
       ];
 
       const result = await evaluateIfContextIsTrusted(
@@ -59,29 +59,34 @@ describe("trusted-data anthropic utils", () => {
         { role: "user", content: "Get emails" },
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_456",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_456",
-          content: JSON.stringify({
-            emails: [
-              { from: "user@company.com", subject: "Normal" },
-              { from: "hacker@evil.com", subject: "Malicious" },
-            ],
-          }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_456",
+              content: JSON.stringify({
+                emails: [
+                  { from: "user@company.com", subject: "Normal" },
+                  { from: "hacker@evil.com", subject: "Malicious" },
+                ],
+              }),
+            },
+          ],
         },
-        { role: "assistant", content: "Here are your emails" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Here are your emails" }],
+        },
       ];
 
       const result = await evaluateIfContextIsTrusted(
@@ -96,25 +101,30 @@ describe("trusted-data anthropic utils", () => {
         { role: "user", content: "Get emails" },
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_456",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_456",
-          content:
-            "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_456",
+              content:
+                "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+            },
+          ],
         },
-        { role: "assistant", content: "Here are your emails" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Here are your emails" }],
+        },
       ]);
     });
 
@@ -132,27 +142,29 @@ describe("trusted-data anthropic utils", () => {
       const messages: Messages = [
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_123",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_123",
-          content: JSON.stringify({
-            emails: [
-              { from: "user@trusted.com", subject: "Hello" },
-              { from: "admin@trusted.com", subject: "Update" },
-            ],
-          }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_123",
+              content: JSON.stringify({
+                emails: [
+                  { from: "user@trusted.com", subject: "Hello" },
+                  { from: "admin@trusted.com", subject: "Update" },
+                ],
+              }),
+            },
+          ],
         },
       ];
 
@@ -180,24 +192,26 @@ describe("trusted-data anthropic utils", () => {
       const messages: Messages = [
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_789",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_789",
-          content: JSON.stringify({
-            emails: [{ from: "user@untrusted.com", subject: "Hello" }],
-          }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_789",
+              content: JSON.stringify({
+                emails: [{ from: "user@untrusted.com", subject: "Hello" }],
+              }),
+            },
+          ],
         },
       ];
 
@@ -235,48 +249,49 @@ describe("trusted-data anthropic utils", () => {
       const messages: Messages = [
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_001",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
             {
+              type: "tool_use",
               id: "call_002",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
             {
+              type: "tool_use",
               id: "call_003",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_001",
-          content: JSON.stringify({ source: "trusted", data: "good data" }),
-        },
-        {
-          role: "tool",
-          tool_call_id: "call_002",
-          content: JSON.stringify({ source: "malicious", data: "bad data" }),
-        },
-        {
-          role: "tool",
-          tool_call_id: "call_003",
-          content: JSON.stringify({ source: "unknown", data: "some data" }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_001",
+              content: JSON.stringify({ source: "trusted", data: "good data" }),
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_002",
+              content: JSON.stringify({
+                source: "malicious",
+                data: "bad data",
+              }),
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_003",
+              content: JSON.stringify({ source: "unknown", data: "some data" }),
+            },
+          ],
         },
       ];
 
@@ -291,49 +306,47 @@ describe("trusted-data anthropic utils", () => {
       expect(result.filteredMessages).toEqual([
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_001",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
             {
+              type: "tool_use",
               id: "call_002",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
             {
+              type: "tool_use",
               id: "call_003",
-              type: "function",
-              function: {
-                name: "get_emails",
-                arguments: "{}",
-              },
+              name: "get_emails",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_001",
-          content: JSON.stringify({ source: "trusted", data: "good data" }),
-        },
-        {
-          role: "tool",
-          tool_call_id: "call_002",
-          content:
-            "[Content blocked by policy: Data blocked by policy: Block malicious source]",
-        },
-        {
-          role: "tool",
-          tool_call_id: "call_003",
-          content: JSON.stringify({ source: "unknown", data: "some data" }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_001",
+              content: JSON.stringify({ source: "trusted", data: "good data" }),
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_002",
+              content:
+                "[Content blocked by policy: Data blocked by policy: Block malicious source]",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_003",
+              content: JSON.stringify({ source: "unknown", data: "some data" }),
+            },
+          ],
         },
       ]);
     });
@@ -341,9 +354,14 @@ describe("trusted-data anthropic utils", () => {
     test("handles tool messages without matching tool definition", async () => {
       const messages: Messages = [
         {
-          role: "tool",
-          tool_call_id: "call_unknown",
-          content: JSON.stringify({ data: "some data" }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_unknown",
+              content: JSON.stringify({ data: "some data" }),
+            },
+          ],
         },
       ];
 
@@ -361,9 +379,14 @@ describe("trusted-data anthropic utils", () => {
     test("handles invalid JSON in tool message content", async () => {
       const messages: Messages = [
         {
-          role: "tool",
-          tool_call_id: "call_123",
-          content: "not json",
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_123",
+              content: "not json",
+            },
+          ],
         },
       ];
 
@@ -381,8 +404,7 @@ describe("trusted-data anthropic utils", () => {
     test("preserves non-tool messages unchanged", async () => {
       const messages: Messages = [
         { role: "user", content: "Hello" },
-        { role: "assistant", content: "Hi there!" },
-        { role: "system", content: "You are helpful" },
+        { role: "assistant", content: [{ type: "text", text: "Hi there!" }] },
       ];
 
       const result = await evaluateIfContextIsTrusted(
@@ -409,22 +431,24 @@ describe("trusted-data anthropic utils", () => {
       const messages: Messages = [
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_trusted",
-              type: "function",
-              function: {
-                name: "trusted_tool",
-                arguments: "{}",
-              },
+              name: "trusted_tool",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_trusted",
-          content: JSON.stringify({ data: "any data" }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_trusted",
+              content: JSON.stringify({ data: "any data" }),
+            },
+          ],
         },
       ];
 
@@ -465,22 +489,24 @@ describe("trusted-data anthropic utils", () => {
       const messages: Messages = [
         {
           role: "assistant",
-          content: null,
-          tool_calls: [
+          content: [
             {
+              type: "tool_use",
               id: "call_blocked",
-              type: "function",
-              function: {
-                name: "default_trusted_tool",
-                arguments: "{}",
-              },
+              name: "default_trusted_tool",
+              input: {},
             },
           ],
         },
         {
-          role: "tool",
-          tool_call_id: "call_blocked",
-          content: JSON.stringify({ dangerous: "true", other: "data" }),
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_blocked",
+              content: JSON.stringify({ dangerous: "true", other: "data" }),
+            },
+          ],
         },
       ];
 
@@ -491,7 +517,17 @@ describe("trusted-data anthropic utils", () => {
       );
 
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages[1].content).toContain("[Content blocked");
+      // Check that the tool result content in the filtered messages is blocked
+      const userMessage = result.filteredMessages[1];
+      if (
+        userMessage.role === "user" &&
+        Array.isArray(userMessage.content) &&
+        userMessage.content[0].type === "tool_result"
+      ) {
+        expect(userMessage.content[0].content).toContain("[Content blocked");
+      } else {
+        throw new Error("Expected user message with tool_result content");
+      }
     });
   });
 });

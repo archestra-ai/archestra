@@ -36,6 +36,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       expect(interaction).toBeDefined();
@@ -72,6 +73,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       await InteractionModel.create({
@@ -98,6 +100,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       const interactions = await InteractionModel.findAll();
@@ -131,6 +134,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       const found = await InteractionModel.findById(created.id);
@@ -176,6 +180,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       await InteractionModel.create({
@@ -202,6 +207,7 @@ describe("InteractionModel", () => {
             },
           ],
         },
+        type: "openai:chatCompletions",
       });
 
       const agentInteractions =

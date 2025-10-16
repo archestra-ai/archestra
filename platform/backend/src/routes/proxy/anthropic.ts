@@ -74,7 +74,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
         for (const tool of body.tools) {
-          if (tool.type === "custom") {
+          // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
+          if (
+            tool.type === undefined ||
+            tool.type === null ||
+            tool.type === "custom"
+          ) {
             transformedTools.push({
               toolName: tool.name,
               toolParameters: tool.input_schema,

@@ -77,11 +77,7 @@ function SettingsContent() {
           }
         }}
       />
-      <InvitationsList
-        key={refreshKey}
-        organizationId={activeOrg.id}
-        showAllStatuses
-      />
+      <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
     </div>
   ) : (
     <Card>

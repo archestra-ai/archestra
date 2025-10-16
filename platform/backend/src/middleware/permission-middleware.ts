@@ -34,6 +34,22 @@ async function getRoleCacheKey(
     const session = await auth.api.getSession({ headers });
     if (!session?.user) return null;
 
+    // Verify user still exists in database (not deleted)
+    const db = (await import("@/database")).default;
+    const { schema } = await import("@/database");
+    const { eq } = await import("drizzle-orm");
+
+    const user = await db
+      .select()
+      .from(schema.user)
+      .where(eq(schema.user.id, session.user.id))
+      .limit(1);
+
+    if (!user[0]) {
+      console.warn(`⚠️ Session found for deleted user: ${session.user.id}`);
+      return null;
+    }
+
     const orgId = session.session.activeOrganizationId || "no-org";
     return `${session.user.id}:${orgId}`;
   } catch {

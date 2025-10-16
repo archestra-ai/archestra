@@ -2,7 +2,7 @@ import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import db, { schema } from "@/database";
 import { ac, adminRole, memberRole, ownerRole } from "./permission";
@@ -117,12 +117,106 @@ export const auth = betterAuth({
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
+      // Delete invitation from DB when canceled (instead of marking as canceled)
+      if (
+        ctx.path === "/organization/cancel-invitation" &&
+        ctx.method === "POST"
+      ) {
+        const body = ctx.body;
+        const invitationId = body.invitationId;
+
+        if (invitationId) {
+          try {
+            await db
+              .delete(schema.invitation)
+              .where(eq(schema.invitation.id, invitationId));
+            console.log(`✅ Invitation ${invitationId} deleted from database`);
+          } catch (error) {
+            console.error("❌ Failed to delete invitation:", error);
+          }
+        }
+      }
+
+      // Invalidate all sessions when user is deleted
+      if (ctx.path === "/admin/remove-user" && ctx.method === "POST") {
+        const body = ctx.body;
+        const userId = body.userId;
+
+        if (userId) {
+          try {
+            // Delete all sessions for this user
+            await db
+              .delete(schema.session)
+              .where(eq(schema.session.userId, userId));
+            console.log(`✅ All sessions for user ${userId} invalidated`);
+          } catch (error) {
+            console.error("❌ Failed to invalidate user sessions:", error);
+          }
+        }
+      }
+
+      // Ensure member is actually deleted from DB when removed from organization
+      if (ctx.path === "/organization/remove-member" && ctx.method === "POST") {
+        const body = ctx.body;
+        const memberIdOrUserId = body.memberIdOrUserId;
+        const organizationId = body.organizationId;
+
+        if (memberIdOrUserId) {
+          try {
+            // Try to delete by member ID first
+            let deleted = await db
+              .delete(schema.member)
+              .where(eq(schema.member.id, memberIdOrUserId))
+              .returning();
+
+            // If not found, try by user ID + organization ID
+            if (!deleted[0] && organizationId) {
+              deleted = await db
+                .delete(schema.member)
+                .where(
+                  and(
+                    eq(schema.member.userId, memberIdOrUserId),
+                    eq(schema.member.organizationId, organizationId),
+                  ),
+                )
+                .returning();
+            }
+
+            if (deleted[0]) {
+              console.log(
+                `✅ Member ${deleted[0].id} deleted from organization ${deleted[0].organizationId}`,
+              );
+            } else {
+              console.warn(
+                `⚠️ Member ${memberIdOrUserId} not found for deletion`,
+              );
+            }
+          } catch (error) {
+            console.error("❌ Failed to delete member:", error);
+          }
+        }
+      }
+
       if (ctx.path.startsWith("/sign-up")) {
         const newSession = ctx.context.newSession;
 
         if (newSession?.user && newSession?.session) {
           const user = newSession.user;
           const sessionId = newSession.session.id;
+
+          // Check if this is an invitation sign-up
+          const body = ctx.body;
+          const invitationId = body.callbackURL
+            ?.split("invitationId=")[1]
+            ?.split("&")[0];
+
+          // Skip organization creation if signing up via invitation
+          if (invitationId) {
+            console.log(
+              `⏭️ Skipping organization creation for user ${user.email} (signing up via invitation ${invitationId})`,
+            );
+            return;
+          }
 
           try {
             const orgName = `${user.name || user.email.split("@")[0]}'s Organization`;

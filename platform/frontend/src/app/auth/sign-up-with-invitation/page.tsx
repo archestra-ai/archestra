@@ -27,66 +27,45 @@ export default function SignUpWithInvitationPage() {
     }
   }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
 
-  // Prefill and lock email field since user is invited to this specific email
+  // Prefill email field (but keep it editable for form validation)
   useEffect(() => {
     if (!email) return;
 
-    const updateEmailField = () => {
+    const prefillEmail = () => {
       const emailInput = document.querySelector<HTMLInputElement>(
         'input[name="email"], input[type="email"]',
       );
 
-      if (emailInput && emailInput.value !== email) {
-        // Set the value
-        emailInput.value = email;
-
-        // Make it readonly since they're invited to this specific email
-        emailInput.readOnly = true;
-        emailInput.style.opacity = "0.7";
-        emailInput.style.cursor = "not-allowed";
-
-        // Trigger events to ensure form validation works
-        emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-        emailInput.dispatchEvent(new Event("change", { bubbles: true }));
-
-        // Also try to set the internal form state by triggering React's onChange
+      if (emailInput && !emailInput.value) {
+        // Use React's way to set the value
         const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
           window.HTMLInputElement.prototype,
           "value",
         )?.set;
+
         if (nativeInputValueSetter) {
           nativeInputValueSetter.call(emailInput, email);
+          // Trigger React's onChange event
+          const event = new Event("input", { bubbles: true });
+          emailInput.dispatchEvent(event);
+        } else {
+          // Fallback
+          emailInput.value = email;
           emailInput.dispatchEvent(new Event("input", { bubbles: true }));
+          emailInput.dispatchEvent(new Event("change", { bubbles: true }));
         }
       }
     };
 
-    // Initial update
-    const initialTimer = setTimeout(updateEmailField, 100);
-
-    // Set up a MutationObserver to watch for form changes
-    const observer = new MutationObserver(updateEmailField);
-
-    // Observe the entire document for changes
-    const observerTimer = setTimeout(() => {
-      const formContainer = document.querySelector("form");
-      if (formContainer) {
-        observer.observe(formContainer, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-        });
-      }
-    }, 100);
-
-    // Also periodically check and update (as a fallback)
-    const interval = setInterval(updateEmailField, 500);
+    // Try multiple times as form might not be rendered immediately
+    const timer1 = setTimeout(prefillEmail, 100);
+    const timer2 = setTimeout(prefillEmail, 300);
+    const timer3 = setTimeout(prefillEmail, 500);
 
     return () => {
-      clearTimeout(initialTimer);
-      clearTimeout(observerTimer);
-      clearInterval(interval);
-      observer.disconnect();
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
     };
   }, [email]);
 
@@ -108,7 +87,14 @@ export default function SignUpWithInvitationPage() {
               </div>
             )}
             <div className="w-full flex flex-col items-center justify-center">
-              <AuthView path="sign-up" />
+              <AuthView
+                path="sign-up"
+                callbackURL={
+                  invitationId
+                    ? `/auth/sign-up-with-invitation?invitationId=${invitationId}${email ? `&email=${encodeURIComponent(email)}` : ""}`
+                    : undefined
+                }
+              />
             </div>
           </div>
         </main>

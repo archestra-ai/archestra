@@ -81,41 +81,11 @@ export function useAcceptInvitation() {
 }
 
 /**
- * Reject invitation mutation
+ * List all pending invitations for an organization
  */
-export function useRejectInvitation() {
-  const router = useRouter();
-  return useMutation({
-    mutationFn: async (invitationId: string) => {
-      const response = await authClient.organization.rejectInvitation({
-        invitationId,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      router.push("/");
-    },
-    onError: (error) => {
-      toast.error("Error", {
-        description: error.message || "Failed to reject invitation",
-      });
-    },
-  });
-}
-
-/**
- * List all invitations for an organization
- */
-export function useInvitationsList(
-  organizationId: string | undefined,
-  showAllStatuses = false,
-) {
+export function useInvitationsList(organizationId: string | undefined) {
   return useSuspenseQuery({
-    queryKey: [
-      ...organizationKeys.invitations(),
-      organizationId,
-      showAllStatuses,
-    ],
+    queryKey: [...organizationKeys.invitations(), organizationId],
     queryFn: async () => {
       if (!organizationId) return [];
 
@@ -127,7 +97,7 @@ export function useInvitationsList(
 
       const now = new Date();
       return response.data
-        .filter((inv) => showAllStatuses || inv.status === "pending")
+        .filter((inv) => inv.status === "pending")
         .map((inv: Invitation) => {
           const expiresAt = inv.expiresAt || null;
           const isExpired = expiresAt ? new Date(expiresAt) < now : false;
@@ -162,7 +132,7 @@ export function useInvitationsList(
 }
 
 /**
- * Cancel invitation mutation
+ * Delete invitation mutation
  */
 export function useCancelInvitation() {
   return useMutation({
@@ -173,49 +143,10 @@ export function useCancelInvitation() {
       return response.data;
     },
     onSuccess: () => {
-      toast.success("Invitation cancelled");
+      toast.success("Invitation deleted");
     },
     onError: (error) => {
-      toast.error("Failed to cancel invitation", {
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Reinvite mutation (cancel old + create new)
- */
-export function useReinvite(organizationId: string | undefined) {
-  return useMutation({
-    mutationFn: async ({
-      email,
-      oldInvitationId,
-    }: {
-      email: string;
-      oldInvitationId: string;
-    }) => {
-      // Cancel old invitation
-      await authClient.organization.cancelInvitation({
-        invitationId: oldInvitationId,
-      });
-
-      // Create new invitation
-      const response = await authClient.organization.inviteMember({
-        email,
-        role: "member",
-        organizationId,
-      });
-
-      return response.data;
-    },
-    onSuccess: (_, variables) => {
-      toast.success("New invitation created", {
-        description: `A fresh invitation link has been generated for ${variables.email}`,
-      });
-    },
-    onError: (error) => {
-      toast.error("Failed to reinvite", {
+      toast.error("Failed to delete invitation", {
         description: error.message,
       });
     },

@@ -14,11 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import {
-  useAcceptInvitation,
-  useInvitation,
-  useRejectInvitation,
-} from "@/lib/organization.query";
+import { useAcceptInvitation, useInvitation } from "@/lib/organization.query";
 
 function InvitationContent() {
   const params = useParams();
@@ -35,7 +31,6 @@ function InvitationContent() {
   const { data: invitation, error: invitationError } =
     useInvitation(invitationId);
   const acceptMutation = useAcceptInvitation();
-  const rejectMutation = useRejectInvitation();
 
   // If user is not authenticated, redirect to sign-up with invitation details
   useEffect(() => {
@@ -56,12 +51,6 @@ function InvitationContent() {
   const handleAccept = async () => {
     await acceptMutation.mutateAsync(invitationId);
   };
-
-  const handleReject = async () => {
-    await rejectMutation.mutateAsync(invitationId);
-  };
-
-  const isProcessing = acceptMutation.isPending || rejectMutation.isPending;
   if (invitationError) {
     return (
       <main className="container p-4 md:p-6 flex items-center justify-center min-h-[60vh]">
@@ -124,26 +113,16 @@ function InvitationContent() {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                onClick={handleAccept}
-                disabled={isProcessing}
-                className="flex-1"
-              >
-                {acceptMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Accept
-              </Button>
-              <Button
-                onClick={handleReject}
-                disabled={isProcessing}
-                variant="outline"
-                className="flex-1"
-              >
-                Reject
-              </Button>
-            </div>
+            <Button
+              onClick={handleAccept}
+              disabled={acceptMutation.isPending}
+              className="w-full"
+            >
+              {acceptMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Accept Invitation
+            </Button>
           </CardContent>
         </Card>
       ) : (

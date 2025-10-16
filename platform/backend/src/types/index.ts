@@ -1,4 +1,4 @@
-import type { Tool } from "@ai-sdk/provider-utils";
+import type { Tool } from "@shared/vercel-ai/types";
 import type { generateText, ModelMessage } from "ai";
 
 export * from "./agent";

@@ -5,13 +5,19 @@
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./vercel-ai/*": "./vercel-ai/*"
   },
   "scripts": {},
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "openai": "^4.76.4",
+    "vercel-ai-source-code": "file:../../../ai-sdk"
+  },
   "devDependencies": {
+    "@types/json-schema": "^7.0.15",
     "typescript": "^5.9.2"
   }
 }

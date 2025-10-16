@@ -178,11 +178,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   };
 
   /**
-   * Anthropic SDK standard format (with /v1 prefix)
    * No agentId is provided -- agent is created/fetched based on the user-agent header
+   * or if the user-agent header is not present, a default agent is used
    */
   fastify.post(
-    `${API_PREFIX}/v1${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithDefaultAgent",
@@ -205,11 +205,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
    */
   fastify.post(
-    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/:agentId${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithAgent",

@@ -6,13 +6,14 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-import { OpenAi } from "./llm-providers";
+// import { OpenAi } from "./llm-providers";
 
 /**
  * As we support more llm provider types, this type will expand and should be updated
  */
 const ToolParametersContentSchema = z.union([
-  OpenAi.Tools.FunctionDefinitionParametersSchema,
+  // OpenAi.Tools.FunctionDefinitionParametersSchema,
+  z.any(),
 ]);
 
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {

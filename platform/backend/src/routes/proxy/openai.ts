@@ -1,12 +1,61 @@
+import { createOpenAI } from "@ai-sdk/openai";
+import { jsonSchema } from "@ai-sdk/provider-utils";
 import fastifyHttpProxy from "@fastify/http-proxy";
+import {
+  generateText,
+  type ModelMessage,
+  type ToolChoice,
+  type ToolSet,
+} from "ai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import OpenAIProvider from "openai";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import {
+  ErrorResponseSchema,
+  type MagicalType,
+  OpenAi,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
+
+const convertOpenAiFormatToAiSdkFormat = (
+  request: OpenAi.Types.ChatCompletionsRequest,
+): MagicalType => {
+  // Convert OpenAI tools array format to AI SDK Record format
+  const tools: MagicalType["tools"] = {};
+
+  if (request.tools && Array.isArray(request.tools)) {
+    for (const tool of request.tools) {
+      if (tool.type === "function") {
+        const { name, description, parameters } = tool.function;
+
+        // Ensure parameters has type: "object" at the root and wrap in jsonSchema()
+        const schema = parameters
+          ? { type: "object" as const, ...parameters }
+          : {
+              type: "object" as const,
+              properties: {},
+              additionalProperties: false,
+            };
+
+        tools[name] = {
+          description,
+          inputSchema: jsonSchema(schema),
+        };
+      }
+    }
+  }
+
+  return {
+    messages: request.messages as unknown as ModelMessage[],
+    tools,
+    toolChoice: request.tool_choice as ToolChoice<ToolSet>,
+    temperature: request.temperature ?? undefined,
+    maxOutputTokens: request.max_tokens ?? undefined,
+  };
+};
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
@@ -40,8 +89,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { messages, tools, stream } = body;
-
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -63,137 +110,139 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { authorization: openAiApiKey } = headers;
-    const openAiClient = new OpenAIProvider({ apiKey: openAiApiKey });
+    const openAiProvider = createOpenAI({ apiKey: openAiApiKey });
+
+    const vercelAiSdkRequest = convertOpenAiFormatToAiSdkFormat(body);
 
     try {
-      await utils.persistTools(tools, resolvedAgentId);
+      await utils.persistTools(vercelAiSdkRequest.tools, resolvedAgentId);
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          messages,
+          vercelAiSdkRequest.messages,
           resolvedAgentId,
           openAiApiKey,
         );
 
-      if (stream) {
-        reply.header("Content-Type", "text/event-stream");
-        reply.header("Cache-Control", "no-cache");
-        reply.header("Connection", "keep-alive");
-
-        // Handle streaming response
-        const stream = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          stream: true,
-        });
-
-        const chatCompletionChunksAndMessage =
-          await utils.streaming.handleChatCompletions(stream);
-
-        let assistantMessage = chatCompletionChunksAndMessage.message;
-        let chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
-          chatCompletionChunksAndMessage.chunks;
-
-        // Evaluate tool invocation policies dynamically
-        const toolInvocationRefusal =
-          await utils.toolInvocation.evaluatePolicies(
-            assistantMessage,
-            resolvedAgentId,
-            contextIsTrusted,
-          );
-
-        if (toolInvocationRefusal) {
-          /**
-           * Tool invocation was blocked
-           *
-           * Overwrite the assistant message that will be persisted
-           * Plus send a single chunk, representing the refusal message instead of original chunks
-           */
-          assistantMessage = toolInvocationRefusal.message;
-          chunks = [
-            {
-              id: "chatcmpl-blocked",
-              object: "chat.completion.chunk",
-              created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
-              model: body.model,
-              choices: [
-                {
-                  index: 0,
-                  delta:
-                    toolInvocationRefusal.message as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-                  finish_reason: "stop",
-                  logprobs: null,
-                },
-              ],
-            },
-          ];
-        }
-
-        // Store the complete interaction
-        await InteractionModel.create({
-          agentId: resolvedAgentId,
-          type: "openai:chatCompletions",
-          request: body,
-          response: {
-            id: chunks[0]?.id || "chatcmpl-unknown",
-            object: "chat.completion",
-            created: chunks[0]?.created || Date.now() / 1000,
-            model: body.model,
-            choices: [
-              {
-                index: 0,
-                message: assistantMessage,
-                finish_reason: "stop",
-                logprobs: null,
-              },
-            ],
-          },
-        });
-
-        for (const chunk of chunks) {
-          /**
-           * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
-           */
-          reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.random() * 10),
-          );
-        }
-
-        reply.raw.write("data: [DONE]\n\n");
-        reply.raw.end();
-        return reply;
+      if (body.stream) {
+        // reply.header("Content-Type", "text/event-stream");
+        // reply.header("Cache-Control", "no-cache");
+        // reply.header("Connection", "keep-alive");
+        // // Handle streaming response
+        // const stream = await openAiClient.chat.completions.create({
+        //   ...body,
+        //   messages: filteredMessages,
+        //   stream: true,
+        // });
+        // const chatCompletionChunksAndMessage =
+        //   await utils.streaming.handleChatCompletions(stream);
+        // let assistantMessage = chatCompletionChunksAndMessage.message;
+        // let chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
+        //   chatCompletionChunksAndMessage.chunks;
+        // // Evaluate tool invocation policies dynamically
+        // const toolInvocationRefusal =
+        //   await utils.toolInvocation.evaluatePolicies(
+        //     assistantMessage,
+        //     resolvedAgentId,
+        //     contextIsTrusted,
+        //   );
+        // if (toolInvocationRefusal) {
+        //   /**
+        //    * Tool invocation was blocked
+        //    *
+        //    * Overwrite the assistant message that will be persisted
+        //    * Plus send a single chunk, representing the refusal message instead of original chunks
+        //    */
+        //   assistantMessage = toolInvocationRefusal.message;
+        //   chunks = [
+        //     {
+        //       id: "chatcmpl-blocked",
+        //       object: "chat.completion.chunk",
+        //       created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
+        //       model: body.model,
+        //       choices: [
+        //         {
+        //           index: 0,
+        //           delta:
+        //             toolInvocationRefusal.message as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+        //           finish_reason: "stop",
+        //           logprobs: null,
+        //         },
+        //       ],
+        //     },
+        //   ];
+        // }
+        // // Store the complete interaction
+        // await InteractionModel.create({
+        //   agentId: resolvedAgentId,
+        //   type: "openai:chatCompletions",
+        //   request: body,
+        //   response: {
+        //     id: chunks[0]?.id || "chatcmpl-unknown",
+        //     object: "chat.completion",
+        //     created: chunks[0]?.created || Date.now() / 1000,
+        //     model: body.model,
+        //     choices: [
+        //       {
+        //         index: 0,
+        //         message: assistantMessage,
+        //         finish_reason: "stop",
+        //         logprobs: null,
+        //       },
+        //     ],
+        //   },
+        // });
+        // for (const chunk of chunks) {
+        //   /**
+        //    * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
+        //    */
+        //   reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        //   await new Promise((resolve) =>
+        //     setTimeout(resolve, Math.random() * 10),
+        //   );
+        // }
+        // reply.raw.write("data: [DONE]\n\n");
+        // reply.raw.end();
+        // return reply;
       } else {
-        const response = await openAiClient.chat.completions.create({
-          ...body,
+        // const response = await openAiClient.chat.completions.create({
+        //   ...body,
+        //   messages: filteredMessages,
+        //   stream: false,
+        // });
+        const results = await generateText({
+          model: openAiProvider.chat(body.model), // use OpenAI chat completions API
+          ...vercelAiSdkRequest,
           messages: filteredMessages,
-          stream: false,
         });
 
-        let assistantMessage = response.choices[0].message;
+        // const rawResponse = results.response
+        //   .body as OpenAi.Types.ChatCompletionsResponse;
 
-        // Evaluate tool invocation policies dynamically
-        const toolInvocationRefusal =
-          await utils.toolInvocation.evaluatePolicies(
-            assistantMessage,
-            resolvedAgentId,
-            contextIsTrusted,
-          );
-        if (toolInvocationRefusal) {
-          assistantMessage = toolInvocationRefusal.message;
-          response.choices = [toolInvocationRefusal];
-        }
+        // if (rawResponse.choices[0].message.role === "tool") {
+        //   // Evaluate tool invocation policies dynamically
+        //   const toolInvocationRefusal =
+        //     await utils.toolInvocation.evaluatePolicies(
+        //       assistantMessage,
+        //       resolvedAgentId,
+        //       contextIsTrusted,
+        //     );
+        //   if (toolInvocationRefusal) {
+        //     assistantMessage = toolInvocationRefusal.message;
+        //     response.choices = [toolInvocationRefusal];
+        //   }
+        // }
 
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
           request: body,
-          response,
+          response: results.response.body,
         });
 
-        return reply.send(response);
+        return reply.send(results.response.body);
       }
     } catch (error) {
       fastify.log.error(error);

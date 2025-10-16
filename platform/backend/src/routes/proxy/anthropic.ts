@@ -23,7 +23,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1",
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+      // Support Anthropic SDK standard format:
+      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
+      const isMessagesRoute =
+        request.method === "POST" &&
+        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
+          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
+
+      if (isMessagesRoute) {
         // Skip proxy for this route - we handle it below
         next(new Error("skip"));
       } else {
@@ -178,11 +185,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   };
 
   /**
+   * Anthropic SDK standard format (with /v1 prefix)
    * No agentId is provided -- agent is created/fetched based on the user-agent header
-   * or if the user-agent header is not present, a default agent is used
    */
   fastify.post(
-    `${API_PREFIX}${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithDefaultAgent",
@@ -205,10 +212,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
    */
   fastify.post(
-    `${API_PREFIX}/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithAgent",

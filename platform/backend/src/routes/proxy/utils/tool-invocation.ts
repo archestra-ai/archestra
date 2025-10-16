@@ -9,21 +9,12 @@ import { ToolInvocationPolicyModel } from "@/models";
  * (in the format of an assistant message with a refusal)
  */
 export const evaluatePolicies = async (
-  { tool_calls: toolCalls }: OpenAI.Chat.Completions.ChatCompletionMessage,
+  toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
   agentId: string,
   contextIsTrusted: boolean,
-): Promise<null | OpenAI.Chat.Completions.ChatCompletion.Choice> => {
-  for (const toolCall of toolCalls || []) {
-    let toolCallName = "";
-    let toolCallArgs = "";
-
-    if (toolCall.type === "function") {
-      toolCallName = toolCall.function.name;
-      toolCallArgs = toolCall.function.arguments;
-    } else {
-      toolCallName = toolCall.custom.name;
-      toolCallArgs = toolCall.custom.input;
-    }
+): Promise<null | string> => {
+  for (const toolCall of toolCalls) {
+    const { toolCallName, toolCallArgs } = toolCall;
 
     /**
      * According to the OpenAI TS SDK types.. toolCall.function.arguments mentions:
@@ -60,6 +51,7 @@ ${reason}`;
 ${contentMessage}`;
 
     if (!isAllowed) {
+      // TODO: return string or null, not provider specific message type
       return {
         finish_reason: "stop",
         index: 0,

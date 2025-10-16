@@ -193,7 +193,7 @@
   }
 }
 
-button {
+button, div[role="menuitem"] {
   cursor: pointer;
 }
 button:disabled {

@@ -1,5 +1,10 @@
 "use client";
-import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
+import {
+  authLocalization,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@daveyplate/better-auth-ui";
 import {
   BookOpen,
   Bot,
@@ -250,6 +255,7 @@ export function AppSidebar() {
               <UserButton
                 align="center"
                 className="w-full bg-transparent hover:bg-transparent text-foreground"
+                localization={{ ...authLocalization, SETTINGS: "Account" }}
               />
             </SidebarGroupContent>
           </SidebarGroup>

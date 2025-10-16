@@ -31,9 +31,22 @@ export class AnthropicMessagesTransformer
   }
 
   requestFromOpenAI(
-    _request: OpenAi.Types.ChatCompletionsRequest,
+    request: OpenAi.Types.ChatCompletionsRequest,
   ): Anthropic.Types.MessagesRequest {
-    return {};
+    const anthropicRequest: Anthropic.Types.MessagesRequest = {
+      model: request.model,
+      messages: request.messages,
+      tools: request.tools,
+      stream: request.stream ?? false,
+      temperature: request.temperature ?? 0,
+      tool_choice: request.tool_choice ?? "none",
+    };
+
+    if (request.max_tokens) {
+      anthropicRequest.max_tokens = request.max_tokens;
+    }
+
+    return anthropicRequest;
   }
 
   responseToOpenAI(

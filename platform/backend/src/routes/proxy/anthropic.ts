@@ -92,6 +92,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicApiKey,
         );
 
+      commonRequest.messages = filteredMessages;
+
       if (stream) {
         return reply.code(400).send({
           error: {
@@ -104,16 +106,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Non-streaming response
         const response = await anthropicClient.messages.create({
-          ...body,
-          messages: filteredMessages,
+          ...anthropicRequest,
           stream: false,
         });
-
-        // Convert to common format for policy evaluation
-        // const commonResponse = transformer.responseToOpenAI(response);
-
-        // Evaluate tool invocation policies
-        // const assistantMessage = commonResponse.choices[0]?.message;
 
         const toolCalls = response.content.filter(
           (content) => content.type === "tool_use",
@@ -131,11 +126,12 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
 
           if (toolInvocationRefusal) {
-            const [refusalMessage, contentMessage] = toolInvocationRefusal;
+            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
             response.content = [
               {
                 type: "text",
-                text: refusalMessage,
+                text: contentMessage,
+                citations: null,
               },
             ];
 
@@ -144,10 +140,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
-              response: refusalResponse,
+              response: response,
             });
 
-            return reply.send(refusalResponse);
+            return reply.send(response);
           }
         }
 

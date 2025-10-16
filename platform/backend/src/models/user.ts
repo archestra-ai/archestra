@@ -1,3 +1,4 @@
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import db from "@/database";
@@ -5,8 +6,9 @@ import { user } from "@/database/schemas";
 
 class User {
   static async createAdminUser() {
-    const email = process.env.BETTER_AUTH_ADMIN_EMAIL;
-    const password = process.env.BETTER_AUTH_ADMIN_PASSWORD;
+    const email = process.env.BETTER_AUTH_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
+    const password =
+      process.env.BETTER_AUTH_ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
 
     if (!email || !password) {
       console.warn(

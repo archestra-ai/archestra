@@ -18,3 +18,6 @@ export const E2eTestId = {
   DeleteAgentButton: "delete-agent-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
+
+export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
+export const DEFAULT_ADMIN_PASSWORD = "admin123";

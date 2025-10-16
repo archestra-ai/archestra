@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { MessageSchema } from "./messages";
+import { MessageContentBlockSchema, MessageParamSchema } from "./messages";
 import { ToolSchema } from "./tools";
 
 export const MessagesRequestSchema = z.object({
   model: z.string(),
-  messages: z.array(MessageSchema),
+  messages: z.array(MessageParamSchema),
   max_tokens: z.number(),
   container: z.string().nullable().optional(),
   context_management: z.object().nullable().optional(),
@@ -26,8 +26,16 @@ export const MessagesRequestSchema = z.object({
   top_p: z.number().optional(),
 });
 
-// TODO: Implement
-export const MessagesResponseSchema = z.any();
+export const MessagesResponseSchema = z.object({
+  id: z.string(),
+  content: z.array(MessageContentBlockSchema),
+  model: z.string(),
+  role: z.enum(["assistant"]),
+  stop_reason: z.any().nullable(),
+  stop_sequence: z.string().nullable(),
+  type: z.enum(["message"]),
+  usage: z.any(),
+});
 
 export const MessagesHeadersSchema = z
   .object({

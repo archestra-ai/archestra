@@ -41,10 +41,12 @@ function SettingsContent() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <main className="container p-4 md:p-6">
+    <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Account Settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="mb-2 text-2xl font-semibold tracking-tight">
+          Account Settings
+        </h1>
+        <p className="text-sm text-muted-foreground">
           Manage your account settings and preferences
         </p>
       </div>
@@ -149,7 +151,7 @@ function SettingsContent() {
           )}
         </TabsContent>
       </Tabs>
-    </main>
+    </div>
   );
 }
 

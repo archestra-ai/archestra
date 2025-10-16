@@ -184,13 +184,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   messages: filteredMessages,
         //   stream: false,
         // });
-
-        // ... rest of the code ...
-
-        // const results = await openAIChatCompletionsModelExtended.doGenerate({
-        //   ...vercelAiSdkRequest,
-        //   prompt: filteredMessages,
-        // });
         const results = await generateText({
           model: openAIChatCompletionsModelExtended,
           prompt: filteredMessages,

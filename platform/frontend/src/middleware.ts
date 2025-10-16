@@ -25,11 +25,11 @@ export const config = {
      * Match all request paths except for the ones starting with:
      * - auth/sign-in (login page)
      * - auth/sign-up (registration page)
-     * - accept-invitation (invitation acceptance page)
+     * - auth/sign-up-with-invitation (invitation acceptance page)
      * - test-agent (public test page)
      * - _next (Next.js internals)
      * - favicon.ico, robots.txt, sitemap.xml (static files)
      */
-    "/((?!auth/sign-in|auth/sign-up|accept-invitation|test-agent|_next|public|favicon.ico|robots.txt|sitemap.xml).*)",
+    "/((?!auth/sign-in|auth/sign-up|auth/sign-up-with-invitation|test-agent|_next|public|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
 };

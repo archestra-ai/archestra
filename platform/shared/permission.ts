@@ -10,7 +10,7 @@ export type Resource =
   | "dualLlmResult"
   | "settings"
   | "member"
-  | "organisation"
+  | "organization"
   | "invitation";
 
 /**

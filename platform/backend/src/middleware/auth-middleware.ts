@@ -1,8 +1,11 @@
 import {
+  type Action,
   getResourceFromPath,
   METHOD_TO_ACTION,
   type Permission,
+  type Resource,
 } from "@shared";
+import { createAccessControl } from "better-auth/plugins/access";
 import type {
   FastifyReply,
   FastifyRequest,
@@ -19,49 +22,172 @@ class AuthMiddleware {
     // custom logic to skip auth check
     if (this.shouldSkipAuthCheck(request)) return;
 
-    // route ids to skip auth check
+    // return 401 if unauthenticated
+    if (await this.isUnauthenticated(request)) {
+      return reply.status(401).send({ error: "Unauthorized" });
+    }
+
+    // return 403 if unauthorized
+    const isAuthorized = await this.isAuthorized(request);
+    if ("success" in isAuthorized && isAuthorized.success) {
+      return;
+    }
+
+    return reply.status(403).send({ error: isAuthorized.error });
   }
 
-  private shouldSkipAuthCheck({ url, routeOptions }: FastifyRequest) {
+  private shouldSkipAuthCheck({ url }: FastifyRequest) {
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/v1/openai") ||
       url.startsWith("/v1/anthropic") ||
       url.startsWith("/v1/gemini") ||
       url === "/openapi.json" ||
-      url.startsWith("/health")
-    ) {
-      return true;
-    }
-
-    if (
-      routeOptions.schema?.operationId &&
-      ROUTES_TO_SKIP_AUTH_CHECK.includes(
-        routeOptions.schema.operationId as RouteId,
-      )
+      url === "/health"
     ) {
       return true;
     }
     return false;
   }
+
+  private async isUnauthenticated(request: FastifyRequest) {
+    const headers = new Headers(request.headers as HeadersInit);
+    const session = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+    });
+    return Boolean(session);
+  }
+
+  private async isAuthorized(request: FastifyRequest) {
+    const routeId = request.routeOptions.schema?.operationId as
+      | RouteId
+      | undefined;
+    if (!routeId) {
+      return { error: "Forbidden" };
+    }
+
+    const requiredActions = routePermissionsConfig[routeId];
+
+    const headers = new Headers(request.headers as HeadersInit);
+    return await auth.api.hasPermission({
+      headers,
+      body: {
+        permissions: {
+          [routeId]: requiredActions,
+        },
+      },
+    });
+  }
 }
 
-const ROUTES_TO_SKIP_AUTH_CHECK: RouteId[] = [
-  RouteId.OpenAiChatCompletionsWithDefaultAgent,
-  RouteId.OpenAiChatCompletionsWithAgent,
-  RouteId.AnthropicMessagesWithDefaultAgent,
-  RouteId.AnthropicMessagesWithAgent,
-];
+// routes not configured throws 403
+const routePermissionsConfig: Partial<
+  Record<RouteId, Partial<Record<Resource, Action[]>>>
+> = {
+  [RouteId.GetAgents]: {
+    agent: ["read"],
+  },
+  [RouteId.CreateAgent]: {
+    agent: ["create"],
+  },
+  [RouteId.UpdateAgent]: {
+    agent: ["update"],
+  },
+  [RouteId.DeleteAgent]: {
+    agent: ["delete"],
+  },
+  [RouteId.GetTools]: {
+    tool: ["read"],
+  },
+  [RouteId.UpdateTool]: {
+    tool: ["update"],
+  },
+};
+
+/**
+ * Create Access Control instance
+ */
+const availableActions: Record<Resource, Action[]> = {
+  agent: ["create", "read", "update", "delete"],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["create", "read", "update", "delete"],
+  dualLlmResult: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
+  settings: ["read", "update"],
+  organization: ["create", "read", "update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create"],
+};
+export const ac = createAccessControl(availableActions);
+
+/**
+ * Owner role - has all permissions
+ */
+export const ownerRole = ac.newRole({
+  agent: ["create", "read", "update", "delete"],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["create", "read", "update", "delete"],
+  dualLlmResult: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
+  settings: ["read", "update"],
+  organization: ["create", "read", "update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create"],
+});
+
+/**
+ * Admin role - has all permissions except org deletion/transfer
+ */
+export const adminRole = ac.newRole({
+  agent: ["create", "read", "update", "delete"],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["create", "read", "update", "delete"],
+  dualLlmResult: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
+  settings: ["read", "update"],
+  organization: ["create", "read", "update"],
+  member: ["create", "update", "delete"],
+  invitation: ["create"],
+});
+
+/**
+ * Member role - read-only access
+ */
+export const memberRole = ac.newRole({
+  agent: ["read"],
+  tool: ["read"],
+  policy: ["read"],
+  dualLlmConfig: ["read"],
+  dualLlmResult: ["read"],
+  interaction: ["read"],
+  settings: ["read"],
+  organization: ["read"],
+  member: [],
+  invitation: [],
+});
 
 const authMiddleware2 = new AuthMiddleware();
-export default authMiddleware2;
+export { authMiddleware2 };
+
+const routeIsUnauthenticated = (request: FastifyRequest) => {
+  return (
+    request.url.startsWith("/api/auth") ||
+    request.url.startsWith("/v1/openai") ||
+    request.url.startsWith("/v1/anthropic") ||
+    request.url.startsWith("/v1/gemini") ||
+    request.url === "/openapi.json"
+  );
+};
 
 export const authMiddleware = async (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
-  if (request.url.startsWith("/api/auth")) return;
-  if (request.url === "/openapi.json") return;
+  if (routeIsUnauthenticated(request)) return;
 
   const headers = new Headers();
   Object.entries(request.headers).forEach(([key, value]) => {

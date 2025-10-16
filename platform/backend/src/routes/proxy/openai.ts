@@ -70,12 +70,32 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {
-      await utils.persistTools(tools, resolvedAgentId);
+      await utils.persistTools(
+        (tools || []).map((tool) => {
+          if (tool.type === "function") {
+            return {
+              toolName: tool.function.name,
+              toolParameters: tool.function.parameters || {},
+              toolDescription: tool.function.description || "",
+            };
+          } else {
+            return {
+              toolName: tool.custom.name,
+              toolParameters: tool.custom.format || {},
+              toolDescription: tool.custom.description || "",
+            };
+          }
+        }),
+        resolvedAgentId,
+      );
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          messages,
+          {
+            provider: "openai",
+            messages,
+          },
           resolvedAgentId,
           openAiApiKey,
         );
@@ -102,19 +122,43 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
           await utils.toolInvocation.evaluatePolicies(
-            assistantMessage,
+            (assistantMessage.tool_calls || []).map((toolCall) => {
+              if (toolCall.type === "function") {
+                return {
+                  toolCallName: toolCall.function.name,
+                  toolCallArgs: toolCall.function.arguments,
+                };
+              } else {
+                return {
+                  toolCallName: toolCall.custom.name,
+                  toolCallArgs: toolCall.custom.input,
+                };
+              }
+            }),
             resolvedAgentId,
             contextIsTrusted,
           );
 
         if (toolInvocationRefusal) {
+          const [refusalMessage, contentMessage] = toolInvocationRefusal;
           /**
            * Tool invocation was blocked
            *
            * Overwrite the assistant message that will be persisted
            * Plus send a single chunk, representing the refusal message instead of original chunks
            */
-          assistantMessage = toolInvocationRefusal.message;
+          assistantMessage = {
+            role: "assistant",
+            /**
+             * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
+             * is that most clients expect to see the content field, and don't conditionally render the refusal field
+             *
+             * We also set the refusal field, because this will allow the Archestra UI to not only display the refusal
+             * message, but also show some special UI to indicate that the tool call was blocked.
+             */
+            refusal: refusalMessage,
+            content: contentMessage,
+          };
           chunks = [
             {
               id: "chatcmpl-blocked",
@@ -125,7 +169,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 {
                   index: 0,
                   delta:
-                    toolInvocationRefusal.message as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+                    assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
                   finish_reason: "stop",
                   logprobs: null,
                 },
@@ -180,13 +224,38 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
           await utils.toolInvocation.evaluatePolicies(
-            assistantMessage,
+            (assistantMessage.tool_calls || []).map((toolCall) => {
+              if (toolCall.type === "function") {
+                return {
+                  toolCallName: toolCall.function.name,
+                  toolCallArgs: toolCall.function.arguments,
+                };
+              } else {
+                return {
+                  toolCallName: toolCall.custom.name,
+                  toolCallArgs: toolCall.custom.input,
+                };
+              }
+            }),
             resolvedAgentId,
             contextIsTrusted,
           );
+
         if (toolInvocationRefusal) {
-          assistantMessage = toolInvocationRefusal.message;
-          response.choices = [toolInvocationRefusal];
+          const [refusalMessage, contentMessage] = toolInvocationRefusal;
+          assistantMessage = {
+            role: "assistant",
+            refusal: refusalMessage,
+            content: contentMessage,
+          };
+          response.choices = [
+            {
+              index: 0,
+              message: assistantMessage,
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ];
         }
 
         // Store the complete interaction

@@ -42,7 +42,7 @@ const getPortFromUrl = (): number => {
  * - Empty/undefined: defaults to "*" in development, localhost regex in production
  */
 const getCorsOrigins = (): string | string[] | RegExp[] => {
-  const allowedFrontendOrigins = process.env.ALLOWED_FRONTEND_ORIGINS;
+  const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
   const isDevelopment = process.env.NODE_ENV === "development";
 
   if (!allowedFrontendOrigins) {

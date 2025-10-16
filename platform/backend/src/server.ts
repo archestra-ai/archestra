@@ -11,7 +11,7 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import authMiddleware2, { authMiddleware } from "@/middleware/auth-middleware";
+import { authMiddleware, authMiddleware2 } from "@/middleware/auth-middleware";
 import {
   Anthropic,
   Gemini,

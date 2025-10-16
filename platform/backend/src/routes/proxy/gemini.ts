@@ -7,7 +7,6 @@ import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 
-import { GeminiGenerateContentTransformer } from "./transformers";
 import * as utils from "./utils";
 
 /**
@@ -46,8 +45,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     body: Gemini.Types.GenerateContentRequest,
     headers: Gemini.Types.GenerateContentHeaders,
     reply: FastifyReply,
+    model: string,
     agentId?: string,
-    model?: string,
     stream = false,
   ) => {
     let resolvedAgentId: string;
@@ -74,30 +73,20 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
 
     // Use the model from the URL path or default to gemini-pro
-    const modelName = model || "gemini-pro";
-
-    const transformer = new GeminiGenerateContentTransformer();
+    const modelName = model || "gemini-2.5-pro";
 
     try {
-      // Convert Gemini request to common format for processing
-      const commonRequest = transformer.requestToOpenAI(body);
+      // TODO: Persist tools if present
+      // await utils.persistTools(commonRequest.tools, resolvedAgentId);
 
-      // Persist tools if present
-      await utils.persistTools(commonRequest.tools, resolvedAgentId);
-
+      // TODO:
       // Process messages with trusted data policies dynamically
-      const { filteredMessages, contextIsTrusted } =
-        await utils.trustedData.evaluateIfContextIsTrusted(
-          commonRequest.messages,
-          resolvedAgentId,
-          geminiApiKey,
-        );
-
-      // Update common request with filtered messages
-      commonRequest.messages = filteredMessages;
-
-      // Convert back to Gemini format
-      const geminiRequest = transformer.requestFromOpenAI(commonRequest);
+      // const { filteredMessages, contextIsTrusted } =
+      //   await utils.trustedData.evaluateIfContextIsTrusted(
+      //     commonRequest.messages,
+      //     resolvedAgentId,
+      //     geminiApiKey,
+      //   );
 
       if (stream) {
         // reply.header("Content-Type", "text/event-stream");
@@ -219,59 +208,51 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Non-streaming response
         const response = await genAI.models.generateContent({
           model: modelName,
-          ...geminiRequest,
+          ...body,
         });
 
-        const geminiResponse: Gemini.Types.GenerateContentResponse = {
-          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-          candidates: response.candidates as any,
-          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-          usageMetadata: response.usageMetadata as any,
-          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-          promptFeedback: response.promptFeedback as any,
-          modelVersion: modelName,
-        };
-
         // Convert to common format for policy evaluation
-        const commonResponse = transformer.responseToOpenAI(geminiResponse);
+        // const commonResponse = transformer.responseToOpenAI(geminiResponse);
 
+        // TODO:
         // Evaluate tool invocation policies
-        const assistantMessage = commonResponse.choices[0]?.message;
-        if (assistantMessage) {
-          const toolInvocationRefusal =
-            await utils.toolInvocation.evaluatePolicies(
-              assistantMessage,
-              resolvedAgentId,
-              contextIsTrusted,
-            );
+        // const assistantMessage = commonResponse.choices[0]?.message;
+        // if (assistantMessage) {
+        //   const toolInvocationRefusal =
+        //     await utils.toolInvocation.evaluatePolicies(
+        //       assistantMessage,
+        //       resolvedAgentId,
+        //       contextIsTrusted,
+        //     );
 
-          if (toolInvocationRefusal) {
-            commonResponse.choices = [toolInvocationRefusal];
-            // Convert back to Gemini format
-            const refusalResponse =
-              transformer.responseFromOpenAI(commonResponse);
+        //   if (toolInvocationRefusal) {
+        //     commonResponse.choices = [toolInvocationRefusal];
+        //     // Convert back to Gemini format
+        //     const refusalResponse =
+        //       transformer.responseFromOpenAI(commonResponse);
 
-            // Store the interaction with refusal
-            await InteractionModel.create({
-              agentId: resolvedAgentId,
-              type: "gemini:generateContent",
-              request: body,
-              response: refusalResponse,
-            });
+        //     // Store the interaction with refusal
+        //     await InteractionModel.create({
+        //       agentId: resolvedAgentId,
+        //       type: "gemini:generateContent",
+        //       request: body,
+        //       response: refusalResponse,
+        //     });
 
-            return reply.send(refusalResponse);
-          }
-        }
+        //     return reply.send(refusalResponse);
+        //   }
+        // }
 
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "gemini:generateContent",
           request: body,
-          response: geminiResponse,
+          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+          response: response as any,
         });
 
-        return reply.send(geminiResponse);
+        return reply.send(response);
       }
     } catch (error) {
       fastify.log.error(error);
@@ -339,8 +320,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body,
         request.headers,
         reply,
-        undefined,
         request.params.model,
+        undefined,
         false,
       );
     },
@@ -375,8 +356,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body,
         request.headers,
         reply,
-        undefined,
         request.params.model,
+        undefined,
         true,
       );
     },
@@ -412,8 +393,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body,
         request.headers,
         reply,
-        request.params.agentId,
         request.params.model,
+        request.params.agentId,
         false,
       );
     },
@@ -450,8 +431,8 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.body,
         request.headers,
         reply,
-        request.params.agentId,
         request.params.model,
+        request.params.agentId,
         true,
       );
     },

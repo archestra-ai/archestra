@@ -159,6 +159,15 @@ local_resource(
 )
 
 local_resource(
+  'unit-tests',
+  cmd='pnpm test',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
   'e2e-tests',
   cmd='pnpm test:e2e',
   labels=['test'],

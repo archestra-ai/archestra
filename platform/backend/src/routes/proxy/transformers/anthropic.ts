@@ -9,65 +9,92 @@ export class AnthropicMessagesTransformer
   implements
     ProviderTransformer<
       Anthropic.Types.MessagesRequest,
-      Anthropic.Types.MessagesResponse,
       Anthropic.Types.MessagesResponse
     >
 {
   provider = "anthropic:messages" as const;
 
-  // TODO: Implement
   requestToOpenAI(
-    _request: Anthropic.Types.MessagesRequest,
+    request: Anthropic.Types.MessagesRequest,
   ): OpenAi.Types.ChatCompletionsRequest {
+    const openAiTools: OpenAi.Types.ChatCompletionsRequest["tools"] = [];
+    const openAiMessages: OpenAi.Types.ChatCompletionsRequest["messages"] = [];
+
+    for (const tool of request.tools || []) {
+      if (tool.type === "custom") {
+        openAiTools.push({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description || "",
+            parameters: tool.input_schema as any,
+          },
+        });
+      }
+    }
+
+    for (const message of request.messages) {
+      if (message.role === "user") {
+        openAiMessages.push({
+          role: "user",
+          content: message.content,
+        });
+      } else if (message.role === "assistant") {
+        openAiMessages.push({
+          role: "assistant",
+          content: message.content,
+        });
+      }
+    }
+
     return {
-      model: "gemini-pro", // Default model, should be passed separately
-      messages: [],
-      tools: [],
-      stream: false, // Will be determined by endpoint
-      temperature: 0,
-      max_tokens: 0,
-      tool_choice: "none",
+      model: request.model,
+      messages: openAiMessages,
+      tools: openAiTools,
+      stream: request.stream ?? false,
+      temperature: request.temperature ?? 0,
+      tool_choice: request.tool_choice ?? "none",
     };
   }
 
   requestFromOpenAI(
     request: OpenAi.Types.ChatCompletionsRequest,
   ): Anthropic.Types.MessagesRequest {
-    const anthropicRequest: Anthropic.Types.MessagesRequest = {
+    const anthropicTools: Anthropic.Types.MessagesRequest["tools"] = [];
+    const anthropicMessages: Anthropic.Types.MessagesRequest["messages"] = [];
+
+    for (const tool of request.tools || []) {
+      if (tool.type === "function") {
+        anthropicTools.push({
+          name: tool.function.name,
+          input_schema: tool.function.parameters as any,
+        });
+      }
+    }
+
+    for (const message of request.messages) {
+      if (message.role === "user") {
+        anthropicMessages.push({
+          role: "user",
+          content: message.content,
+        });
+      } else if (message.role === "assistant") {
+        anthropicMessages.push({
+          role: "assistant",
+          content: message.content as any,
+        });
+      }
+    }
+
+    return {
       model: request.model,
-      messages: request.messages,
-      tools: request.tools,
+      messages: anthropicMessages,
+      tools: anthropicTools,
       stream: request.stream ?? false,
       temperature: request.temperature ?? 0,
       tool_choice: request.tool_choice ?? "none",
+      max_tokens: request.max_tokens ?? 0,
     };
-
-    if (request.max_tokens) {
-      anthropicRequest.max_tokens = request.max_tokens;
-    }
-
-    return anthropicRequest;
-  }
-
-  responseToOpenAI(
-    response: Anthropic.Types.MessagesResponse,
-  ): OpenAi.Types.ChatCompletionsResponse {
-    return {
-      id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
-      model: response.modelVersion,
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      choices: [],
-      usage: undefined,
-      system_fingerprint: null,
-    };
-  }
-
-  // TODO: Implement
-  responseFromOpenAI(
-    _response: OpenAi.Types.ChatCompletionsResponse,
-  ): Anthropic.Types.MessagesResponse {
-    return {};
   }
 
   chunkToOpenAI(
@@ -77,7 +104,7 @@ export class AnthropicMessagesTransformer
       id: `chatcmpl-${randomUUID().replace(/-/g, "").substring(0, 29)}`,
       object: "chat.completion.chunk",
       created: Math.floor(Date.now() / 1000),
-      model: chunk.modelVersion || "gemini-pro",
+      model: chunk.model,
       choices: [],
     };
   }

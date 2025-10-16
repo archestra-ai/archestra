@@ -7,7 +7,7 @@ import type { OpenAi, SupportedProviderDiscriminator } from "@/types";
  * The OpenAI "chat completions" format is used as the internal "common" format for data operations
  * (ex. static policy evaluation, dual-llm analysis, etc.).
  */
-export interface ProviderTransformer<Request, Chunk, Response> {
+export interface ProviderTransformer<Request, Chunk> {
   provider: SupportedProviderDiscriminator;
 
   /**
@@ -19,16 +19,6 @@ export interface ProviderTransformer<Request, Chunk, Response> {
    * Convert OpenAI format request to provider-specific format
    */
   requestFromOpenAI(request: OpenAi.Types.ChatCompletionsRequest): Request;
-
-  /**
-   * Convert provider-specific response to OpenAI format
-   */
-  responseToOpenAI(response: Response): OpenAi.Types.ChatCompletionsResponse;
-
-  /**
-   * Convert OpenAI format response to provider-specific format
-   */
-  responseFromOpenAI(response: OpenAi.Types.ChatCompletionsResponse): Response;
 
   /**
    * Convert provider-specific streaming chunk to OpenAI format

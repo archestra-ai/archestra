@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+
+const authFile = path.join(__dirname, 'playwright/.auth/user.json');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -23,9 +26,22 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
+    // Setup project - runs authentication once before all tests
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+      testDir: './',
+    },
+
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use the stored authentication state
+        storageState: authFile,
+      },
+      // Run the setup project before tests
+      dependencies: ['setup'],
     },
   ],
 });

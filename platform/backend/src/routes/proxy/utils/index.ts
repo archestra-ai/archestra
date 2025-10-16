@@ -19,7 +19,7 @@ export const persistTools = async (
   }>,
   agentId: string,
 ) => {
-  for (const { toolName, toolParameters, toolDescription } of tools || []) {
+  for (const { toolName, toolParameters, toolDescription } of tools) {
     await ToolModel.createToolIfNotExists({
       agentId,
       name: toolName,

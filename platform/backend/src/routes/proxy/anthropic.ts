@@ -75,14 +75,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Convert Anthropic request to common format for processing
       const commonRequest = transformer.requestToOpenAI(body);
 
-      await utils.persistTools(
-        (body.tools || []).map((tool) => ({
-          toolName: tool.name,
-          toolParameters: tool.parameters,
-          toolDescription: tool.description,
-        })),
-        resolvedAgentId,
-      );
+      if (body.tools) {
+        await utils.persistTools(
+          body.tools.map((tool) => ({
+            toolName: tool.name,
+            toolParameters: tool.input_schema,
+            toolDescription: tool.description,
+          })),
+          resolvedAgentId,
+        );
+      }
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =

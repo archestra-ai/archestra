@@ -4,6 +4,7 @@ import {
   getAgents,
   getInteraction,
 } from "@/lib/clients/api";
+import { getServerApiHeaders } from "@/lib/server-utils";
 import { ChatPage } from "./page.client";
 
 export default async function ChatPageServer({
@@ -20,9 +21,12 @@ export default async function ChatPageServer({
     agents: [],
   };
   try {
+    const headers = await getServerApiHeaders();
     initialData = {
-      interaction: (await getInteraction({ path: { interactionId: id } })).data,
-      agents: (await getAgents()).data || [],
+      interaction: (
+        await getInteraction({ headers, path: { interactionId: id } })
+      ).data,
+      agents: (await getAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

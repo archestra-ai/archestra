@@ -1,5 +1,10 @@
 "use client";
-import type { LucideIcon } from "lucide-react";
+import {
+  authLocalization,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@daveyplate/better-auth-ui";
 import {
   BookOpen,
   Bot,
@@ -7,6 +12,8 @@ import {
   FileJson2,
   Github,
   Info,
+  LogIn,
+  type LucideIcon,
   MessagesSquare,
   Settings,
   ShieldCheck,
@@ -32,6 +39,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 
 interface MenuItem {
   title: string;
@@ -40,33 +48,39 @@ interface MenuItem {
   subItems?: MenuItem[];
 }
 
-const navigationItems: MenuItem[] = [
-  {
-    title: "How it works",
-    url: "/test-agent",
-    icon: Info,
-  },
-  {
-    title: "Agents",
-    url: "/agents",
-    icon: Bot,
-  },
-  {
-    title: "Logs",
-    url: "/logs",
-    icon: MessagesSquare,
-  },
-  {
-    title: "Tools",
-    url: "/tools",
-    icon: FileJson2,
-  },
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: Settings,
-  },
-];
+const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+  return [
+    {
+      title: "How it works",
+      url: "/test-agent",
+      icon: Info,
+    },
+    ...(isAuthenticated
+      ? [
+          {
+            title: "Agents",
+            url: "/agents",
+            icon: Bot,
+          },
+          {
+            title: "Logs",
+            url: "/logs",
+            icon: MessagesSquare,
+          },
+          {
+            title: "Tools",
+            url: "/tools",
+            icon: FileJson2,
+          },
+          {
+            title: "Settings",
+            url: "/settings",
+            icon: Settings,
+          },
+        ]
+      : []),
+  ];
+};
 
 const actionItems: MenuItem[] = [
   {
@@ -76,9 +90,19 @@ const actionItems: MenuItem[] = [
   },
 ];
 
+const userItems: MenuItem[] = [
+  {
+    title: "Sign in",
+    url: "/auth/sign-in",
+    icon: LogIn,
+  },
+  // Sign up is disabled - users must use invitation links to join
+];
+
 export function AppSidebar() {
   const pathname = usePathname();
   const [starCount, setStarCount] = useState<number | null>(null);
+  const isAuthenticated = useIsAuthenticated();
 
   useEffect(() => {
     fetch("https://api.github.com/repos/archestra-ai/archestra")
@@ -93,17 +117,18 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader>
+      <SidebarHeader className="flex items-center flex-row justify-between">
         <div className="flex items-center gap-2 px-2 py-2">
           <Image src="/logo.png" alt="Logo" width={28} height={28} />
           <span className="text-base font-semibold">Archestra.AI</span>
         </div>
+        <ColorModeToggle />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => (
+              {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
                     <a href={item.url}>
@@ -134,23 +159,25 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="px-4">
-          <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {actionItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <SignedIn>
+          <SidebarGroup className="px-4">
+            <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {actionItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={item.url === pathname}>
+                      <a href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SignedIn>
 
         <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>
@@ -217,9 +244,34 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="flex items-center justify-center py-2">
-          <ColorModeToggle />
-        </div>
+        <SignedIn>
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <UserButton
+                align="center"
+                className="w-full bg-transparent hover:bg-transparent text-foreground"
+                localization={{ ...authLocalization, SETTINGS: "Account" }}
+              />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SignedIn>
+        <SignedOut>
+          <SidebarGroupContent className="mt-4">
+            <SidebarGroupLabel>User</SidebarGroupLabel>
+            <SidebarMenu>
+              {userItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={item.url === pathname}>
+                    <a href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SignedOut>
       </SidebarFooter>
     </Sidebar>
   );

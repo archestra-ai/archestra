@@ -9,6 +9,7 @@ import AgentModel from "@/models/agent";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
 import ToolModel from "@/models/tool";
+import User from "@/models/user";
 import type {
   InsertAgent,
   InsertDualLlmConfig,
@@ -27,6 +28,7 @@ export async function seedDatabase(): Promise<void> {
 
   try {
     // Seed in correct order (respecting foreign keys)
+    await seedAdminUser();
     await seedAgents();
     await seedTools();
     await seedInteractions();
@@ -37,6 +39,14 @@ export async function seedDatabase(): Promise<void> {
     console.error("\n❌ Error seeding database:", error);
     throw error;
   }
+}
+
+/**
+ * Seeds admin user
+ */
+async function seedAdminUser(): Promise<void> {
+  await User.createAdminUser();
+  console.log("✓ Seeded admin user");
 }
 
 /**

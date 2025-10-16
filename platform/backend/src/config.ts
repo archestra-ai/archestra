@@ -59,6 +59,7 @@ const getCorsOrigins = (): string | string[] | RegExp[] => {
 };
 
 export default {
+  baseURL: process.env.ARCHESTRA_API_BASE_URL,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),

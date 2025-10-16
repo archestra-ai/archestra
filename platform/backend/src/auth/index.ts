@@ -4,10 +4,12 @@ import { createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { ac, adminRole, memberRole, ownerRole } from "./permission";
 
 export const auth = betterAuth({
+  baseURL: config.baseURL,
   plugins: [
     organization({
       requireEmailVerificationOnInvitation: false,

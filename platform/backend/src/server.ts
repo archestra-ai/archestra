@@ -11,7 +11,6 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import { authMiddleware } from "@/middleware/auth-middleware";
-import User from "@/models/user";
 import {
   Anthropic,
   Gemini,
@@ -73,7 +72,6 @@ const start = async () => {
   try {
     // Seed database with demo data
     await seedDatabase();
-    await User.createAdminUser();
 
     /**
      * Register CORS plugin to allow cross-origin requests from frontend

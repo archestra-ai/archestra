@@ -1830,6 +1830,38 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
+export type GetApiAuthBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/api/auth/{*}';
+};
+
+export type GetApiAuthBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostApiAuthBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/api/auth/{*}';
+};
+
+export type PostApiAuthBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type DeleteV1AnthropicData = {
     body?: never;
     path?: never;

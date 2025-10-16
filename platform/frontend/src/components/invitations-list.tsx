@@ -2,7 +2,6 @@
 
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import {
-  CheckCircle,
   ChevronDown,
   Copy,
   Mail,
@@ -29,16 +28,6 @@ import {
   useReinvite,
 } from "@/lib/organization.query";
 
-interface Invitation {
-  id: string;
-  email: string;
-  role?: string;
-  expiresAt?: string | null;
-  createdAt?: string | null;
-  isExpired?: boolean;
-  status?: "pending" | "accepted" | "rejected";
-}
-
 function InvitationsListContent({
   organizationId,
   showAllStatuses = false,
@@ -51,7 +40,7 @@ function InvitationsListContent({
     organizationId,
     showAllStatuses,
   );
-  const cancelMutation = useCancelInvitation(organizationId);
+  const cancelMutation = useCancelInvitation();
   const reinviteMutation = useReinvite(organizationId);
   const [isRejectedOpen, setIsRejectedOpen] = useState(false);
 

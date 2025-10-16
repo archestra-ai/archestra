@@ -1,45 +1,30 @@
 "use client";
 
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAcceptInvitation } from "@/lib/organization.query";
 
 export default function SignUpWithInvitationPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [hasProcessed, setHasProcessed] = useState(false);
-  const [initialSessionChecked, setInitialSessionChecked] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const invitationId = searchParams.get("invitationId");
-  const _email = searchParams.get("email");
 
   const { data: session } = authClient.useSession();
   const acceptMutation = useAcceptInvitation();
 
   // Handle auto-accept after sign-up
   useEffect(() => {
-    // Don't auto-accept if we're redirecting an already-authenticated user
-    if (isRedirecting) return;
-
     // Only process if we've done initial check and now have a new session
-    if (initialSessionChecked && session && invitationId && !hasProcessed) {
+    if (session && invitationId && !hasProcessed) {
       setHasProcessed(true);
       acceptMutation.mutateAsync(invitationId);
     }
-  }, [
-    session,
-    invitationId,
-    hasProcessed,
-    router,
-    initialSessionChecked,
-    isRedirecting,
-  ]);
+  }, [session, invitationId, hasProcessed, acceptMutation.mutateAsync]);
 
   return (
     <ErrorBoundary>

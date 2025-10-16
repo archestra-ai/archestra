@@ -164,7 +164,7 @@ export function useInvitationsList(
 /**
  * Cancel invitation mutation
  */
-export function useCancelInvitation(organizationId: string | undefined) {
+export function useCancelInvitation() {
   return useMutation({
     mutationFn: async (invitationId: string) => {
       const response = await authClient.organization.cancelInvitation({
@@ -248,7 +248,7 @@ export function useCreateInvitation(organizationId: string | undefined) {
 
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success("Invitation link generated", {
         description: "Share this link with the person you want to invite",
       });

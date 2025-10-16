@@ -3,7 +3,6 @@
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { Suspense, useEffect } from "react";
-import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";

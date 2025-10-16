@@ -144,10 +144,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
-              response: refusalResponse,
+              response: response,
             });
 
-            return reply.send(refusalResponse);
+            return reply.send(response);
           }
         }
 

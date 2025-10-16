@@ -285,11 +285,12 @@ The production backend provides:
   - Database schema supports provider field to distinguish between providers
   - Requires `GEMINI_API_KEY` environment variable
   - Gemini API requests require `x-goog-api-key` header with API key
-- **Anthropic**: Partially implemented with messages API support
+- **Anthropic**: Messages API support with tool invocation and trusted data policies
   - TypeScript types for Anthropic API (`platform/backend/src/types/llm-providers/anthropic/`)
   - Requires `ANTHROPIC_API_KEY` environment variable
   - Anthropic API requests require `x-api-key` header with API key
-  - Note: Transformer implementation is partially complete
+  - Tool invocation policies evaluation now supports Anthropic format
+  - Note: Streaming support coming soon
 
 #### REST API Endpoints
 
@@ -313,7 +314,7 @@ The production backend provides:
     - `POST /v1/anthropic/:agentId/messages` - Agent-specific messages endpoint
     - Routes for other Anthropic API endpoints are proxied directly (e.g., `/v1/anthropic/models`)
   - Supports streaming responses for real-time AI interactions
-  - **Supported Providers**: OpenAI, Google Gemini, Anthropic (partial)
+  - **Supported Providers**: OpenAI (full), Google Gemini (full), Anthropic (messages API)
 - **Agent Management**:
   - `GET /api/agents` - List all agents
   - `POST /api/agents` - Create new agent

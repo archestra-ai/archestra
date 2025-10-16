@@ -76,14 +76,21 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const commonRequest = transformer.requestToOpenAI(body);
 
       if (body.tools) {
-        await utils.persistTools(
-          body.tools.map((tool) => ({
-            toolName: tool.name,
-            toolParameters: tool.input_schema,
-            toolDescription: tool.description,
-          })),
-          resolvedAgentId,
-        );
+        const transformedTools = body.tools
+          .map((tool) => {
+            if (tool.type === "custom") {
+              return {
+                toolName: tool.name,
+                toolParameters: tool.input_schema,
+                toolDescription: tool.description,
+              };
+            } else {
+              return null;
+            }
+          })
+          .filter((tool) => tool !== null);
+
+        await utils.persistTools(transformedTools, resolvedAgentId);
       }
 
       // Process messages with trusted data policies dynamically
@@ -108,7 +115,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Non-streaming response
         const response = await anthropicClient.messages.create({
-          ...anthropicRequest,
+          ...(anthropicRequest as any),
           stream: false,
         });
 

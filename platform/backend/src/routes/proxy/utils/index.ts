@@ -14,8 +14,8 @@ export const getAgentIdFromRequest = async (
 export const persistTools = async (
   tools: Array<{
     toolName: string;
-    toolParameters: Record<string, unknown>;
-    toolDescription: string;
+    toolParameters?: Record<string, unknown>;
+    toolDescription?: string;
   }>,
   agentId: string,
 ) => {

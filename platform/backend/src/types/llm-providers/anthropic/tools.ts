@@ -2,12 +2,12 @@ import { z } from "zod";
 
 const InputSchemaJsonSchemaSchema = z.record(z.string(), z.any());
 
-const CustomToolSchema = z.object({
-  input_schema: InputSchemaJsonSchemaSchema,
+export const CustomToolSchema = z.object({
   name: z.string(),
-  cache_control: z.any().nullable().optional(),
-  description: z.string().optional(),
   type: z.enum(["custom"]).nullable().optional(),
+  cache_control: z.any().nullable().optional(),
+  input_schema: InputSchemaJsonSchemaSchema,
+  description: z.string().optional(),
 });
 
 const ToolBash20250124Schema = z.object({
@@ -41,7 +41,7 @@ const WebSearchToolSchema = z.object({
   user_location: z.any().nullable().optional(),
 });
 
-export const ToolSchema = z.union([
+export const ToolSchema = z.discriminatedUnion("type", [
   CustomToolSchema,
   ToolBash20250124Schema,
   ToolTextEditor20250124Schema,

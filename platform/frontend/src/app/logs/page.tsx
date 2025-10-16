@@ -4,6 +4,7 @@ import {
   getAgents,
   getInteractions,
 } from "@/lib/clients/api";
+import { getServerApiHeaders } from "@/lib/server-utils";
 import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import LogsPage from "./page.client";
 
@@ -28,9 +29,11 @@ export default async function LogsPageServer() {
     agents: [],
   };
   try {
+    const headers = await getServerApiHeaders();
     initialData = {
       interactions: (
         await getInteractions({
+          headers,
           query: {
             limit: DEFAULT_TABLE_LIMIT,
             offset: 0,
@@ -49,7 +52,7 @@ export default async function LogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await getAgents()).data || [],
+      agents: (await getAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

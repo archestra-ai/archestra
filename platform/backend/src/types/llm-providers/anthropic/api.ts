@@ -51,7 +51,7 @@ export const MessagesRequestSchema = z.object({
         type: z.enum(["text"]),
         text: z.string(),
         cache_control: z.any().nullable().optional(),
-        citations: z.array(z.any()).optional(),
+        citations: z.array(z.any()).nullable().optional(),
       }),
     ])
     .optional(),

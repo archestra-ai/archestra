@@ -45,27 +45,51 @@ const TextBlockParamSchema = z.object({
   citations: z.array(z.any()).nullable().optional(),
 });
 
-const ImageBlockParamSchema = z.any();
-const DocumentBlockParamSchema = z.any();
-const SearchResultBlockParamSchema = z.any();
-const ThinkingBlockParamSchema = z.any();
-const RedactedThinkingBlockParamSchema = z.any();
-const ToolUseBlockParamSchema = z.any();
-const ToolResultBlockParamSchema = z.any();
-const ServerToolUseBlockParamSchema = z.any();
-const WebSearchToolResultBlockParamSchema = z.any();
+// const ImageBlockParamSchema = z.any();
+// const DocumentBlockParamSchema = z.any();
+// const SearchResultBlockParamSchema = z.any();
+// const ThinkingBlockParamSchema = z.any();
+// const RedactedThinkingBlockParamSchema = z.any();
+const ToolUseBlockParamSchema = z.object({
+  id: z.string(),
+  input: z.any(),
+  name: z.string(),
+  type: z.enum(["tool_use"]),
+  cache_control: z.any().nullable().optional(),
+});
+const ToolResultBlockParamSchema = z.object({
+  tool_use_id: z.string(),
+  type: z.enum(["tool_result"]),
+  cache_control: z.any().nullable().optional(),
+  content: z
+    .union([
+      z.string(),
+      z.array(
+        z.union([
+          TextBlockParamSchema,
+          // ImageBlockParamSchema,
+          // SearchResultBlockParamSchema,
+          // DocumentBlockParamSchema,
+        ]),
+      ),
+    ])
+    .optional(),
+  is_error: z.boolean().optional(),
+});
+// const ServerToolUseBlockParamSchema = z.any();
+// const WebSearchToolResultBlockParamSchema = z.any();
 
 const ContentBlockParamSchema = z.union([
   TextBlockParamSchema,
-  ImageBlockParamSchema,
-  DocumentBlockParamSchema,
-  SearchResultBlockParamSchema,
-  ThinkingBlockParamSchema,
-  RedactedThinkingBlockParamSchema,
+  // ImageBlockParamSchema,
+  // DocumentBlockParamSchema,
+  // SearchResultBlockParamSchema,
+  // ThinkingBlockParamSchema,
+  // RedactedThinkingBlockParamSchema,
   ToolUseBlockParamSchema,
   ToolResultBlockParamSchema,
-  ServerToolUseBlockParamSchema,
-  WebSearchToolResultBlockParamSchema,
+  // ServerToolUseBlockParamSchema,
+  // WebSearchToolResultBlockParamSchema,
 ]);
 
 export const MessageParamSchema = z.object({

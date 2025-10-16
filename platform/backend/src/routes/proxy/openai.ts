@@ -92,7 +92,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          messages,
+          {
+            provider: "openai",
+            messages,
+          },
           resolvedAgentId,
           openAiApiKey,
         );

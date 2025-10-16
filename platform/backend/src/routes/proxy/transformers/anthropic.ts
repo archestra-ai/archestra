@@ -21,13 +21,17 @@ export class AnthropicMessagesTransformer
     const openAiMessages: OpenAi.Types.ChatCompletionsRequest["messages"] = [];
 
     for (const tool of request.tools || []) {
-      if (tool.type === "custom") {
+      if (
+        tool.type === "custom" ||
+        tool.type === undefined ||
+        tool.type === null
+      ) {
         openAiTools.push({
           type: "function",
           function: {
             name: tool.name,
             description: tool.description || "",
-            parameters: tool.input_schema as any,
+            parameters: tool.input_schema,
           },
         });
       }
@@ -44,16 +48,30 @@ export class AnthropicMessagesTransformer
     }
 
     for (const message of request.messages) {
-      if (message.role === "user") {
+      if (typeof message.content === "string") {
         openAiMessages.push({
-          role: "user",
+          role: message.role,
           content: message.content,
         });
-      } else if (message.role === "assistant") {
-        openAiMessages.push({
-          role: "assistant",
-          content: message.content,
-        });
+      } else if (Array.isArray(message.content)) {
+        for (const content of message.content) {
+          if (content.type === "text") {
+            openAiMessages.push({
+              role: message.role,
+              content: content.text,
+            });
+          } else if (content.type === "tool_use") {
+            openAiMessages.push({
+              role: message.role,
+              content: content.input,
+            });
+          } else if (content.type === "tool_result") {
+            openAiMessages.push({
+              role: message.role,
+              content: content.content,
+            });
+          }
+        }
       }
     }
 
@@ -98,27 +116,41 @@ export class AnthropicMessagesTransformer
       if (tool.type === "function") {
         anthropicRequest.tools?.push({
           name: tool.function.name,
-          input_schema: tool.function.parameters as any,
+          input_schema: tool.function.parameters ?? {},
         });
       }
     }
 
     for (const message of request.messages) {
       if (message.role === "system") {
-        anthropicRequest.system =
-          typeof message.content === "string"
-            ? message.content
-            : message.content[0].text;
+        // Anthropic expects system to be either string or TextBlockParam[]
+        if (typeof message.content === "string") {
+          anthropicRequest.system = message.content;
+        } else if (Array.isArray(message.content)) {
+          // Convert to string by extracting text from content blocks
+          const textContent = message.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+            .join("\n");
+          anthropicRequest.system = textContent;
+        }
       } else if (message.role === "user") {
         anthropicRequest.messages?.push({
           role: "user",
           content: message.content,
         });
       } else if (message.role === "assistant") {
-        anthropicRequest.messages?.push({
-          role: "assistant",
-          content: message.content as any,
-        });
+        if (Array.isArray(message.content)) {
+          const content = message.content
+            .filter((c) => c.type === "text")
+            .map((c) => c.text)
+            .join("\n");
+
+          anthropicRequest.messages?.push({
+            role: "assistant",
+            content: content,
+          });
+        }
       }
     }
 

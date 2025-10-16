@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const InputSchemaJsonSchemaSchema = z.record(z.string(), z.any());
+const InputSchemaJsonSchemaSchema = z.record(z.string(), z.unknown());
 
 export const CustomToolSchema = z.object({
   name: z.string(),

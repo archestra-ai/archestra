@@ -6,7 +6,6 @@ import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { Anthropic, ErrorResponseSchema, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
-import { AnthropicMessagesTransformer } from "./transformers";
 import * as utils from "./utils";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -69,12 +68,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { "x-api-key": anthropicApiKey } = headers;
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
-    const transformer = new AnthropicMessagesTransformer();
 
     try {
-      // Convert Anthropic request to common format for processing
-      const commonRequest = transformer.requestToOpenAI(body);
-
       if (body.tools) {
         const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
@@ -94,12 +89,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          commonRequest.messages,
+          {
+            provider: "anthropic",
+            messages: body.messages,
+          },
           resolvedAgentId,
           anthropicApiKey,
         );
-
-      commonRequest.messages = filteredMessages;
 
       if (stream) {
         return reply.code(400).send({
@@ -109,20 +105,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } else {
-        const anthropicRequest = transformer.requestFromOpenAI(commonRequest);
-
         // Non-streaming response
         const response = await anthropicClient.messages.create({
-          ...(anthropicRequest as any),
+          ...body,
+          messages: filteredMessages,
           stream: false,
         });
 
         const toolCalls = response.content.filter(
           (content) => content.type === "tool_use",
         );
-
-        console.log("response", response);
-        console.log("toolCalls", toolCalls);
 
         if (toolCalls) {
           const toolInvocationRefusal =

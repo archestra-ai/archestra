@@ -108,6 +108,14 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
 
+# Allowed Frontend Origins (optional)
+ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"  # Comma-separated list of allowed frontend origins
+# If not set, defaults to "*" in development (NODE_ENV=development), localhost-only in production
+# Examples:
+#   Single domain: ALLOWED_FRONTEND_ORIGINS="https://app.example.com"
+#   Multiple domains: ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"
+#   All origins: ALLOWED_FRONTEND_ORIGINS="*"
+
 # Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
 GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider

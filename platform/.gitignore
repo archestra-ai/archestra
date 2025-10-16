@@ -62,3 +62,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 tsconfig.tsbuildinfo
 .playwright-mcp
 benchmark-config.env
+
+# Playwright
+/playwright/

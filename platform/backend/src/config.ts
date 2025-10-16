@@ -34,6 +34,30 @@ const getPortFromUrl = (): number => {
   }
 };
 
+/**
+ * Parse CORS origins from environment variable
+ * Supports:
+ * - Comma-separated list: "https://example.com,https://app.example.com"
+ * - Wildcard for all origins: "*"
+ * - Empty/undefined: defaults to "*" in development, localhost regex in production
+ */
+const getCorsOrigins = (): string | string[] | RegExp[] => {
+  const allowedFrontendOrigins = process.env.ALLOWED_FRONTEND_ORIGINS;
+  const isDevelopment = process.env.NODE_ENV === "development";
+
+  if (!allowedFrontendOrigins) {
+    // Default: allow all origins in development, localhost only in production
+    return isDevelopment ? "*" : [/^https?:\/\/localhost(:\d+)?$/];
+  }
+
+  if (allowedFrontendOrigins === "*") {
+    return "*";
+  }
+
+  // Split comma-separated list and trim whitespace
+  return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
+};
+
 export default {
   api: {
     host: "0.0.0.0",
@@ -43,6 +67,9 @@ export default {
   },
   database: {
     url: process.env.DATABASE_URL,
+  },
+  cors: {
+    origins: getCorsOrigins(),
   },
   debug: process.env.NODE_ENV === "development",
   benchmark: {

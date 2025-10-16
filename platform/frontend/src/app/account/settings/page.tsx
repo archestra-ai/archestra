@@ -66,7 +66,6 @@ function SettingsContent() {
                 organizationId={activeOrg.id}
                 onInvitationCreated={() => setRefreshKey((prev) => prev + 1)}
               />
-              <InvitationsList key={refreshKey} organizationId={activeOrg.id} />
             </DialogContent>
           </Dialog>
         )}

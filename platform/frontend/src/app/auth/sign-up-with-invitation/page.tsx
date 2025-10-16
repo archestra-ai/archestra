@@ -77,7 +77,7 @@ export default function SignUpWithInvitationPage() {
             {invitationId && (
               <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center space-y-2">
                 <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
-                  You've been invited to join an organization
+                  You've been invited to join Archestra workspace
                 </p>
                 {email && (
                   <p className="text-xs text-blue-700 dark:text-blue-300">
@@ -89,6 +89,7 @@ export default function SignUpWithInvitationPage() {
             <div className="w-full flex flex-col items-center justify-center">
               <AuthView
                 path="sign-up"
+                classNames={{ footer: "hidden" }}
                 callbackURL={
                   invitationId
                     ? `/auth/sign-up-with-invitation?invitationId=${invitationId}${email ? `&email=${encodeURIComponent(email)}` : ""}`

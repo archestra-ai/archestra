@@ -25,19 +25,26 @@ function InvitationContent() {
   const router = useRouter();
   const invitationId = params.id as string;
 
+  // Get email from URL params (passed from invitation link)
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : "",
+  );
+  const emailFromUrl = searchParams.get("email");
+
   const { data: session } = authClient.useSession();
   const { data: invitation, error: invitationError } =
     useInvitation(invitationId);
   const acceptMutation = useAcceptInvitation();
   const rejectMutation = useRejectInvitation();
 
-  // If user is not authenticated, redirect immediately to sign-up
+  // If user is not authenticated, redirect to sign-up with invitation details
   useEffect(() => {
     if (!session && invitationId) {
-      const redirectUrl = `/auth/sign-up-with-invitation?invitationId=${invitationId}`;
+      const email = emailFromUrl || invitation?.email || "";
+      const redirectUrl = `/auth/sign-up-with-invitation?invitationId=${invitationId}${email ? `&email=${encodeURIComponent(email)}` : ""}`;
       router.push(redirectUrl);
     }
-  }, [session, invitationId, router]);
+  }, [session, invitationId, emailFromUrl, invitation?.email, router]);
 
   // Check if invitation is already accepted
   useEffect(() => {

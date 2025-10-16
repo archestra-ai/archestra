@@ -44,8 +44,8 @@ function InvitationsListContent({
   const reinviteMutation = useReinvite(organizationId);
   const [isRejectedOpen, setIsRejectedOpen] = useState(false);
 
-  const handleCopy = async (id: string) => {
-    const link = `${window.location.origin}/accept-invitation/${id}`;
+  const handleCopy = async (id: string, email: string) => {
+    const link = `${window.location.origin}/accept-invitation/${id}?email=${encodeURIComponent(email)}`;
     await navigator.clipboard.writeText(link);
     toast.success("Link copied to clipboard");
   };
@@ -120,7 +120,7 @@ function InvitationsListContent({
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => handleCopy(inv.id)}
+                    onClick={() => handleCopy(inv.id, inv.email)}
                     title="Copy invitation link"
                   >
                     <Copy className="h-4 w-4" />

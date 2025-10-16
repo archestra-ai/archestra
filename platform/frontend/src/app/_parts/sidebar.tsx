@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   Slack,
   Star,
-  UserRoundPlus,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -97,11 +96,7 @@ const userItems: MenuItem[] = [
     url: "/auth/sign-in",
     icon: LogIn,
   },
-  {
-    title: "Sign up",
-    url: "/auth/sign-up",
-    icon: UserRoundPlus,
-  },
+  // Sign up is disabled - users must use invitation links to join
 ];
 
 export function AppSidebar() {

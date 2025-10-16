@@ -26,21 +26,23 @@ export function ToolDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[90vw] max-w-[1600px] max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-xl font-semibold tracking-tight">
             {tool.name}
           </DialogTitle>
           {tool.description && (
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
+            <p className="text-sm text-muted-foreground mt-1">{tool.description}</p>
           )}
         </DialogHeader>
 
-        <div className="space-y-6">
-          <ToolReadonlyDetails tool={tool} />
+        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           <div className="space-y-6">
-            <ToolCallPolicies tool={tool} />
-            <ToolResultPolicies tool={tool} />
+            <ToolReadonlyDetails tool={tool} />
+            <div className="space-y-6">
+              <ToolCallPolicies tool={tool} />
+              <ToolResultPolicies tool={tool} />
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -359,7 +359,7 @@ function ToolsList({
           className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Created
+          Detected
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
@@ -525,7 +525,17 @@ function ToolsList({
           <DataTable
             columns={columns}
             data={paginatedTools}
-            onRowClick={(tool) => setSelectedToolForDialog(tool)}
+            onRowClick={(tool, event) => {
+              // Don't open dialog if clicking on checkbox cell or switch controls
+              const target = event.target as HTMLElement;
+              const isCheckboxClick = target.closest('[data-column-id="select"]') || 
+                                     target.closest('input[type="checkbox"]') ||
+                                     target.closest('button[role="checkbox"]') ||
+                                     target.closest('button[role="switch"]');
+              if (!isCheckboxClick) {
+                setSelectedToolForDialog(tool);
+              }
+            }}
             sorting={sorting}
             onSortingChange={setSorting}
             manualPagination={true}

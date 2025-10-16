@@ -11,27 +11,29 @@ export function ToolReadonlyDetails({
       <div className="text-xs font-medium text-muted-foreground mb-4">
         TOOL INFORMATION
       </div>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1.5">
-          <div className="text-xs font-medium text-muted-foreground">Agent</div>
-          <div className="text-sm break-all text-foreground">
-            {tool.agent.name}
+      <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">Agent</div>
+            <div className="text-sm break-all text-foreground">
+              {tool.agent.name}
+            </div>
           </div>
-        </div>
-        <div className="space-y-1.5">
-          <div className="text-xs font-medium text-muted-foreground">
-            Created
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">
+              Detected
+            </div>
+            <div className="text-sm text-foreground">
+              {formatDate({ date: tool.createdAt })}
+            </div>
           </div>
-          <div className="text-sm text-foreground">
-            {formatDate({ date: tool.createdAt })}
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <div className="text-xs font-medium text-muted-foreground">
-            Updated
-          </div>
-          <div className="text-sm text-foreground">
-            {formatDate({ date: tool.updatedAt })}
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">
+              Updated
+            </div>
+            <div className="text-sm text-foreground">
+              {formatDate({ date: tool.updatedAt })}
+            </div>
           </div>
         </div>
         <div className="space-y-1.5">

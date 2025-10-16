@@ -40,7 +40,7 @@ interface DataTableProps<TData, TValue> {
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
   sorting?: SortingState;
-  onRowClick?: (row: TData) => void;
+  onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
 }
@@ -161,11 +161,12 @@ export function DataTable<TData, TValue>({
                   className={
                     onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
                   }
-                  onClick={() => onRowClick?.(row.original)}
+                  onClick={(e) => onRowClick?.(row.original, e)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell 
                       key={cell.id}
+                      data-column-id={cell.column.id}
                       style={{
                         width: cell.column.getSize(),
                       }}

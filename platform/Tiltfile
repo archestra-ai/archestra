@@ -3,6 +3,11 @@ allow_k8s_contexts(['orbstack', 'docker-desktop'])
 load('ext://helm_remote', 'helm_remote')
 load('ext://dotenv', 'dotenv')
 
+is_prod = os.getenv('PROD') == 'true'
+
+# Disable analytics in local development
+os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -48,12 +53,20 @@ dotenv(
   './.env'
 )
 
-# pre
 local_resource(
   'pnpm-install',
   cmd='pnpm install',
   deps=['./frontend/package.json', './backend/package.json'],
   labels=['pre']
+)
+
+local_resource(
+  'db-seed-mock-data',
+  cmd='pnpm db:seed:mock-data',
+  resource_deps=['pnpm-install', 'postgresql'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  labels=['database']
 )
 
 local_resource(
@@ -84,16 +97,27 @@ local_resource(
   ''',
   deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
   resource_deps=['pnpm-install', 'postgresql'],
-  labels=['pre']
+  labels=['database']
 )
 
+# prod bundle
+if is_prod:
+  local_resource(
+    'pnpm-prod',
+    cmd='pnpm build',
+    serve_cmd='pnpm start',
+    labels=['prod'],
+    resource_deps=['db-migrate-and-seed']
+  )
+
 # dev
-local_resource(
-  'pnpm-dev',
-  serve_cmd='pnpm dev',
-  labels=['dev'],
-  resource_deps=['db-migrate-and-seed']
-)
+if not is_prod:
+  local_resource(
+    'pnpm-dev',
+    serve_cmd='pnpm dev',
+    labels=['dev'],
+    resource_deps=['db-migrate-and-seed']
+  )
 
 local_resource(
   'database-gui',

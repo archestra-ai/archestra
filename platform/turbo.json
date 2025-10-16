@@ -8,6 +8,10 @@
       "persistent": true,
       "cache": false
     },
+    "start": {
+      "persistent": true,
+      "cache": false
+    },
     "lint": {
       "inputs": ["**/src/**/*.tsx", "**/src/**/*.ts", "./biome.json"]
     },
@@ -43,6 +47,9 @@
     },
     "db:studio": {
       "persistent": true,
+      "cache": false
+    },
+    "db:seed:mock-data": {
       "cache": false
     }
   }

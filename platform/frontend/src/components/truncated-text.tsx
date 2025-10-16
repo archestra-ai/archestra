@@ -1,4 +1,3 @@
-import { AlignLeft } from "lucide-react";
 import { useState } from "react";
 import {
   Tooltip,
@@ -15,16 +14,9 @@ export function TruncatedText({
   maxLength?: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [shouldShowIcon, setShouldShowIcon] = useState(false);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    if (open) {
-      setShouldShowIcon(true);
-    } else {
-      // Delay hiding the icon until after the tooltip's exit animation
-      setTimeout(() => setShouldShowIcon(false), 200);
-    }
   };
 
   if (!message) {
@@ -43,13 +35,11 @@ export function TruncatedText({
         "overflow-hidden group",
       )}
     >
-      <span>{displayText}</span>
+      {!isTruncated && <span>{displayText}</span>}
       {isTruncated && (
         <Tooltip open={isOpen} onOpenChange={handleOpenChange}>
           <TooltipTrigger asChild>
-            <AlignLeft
-              className={`w-4 h-4 absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer ${shouldShowIcon ? "block" : "hidden group-hover:block"}`}
-            />
+            <span>{displayText}</span>
           </TooltipTrigger>
           <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
             {message}

@@ -327,6 +327,7 @@ async function seedInteractions(): Promise<void> {
       agentId: DEMO_AGENT_ID,
       request,
       response,
+      type: "openai:chatCompletions",
     };
 
     await InteractionModel.create(interactionData);
@@ -513,6 +514,7 @@ async function seedInteractions(): Promise<void> {
       agentId: BLOCKED_DEMO_AGENT_ID,
       request,
       response,
+      type: "openai:chatCompletions",
     };
 
     await InteractionModel.create(interactionData);

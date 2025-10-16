@@ -1,9 +1,11 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { InteractionModel } from "@/models";
-import type { Interaction } from "@/types";
 import {
+  createPaginatedResponseSchema,
+  createSortingQuerySchema,
   ErrorResponseSchema,
+  PaginationQuerySchema,
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
@@ -14,26 +16,47 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: "getInteractions",
-        description: "Get all interactions",
+        description: "Get all interactions with pagination and sorting",
         tags: ["Interaction"],
-        querystring: z.object({
-          agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
-        }),
+        querystring: z
+          .object({
+            agentId: UuidIdSchema.optional().describe("Filter by agent ID"),
+          })
+          .merge(PaginationQuerySchema)
+          .merge(
+            createSortingQuerySchema([
+              "createdAt",
+              "agentId",
+              "model",
+            ] as const),
+          ),
         response: {
-          200: z.array(SelectInteractionSchema),
+          200: createPaginatedResponseSchema(SelectInteractionSchema),
         },
       },
     },
-    async ({ query: { agentId } }, reply) => {
-      let interactions: Interaction[];
+    async (
+      { query: { agentId, limit, offset, sortBy, sortDirection } },
+      reply,
+    ) => {
+      const pagination = { limit, offset };
+      const sorting = { sortBy, sortDirection };
+
       if (agentId) {
-        interactions =
-          await InteractionModel.getAllInteractionsForAgent(agentId);
-      } else {
-        interactions = await InteractionModel.findAll();
+        const result =
+          await InteractionModel.getAllInteractionsForAgentPaginated(
+            agentId,
+            pagination,
+            sorting,
+          );
+        return reply.send(result);
       }
 
-      return reply.send(interactions);
+      const result = await InteractionModel.findAllPaginated(
+        pagination,
+        sorting,
+      );
+      return reply.send(result);
     },
   );
 

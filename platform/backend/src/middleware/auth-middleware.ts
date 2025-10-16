@@ -16,6 +16,7 @@ export const authMiddleware = async (
   reply: FastifyReply,
 ) => {
   if (request.url.startsWith("/api/auth")) return;
+  if (request.url === "/openapi.json") return;
 
   const headers = new Headers();
   Object.entries(request.headers).forEach(([key, value]) => {

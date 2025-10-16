@@ -3,11 +3,6 @@ import { z } from "zod";
 import { MessageParamSchema, ToolCallSchema } from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
-export const ApiKeySchema = z
-  .string()
-  .describe("Bearer token for OpenAI")
-  .transform((authorization) => authorization.replace("Bearer ", ""));
-
 const ChatCompletionUsageSchema = z
   .object({
     completion_tokens: z.number(),
@@ -30,22 +25,24 @@ const ChatCompletionUsageSchema = z
     `https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113`,
   );
 
+export const FinishReasonSchema = z.enum([
+  "stop",
+  "length",
+  "tool_calls",
+  "content_filter",
+  "function_call",
+]);
+
 const ChoiceSchema = z
   .object({
-    finish_reason: z.enum([
-      "stop",
-      "length",
-      "tool_calls",
-      "content_filter",
-      "function_call",
-    ]),
+    finish_reason: FinishReasonSchema,
     index: z.number(),
     logprobs: z.any().nullable(),
     message: z
       .object({
         content: z.string().nullable(),
         refusal: z.string().nullable(),
-        role: z.literal("assistant"),
+        role: z.enum(["assistant"]),
         annotations: z.array(z.any()).optional(),
         audio: z.any().nullable().optional(),
         function_call: z
@@ -88,7 +85,7 @@ export const ChatCompletionResponseSchema = z
     choices: z.array(ChoiceSchema),
     created: z.number(),
     model: z.string(),
-    object: z.literal("chat.completion"),
+    object: z.enum(["chat.completion"]),
     server_tier: z.string().optional(),
     system_fingerprint: z.string().nullable().optional(),
     usage: ChatCompletionUsageSchema.optional(),
@@ -96,3 +93,11 @@ export const ChatCompletionResponseSchema = z
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L248`,
   );
+
+export const ChatCompletionsHeadersSchema = z.object({
+  "user-agent": z.string().optional().describe("The user agent of the client"),
+  authorization: z
+    .string()
+    .describe("Bearer token for OpenAI")
+    .transform((authorization) => authorization.replace("Bearer ", "")),
+});

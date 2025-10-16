@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.11](https://github.com/archestra-ai/archestra/compare/platform-v0.0.10...platform-v0.0.11) (2025-10-15)
+
+
+### Features
+
+* add gemini provider support ([#716](https://github.com/archestra-ai/archestra/issues/716)) ([456bde5](https://github.com/archestra-ai/archestra/commit/456bde51d4f2cd8091e35d29fc921ea26b5b61bc))
+* archestra + mastra example and docker compose ([#714](https://github.com/archestra-ai/archestra/issues/714)) ([8548320](https://github.com/archestra-ai/archestra/commit/8548320c34fb4b005c9d6f6e34ca8b14439eaf45))
+* logs pagination and sorting ([#718](https://github.com/archestra-ai/archestra/issues/718)) ([59b698c](https://github.com/archestra-ai/archestra/commit/59b698c6991e14c96bf14248547c754517c9d7f7))
+* performance benchmarks ([#724](https://github.com/archestra-ai/archestra/issues/724)) ([2590217](https://github.com/archestra-ai/archestra/commit/259021783265dd25f8270745ec9814b4db7df438))
+
+
+### Bug Fixes
+
+* fix seed data to reflect demo scenario ([#707](https://github.com/archestra-ai/archestra/issues/707)) ([4f98efb](https://github.com/archestra-ai/archestra/commit/4f98efb7ab9e8d04d985d91be910780a9dca40d3))
+* fix texts for dual llm ([#717](https://github.com/archestra-ai/archestra/issues/717)) ([fc60d36](https://github.com/archestra-ai/archestra/commit/fc60d367f24b7078616e255b6f9acdcf067366a9))
+* show tooltip on hovering text ([#710](https://github.com/archestra-ai/archestra/issues/710)) ([264a281](https://github.com/archestra-ai/archestra/commit/264a28165621516e4aa9b0288996d6c71dfc5c35))
+* unify table paddings ([#721](https://github.com/archestra-ai/archestra/issues/721)) ([1e26f1b](https://github.com/archestra-ai/archestra/commit/1e26f1b1e96c18d18e49bccb260fb906da59aed3))
+
 ## [0.0.10](https://github.com/archestra-ai/archestra/compare/platform-v0.0.9...platform-v0.0.10) (2025-10-13)
 
 

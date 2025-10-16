@@ -1,0 +1,29 @@
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What files are in the current directory?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_files",
+        "description": "List files in a directory",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The directory path"
+            }
+          },
+          "required": ["path"]
+        }
+      }
+    }
+  ],
+  "temperature": 0.7
+}

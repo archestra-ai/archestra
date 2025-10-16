@@ -73,25 +73,28 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Extract all tool_call_ids from the interaction messages
-        const toolCallIds: string[] = [];
-        for (const message of interaction.request.messages) {
-          if (message.role === "tool") {
-            toolCallIds.push(message.tool_call_id);
+        if (interaction.type === "openai:chatCompletions") {
+          // Extract all tool_call_ids from the interaction messages
+          const toolCallIds: string[] = [];
+          for (const message of interaction.request.messages) {
+            if (message.role === "tool") {
+              toolCallIds.push(message.tool_call_id);
+            }
           }
+
+          // Fetch dual LLM results for all tool call IDs
+          const results = await Promise.all(
+            toolCallIds.map((id) => DualLlmResultModel.findByToolCallId(id)),
+          );
+
+          // Filter out null results
+          const validResults = results.filter(
+            (result): result is NonNullable<typeof result> => result !== null,
+          );
+
+          return reply.send(validResults);
         }
-
-        // Fetch dual LLM results for all tool call IDs
-        const results = await Promise.all(
-          toolCallIds.map((id) => DualLlmResultModel.findByToolCallId(id)),
-        );
-
-        // Filter out null results
-        const validResults = results.filter(
-          (result): result is NonNullable<typeof result> => result !== null,
-        );
-
-        return reply.send(validResults);
+        // TODO: Implement Gemini support
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

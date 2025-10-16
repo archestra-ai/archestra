@@ -16,6 +16,30 @@ $ pnpm cli-chat-with-guardrails --help
 Options:
 --include-external-email  Include external email in mock Gmail data
 --include-malicious-email Include malicious email in mock Gmail data
+--stream                  Stream the response
+--model <model>           The model to use (default: gpt-4o for openai, gemini-2.0-flash-exp for gemini)
+--provider <provider>     The provider to use (openai or gemini, default: openai)
 --debug                   Print debug messages
 --help                    Print this help message
 ```
+
+### Examples
+
+**Using OpenAI (default):**
+
+```bash
+pnpm cli-chat-with-guardrails
+pnpm cli-chat-with-guardrails --model gpt-4o-mini --stream
+```
+
+**Using Gemini:**
+
+```bash
+pnpm cli-chat-with-guardrails --provider gemini
+pnpm cli-chat-with-guardrails --provider gemini --model gemini-2.0-flash-exp --stream
+```
+
+**Note:** Make sure you have the appropriate API key set in your `/platform/.env` file:
+
+- `OPENAI_API_KEY` for OpenAI provider
+- `GEMINI_API_KEY` for Gemini provider

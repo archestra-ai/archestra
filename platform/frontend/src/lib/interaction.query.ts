@@ -1,29 +1,53 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import {
   type GetInteractionResponses,
+  type GetInteractionsData,
   type GetInteractionsResponses,
   getInteraction,
   getInteractions,
 } from "@/lib/clients/api";
+import { DEFAULT_TABLE_LIMIT } from "./utils";
 
 export function useInteractions({
   agentId,
+  limit = DEFAULT_TABLE_LIMIT,
+  offset = 0,
+  sortBy,
+  sortDirection = "desc",
   initialData,
 }: {
   agentId?: string;
+  limit?: number;
+  offset?: number;
+  sortBy?: NonNullable<GetInteractionsData["query"]>["sortBy"];
+  sortDirection?: "asc" | "desc";
   initialData?: GetInteractionsResponses["200"];
 } = {}) {
-  return useQuery({
-    queryKey: ["interactions", agentId],
+  return useSuspenseQuery({
+    queryKey: ["interactions", agentId, limit, offset, sortBy, sortDirection],
     queryFn: async () => {
-      const params = agentId ? { query: { agentId } } : undefined;
-      const response = await getInteractions(params);
+      const response = await getInteractions({
+        query: {
+          ...(agentId ? { agentId } : {}),
+          limit,
+          offset,
+          ...(sortBy ? { sortBy } : {}),
+          sortDirection,
+        },
+      });
       return response.data;
     },
-    initialData,
-    refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
+    // Only use initialData for the first page (offset 0) with default sorting and default limit
+    initialData:
+      offset === 0 &&
+      limit === DEFAULT_TABLE_LIMIT &&
+      sortBy === "createdAt" &&
+      sortDirection === "desc"
+        ? initialData
+        : undefined,
+    // refetchInterval: 3_000, // later we might want to switch to websockets or sse, polling for now
   });
 }
 
@@ -36,7 +60,7 @@ export function useInteraction({
   initialData?: GetInteractionResponses["200"];
   refetchInterval?: number | null;
 }) {
-  return useQuery({
+  return useSuspenseQuery({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });

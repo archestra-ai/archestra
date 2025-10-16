@@ -8,6 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { GetDualLlmResultByToolCallIdResponses } from "@/lib/clients/api";
+import { CodeText } from "./code-text";
 
 type DualLlmResult = NonNullable<GetDualLlmResultByToolCallIdResponses["200"]>;
 
@@ -34,9 +35,7 @@ export function DualLlmConversation({ result }: { result: DualLlmResult }) {
           <div className="rounded-lg border bg-card p-4 space-y-4">
             <div>
               <h4 className="text-sm font-medium mb-2">Tool Call ID</h4>
-              <code className="text-xs bg-muted px-2 py-1 rounded">
-                {result.toolCallId}
-              </code>
+              <CodeText className="text-xs">{result.toolCallId}</CodeText>
             </div>
 
             <div>

@@ -60,7 +60,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     }
 
-    const { authorization: anthropicApiKey } = headers;
+    const { "x-api-key": anthropicApiKey } = headers;
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
     const transformer = new AnthropicMessagesTransformer();
 

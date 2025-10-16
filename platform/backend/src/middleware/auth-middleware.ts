@@ -27,12 +27,13 @@ class AuthMiddleware {
       return reply.status(401).send({ error: "Unauthorized" });
     }
 
-    // return 403 if unauthorized
+    // check if authorized
     const isAuthorized = await this.isAuthorized(request);
     if ("success" in isAuthorized && isAuthorized.success) {
       return;
     }
 
+    // return 403 if unauthorized
     return reply.status(403).send({ error: isAuthorized.error });
   }
 

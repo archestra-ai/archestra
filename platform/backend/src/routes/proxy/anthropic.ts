@@ -23,14 +23,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1",
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format:
-      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
-      const isMessagesRoute =
-        request.method === "POST" &&
-        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
-
-      if (isMessagesRoute) {
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
         // Skip proxy for this route - we handle it below
         next(new Error("skip"));
       } else {

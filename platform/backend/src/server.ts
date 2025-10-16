@@ -118,7 +118,7 @@ const start = async () => {
       version,
     }));
 
-    // fastify.addHook("preHandler", authMiddleware);
+    fastify.addHook("preHandler", authMiddleware);
 
     fastify.register(routes.authRoutes);
     fastify.register(routes.anthropicProxyRoutes);

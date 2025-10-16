@@ -9,7 +9,52 @@ import type {
   RouteShorthandOptions,
 } from "fastify";
 import { auth } from "@/auth";
+import { RouteId } from "@/types";
 import { checkPermission } from "./permission-middleware";
+
+class AuthMiddleware {
+  constructor() {}
+
+  public async handle(request: FastifyRequest, reply: FastifyReply) {
+    // custom logic to skip auth check
+    if (this.shouldSkipAuthCheck(request)) return;
+
+    // route ids to skip auth check
+  }
+
+  private shouldSkipAuthCheck({ url, routeOptions }: FastifyRequest) {
+    if (
+      url.startsWith("/api/auth") ||
+      url.startsWith("/v1/openai") ||
+      url.startsWith("/v1/anthropic") ||
+      url.startsWith("/v1/gemini") ||
+      url === "/openapi.json" ||
+      url.startsWith("/health")
+    ) {
+      return true;
+    }
+
+    if (
+      routeOptions.schema?.operationId &&
+      ROUTES_TO_SKIP_AUTH_CHECK.includes(
+        routeOptions.schema.operationId as RouteId,
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+}
+
+const ROUTES_TO_SKIP_AUTH_CHECK: RouteId[] = [
+  RouteId.OpenAiChatCompletionsWithDefaultAgent,
+  RouteId.OpenAiChatCompletionsWithAgent,
+  RouteId.AnthropicMessagesWithDefaultAgent,
+  RouteId.AnthropicMessagesWithAgent,
+];
+
+const authMiddleware2 = new AuthMiddleware();
+export default authMiddleware2;
 
 export const authMiddleware = async (
   request: FastifyRequest,

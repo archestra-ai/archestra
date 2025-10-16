@@ -4,7 +4,7 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
-import { Anthropic, ErrorResponseSchema, UuidIdSchema } from "@/types";
+import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { AnthropicMessagesTransformer } from "./transformers";
 import * as utils from "./utils";
@@ -248,7 +248,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/${MESSAGES_SUFFIX}`,
     {
       schema: {
-        operationId: "anthropicMessagesWithDefaultAgent",
+        operationId: RouteId.AnthropicMessagesWithDefaultAgent,
         description: "Send a message to Anthropic using the default agent",
         tags: ["llm-proxy"],
         body: Anthropic.API.MessagesRequestSchema,
@@ -274,7 +274,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/:agentId/${MESSAGES_SUFFIX}`,
     {
       schema: {
-        operationId: "anthropicMessagesWithAgent",
+        operationId: RouteId.AnthropicMessagesWithAgent,
         description: "Send a message to Anthropic using a specific agent",
         tags: ["llm-proxy"],
         params: z.object({

@@ -4,6 +4,7 @@ import { AgentModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertAgentSchema,
+  RouteId,
   SelectAgentSchema,
   UuidIdSchema,
 } from "@/types";
@@ -13,7 +14,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents",
     {
       schema: {
-        operationId: "getAgents",
+        operationId: RouteId.GetAgents,
         description: "Get all agents",
         tags: ["Agents"],
         response: {
@@ -43,7 +44,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents",
     {
       schema: {
-        operationId: "createAgent",
+        operationId: RouteId.CreateAgent,
         description: "Create a new agent",
         tags: ["Agents"],
         body: InsertAgentSchema.omit({
@@ -78,7 +79,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents/:id",
     {
       schema: {
-        operationId: "getAgent",
+        operationId: RouteId.GetAgent,
         description: "Get agent by ID",
         tags: ["Agents"],
         params: z.object({
@@ -122,7 +123,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents/:id",
     {
       schema: {
-        operationId: "updateAgent",
+        operationId: RouteId.UpdateAgent,
         description: "Update an agent",
         tags: ["Agents"],
         params: z.object({
@@ -171,7 +172,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/agents/:id",
     {
       schema: {
-        operationId: "deleteAgent",
+        operationId: RouteId.DeleteAgent,
         description: "Delete an agent",
         tags: ["Agents"],
         params: z.object({

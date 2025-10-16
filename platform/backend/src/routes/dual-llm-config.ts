@@ -4,6 +4,7 @@ import { DualLlmConfigModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertDualLlmConfigSchema,
+  RouteId,
   SelectDualLlmConfigSchema,
   UuidIdSchema,
 } from "@/types";
@@ -14,7 +15,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config/default",
     {
       schema: {
-        operationId: "getDefaultDualLlmConfig",
+        operationId: RouteId.GetDefaultDualLlmConfig,
         description: "Get default dual LLM configuration",
         tags: ["Dual LLM Config"],
         response: {
@@ -45,7 +46,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config",
     {
       schema: {
-        operationId: "getDualLlmConfigs",
+        operationId: RouteId.GetDualLlmConfigs,
         description: "Get all dual LLM configurations",
         tags: ["Dual LLM Config"],
         response: {
@@ -76,7 +77,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config",
     {
       schema: {
-        operationId: "createDualLlmConfig",
+        operationId: RouteId.CreateDualLlmConfig,
         description: "Create a new dual LLM configuration",
         tags: ["Dual LLM Config"],
         body: InsertDualLlmConfigSchema.omit({
@@ -112,7 +113,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config/:id",
     {
       schema: {
-        operationId: "getDualLlmConfig",
+        operationId: RouteId.GetDualLlmConfig,
         description: "Get dual LLM configuration by ID",
         tags: ["Dual LLM Config"],
         params: z.object({
@@ -157,7 +158,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config/:id",
     {
       schema: {
-        operationId: "updateDualLlmConfig",
+        operationId: RouteId.UpdateDualLlmConfig,
         description: "Update a dual LLM configuration",
         tags: ["Dual LLM Config"],
         params: z.object({
@@ -207,7 +208,7 @@ const dualLlmConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-config/:id",
     {
       schema: {
-        operationId: "deleteDualLlmConfig",
+        operationId: RouteId.DeleteDualLlmConfig,
         description: "Delete a dual LLM configuration",
         tags: ["Dual LLM Config"],
         params: z.object({

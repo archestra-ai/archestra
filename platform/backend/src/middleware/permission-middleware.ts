@@ -61,7 +61,7 @@ async function getRoleCacheKey(
  * Clear permission cache for a specific role or all
  * Call this when role definitions change (e.g., deploy new permission.ts)
  */
-export function clearPermissionCache(role?: string) {
+function clearPermissionCache(role?: string) {
   if (role) {
     // Clear only for specific role
     for (const key of permissionCache.keys()) {
@@ -79,7 +79,7 @@ export function clearPermissionCache(role?: string) {
  * Clear role cache for a specific user/org
  * Call this when a user's role changes
  */
-export function clearRoleCache(userId: string, organizationId?: string) {
+function clearRoleCache(userId: string, organizationId?: string) {
   if (organizationId) {
     roleCache.delete(`${userId}:${organizationId}`);
   } else {

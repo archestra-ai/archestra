@@ -26,7 +26,11 @@ class AuthMiddleware {
     return reply.status(403).send(prepareErrorResponse("Forbidden", request));
   };
 
-  private shouldSkipAuthCheck = ({ url }: FastifyRequest) => {
+  private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
+    // Skip CORS preflight and HEAD requests globally
+    if (method === "OPTIONS" || method === "HEAD") {
+      return true;
+    }
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/v1/openai") ||
@@ -79,6 +83,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetAgents]: {
     agent: ["read"],
   },
+  [RouteId.GetAgent]: {
+    agent: ["read"],
+  },
   [RouteId.CreateAgent]: {
     agent: ["create"],
   },
@@ -106,6 +113,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetToolInvocationPolicies]: {
     policy: ["read"],
   },
+  [RouteId.CreateToolInvocationPolicy]: {
+    policy: ["create"],
+  },
   [RouteId.GetToolInvocationPolicy]: {
     policy: ["read"],
   },
@@ -117,6 +127,9 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.GetTrustedDataPolicies]: {
     policy: ["read"],
+  },
+  [RouteId.CreateTrustedDataPolicy]: {
+    policy: ["create"],
   },
   [RouteId.GetTrustedDataPolicy]: {
     policy: ["read"],

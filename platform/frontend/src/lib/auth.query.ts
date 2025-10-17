@@ -7,6 +7,7 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 export const authKeys = {
   all: ["auth"] as const,
   session: () => [...authKeys.all, "session"] as const,
+  orgMembers: () => [...authKeys.all, "orgMembers"] as const,
 };
 
 /**
@@ -18,6 +19,16 @@ export function useSession() {
     queryFn: async () => {
       const { data } = await authClient.getSession();
       return data;
+    },
+  });
+}
+
+export function useCurrentOrgMembers() {
+  return useQuery({
+    queryKey: authKeys.orgMembers(),
+    queryFn: async () => {
+      const { data } = await authClient.organization.listMembers();
+      return data?.members ?? [];
     },
   });
 }

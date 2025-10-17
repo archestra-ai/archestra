@@ -1,12 +1,13 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { MoreVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Plug, Plus, Trash2, X } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,6 +33,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -46,6 +54,7 @@ import {
   useDeleteAgent,
   useUpdateAgent,
 } from "@/lib/agent.query";
+import { useCurrentOrgMembers } from "@/lib/auth.query";
 import type { GetAgentsResponses } from "@/lib/clients/api";
 
 export default function AgentsPage({
@@ -242,11 +251,51 @@ function CreateAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const { data: orgMembers } = useCurrentOrgMembers();
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
+
+  const handleAddUser = useCallback(
+    (userId: string) => {
+      if (userId && !assignedUserIds.includes(userId)) {
+        setAssignedUserIds([...assignedUserIds, userId]);
+        setSelectedUserId("");
+      }
+    },
+    [assignedUserIds],
+  );
+
+  const handleRemoveUser = useCallback(
+    (userId: string) => {
+      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+    },
+    [assignedUserIds],
+  );
+
+  const getAdminMembers = useCallback(() => {
+    if (!orgMembers) return [];
+    return orgMembers.filter((member) => member.role === "admin");
+  }, [orgMembers]);
+
+  const getUnassignedMembers = useCallback(() => {
+    if (!orgMembers) return [];
+    return orgMembers.filter(
+      (member) =>
+        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
+    );
+  }, [orgMembers, assignedUserIds]);
+
+  const getUserById = useCallback(
+    (userId: string) => {
+      return orgMembers?.find((member) => member.user.id === userId)?.user;
+    },
+    [orgMembers],
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -257,7 +306,11 @@ function CreateAgentDialog({
       }
 
       try {
-        const agent = await createAgent.mutateAsync({ name: name.trim() });
+        const agent = await createAgent.mutateAsync({
+          name: name.trim(),
+          // @ts-expect-error - assignedUserIds will be added to the backend API
+          assignedUserIds,
+        });
         if (!agent) {
           throw new Error("Failed to create agent");
         }
@@ -267,18 +320,23 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, createAgent],
+    [name, assignedUserIds, createAgent],
   );
 
   const handleClose = useCallback(() => {
     setName("");
+    setAssignedUserIds([]);
+    setSelectedUserId("");
     setCreatedAgent(null);
     onOpenChange(false);
   }, [onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         {!createdAgent ? (
           <>
             <DialogHeader>
@@ -287,8 +345,11 @@ function CreateAgentDialog({
                 Create a new agent to use with the Archestra Platform proxy.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="grid gap-4 py-4">
+            <form
+              onSubmit={handleSubmit}
+              className="flex flex-col flex-1 overflow-hidden"
+            >
+              <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Agent Name</Label>
                   <Input
@@ -299,8 +360,73 @@ function CreateAgentDialog({
                     autoFocus
                   />
                 </div>
+
+                <div className="grid gap-2">
+                  <Label>Members with access</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Admin users have access to all agents.
+                  </p>
+                  <Select value={selectedUserId} onValueChange={handleAddUser}>
+                    <SelectTrigger id="assign-user">
+                      <SelectValue placeholder="Select a member to assign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getUnassignedMembers().length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          All members are already assigned
+                        </div>
+                      ) : (
+                        getUnassignedMembers().map((member) => (
+                          <SelectItem
+                            key={member.user.id}
+                            value={member.user.id}
+                          >
+                            {member.user.name} ({member.user.email})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {getAdminMembers().length > 0 ||
+                  assignedUserIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {getAdminMembers().map((member) => (
+                        <Badge
+                          key={member.user.id}
+                          variant="outline"
+                          className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
+                        >
+                          <span>{member.user.email} (Admin)</span>
+                        </Badge>
+                      ))}
+                      {assignedUserIds.map((userId) => {
+                        const user = getUserById(userId);
+                        return (
+                          <Badge
+                            key={userId}
+                            variant="secondary"
+                            className="flex items-center gap-1 pr-1"
+                          >
+                            <span>{user?.email || userId}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveUser(userId)}
+                              className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No members assigned yet
+                    </p>
+                  )}
+                </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
                   Cancel
                 </Button>
@@ -344,7 +470,27 @@ function EditAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState(agent.name);
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const { data: orgMembers } = useCurrentOrgMembers();
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const updateAgent = useUpdateAgent();
+
+  const handleAddUser = useCallback(
+    (userId: string) => {
+      if (userId && !assignedUserIds.includes(userId)) {
+        setAssignedUserIds([...assignedUserIds, userId]);
+        setSelectedUserId("");
+      }
+    },
+    [assignedUserIds],
+  );
+
+  const handleRemoveUser = useCallback(
+    (userId: string) => {
+      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+    },
+    [assignedUserIds],
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -357,7 +503,11 @@ function EditAgentDialog({
       try {
         await updateAgent.mutateAsync({
           id: agent.id,
-          data: { name: name.trim() },
+          data: {
+            name: name.trim(),
+            // @ts-expect-error - assignedUserIds will be added to the backend API
+            assignedUserIds,
+          },
         });
         toast.success("Agent updated successfully");
         onOpenChange(false);
@@ -365,18 +515,46 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, updateAgent, onOpenChange],
+    [agent.id, name, assignedUserIds, updateAgent, onOpenChange],
+  );
+
+  const getAdminMembers = useCallback(() => {
+    if (!orgMembers) return [];
+    return orgMembers.filter((member) => member.role === "admin");
+  }, [orgMembers]);
+
+  const getUnassignedMembers = useCallback(() => {
+    if (!orgMembers) return [];
+    return orgMembers.filter(
+      (member) =>
+        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
+    );
+  }, [orgMembers, assignedUserIds]);
+
+  const getUserById = useCallback(
+    (userId: string) => {
+      return orgMembers?.find((member) => member.user.id === userId)?.user;
+    },
+    [orgMembers],
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Edit agent</DialogTitle>
-          <DialogDescription>Update the agent's name.</DialogDescription>
+          <DialogDescription>
+            Update the agent's name and assign organization members.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col flex-1 overflow-hidden"
+        >
+          <div className="grid gap-4 overflow-y-auto pr-2 pb-4 space-y-2">
             <div className="grid gap-2">
               <Label htmlFor="edit-name">Agent Name</Label>
               <Input
@@ -387,8 +565,69 @@ function EditAgentDialog({
                 autoFocus
               />
             </div>
+
+            <div className="grid gap-2">
+              <Label>Members with access</Label>
+              <p className="text-sm text-muted-foreground">
+                Admin users have access to all agents.
+              </p>
+              <Select value={selectedUserId} onValueChange={handleAddUser}>
+                <SelectTrigger id="assign-user">
+                  <SelectValue placeholder="Select a member to assign" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getUnassignedMembers().length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      All members are already assigned
+                    </div>
+                  ) : (
+                    getUnassignedMembers().map((member) => (
+                      <SelectItem key={member.user.id} value={member.user.id}>
+                        {member.user.name} ({member.user.email})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {getAdminMembers().length > 0 || assignedUserIds.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getAdminMembers().map((member) => (
+                    <Badge
+                      key={member.user.id}
+                      variant="outline"
+                      className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
+                    >
+                      <span>{member.user.email} (Admin)</span>
+                    </Badge>
+                  ))}
+                  {assignedUserIds.map((userId) => {
+                    const user = getUserById(userId);
+                    return (
+                      <Badge
+                        key={userId}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1"
+                      >
+                        <span>{user?.email || userId}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUser(userId)}
+                          className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No members assigned yet
+                </p>
+              )}
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button
               type="button"
               variant="outline"

@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent } from "@/types";
@@ -8,35 +9,93 @@ class AgentModel {
       .insert(schema.agentsTable)
       .values(agent)
       .returning();
-    return createdAgent;
+
+    return {
+      ...createdAgent,
+      tools: [],
+    };
   }
 
   static async findAll(): Promise<Agent[]> {
-    return db.select().from(schema.agentsTable);
+    const rows = await db
+      .select()
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+      );
+
+    // Group the flat join results by agent
+    const agentsMap = new Map<string, Agent>();
+
+    for (const row of rows) {
+      const agent = row.agents;
+      const tool = row.tools;
+
+      if (!agentsMap.has(agent.id)) {
+        agentsMap.set(agent.id, {
+          ...agent,
+          tools: [],
+        });
+      }
+
+      // Add tool if it exists (leftJoin returns null for agents with no tools)
+      if (tool) {
+        agentsMap.get(agent.id)?.tools.push(tool);
+      }
+    }
+
+    return Array.from(agentsMap.values());
   }
 
   static async findById(id: string): Promise<Agent | null> {
-    const [agent] = await db
+    const rows = await db
       .select()
       .from(schema.agentsTable)
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+      )
       .where(eq(schema.agentsTable.id, id));
-    return agent || null;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const agent = rows[0].agents;
+    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
+
+    return {
+      ...agent,
+      tools,
+    };
   }
 
   static async getAgentOrCreateDefault(
     name: string | undefined,
   ): Promise<Agent> {
-    const agentName = name || "Default Agent";
+    const agentName = name || DEFAULT_AGENT_NAME;
 
-    const [agent] = await db
+    const rows = await db
       .select()
       .from(schema.agentsTable)
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+      )
       .where(eq(schema.agentsTable.name, agentName));
 
-    if (!agent) {
+    if (rows.length === 0) {
       return await AgentModel.create({ name: agentName });
     }
-    return agent;
+
+    const agent = rows[0].agents;
+    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
+
+    return {
+      ...agent,
+      tools,
+    };
   }
 
   static async update(
@@ -48,7 +107,21 @@ class AgentModel {
       .set(agent)
       .where(eq(schema.agentsTable.id, id))
       .returning();
-    return updatedAgent || null;
+
+    if (!updatedAgent) {
+      return null;
+    }
+
+    // Fetch the tools for the updated agent
+    const tools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.agentId, updatedAgent.id));
+
+    return {
+      ...updatedAgent,
+      tools,
+    };
   }
 
   static async delete(id: string): Promise<boolean> {

@@ -12,7 +12,6 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -447,60 +446,45 @@ function ToolsList({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              In untrusted context:
-            </span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
-                }
-                disabled={!hasSelection}
-              >
-                Allow
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction(
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    false,
-                  )
-                }
-                disabled={!hasSelection}
-              >
-                Block
-              </Button>
-            </ButtonGroup>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Results are:</span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleBulkAction("dataIsTrustedByDefault", true)}
-                disabled={!hasSelection}
-              >
-                Trusted
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("dataIsTrustedByDefault", false)
-                }
-                disabled={!hasSelection}
-              >
-                Untrusted
-              </Button>
-            </ButtonGroup>
-          </div>
+        <div className="flex items-center gap-2">
+          <div className="mr-2 h-4 w-px bg-border" />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
+            }
+            disabled={!hasSelection}
+          >
+            Allow in untrusted context
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              handleBulkAction("allowUsageWhenUntrustedDataIsPresent", false)
+            }
+            disabled={!hasSelection}
+          >
+            Block in untrusted context
+          </Button>
+          <div className="mx-1 h-4 w-px bg-border" />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => handleBulkAction("dataIsTrustedByDefault", true)}
+            disabled={!hasSelection}
+          >
+            Mark results as trusted
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => handleBulkAction("dataIsTrustedByDefault", false)}
+            disabled={!hasSelection}
+          >
+            Mark results as untrusted
+          </Button>
           <div className="ml-2 h-4 w-px bg-border" />
           <Button
             size="sm"

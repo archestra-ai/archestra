@@ -3287,6 +3287,15 @@ export type GetAgentsErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3332,6 +3341,7 @@ export type GetAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     }>;
 };
 
@@ -3341,6 +3351,7 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
+        usersWithAccess: Array<string>;
     };
     path?: never;
     query?: never;
@@ -3396,6 +3407,7 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3511,6 +3523,7 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3520,6 +3533,7 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
+        usersWithAccess?: Array<string>;
     };
     path: {
         id: string;
@@ -3586,6 +3600,7 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 

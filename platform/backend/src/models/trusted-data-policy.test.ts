@@ -44,7 +44,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(false);
-        expect(result.reason).toContain("No trust policy defined");
+        expect(result.reason).toContain(
+          "Tool test-tool is configured as untrusted",
+        );
       });
 
       test("marks data as trusted when policy matches", async () => {
@@ -113,7 +115,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(true);
-        expect(result.reason).toContain("configured to trust data by default");
+        expect(result.reason).toContain(
+          "Tool trusted-by-default-tool is configured as trusted",
+        );
       });
 
       test("marks data as trusted when no policies match but tool has dataIsTrustedByDefault", async () => {
@@ -149,7 +153,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(true);
-        expect(result.reason).toContain("configured to trust data by default");
+        expect(result.reason).toContain(
+          "Tool trusted-by-default-with-policies is configured as trusted",
+        );
       });
 
       test("respects policy match over dataIsTrustedByDefault", async () => {

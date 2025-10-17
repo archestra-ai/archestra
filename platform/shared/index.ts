@@ -1,3 +1,3 @@
 export * from "./consts";
-export * from "./permission";
+export * from "./access-control";
 export * from "./types";

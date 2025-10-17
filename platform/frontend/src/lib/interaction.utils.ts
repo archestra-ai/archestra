@@ -56,6 +56,10 @@ export class DynamicInteraction implements InteractionUtils {
     return this.interactionClass.getToolNamesRefused();
   }
 
+  getToolNamesRequested(): string[] {
+    return this.interactionClass.getToolNamesRequested();
+  }
+
   getToolNamesUsed(): string[] {
     return this.interactionClass.getToolNamesUsed();
   }

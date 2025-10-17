@@ -51,6 +51,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
   }
 
   // TODO: Implement this
+  getToolNamesRequested(): string[] {
+    return [];
+  }
+
+  // TODO: Implement this
   getToolRefusedCount(): number {
     return 0;
   }

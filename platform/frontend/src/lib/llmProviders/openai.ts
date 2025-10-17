@@ -97,6 +97,23 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     return Array.from(toolsRefused);
   }
 
+  getToolNamesRequested(): string[] {
+    const toolsRequested = new Set<string>();
+
+    // Check the response for tool calls (tools that LLM wants to execute)
+    for (const choice of this.response.choices) {
+      if (choice.message.tool_calls) {
+        for (const toolCall of choice.message.tool_calls) {
+          if ("function" in toolCall) {
+            toolsRequested.add(toolCall.function.name);
+          }
+        }
+      }
+    }
+
+    return Array.from(toolsRequested);
+  }
+
   getLastUserMessage(): string {
     const reversedMessages = [...this.request.messages].reverse();
     for (const message of reversedMessages) {

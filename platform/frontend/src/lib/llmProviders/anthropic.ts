@@ -76,6 +76,21 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     return [];
   }
 
+  getToolNamesRequested(): string[] {
+    const toolsRequested = new Set<string>();
+
+    // Check the response for tool_use blocks (tools that LLM wants to execute)
+    if (Array.isArray(this.response.content)) {
+      for (const block of this.response.content) {
+        if (block.type === "tool_use" && "name" in block) {
+          toolsRequested.add(block.name);
+        }
+      }
+    }
+
+    return Array.from(toolsRequested);
+  }
+
   getToolRefusedCount(): number {
     return 0;
   }

@@ -171,14 +171,31 @@ class AgentModel {
     id: string,
     { usersWithAccess, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    const [updatedAgent] = await db
-      .update(schema.agentsTable)
-      .set(agent)
-      .where(eq(schema.agentsTable.id, id))
-      .returning();
+    let updatedAgent: Omit<Agent, "tools" | "usersWithAccess"> | undefined;
 
-    if (!updatedAgent) {
-      return null;
+    // Only update agent table if there are fields to update
+    if (Object.keys(agent).length > 0) {
+      [updatedAgent] = await db
+        .update(schema.agentsTable)
+        .set(agent)
+        .where(eq(schema.agentsTable.id, id))
+        .returning();
+
+      if (!updatedAgent) {
+        return null;
+      }
+    } else {
+      // If only updating usersWithAccess, fetch the existing agent
+      const [existingAgent] = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, id));
+
+      if (!existingAgent) {
+        return null;
+      }
+
+      updatedAgent = existingAgent;
     }
 
     // Sync access control if usersWithAccess is provided

@@ -37,13 +37,16 @@ describe("ToolModel", () => {
     });
 
     test("member only sees tools for accessible agents", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent1 = await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
       const agent2 = await AgentModel.create(
         { name: "Agent 2", usersWithAccess: [] },
-        "user-2",
+        user2Id,
       );
 
       const tool1 = await ToolModel.create({
@@ -60,7 +63,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll("user-1", false);
+      const tools = await ToolModel.findAll(user1Id, false);
       expect(tools).toHaveLength(1);
       expect(tools[0].id).toBe(tool1.id);
     });

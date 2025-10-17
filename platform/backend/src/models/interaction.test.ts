@@ -319,7 +319,7 @@ describe("InteractionModel", () => {
 
       const agent1 = await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        user2Id,
+        user1Id,
       );
 
       await InteractionModel.create({

@@ -112,7 +112,42 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           return reply.send(validResults);
         }
-        // TODO: Implement Gemini support
+
+        if (interaction.type === "anthropic:messages") {
+          // Extract all tool_use_ids from the interaction messages
+          const toolUseIds: string[] = [];
+          for (const message of interaction.request.messages) {
+            if (
+              message.role === "user" &&
+              Array.isArray(message.content) &&
+              message.content.length > 0
+            ) {
+              for (const contentBlock of message.content) {
+                if (
+                  contentBlock.type === "tool_result" &&
+                  "tool_use_id" in contentBlock
+                ) {
+                  toolUseIds.push(contentBlock.tool_use_id);
+                }
+              }
+            }
+          }
+
+          // Fetch dual LLM results for all tool use IDs
+          const results = await Promise.all(
+            toolUseIds.map((id) => DualLlmResultModel.findByToolCallId(id)),
+          );
+
+          // Filter out null results
+          const validResults = results.filter(
+            (result): result is NonNullable<typeof result> => result !== null,
+          );
+
+          return reply.send(validResults);
+        }
+
+        // For other interaction types (e.g., Gemini), return empty array for now
+        return reply.send([]);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

@@ -47,6 +47,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { WithPermission } from "@/components/with-permission";
 import {
   useAgents,
@@ -73,8 +79,67 @@ export default function AgentsPage({
   );
 }
 
+function AgentMembersBadges({
+  usersWithAccess,
+  orgMembers,
+}: {
+  usersWithAccess: string[];
+  orgMembers:
+    | Array<{ user: { id: string; name: string; email: string } }>
+    | undefined;
+}) {
+  const MAX_USERS_TO_SHOW = 3;
+  if (!orgMembers || usersWithAccess.length === 0) {
+    return <span className="text-sm text-muted-foreground">None</span>;
+  }
+
+  const getUserById = (userId: string) => {
+    return orgMembers.find((member) => member.user.id === userId)?.user;
+  };
+
+  const visibleUsers = usersWithAccess.slice(0, MAX_USERS_TO_SHOW);
+  const remainingUsers = usersWithAccess.slice(MAX_USERS_TO_SHOW);
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {visibleUsers.map((userId) => {
+        const user = getUserById(userId);
+        return (
+          <Badge key={userId} variant="secondary" className="text-xs">
+            {user?.email || userId}
+          </Badge>
+        );
+      })}
+      {remainingUsers.length > 0 && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground cursor-help">
+                +{remainingUsers.length} more
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="flex flex-col gap-1">
+                {remainingUsers.map((userId) => {
+                  const user = getUserById(userId);
+                  return (
+                    <div key={userId} className="text-xs">
+                      {user?.email || userId}
+                    </div>
+                  );
+                })}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+  );
+}
+
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
+  const { data: orgMembers } = useCurrentOrgMembers();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -83,6 +148,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
+    usersWithAccess: string[];
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -142,6 +208,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                     <TableHead>Name</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Connected Tools</TableHead>
+                    <TableHead>Members</TableHead>
                     <WithPermission permissions={["agent:delete"]}>
                       <TableHead className="text-right">Actions</TableHead>
                     </WithPermission>
@@ -161,6 +228,12 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                         })}
                       </TableCell>
                       <TableCell>{agent.tools.length}</TableCell>
+                      <TableCell>
+                        <AgentMembersBadges
+                          usersWithAccess={agent.usersWithAccess || []}
+                          orgMembers={orgMembers}
+                        />
+                      </TableCell>
                       <WithPermission permissions={["agent:delete"]}>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -186,6 +259,8 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                                   setEditingAgent({
                                     id: agent.id,
                                     name: agent.name,
+                                    usersWithAccess:
+                                      agent.usersWithAccess || [],
                                   })
                                 }
                               >
@@ -466,12 +541,14 @@ function EditAgentDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string };
+  agent: { id: string; name: string; usersWithAccess: string[] };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState(agent.name);
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(
+    agent.usersWithAccess || [],
+  );
   const { data: orgMembers } = useCurrentOrgMembers();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const updateAgent = useUpdateAgent();

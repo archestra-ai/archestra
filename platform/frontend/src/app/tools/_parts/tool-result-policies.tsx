@@ -170,9 +170,8 @@ export function ToolResultPolicies({
     useToolResultPoliciesDeleteMutation();
   const toolPatchMutation = useToolPatchMutation();
 
-  // Determine if Dual LLM will be triggered based on the default action
-  const isDualLlmEnabled = dualLlmConfig?.enabled ?? false;
-  const willTriggerDualLlm = !tool.dataIsTrustedByDefault && isDualLlmEnabled;
+  // Determine if Dual LLM will be triggered based on the tool result treatment
+  const willTriggerDualLlm = tool.toolResultTreatment === "sanitize_with_dual_llm";
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -201,35 +200,29 @@ export function ToolResultPolicies({
             DEFAULT
           </div>
           <Select
-            defaultValue={tool.dataIsTrustedByDefault ? "true" : "false"}
-            onValueChange={(value) => {
+            value={tool.toolResultTreatment}
+            onValueChange={(value: "trusted" | "sanitize_with_dual_llm" | "untrusted") => {
               toolPatchMutation.mutate({
                 id: tool.id,
-                dataIsTrustedByDefault: value === "true",
+                toolResultTreatment: value,
               });
             }}
           >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="parameter" />
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select treatment" />
             </SelectTrigger>
             <SelectContent>
-              {DEFAULT_TRUSTED_UNTRUSTED_SELECT_OPTIONS.map((val) => (
-                <SelectItem key={val.label} value={val.value.toString()}>
-                  {val.label}
+              {TOOL_RESULT_TREATMENT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {willTriggerDualLlm ? (
+          {willTriggerDualLlm && (
             <Badge variant="default" asChild>
               <Link href="/dual-llm" className="cursor-pointer">
                 Dual LLM is active
-              </Link>
-            </Badge>
-          ) : (
-            <Badge variant="secondary" asChild>
-              <Link href="/dual-llm" className="cursor-pointer">
-                Dual LLM is inactive (Click to enable)
               </Link>
             </Badge>
           )}
@@ -306,6 +299,10 @@ export function ToolResultPolicies({
                       value: "mark_as_trusted",
                       label: "Mark as trusted",
                     },
+                    {
+                      value: "sanitize_with_dual_llm",
+                      label: "Sanitize with Dual LLM",
+                    },
                     { value: "block_always", label: "Block always" },
                   ].map(({ value, label }) => (
                     <SelectItem key={label} value={value}>
@@ -340,10 +337,11 @@ export function ToolResultPolicies({
   );
 }
 
-const DEFAULT_TRUSTED_UNTRUSTED_SELECT_OPTIONS = [
-  { value: true, label: "Mark as trusted" },
-  { value: false, label: "Mark as untrusted" },
-];
+const TOOL_RESULT_TREATMENT_OPTIONS = [
+  { value: "trusted", label: "Mark as trusted" },
+  { value: "sanitize_with_dual_llm", label: "Sanitize with Dual LLM" },
+  { value: "untrusted", label: "Mark as untrusted" },
+] as const;
 
 function isValidPathSyntax(path: string): boolean {
   const segments = toPath(path);

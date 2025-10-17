@@ -46,12 +46,13 @@ export function useToolPatchMutation() {
         }
 
         // Create a new array with the updated tool from the server response
-        // Preserve the agent relationship if not included in response
+        // Preserve the agent relationship since update response doesn't include it
         const existingTool = old[toolIndex];
         const newTools = [...old];
         newTools[toolIndex] = {
+          ...existingTool,
           ...data,
-          agent: data.agent || existingTool.agent,
+          agent: existingTool.agent, // Always preserve the agent from existing tool
         };
         return newTools;
       });

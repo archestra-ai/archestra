@@ -109,10 +109,12 @@ function ToolsList({
 
   // Filter tools based on search query
   const filteredTools = useMemo(() => {
-    if (!searchQuery.trim()) return tools;
+    if (!searchQuery.trim()) return tools || [];
 
     const query = searchQuery.toLowerCase();
-    return tools.filter((tool) => tool.name.toLowerCase().includes(query));
+    return (tools || []).filter((tool) =>
+      tool.name.toLowerCase().includes(query),
+    );
   }, [tools, searchQuery]);
 
   const handlePaginationChange = useCallback(
@@ -136,7 +138,10 @@ function ToolsList({
 
       // Calculate the current page's data from filtered tools
       const startIndex = pageIndex * pageSize;
-      const pageTools = filteredTools.slice(startIndex, startIndex + pageSize);
+      const pageTools = (filteredTools || []).slice(
+        startIndex,
+        startIndex + pageSize,
+      );
 
       // Map page-relative indices to actual tools
       const newSelectedTools = Object.keys(newRowSelection)
@@ -388,7 +393,7 @@ function ToolsList({
   const paginatedTools = useMemo(() => {
     const startIndex = pageIndex * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredTools.slice(startIndex, endIndex);
+    return (filteredTools || []).slice(startIndex, endIndex);
   }, [filteredTools, pageIndex, pageSize]);
 
   // Early return if no tools
@@ -536,7 +541,7 @@ function ToolsList({
 
         <BulkActions />
 
-        {filteredTools.length === 0 && searchQuery ? (
+        {(filteredTools?.length || 0) === 0 && searchQuery ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
@@ -576,7 +581,7 @@ function ToolsList({
             pagination={{
               pageIndex,
               pageSize,
-              total: filteredTools.length,
+              total: filteredTools?.length || 0,
             }}
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}

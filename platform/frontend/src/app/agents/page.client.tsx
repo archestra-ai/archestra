@@ -86,6 +86,8 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
+  console.log(agents);
+
   return (
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">
@@ -308,8 +310,7 @@ function CreateAgentDialog({
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
-          // @ts-expect-error - assignedUserIds will be added to the backend API
-          assignedUserIds,
+          usersWithAccess: assignedUserIds,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -505,8 +506,7 @@ function EditAgentDialog({
           id: agent.id,
           data: {
             name: name.trim(),
-            // @ts-expect-error - assignedUserIds will be added to the backend API
-            assignedUserIds,
+            usersWithAccess: assignedUserIds,
           },
         });
         toast.success("Agent updated successfully");

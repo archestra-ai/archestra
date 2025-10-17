@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getUserFromRequest } from "@/auth/utils";
 import { InteractionModel } from "@/models";
 import {
   createPaginatedResponseSchema,
@@ -33,13 +34,23 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         response: {
           200: createPaginatedResponseSchema(SelectInteractionSchema),
+          401: ErrorResponseSchema,
         },
       },
     },
-    async (
-      { query: { agentId, limit, offset, sortBy, sortDirection } },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const user = await getUserFromRequest(request);
+
+      if (!user) {
+        return reply.status(401).send({
+          error: {
+            message: "Unauthorized",
+            type: "unauthorized",
+          },
+        });
+      }
+
+      const { agentId, limit, offset, sortBy, sortDirection } = request.query;
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
 
@@ -56,6 +67,8 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = await InteractionModel.findAllPaginated(
         pagination,
         sorting,
+        user.id,
+        user.isAdmin,
       );
       return reply.send(result);
     },
@@ -73,12 +86,28 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectInteractionSchema,
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { interactionId } }, reply) => {
-      const interaction = await InteractionModel.findById(interactionId);
+    async (request, reply) => {
+      const user = await getUserFromRequest(request);
+
+      if (!user) {
+        return reply.status(401).send({
+          error: {
+            message: "Unauthorized",
+            type: "unauthorized",
+          },
+        });
+      }
+
+      const interaction = await InteractionModel.findById(
+        request.params.interactionId,
+        user.id,
+        user.isAdmin,
+      );
 
       if (!interaction) {
         return reply.status(404).send({

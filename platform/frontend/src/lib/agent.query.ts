@@ -4,10 +4,12 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import {
+  type CreateAgentData,
   createAgent,
   deleteAgent,
   type GetAgentsResponses,
   getAgents,
+  type UpdateAgentData,
   updateAgent,
 } from "@/lib/clients/api";
 
@@ -24,7 +26,7 @@ export function useAgents(params?: {
 export function useCreateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { name: string }) => {
+    mutationFn: async (data: CreateAgentData["body"]) => {
       const response = await createAgent({ body: data });
       return response.data;
     },
@@ -42,7 +44,7 @@ export function useUpdateAgent() {
       data,
     }: {
       id: string;
-      data: { name: string };
+      data: UpdateAgentData["body"];
     }) => {
       const response = await updateAgent({ path: { id }, body: data });
       return response.data;

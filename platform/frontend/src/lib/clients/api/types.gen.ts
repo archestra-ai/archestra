@@ -3645,7 +3645,7 @@ export type GetToolsResponses = {
         };
         description: string | null;
         allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -3658,7 +3658,7 @@ export type GetToolsResponses = {
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
 export type UpdateToolData = {
-    body?: {
+    body: {
         id?: string;
         agentId?: string;
         name?: string;
@@ -3679,7 +3679,7 @@ export type UpdateToolData = {
         };
         description?: string | null;
         allowUsageWhenUntrustedDataIsPresent?: boolean;
-        dataIsTrustedByDefault?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt?: unknown;
         updatedAt?: unknown;
     };
@@ -3738,7 +3738,7 @@ export type UpdateToolResponses = {
         };
         description: string | null;
         allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt: string;
         updatedAt: string;
     };
@@ -4036,7 +4036,7 @@ export type GetTrustedDataPoliciesResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -4051,7 +4051,7 @@ export type CreateTrustedDataPolicyData = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -4083,7 +4083,7 @@ export type CreateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -4177,7 +4177,7 @@ export type GetTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -4192,7 +4192,7 @@ export type UpdateTrustedDataPolicyData = {
         attributePath?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
-        action?: 'block_always' | 'mark_as_trusted';
+        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path: {
         id: string;
@@ -4235,7 +4235,7 @@ export type UpdateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };

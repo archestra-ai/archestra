@@ -78,7 +78,7 @@ export const evaluateIfContextIsTrusted = async (
 
       if (toolName) {
         // Evaluate trusted data policy dynamically
-        const { isTrusted, isBlocked, reason } =
+        const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
           await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
 
         if (!isTrusted) {
@@ -90,7 +90,7 @@ export const evaluateIfContextIsTrusted = async (
             ...message,
             content: `[Content blocked by policy${reason ? `: ${reason}` : ""}]`,
           });
-        } else if (dualLlmConfig.enabled) {
+        } else if (shouldSanitizeWithDualLlm) {
           // First, check if this tool call has already been analyzed
           const existingResult = await DualLlmResultModel.findByToolCallId(
             message.tool_call_id,

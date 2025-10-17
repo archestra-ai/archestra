@@ -115,7 +115,7 @@ async function seedTools(): Promise<void> {
       },
       description: "Send an email via Gmail",
       allowUsageWhenUntrustedDataIsPresent: true,
-      dataIsTrustedByDefault: true,
+      toolResultTreatment: "trusted",
     };
     await ToolModel.create(toolData);
     console.log("✓ Seeded gmail__sendEmail tool");
@@ -138,7 +138,7 @@ async function seedTools(): Promise<void> {
       },
       description: "Get emails from the user's Gmail inbox",
       allowUsageWhenUntrustedDataIsPresent: true,
-      dataIsTrustedByDefault: false,
+      toolResultTreatment: "untrusted",
     };
     await ToolModel.create(toolData);
     console.log("✓ Seeded gmail__getEmails tool");

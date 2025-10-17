@@ -1,6 +1,11 @@
 import { desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTool, Tool, UpdateTool } from "@/types";
+import type {
+  InsertTool,
+  Tool,
+  ToolResultTreatment,
+  UpdateTool,
+} from "@/types";
 
 class ToolModel {
   static async create(tool: InsertTool): Promise<Tool> {
@@ -8,7 +13,11 @@ class ToolModel {
       .insert(schema.toolsTable)
       .values(tool)
       .returning();
-    return createdTool;
+    return {
+      ...createdTool,
+      toolResultTreatment:
+        createdTool.toolResultTreatment as ToolResultTreatment,
+    };
   }
 
   static async createToolIfNotExists(tool: InsertTool) {
@@ -20,11 +29,15 @@ class ToolModel {
       .select()
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.id, id));
-    return tool || null;
+    if (!tool) return null;
+    return {
+      ...tool,
+      toolResultTreatment: tool.toolResultTreatment as ToolResultTreatment,
+    };
   }
 
   static async findAll() {
-    return db
+    const tools = await db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -32,7 +45,7 @@ class ToolModel {
         description: schema.toolsTable.description,
         allowUsageWhenUntrustedDataIsPresent:
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
-        dataIsTrustedByDefault: schema.toolsTable.dataIsTrustedByDefault,
+        toolResultTreatment: schema.toolsTable.toolResultTreatment,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         agent: {
@@ -46,6 +59,11 @@ class ToolModel {
         eq(schema.toolsTable.agentId, schema.agentsTable.id),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
+
+    return tools.map((tool) => ({
+      ...tool,
+      toolResultTreatment: tool.toolResultTreatment as ToolResultTreatment,
+    }));
   }
 
   static async findByName(name: string): Promise<Tool | null> {
@@ -53,7 +71,11 @@ class ToolModel {
       .select()
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.name, name));
-    return tool || null;
+    if (!tool) return null;
+    return {
+      ...tool,
+      toolResultTreatment: tool.toolResultTreatment as ToolResultTreatment,
+    };
   }
 
   static async update(toolId: string, tool: UpdateTool) {
@@ -62,7 +84,12 @@ class ToolModel {
       .set(tool)
       .where(eq(schema.toolsTable.id, toolId))
       .returning();
-    return updatedTool || null;
+    if (!updatedTool) return null;
+    return {
+      ...updatedTool,
+      toolResultTreatment:
+        updatedTool.toolResultTreatment as ToolResultTreatment,
+    };
   }
 }
 

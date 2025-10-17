@@ -22,7 +22,7 @@ describe("TrustedDataPolicyModel", async () => {
       parameters: {},
       description: "Test tool",
       allowUsageWhenUntrustedDataIsPresent: false,
-      dataIsTrustedByDefault: false,
+      toolResultTreatment: "untrusted",
     });
 
     const tool = await ToolModel.findByName(toolName);
@@ -100,7 +100,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
@@ -121,7 +121,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();
@@ -157,7 +157,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();
@@ -675,7 +675,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();

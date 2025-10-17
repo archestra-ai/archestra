@@ -16,6 +16,13 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { GetToolsResponses } from "@/lib/clients/api";
 import {
@@ -157,8 +164,8 @@ function ToolsList({
   // Bulk action handler - unified for both types
   const handleBulkAction = useCallback(
     (
-      field: "allowUsageWhenUntrustedDataIsPresent" | "dataIsTrustedByDefault",
-      value: boolean,
+      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
+      value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
     ) => {
       let skippedCount = 0;
       let appliedCount = 0;
@@ -175,7 +182,7 @@ function ToolsList({
           }
         }
 
-        if (field === "dataIsTrustedByDefault") {
+        if (field === "toolResultTreatment") {
           const hasCustomResultPolicy =
             resultPolicies?.byToolId[tool.id]?.length > 0;
           if (hasCustomResultPolicy) {
@@ -319,7 +326,7 @@ function ToolsList({
         size: 120,
       },
       {
-        id: "trustedByDefault",
+        id: "toolResultTreatment",
         header: "Results are",
         cell: ({ row }) => {
           const hasCustomPolicy =
@@ -331,26 +338,44 @@ function ToolsList({
             );
           }
 
+          const treatmentLabels = {
+            trusted: "Trusted",
+            sanitize_with_dual_llm: "Sanitize with Dual LLM",
+            untrusted: "Untrusted",
+          };
+
           return (
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={row.original.dataIsTrustedByDefault}
-                onCheckedChange={(checked) => {
-                  toolPatchMutation.mutate({
-                    id: row.original.id,
-                    dataIsTrustedByDefault: checked,
-                  });
-                }}
+            <Select
+              value={row.original.toolResultTreatment}
+              onValueChange={(value) => {
+                toolPatchMutation.mutate({
+                  id: row.original.id,
+                  toolResultTreatment: value as
+                    | "trusted"
+                    | "sanitize_with_dual_llm"
+                    | "untrusted",
+                });
+              }}
+            >
+              <SelectTrigger
+                className="h-8 w-[180px] text-xs"
                 onClick={(e) => e.stopPropagation()}
-                aria-label={`Mark ${row.original.name} results as ${row.original.dataIsTrustedByDefault ? "untrusted" : "trusted"}`}
-              />
-              <span className="text-xs text-muted-foreground">
-                {row.original.dataIsTrustedByDefault ? "Trusted" : "Untrusted"}
-              </span>
-            </div>
+              >
+                <SelectValue>
+                  {treatmentLabels[row.original.toolResultTreatment]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="trusted">Trusted</SelectItem>
+                <SelectItem value="sanitize_with_dual_llm">
+                  Sanitize with Dual LLM
+                </SelectItem>
+                <SelectItem value="untrusted">Untrusted</SelectItem>
+              </SelectContent>
+            </Select>
           );
         },
-        size: 120,
+        size: 200,
       },
       {
         accessorKey: "createdAt",
@@ -484,7 +509,9 @@ function ToolsList({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => handleBulkAction("dataIsTrustedByDefault", true)}
+                onClick={() =>
+                  handleBulkAction("toolResultTreatment", "trusted")
+                }
                 disabled={!hasSelection}
               >
                 Trusted
@@ -493,7 +520,17 @@ function ToolsList({
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  handleBulkAction("dataIsTrustedByDefault", false)
+                  handleBulkAction("toolResultTreatment", "sanitize_with_dual_llm")
+                }
+                disabled={!hasSelection}
+              >
+                Sanitize with Dual LLM
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  handleBulkAction("toolResultTreatment", "untrusted")
                 }
                 disabled={!hasSelection}
               >

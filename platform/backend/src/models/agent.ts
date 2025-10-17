@@ -6,9 +6,8 @@ import AgentAccessControlModel from "./agent-access-control";
 
 class AgentModel {
   static async create(
-    agent: InsertAgent,
+    { usersWithAccess, ...agent }: InsertAgent,
     creatorUserId?: string,
-    additionalUserIds?: string[],
   ): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
@@ -22,8 +21,8 @@ class AgentModel {
       userIdsToGrant.push(creatorUserId);
     }
 
-    if (additionalUserIds && additionalUserIds.length > 0) {
-      userIdsToGrant.push(...additionalUserIds);
+    if (usersWithAccess.length > 0) {
+      userIdsToGrant.push(...usersWithAccess);
     }
 
     await AgentAccessControlModel.grantAgentAccess(
@@ -45,7 +44,8 @@ class AgentModel {
       .leftJoin(
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
-      );
+      )
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
@@ -151,7 +151,7 @@ class AgentModel {
       .where(eq(schema.agentsTable.name, agentName));
 
     if (rows.length === 0) {
-      return AgentModel.create({ name: agentName });
+      return AgentModel.create({ name: agentName, usersWithAccess: [] });
     }
 
     const agent = rows[0].agents;

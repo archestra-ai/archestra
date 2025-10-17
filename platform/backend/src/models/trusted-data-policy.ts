@@ -2,7 +2,6 @@ import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "@/database";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
-import ToolModel from "./tool";
 
 class TrustedDataPolicyModel {
   static async create(
@@ -163,8 +162,16 @@ class TrustedDataPolicyModel {
 
     // If no policies exist for this tool, check the tool's result treatment configuration
     if (toolResultTreatment === null) {
-      // Fetch the tool directly to check toolResultTreatment
-      const tool = await ToolModel.findByName(toolName);
+      // Fetch the tool scoped to the specific agent
+      const [tool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.agentId, agentId),
+            eq(schema.toolsTable.name, toolName),
+          ),
+        );
 
       if (tool?.toolResultTreatment === "trusted") {
         return {

@@ -34,6 +34,11 @@ export interface InteractionUtils {
 
   getToolNamesRefused(): string[];
 
+  /**
+   * Get the names of the tools requested in the response (tool calls that LLM wants to execute)
+   */
+  getToolNamesRequested(): string[];
+
   getToolRefusedCount(): number;
 
   getLastUserMessage(): string;

@@ -177,7 +177,7 @@ function LogsTable({
       cell: ({ row }) => {
         const interaction = new DynamicInteraction(row.original);
         return (
-          <Badge variant="secondary" className="text-xs">
+          <Badge variant="secondary" className="text-xs whitespace-normal">
             {interaction.provider} ({interaction.modelName})
           </Badge>
         );
@@ -201,9 +201,22 @@ function LogsTable({
       id: "assistantResponse",
       header: "Assistant Response",
       cell: ({ row }) => {
-        const assistantResponse = new DynamicInteraction(
-          row.original,
-        ).getLastAssistantResponse();
+        const interaction = new DynamicInteraction(row.original);
+        const assistantResponse = interaction.getLastAssistantResponse();
+        const toolsRequested = interaction.getToolNamesRequested();
+
+        // If there's no text response but tools are requested, show that
+        if (
+          (!assistantResponse || assistantResponse.trim() === "") &&
+          toolsRequested.length > 0
+        ) {
+          return (
+            <div className="text-xs text-muted-foreground italic">
+              Requesting tool execution: {toolsRequested.join(", ")}
+            </div>
+          );
+        }
+
         return (
           <div className="text-xs">
             <TruncatedText message={assistantResponse} maxLength={80} />
@@ -218,13 +231,27 @@ function LogsTable({
         const interaction = new DynamicInteraction(row.original);
         const toolsUsed = interaction.getToolNamesUsed();
         const toolsBlocked = interaction.getToolNamesRefused();
+        const toolsRequested = interaction.getToolNamesRequested();
 
-        if (toolsUsed.length === 0 && toolsBlocked.length === 0) {
+        if (
+          toolsUsed.length === 0 &&
+          toolsBlocked.length === 0 &&
+          toolsRequested.length === 0
+        ) {
           return <span className="text-xs text-muted-foreground">None</span>;
         }
 
         return (
           <div className="flex flex-wrap gap-1">
+            {toolsRequested.map((toolName) => (
+              <Badge
+                key={`requested-${toolName}`}
+                variant="outline"
+                className="whitespace-nowrap text-xs border-amber-500 text-amber-600 dark:text-amber-400"
+              >
+                ? {toolName}
+              </Badge>
+            ))}
             {toolsUsed.map((toolName) => (
               <Badge
                 key={`used-${toolName}`}

@@ -1,11 +1,12 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { MoreVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react";
+import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
+import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,6 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -59,6 +66,10 @@ export default function AgentsPage({
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [connectingAgent, setConnectingAgent] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
@@ -77,7 +88,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
               <p className="text-sm text-muted-foreground">
                 List of agents detected by proxy.{" "}
                 <a
-                  href="https://www.archestra.ai/docs/"
+                  href="https://www.archestra.ai/docs/platform-agents"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline hover:text-foreground"
@@ -115,8 +126,8 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Agent ID</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Connected Tools</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -126,9 +137,6 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                       <TableCell className="font-medium">
                         {agent.name}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {agent.id}
-                      </TableCell>
                       <TableCell>
                         {new Date(agent.createdAt).toLocaleDateString("en-US", {
                           year: "numeric",
@@ -136,29 +144,47 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                           day: "numeric",
                         })}
                       </TableCell>
+                      <TableCell>{agent.tools.length}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              setEditingAgent({
-                                id: agent.id,
-                                name: agent.name,
-                              })
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                            onClick={() => setDeletingAgentId(agent.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setConnectingAgent({
+                                  id: agent.id,
+                                  name: agent.name,
+                                })
+                              }
+                            >
+                              <Plug className="h-4 w-4" />
+                              Connect
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setEditingAgent({
+                                  id: agent.id,
+                                  name: agent.name,
+                                })
+                              }
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                              onClick={() => setDeletingAgentId(agent.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -172,6 +198,14 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
         />
+
+        {connectingAgent && (
+          <ConnectAgentDialog
+            agent={connectingAgent}
+            open={!!connectingAgent}
+            onOpenChange={(open) => !open && setConnectingAgent(null)}
+          />
+        )}
 
         {editingAgent && (
           <EditAgentDialog
@@ -201,60 +235,93 @@ function CreateAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
+  const [createdAgent, setCreatedAgent] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const createAgent = useCreateAgent();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Please enter an agent name");
-      return;
-    }
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!name.trim()) {
+        toast.error("Please enter an agent name");
+        return;
+      }
 
-    try {
-      await createAgent.mutateAsync({ name: name.trim() });
-      toast.success("Agent created successfully");
-      setName("");
-      onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to create agent");
-    }
-  };
+      try {
+        const agent = await createAgent.mutateAsync({ name: name.trim() });
+        if (!agent) {
+          throw new Error("Failed to create agent");
+        }
+        toast.success("Agent created successfully");
+        setCreatedAgent({ id: agent.id, name: agent.name });
+      } catch (_error) {
+        toast.error("Failed to create agent");
+      }
+    },
+    [name, createAgent],
+  );
+
+  const handleClose = useCallback(() => {
+    setName("");
+    setCreatedAgent(null);
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create new agent</DialogTitle>
-          <DialogDescription>
-            Create a new agent to use with the Archestra Platform proxy.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Agent Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My AI Agent"
-                autoFocus
-              />
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl">
+        {!createdAgent ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Create new agent</DialogTitle>
+              <DialogDescription>
+                Create a new agent to use with the Archestra Platform proxy.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit}>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Agent Name</Label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="My AI Agent"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={handleClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createAgent.isPending}>
+                  {createAgent.isPending ? "Creating..." : "Create agent"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>How to connect</DialogTitle>
+              <DialogDescription>
+                Use this proxy URL to connect {createdAgent.name} to Archestra
+                Platform.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <ProxyConnectionInstructions agentId={createdAgent.id} />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createAgent.isPending}>
-              {createAgent.isPending ? "Creating..." : "Create agent"}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="button" onClick={handleClose}>
+                Close
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -272,28 +339,31 @@ function EditAgentDialog({
   const [name, setName] = useState(agent.name);
   const updateAgent = useUpdateAgent();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Please enter an agent name");
-      return;
-    }
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!name.trim()) {
+        toast.error("Please enter an agent name");
+        return;
+      }
 
-    try {
-      await updateAgent.mutateAsync({
-        id: agent.id,
-        data: { name: name.trim() },
-      });
-      toast.success("Agent updated successfully");
-      onOpenChange(false);
-    } catch (_error) {
-      toast.error("Failed to update agent");
-    }
-  };
+      try {
+        await updateAgent.mutateAsync({
+          id: agent.id,
+          data: { name: name.trim() },
+        });
+        toast.success("Agent updated successfully");
+        onOpenChange(false);
+      } catch (_error) {
+        toast.error("Failed to update agent");
+      }
+    },
+    [agent.id, name, updateAgent, onOpenChange],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit agent</DialogTitle>
           <DialogDescription>Update the agent's name.</DialogDescription>
@@ -329,6 +399,38 @@ function EditAgentDialog({
   );
 }
 
+function ConnectAgentDialog({
+  agent,
+  open,
+  onOpenChange,
+}: {
+  agent: { id: string; name: string };
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>How to connect</DialogTitle>
+          <DialogDescription>
+            Use this proxy URL to connect {agent.name} to the Archestra
+            Platform.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <ProxyConnectionInstructions agentId={agent.id} />
+        </div>
+        <DialogFooter>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DeleteAgentDialog({
   agentId,
   open,
@@ -340,7 +442,7 @@ function DeleteAgentDialog({
 }) {
   const deleteAgent = useDeleteAgent();
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     try {
       await deleteAgent.mutateAsync(agentId);
       toast.success("Agent deleted successfully");
@@ -348,11 +450,11 @@ function DeleteAgentDialog({
     } catch (_error) {
       toast.error("Failed to delete agent");
     }
-  };
+  }, [agentId, deleteAgent, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Delete agent</DialogTitle>
           <DialogDescription>

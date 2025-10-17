@@ -19,14 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  desktop-app-linting-and-tests:
-    name: Desktop App Linting and Tests
-    permissions:
-      contents: write
-      security-events: write
-      id-token: write # Required for Workload Identity Federation
-    uses: ./.github/workflows/desktop-app-linting-and-tests.yml
-
   platform-linting-and-tests:
     name: Platform Linting and Tests
     permissions:

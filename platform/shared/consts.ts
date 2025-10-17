@@ -30,4 +30,7 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
+export const EMAIL_PLACEHOLDER = "admin@example.com";
+export const PASSWORD_PLACEHOLDER = "password";
+
 export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";

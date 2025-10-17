@@ -71,9 +71,9 @@ export default async function AuthPage({
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
         <main className="container flex grow flex-col items-center justify-center self-center h-full">
-          <div className="space-y-4">
+          <div className="space-y-4 w-full max-w-md px-4 md:px-0">
             {path === "sign-in" && (
-              <div className="max-w-sm mx-auto p-0 m-0 pb-4">
+              <div className="max-w-sm p-0 m-0 pb-4">
                 <DefaultCredentialsWarning alwaysShow />
               </div>
             )}

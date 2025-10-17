@@ -2,8 +2,10 @@
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
 import { Link } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import config from "@/lib/config";
 
 export function DefaultCredentialsWarning({
   alwaysShow = false,
@@ -12,7 +14,29 @@ export function DefaultCredentialsWarning({
 }) {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
+  const [defaultCredentialsEnabled, setDefaultCredentialsEnabled] = useState<
+    boolean | null
+  >(null);
 
+  useEffect(() => {
+    // Fetch the default credentials status from the backend API
+    fetch(`${config.api.baseUrl}/api/auth/default-credentials-status`)
+      .then((res) => res.json())
+      .then((data) => setDefaultCredentialsEnabled(data.enabled))
+      .catch(() => setDefaultCredentialsEnabled(false));
+  }, []);
+
+  // Loading state - don't show anything yet
+  if (defaultCredentialsEnabled === null) {
+    return null;
+  }
+
+  // If default credentials are not enabled, don't show warning
+  if (!defaultCredentialsEnabled) {
+    return null;
+  }
+
+  // For authenticated users, only show if they're using the default admin email
   if (!alwaysShow && (!userEmail || userEmail !== DEFAULT_ADMIN_EMAIL)) {
     return null;
   }

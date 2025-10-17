@@ -1,11 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getUserFromRequest } from "@/auth/utils";
 import { AgentModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertAgentSchema,
   RouteId,
   SelectAgentSchema,
+  UpdateAgentSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -19,13 +21,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         response: {
           200: z.array(SelectAgentSchema),
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async (_, reply) => {
+    async (request, reply) => {
       try {
-        const agents = await AgentModel.findAll();
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agents = await AgentModel.findAll(user.id, user.isAdmin);
         return reply.send(agents);
       } catch (error) {
         fastify.log.error(error);

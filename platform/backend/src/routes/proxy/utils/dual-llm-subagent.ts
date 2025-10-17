@@ -1,7 +1,28 @@
-import OpenAIProvider from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig, OpenAi } from "@/types";
+import type { Anthropic, DualLlmConfig, OpenAi } from "@/types";
+import {
+  createDualLlmClient,
+  type DualLlmClient,
+  type DualLlmMessage,
+} from "./dual-llm-client";
+
+/**
+ * Parameters for creating a DualLlmSubagent with OpenAI provider
+ */
+type OpenAiParams = {
+  provider: "openai";
+  messages: OpenAi.Types.ChatCompletionsRequest["messages"];
+  currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number];
+};
+
+/**
+ * Parameters for creating a DualLlmSubagent with Anthropic provider
+ */
+type AnthropicParams = {
+  provider: "anthropic";
+  messages: Anthropic.Types.MessagesRequest["messages"];
+  toolUseId: string; // For Anthropic, we need the tool_use_id to find the tool result
+};
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -13,60 +34,111 @@ import type { DualLlmConfig, OpenAi } from "@/types";
  * - Information flows through structured Q&A, preventing prompt injection
  */
 export class DualLlmSubagent {
-  messages: OpenAi.Types.ChatCompletionsRequest["messages"]; // Full conversation history
-  currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number]; // Current tool message being analyzed
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
-  openai: OpenAIProvider; // OpenAI client instance
+  llmClient: DualLlmClient; // LLM client instance
+  originalUserRequest: string; // Extracted user request
+  toolResult: unknown; // Extracted tool result
 
-  constructor(
-    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
-    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
+  private constructor(
     config: DualLlmConfig,
     agentId: string,
-    apiKey: string,
+    toolCallId: string,
+    llmClient: DualLlmClient,
+    originalUserRequest: string,
+    toolResult: unknown,
   ) {
-    this.messages = messages;
-    this.currentMessage = currentMessage;
     this.config = config;
     this.agentId = agentId;
-    this.openai = new OpenAIProvider({ apiKey });
-
-    // Extract tool_call_id from current message
-    if (currentMessage.role !== "tool") {
-      throw new Error("currentMessage must be a tool message");
-    }
-    this.toolCallId = currentMessage.tool_call_id;
+    this.toolCallId = toolCallId;
+    this.llmClient = llmClient;
+    this.originalUserRequest = originalUserRequest;
+    this.toolResult = toolResult;
   }
+
+  /**
+   * Create a DualLlmSubagent instance with OpenAI provider
+   */
+  static async create(
+    params: OpenAiParams,
+    agentId: string,
+    apiKey: string,
+  ): Promise<DualLlmSubagent>;
+
+  /**
+   * Create a DualLlmSubagent instance with Anthropic provider
+   */
+  static async create(
+    params: AnthropicParams,
+    agentId: string,
+    apiKey: string,
+  ): Promise<DualLlmSubagent>;
 
   /**
    * Create a DualLlmSubagent instance with configuration loaded from database
    */
   static async create(
-    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
-    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
+    params: OpenAiParams | AnthropicParams,
     agentId: string,
     apiKey: string,
   ): Promise<DualLlmSubagent> {
     const config = await DualLlmConfigModel.getDefault();
-    return new DualLlmSubagent(
+    const llmClient = createDualLlmClient(params.provider, apiKey);
+
+    // Extract user request and tool result based on provider
+    if (params.provider === "openai") {
+      // OpenAI: tool results are in "tool" role messages
+      const { currentMessage, messages } = params;
+
+      if (currentMessage.role !== "tool") {
+        throw new Error("currentMessage must be a tool message");
+      }
+
+      const toolCallId = currentMessage.tool_call_id;
+      const userRequest =
+        DualLlmSubagent.extractUserRequestFromOpenAi(messages);
+      const toolResult =
+        DualLlmSubagent.extractToolResultFromOpenAi(currentMessage);
+
+      return new DualLlmSubagent(
+        config,
+        agentId,
+        toolCallId,
+        llmClient,
+        userRequest,
+        toolResult,
+      );
+    }
+
+    // Anthropic: tool results are in user message content blocks
+    const { messages, toolUseId } = params;
+    const userRequest =
+      DualLlmSubagent.extractUserRequestFromAnthropic(messages);
+    const toolResult = DualLlmSubagent.extractToolResultFromAnthropic(
       messages,
-      currentMessage,
+      toolUseId,
+    );
+
+    return new DualLlmSubagent(
       config,
       agentId,
-      apiKey,
+      toolUseId,
+      llmClient,
+      userRequest,
+      toolResult,
     );
   }
 
   /**
-   * Extract the user's original request from the conversation.
-   * Currently gets the last user message.
-   * In the future, this could use smarter intent extraction.
+   * Extract the user's original request from OpenAI messages.
+   * Gets the last user message from the conversation.
    */
-  private extractUserRequest(): string {
+  private static extractUserRequestFromOpenAi(
+    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
+  ): string {
     const userContent =
-      this.messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
+      messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
       "process this data";
 
     // Convert to string if it's an array (multimodal content)
@@ -76,15 +148,48 @@ export class DualLlmSubagent {
   }
 
   /**
-   * Extract the tool result data from the current message.
+   * Extract the user's original request from Anthropic messages.
+   * Gets the last user message that doesn't contain tool results.
+   */
+  private static extractUserRequestFromAnthropic(
+    messages: Anthropic.Types.MessagesRequest["messages"],
+  ): string {
+    // Find the last user message that doesn't contain tool_result blocks
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "user") {
+        if (typeof message.content === "string") {
+          return message.content;
+        }
+        // If content is an array, look for text blocks (not tool_result blocks)
+        if (Array.isArray(message.content)) {
+          const textBlock = message.content.find(
+            (block) =>
+              block.type === "text" &&
+              "text" in block &&
+              typeof block.text === "string",
+          );
+          if (textBlock && "text" in textBlock) {
+            return textBlock.text;
+          }
+        }
+      }
+    }
+    return "process this data";
+  }
+
+  /**
+   * Extract the tool result data from OpenAI tool message.
    * Parses JSON if possible, otherwise returns as-is.
    */
-  private extractToolResult(): unknown {
-    if (this.currentMessage.role !== "tool") {
+  private static extractToolResultFromOpenAi(
+    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
+  ): unknown {
+    if (currentMessage.role !== "tool") {
       throw new Error("Current message is not a tool message");
     }
 
-    const content = this.currentMessage.content;
+    const content = currentMessage.content;
 
     if (typeof content === "string") {
       try {
@@ -99,23 +204,60 @@ export class DualLlmSubagent {
   }
 
   /**
+   * Extract the tool result data from Anthropic messages.
+   * Finds the tool_result content block with the given toolUseId.
+   */
+  private static extractToolResultFromAnthropic(
+    messages: Anthropic.Types.MessagesRequest["messages"],
+    toolUseId: string,
+  ): unknown {
+    // Find the user message containing the tool_result block
+    for (const message of messages) {
+      if (
+        message.role === "user" &&
+        Array.isArray(message.content) &&
+        message.content.length > 0
+      ) {
+        for (const contentBlock of message.content) {
+          if (
+            contentBlock.type === "tool_result" &&
+            "tool_use_id" in contentBlock &&
+            contentBlock.tool_use_id === toolUseId
+          ) {
+            const content = contentBlock.content;
+
+            if (typeof content === "string") {
+              try {
+                return JSON.parse(content);
+              } catch {
+                // If content is not valid JSON, use it as-is
+                return content;
+              }
+            }
+
+            return content;
+          }
+        }
+      }
+    }
+
+    throw new Error(`Tool result not found for toolUseId: ${toolUseId}`);
+  }
+
+  /**
    * Main entry point for the quarantine pattern.
    * Runs a Q&A session between main agent and quarantined agent.
    *
    * @returns A safe summary of the information extracted
    */
   async processWithMainAgent(): Promise<string> {
-    // Extract data from messages
-    const originalUserRequest = this.extractUserRequest();
-    const toolResult = this.extractToolResult();
-
     // Load prompt from database configuration and replace template variable
     const mainAgentPrompt = this.config.mainAgentPrompt.replace(
       "{{originalUserRequest}}",
-      originalUserRequest,
+      this.originalUserRequest,
     );
 
-    const conversation: ChatCompletionMessageParam[] = [
+    const conversation: DualLlmMessage[] = [
       {
         role: "user",
         content: mainAgentPrompt,
@@ -131,14 +273,7 @@ export class DualLlmSubagent {
       console.log(`\n--- Round ${round + 1}/${this.config.maxRounds} ---`);
 
       // Step 1: Main agent formulates a multiple choice question
-      const mainAgentResponse = await this.openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: conversation,
-        temperature: 0,
-      });
-
-      const response =
-        mainAgentResponse.choices[0].message.content?.trim() || "";
+      const response = await this.llmClient.chat(conversation, 0);
       conversation.push({ role: "assistant", content: response });
 
       // Check if main agent is done questioning
@@ -170,11 +305,7 @@ export class DualLlmSubagent {
       }
 
       // Step 3: Quarantined agent answers the question (can see untrusted data)
-      const answerIndex = await this.answerQuestion(
-        question,
-        options,
-        toolResult,
-      );
+      const answerIndex = await this.answerQuestion(question, options);
       const selectedOption = options[answerIndex];
 
       console.log(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
@@ -213,48 +344,39 @@ export class DualLlmSubagent {
    *
    * @param question - The question to answer
    * @param options - Array of possible answers
-   * @param toolResult - The untrusted tool result data
    * @returns Index of the selected option (0-based)
    */
   private async answerQuestion(
     question: string,
     options: string[],
-    toolResult: unknown,
   ): Promise<number> {
     const optionsText = options.map((opt, idx) => `${idx}: ${opt}`).join("\n");
 
     // Load quarantined agent prompt from database configuration and replace template variables
     const quarantinedPrompt = this.config.quarantinedAgentPrompt
-      .replace("{{toolResultData}}", JSON.stringify(toolResult, null, 2))
+      .replace("{{toolResultData}}", JSON.stringify(this.toolResult, null, 2))
       .replace("{{question}}", question)
       .replace("{{options}}", optionsText)
       .replace("{{maxIndex}}", String(options.length - 1));
 
-    const response = await this.openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: quarantinedPrompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "multiple_choice_response",
-          schema: {
-            type: "object",
-            properties: {
-              answer: {
-                type: "integer",
-                description: "The index of the selected option (0-based)",
-              },
+    const parsed = await this.llmClient.chatWithSchema<{ answer: number }>(
+      [{ role: "user", content: quarantinedPrompt }],
+      {
+        name: "multiple_choice_response",
+        schema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "integer",
+              description: "The index of the selected option (0-based)",
             },
-            required: ["answer"],
-            additionalProperties: false,
           },
+          required: ["answer"],
+          additionalProperties: false,
         },
       },
-      temperature: 0,
-    });
-
-    const content = response.choices[0].message.content || "";
-    const parsed = JSON.parse(content);
+      0,
+    );
 
     // Code-level validation: Check if response has correct structure
     if (!parsed || typeof parsed.answer !== "number") {
@@ -279,13 +401,11 @@ export class DualLlmSubagent {
    * @returns A concise summary (2-3 sentences)
    */
   private async generateSummary(
-    conversation: ChatCompletionMessageParam[],
+    conversation: DualLlmMessage[],
   ): Promise<string> {
     // Extract just the Q&A pairs and summarize
     const qaText = conversation
-      .map((msg) =>
-        "content" in msg && typeof msg.content === "string" ? msg.content : "",
-      )
+      .map((msg) => msg.content)
       .filter((content) => content.length > 0)
       .join("\n");
 
@@ -295,12 +415,11 @@ export class DualLlmSubagent {
       qaText,
     );
 
-    const summaryResponse = await this.openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: summaryPrompt }],
-      temperature: 0,
-    });
+    const summary = await this.llmClient.chat(
+      [{ role: "user", content: summaryPrompt }],
+      0,
+    );
 
-    return summaryResponse.choices[0].message.content?.trim() || "";
+    return summary;
   }
 }

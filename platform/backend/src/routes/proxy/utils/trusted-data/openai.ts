@@ -1,8 +1,4 @@
-import {
-  DualLlmConfigModel,
-  DualLlmResultModel,
-  TrustedDataPolicyModel,
-} from "@/models";
+import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
 import type { OpenAi } from "@/types";
 import { DualLlmSubagent } from "../dual-llm-subagent";
 
@@ -52,8 +48,6 @@ export const evaluateIfContextIsTrusted = async (
   filteredMessages: Messages;
   contextIsTrusted: boolean;
 }> => {
-  // Load dual LLM configuration to check if analysis is enabled
-  const dualLlmConfig = await DualLlmConfigModel.getDefault();
   const filteredMessages: Messages = [];
   let hasUntrustedData = false;
 
@@ -112,8 +106,11 @@ export const evaluateIfContextIsTrusted = async (
              * 4. Returns a safe summary instead of raw untrusted data
              */
             const dualLlmSubagent = await DualLlmSubagent.create(
-              messages,
-              message,
+              {
+                provider: "openai",
+                messages,
+                currentMessage: message,
+              },
               agentId,
               apiKey,
             );

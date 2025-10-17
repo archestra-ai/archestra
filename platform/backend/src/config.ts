@@ -56,8 +56,8 @@ const getCorsOrigins = (): string | string[] | RegExp[] => {
   const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
 
   if (!allowedFrontendOrigins) {
-    // Default: allow all origins in development, localhost only in production
-    return isDevelopment ? "*" : [/^https?:\/\/localhost(:\d+)?$/];
+    // Default: allow localhost origins in both development and production
+    return [/^https?:\/\/localhost(:\d+)?$/];
   }
 
   if (allowedFrontendOrigins === "*") {

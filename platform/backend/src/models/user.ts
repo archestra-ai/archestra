@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { auth } from "@/auth";
+import { auth } from "@/auth/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 

@@ -90,3 +90,55 @@ export type SortingQueryFor<T extends readonly [string, ...string[]]> = {
   sortBy?: T[number];
   sortDirection?: "asc" | "desc";
 };
+
+export const RouteId = {
+  // Agent Routes
+  GetAgents: "getAgents",
+  CreateAgent: "createAgent",
+  GetAgent: "getAgent",
+  UpdateAgent: "updateAgent",
+  DeleteAgent: "deleteAgent",
+
+  // Tool Routes
+  GetTools: "getTools",
+  UpdateTool: "updateTool",
+
+  // Interaction Routes
+  GetInteractions: "getInteractions",
+  GetInteraction: "getInteraction",
+
+  // Autonomy Policy Routes
+  GetOperators: "getOperators",
+  GetToolInvocationPolicies: "getToolInvocationPolicies",
+  CreateToolInvocationPolicy: "createToolInvocationPolicy",
+  GetToolInvocationPolicy: "getToolInvocationPolicy",
+  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
+  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
+  GetTrustedDataPolicies: "getTrustedDataPolicies",
+  CreateTrustedDataPolicy: "createTrustedDataPolicy",
+  GetTrustedDataPolicy: "getTrustedDataPolicy",
+  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
+  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
+
+  // Dual LLM Config Routes
+  GetDefaultDualLlmConfig: "getDefaultDualLlmConfig",
+  GetDualLlmConfigs: "getDualLlmConfigs",
+  CreateDualLlmConfig: "createDualLlmConfig",
+  GetDualLlmConfig: "getDualLlmConfig",
+  UpdateDualLlmConfig: "updateDualLlmConfig",
+  DeleteDualLlmConfig: "deleteDualLlmConfig",
+
+  // Dual LLM Result Routes
+  GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
+  GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
+
+  // Proxy Routes - OpenAI
+  OpenAiChatCompletionsWithDefaultAgent:
+    "openAiChatCompletionsWithDefaultAgent",
+  OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
+
+  // Proxy Routes - Anthropic
+  AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
+  AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+} as const;
+export type RouteId = (typeof RouteId)[keyof typeof RouteId];

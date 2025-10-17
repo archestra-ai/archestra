@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
+  RouteId,
   SelectToolSchema,
   SelectToolWithAgentSchema,
   UpdateToolSchema,
@@ -14,7 +15,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/tools",
     {
       schema: {
-        operationId: "getTools",
+        operationId: RouteId.GetTools,
         description: "Get all tools",
         tags: ["Tools"],
         response: {
@@ -44,7 +45,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/tools/:id",
     {
       schema: {
-        operationId: "updateTool",
+        operationId: RouteId.UpdateTool,
         description: "Update a tool",
         tags: ["Tools"],
         params: z.object({

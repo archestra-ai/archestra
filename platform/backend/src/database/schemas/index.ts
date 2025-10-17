@@ -1,4 +1,5 @@
 export { default as agentsTable } from "./agent";
+export { default as agentAccessControlTable } from "./agent-access-control";
 export {
   account,
   invitation,

@@ -19,6 +19,7 @@ Options:
 --stream                  Stream the response
 --model <model>           The model to use (default: gpt-4o for openai, gemini-2.0-flash-exp for gemini)
 --provider <provider>     The provider to use (openai or gemini, default: openai)
+--agent-id <uuid>         The agent ID to use (optional, creates agent-specific proxy URL)
 --debug                   Print debug messages
 --help                    Print this help message
 ```
@@ -37,6 +38,13 @@ pnpm cli-chat-with-guardrails --model gpt-4o-mini --stream
 ```bash
 pnpm cli-chat-with-guardrails --provider gemini
 pnpm cli-chat-with-guardrails --provider gemini --model gemini-2.0-flash-exp --stream
+```
+
+**Using with a specific agent:**
+
+```bash
+# Create an agent in the Archestra UI (http://localhost:3000/agents) first, then use its ID
+pnpm cli-chat-with-guardrails --agent-id 550e8400-e29b-41d4-a716-446655440000
 ```
 
 **Note:** Make sure you have the appropriate API key set in your `/platform/.env` file:

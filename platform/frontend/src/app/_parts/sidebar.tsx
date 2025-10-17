@@ -5,6 +5,7 @@ import {
   SignedOut,
   UserButton,
 } from "@daveyplate/better-auth-ui";
+import type { Role } from "@shared";
 import {
   BookOpen,
   Bot,
@@ -40,7 +41,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated } from "@/lib/auth.hook";
+import { WithRole } from "@/components/with-permission";
+import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
 
 interface MenuItem {
   title: string;
@@ -49,7 +51,10 @@ interface MenuItem {
   subItems?: MenuItem[];
 }
 
-const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
+const getNavigationItems = (
+  isAuthenticated: boolean,
+  role: Role,
+): MenuItem[] => {
   return [
     {
       title: "How it works",
@@ -73,11 +78,15 @@ const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
             url: "/tools",
             icon: FileJson2,
           },
-          {
-            title: "Settings",
-            url: "/settings",
-            icon: Settings,
-          },
+          ...(role === "admin"
+            ? [
+                {
+                  title: "Settings",
+                  url: "/settings",
+                  icon: Settings,
+                },
+              ]
+            : []),
         ]
       : []),
   ];
@@ -104,6 +113,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [starCount, setStarCount] = useState<number | null>(null);
   const isAuthenticated = useIsAuthenticated();
+  const role = useRole();
 
   useEffect(() => {
     fetch("https://api.github.com/repos/archestra-ai/archestra")
@@ -129,7 +139,7 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated).map((item) => (
+              {getNavigationItems(isAuthenticated, role).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
                     <a href={item.url}>
@@ -161,23 +171,28 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SignedIn>
-          <SidebarGroup className="px-4">
-            <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {actionItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={item.url === pathname}>
-                      <a href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <WithRole requiredRole="admin">
+            <SidebarGroup className="px-4">
+              <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {actionItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={item.url === pathname}
+                      >
+                        <a href={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </WithRole>
         </SignedIn>
 
         <SidebarGroup className="px-4">

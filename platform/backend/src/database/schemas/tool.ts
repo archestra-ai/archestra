@@ -7,7 +7,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ToolParametersContent } from "@/types";
+import type { ToolParametersContent, ToolResultTreatment } from "@/types";
 import agentsTable from "./agent";
 
 const toolsTable = pgTable(
@@ -29,6 +29,7 @@ const toolsTable = pgTable(
       .notNull()
       .default(false),
     toolResultTreatment: text("tool_result_treatment")
+      .$type<ToolResultTreatment>()
       .notNull()
       .default("untrusted"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

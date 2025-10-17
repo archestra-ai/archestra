@@ -3287,6 +3287,15 @@ export type GetAgentsErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3307,6 +3316,32 @@ export type GetAgentsResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
     }>;
 };
 
@@ -3316,6 +3351,7 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
+        usersWithAccess: Array<string>;
     };
     path?: never;
     query?: never;
@@ -3323,6 +3359,15 @@ export type CreateAgentData = {
 };
 
 export type CreateAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3346,6 +3391,32 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3407,6 +3478,15 @@ export type GetAgentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3436,6 +3516,32 @@ export type GetAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3445,6 +3551,7 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
+        usersWithAccess?: Array<string>;
     };
     path: {
         id: string;
@@ -3486,6 +3593,32 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3506,6 +3639,20 @@ export type GetInteractionsData = {
     };
     url: '/api/interactions';
 };
+
+export type GetInteractionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
 
 export type GetInteractionsResponses = {
     /**
@@ -3560,6 +3707,15 @@ export type GetInteractionErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3608,6 +3764,15 @@ export type GetToolsData = {
 };
 
 export type GetToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */

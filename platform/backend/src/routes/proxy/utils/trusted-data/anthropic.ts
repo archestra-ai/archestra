@@ -1,12 +1,6 @@
-import {
-  DualLlmConfigModel,
-  DualLlmResultModel,
-  TrustedDataPolicyModel,
-} from "@/models";
+import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
 import type { Anthropic } from "@/types";
-
-// TODO: Uncomment when dual-llm is implemented for Anthropic
-// import { DualLlmSubagent } from "../dual-llm-subagent";
+import { DualLlmSubagent } from "../dual-llm-subagent";
 
 type Messages = Anthropic.Types.MessagesRequest["messages"];
 
@@ -51,16 +45,11 @@ const extractToolNameFromMessages = (
 export const evaluateIfContextIsTrusted = async (
   messages: Messages,
   agentId: string,
-  _apiKey: string,
+  apiKey: string,
 ): Promise<{
   filteredMessages: Messages;
   contextIsTrusted: boolean;
 }> => {
-  /**
-   * TODO: dual-llm doesn't yet work with anthropic
-   * Load dual LLM configuration to check if analysis is enabled
-   */
-  const dualLlmConfig = await DualLlmConfigModel.getDefault();
   const filteredMessages: Messages = [];
   let hasUntrustedData = false;
 
@@ -126,22 +115,30 @@ export const evaluateIfContextIsTrusted = async (
               } else {
                 /**
                  * No cached result - run Dual LLM quarantine pattern
-                 * Note: This requires adapting the DualLlmSubagent to work with Anthropic format
-                 * For now, we'll use the original content until dual-llm is fully implemented for Anthropic
+                 * Dual LLM Quarantine Pattern:
+                 * 1. Main LLM (privileged) asks multiple choice questions
+                 * 2. Quarantined LLM sees the untrusted data and answers the questions
+                 * 3. Main LLM extracts safe information through Q&A
+                 * 4. Returns a safe summary instead of raw untrusted data
                  */
-                // const dualLlmSubagent = await DualLlmSubagent.create(
-                //   messages,
-                //   contentBlock,
-                //   agentId,
-                //   apiKey,
-                // );
-                // updatedContentBlocks.push({
-                //   ...contentBlock,
-                //   content: await dualLlmSubagent.processWithMainAgent(),
-                // });
+                const dualLlmSubagent = await DualLlmSubagent.create(
+                  {
+                    provider: "anthropic",
+                    messages,
+                    toolUseId,
+                  },
+                  agentId,
+                  apiKey,
+                );
 
-                // TODO: temporary -- Just pass through until dual-llm is implemented for Anthropic
-                updatedContentBlocks.push(contentBlock);
+                /**
+                 * Replace the tool message content with the safe summary
+                 * Note: The result is automatically saved to database in processWithMainAgent
+                 */
+                updatedContentBlocks.push({
+                  ...contentBlock,
+                  content: await dualLlmSubagent.processWithMainAgent(),
+                });
               }
             } else {
               updatedContentBlocks.push(contentBlock);

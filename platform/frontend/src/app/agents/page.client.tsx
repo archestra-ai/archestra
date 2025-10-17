@@ -126,8 +126,8 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Agent ID</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Connected Tools</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -137,9 +137,6 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                       <TableCell className="font-medium">
                         {agent.name}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {agent.id}
-                      </TableCell>
                       <TableCell>
                         {new Date(agent.createdAt).toLocaleDateString("en-US", {
                           year: "numeric",
@@ -147,6 +144,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                           day: "numeric",
                         })}
                       </TableCell>
+                      <TableCell>{agent.tools.length}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

@@ -1,5 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
+  DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+} from "@shared";
 import dotenv from "dotenv";
 import packageJson from "../package.json";
 
@@ -14,6 +20,11 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
+
+const isProduction = ["production", "prod"].includes(
+  process.env.NODE_ENV?.toLowerCase() ?? "",
+);
+const isDevelopment = !isProduction;
 
 /**
  * Parse port from ARCHESTRA_API_BASE_URL if provided
@@ -43,7 +54,6 @@ const getPortFromUrl = (): number => {
  */
 const getCorsOrigins = (): string | string[] | RegExp[] => {
   const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
-  const isDevelopment = process.env.NODE_ENV === "development";
 
   if (!allowedFrontendOrigins) {
     // Default: allow all origins in development, localhost only in production
@@ -65,14 +75,21 @@ export default {
     port: getPortFromUrl(),
     name: "Archestra Platform API",
     version: packageJson.version,
+    corsOrigins: getCorsOrigins(),
+  },
+  auth: {
+    secret: process.env.ARCHESTRA_AUTH_SECRET,
+    adminDefaultEmail:
+      process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
+    adminDefaultPassword:
+      process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
+      DEFAULT_ADMIN_PASSWORD,
   },
   database: {
     url: process.env.DATABASE_URL,
   },
-  cors: {
-    origins: getCorsOrigins(),
-  },
-  debug: process.env.NODE_ENV === "development",
+  debug: isDevelopment,
+  production: isProduction,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",
   },

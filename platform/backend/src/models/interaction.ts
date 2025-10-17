@@ -29,7 +29,8 @@ class InteractionModel {
     let query = db
       .select()
       .from(schema.interactionsTable)
-      .orderBy(desc(schema.interactionsTable.createdAt));
+      .orderBy(desc(schema.interactionsTable.createdAt))
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {

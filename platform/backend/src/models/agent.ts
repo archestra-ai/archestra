@@ -44,7 +44,8 @@ class AgentModel {
       .leftJoin(
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
-      );
+      )
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {

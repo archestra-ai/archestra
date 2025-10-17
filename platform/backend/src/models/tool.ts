@@ -67,7 +67,8 @@ class ToolModel {
         schema.agentsTable,
         eq(schema.toolsTable.agentId, schema.agentsTable.id),
       )
-      .orderBy(desc(schema.toolsTable.createdAt));
+      .orderBy(desc(schema.toolsTable.createdAt))
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {

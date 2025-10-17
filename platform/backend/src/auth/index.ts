@@ -8,8 +8,15 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { ac, adminRole, memberRole, ownerRole } from "./permission";
 
+const {
+  baseURL,
+  auth: { secret },
+} = config;
+
 export const auth = betterAuth({
-  baseURL: config.baseURL,
+  baseURL,
+  secret,
+
   plugins: [
     organization({
       requireEmailVerificationOnInvitation: false,
@@ -43,15 +50,18 @@ export const auth = betterAuth({
       account: schema.account,
     },
   }),
+
   emailAndPassword: {
     enabled: true,
   },
+
   advanced: {
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
       secure: true,
     },
   },
+
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       // Validate email format for invitations

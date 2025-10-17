@@ -22,7 +22,7 @@ import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host },
+  api: { port, name, version, host, corsOrigins },
 } = config;
 
 const fastify = Fastify({
@@ -73,13 +73,9 @@ const start = async () => {
     // Seed database with demo data
     await seedDatabase();
 
-    /**
-     * Register CORS plugin to allow cross-origin requests
-     * Origins are configured via CORS_ORIGINS environment variable
-     * Defaults to localhost (any port) for development
-     */
+    // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {
-      origin: config.cors.origins,
+      origin: corsOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
       credentials: true,

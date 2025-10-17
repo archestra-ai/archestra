@@ -43,7 +43,10 @@ FROM base AS unified
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV ARCHESTRA_AUTH_SECRET=""
 ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
+ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
+ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="admin123"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install PostgreSQL 17 and supervisord
@@ -105,7 +108,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV=%(ENV_NODE_ENV)s,DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s"
 
 [program:frontend]
 directory=/app/frontend
@@ -117,7 +120,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=20
-environment=NODE_ENV=%(ENV_NODE_ENV)s,HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",HOSTNAME="0.0.0.0",NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="placeholder"
 EOF
 
 # Create initialization script

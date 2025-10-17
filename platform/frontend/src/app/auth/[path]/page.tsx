@@ -85,7 +85,6 @@ export default async function AuthPage({
               }}
             />
           </div>
-        </main>
       </Suspense>
     </ErrorBoundary>
   );

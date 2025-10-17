@@ -22,7 +22,7 @@ async function queryTools() {
       console.log(
         `Allow When Untrusted: ${tool.allowUsageWhenUntrustedDataIsPresent}`,
       );
-      console.log(`Data Trusted By Default: ${tool.dataIsTrustedByDefault}`);
+      console.log(`Tool Result Treatment: ${tool.toolResultTreatment}`);
       console.log(`Created At: ${tool.createdAt}`);
       console.log();
     }

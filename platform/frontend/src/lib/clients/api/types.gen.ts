@@ -3287,6 +3287,15 @@ export type GetAgentsErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3332,6 +3341,7 @@ export type GetAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     }>;
 };
 
@@ -3341,6 +3351,7 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
+        usersWithAccess: Array<string>;
     };
     path?: never;
     query?: never;
@@ -3348,6 +3359,15 @@ export type CreateAgentData = {
 };
 
 export type CreateAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -3396,6 +3416,7 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3457,6 +3478,15 @@ export type GetAgentErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3511,6 +3541,7 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3520,6 +3551,7 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
+        usersWithAccess?: Array<string>;
     };
     path: {
         id: string;
@@ -3586,6 +3618,7 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
+        usersWithAccess: Array<string>;
     };
 };
 
@@ -3606,6 +3639,20 @@ export type GetInteractionsData = {
     };
     url: '/api/interactions';
 };
+
+export type GetInteractionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
 
 export type GetInteractionsResponses = {
     /**
@@ -3660,6 +3707,15 @@ export type GetInteractionErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -3711,6 +3767,15 @@ export type GetToolsErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -3745,7 +3810,7 @@ export type GetToolsResponses = {
         };
         description: string | null;
         allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -3779,7 +3844,7 @@ export type UpdateToolData = {
         };
         description?: string | null;
         allowUsageWhenUntrustedDataIsPresent?: boolean;
-        dataIsTrustedByDefault?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt?: unknown;
         updatedAt?: unknown;
     };
@@ -3838,7 +3903,7 @@ export type UpdateToolResponses = {
         };
         description: string | null;
         allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt: string;
         updatedAt: string;
     };
@@ -4136,7 +4201,7 @@ export type GetTrustedDataPoliciesResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     }>;
@@ -4151,7 +4216,7 @@ export type CreateTrustedDataPolicyData = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -4183,7 +4248,7 @@ export type CreateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -4277,7 +4342,7 @@ export type GetTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };
@@ -4292,7 +4357,7 @@ export type UpdateTrustedDataPolicyData = {
         attributePath?: string;
         operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value?: string;
-        action?: 'block_always' | 'mark_as_trusted';
+        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
     };
     path: {
         id: string;
@@ -4335,7 +4400,7 @@ export type UpdateTrustedDataPolicyResponses = {
         attributePath: string;
         operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
         value: string;
-        action: 'block_always' | 'mark_as_trusted';
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
         createdAt: string;
         updatedAt: string;
     };

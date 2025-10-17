@@ -1,6 +1,7 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTool, Tool, UpdateTool } from "@/types";
+import AgentAccessControlModel from "./agent-access-control";
 
 class ToolModel {
   static async create(tool: InsertTool): Promise<Tool> {
@@ -15,16 +16,37 @@ class ToolModel {
     return db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
   }
 
-  static async findById(id: string): Promise<Tool | null> {
+  static async findById(
+    id: string,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<Tool | null> {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.id, id));
-    return tool || null;
+
+    if (!tool) {
+      return null;
+    }
+
+    // Check access control for non-admins
+    if (userId && !isAdmin) {
+      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+        userId,
+        tool.agentId,
+        false,
+      );
+      if (!hasAccess) {
+        return null;
+      }
+    }
+
+    return tool;
   }
 
-  static async findAll() {
-    return db
+  static async findAll(userId?: string, isAdmin?: boolean) {
+    let query = db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -32,7 +54,7 @@ class ToolModel {
         description: schema.toolsTable.description,
         allowUsageWhenUntrustedDataIsPresent:
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
-        dataIsTrustedByDefault: schema.toolsTable.dataIsTrustedByDefault,
+        toolResultTreatment: schema.toolsTable.toolResultTreatment,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         agent: {
@@ -45,15 +67,53 @@ class ToolModel {
         schema.agentsTable,
         eq(schema.toolsTable.agentId, schema.agentsTable.id),
       )
-      .orderBy(desc(schema.toolsTable.createdAt));
+      .orderBy(desc(schema.toolsTable.createdAt))
+      .$dynamic();
+
+    // Apply access control filtering for non-admins
+    if (userId && !isAdmin) {
+      const accessibleAgentIds =
+        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.toolsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    return query;
   }
 
-  static async findByName(name: string): Promise<Tool | null> {
+  static async findByName(
+    name: string,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<Tool | null> {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.name, name));
-    return tool || null;
+
+    if (!tool) {
+      return null;
+    }
+
+    // Check access control for non-admins
+    if (userId && !isAdmin) {
+      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+        userId,
+        tool.agentId,
+        false,
+      );
+      if (!hasAccess) {
+        return null;
+      }
+    }
+
+    return tool;
   }
 
   static async update(toolId: string, tool: UpdateTool) {
@@ -62,7 +122,8 @@ class ToolModel {
       .set(tool)
       .where(eq(schema.toolsTable.id, toolId))
       .returning();
-    return updatedTool || null;
+    if (!updatedTool) return null;
+    return updatedTool;
   }
 }
 

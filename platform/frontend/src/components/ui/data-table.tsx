@@ -125,9 +125,6 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full space-y-4">
-      {(pagination || !manualPagination) && (
-        <DataTablePagination table={table} totalRows={pagination?.total} />
-      )}
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>

@@ -6,6 +6,7 @@ import { SupportedOperatorSchema } from "./operator";
 export const TrustedDataPolicyActionSchema = z.enum([
   "block_always",
   "mark_as_trusted",
+  "sanitize_with_dual_llm",
 ]);
 
 export const SelectTrustedDataPolicySchema = createSelectSchema(

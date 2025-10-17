@@ -12,7 +12,10 @@ describe("TrustedDataPolicyModel", async () => {
 
   beforeEach(async () => {
     // Create test agent
-    const agent = await AgentModel.create({ name: "Test Agent" });
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      usersWithAccess: [],
+    });
     agentId = agent.id;
 
     // Create test tool
@@ -22,7 +25,7 @@ describe("TrustedDataPolicyModel", async () => {
       parameters: {},
       description: "Test tool",
       allowUsageWhenUntrustedDataIsPresent: false,
-      dataIsTrustedByDefault: false,
+      toolResultTreatment: "untrusted",
     });
 
     const tool = await ToolModel.findByName(toolName);
@@ -41,7 +44,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(false);
-        expect(result.reason).toContain("No trust policy defined");
+        expect(result.reason).toContain(
+          "Tool test-tool is configured as untrusted",
+        );
       });
 
       test("marks data as trusted when policy matches", async () => {
@@ -100,7 +105,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const result = await TrustedDataPolicyModel.evaluate(
@@ -110,7 +115,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(true);
-        expect(result.reason).toContain("configured to trust data by default");
+        expect(result.reason).toContain(
+          "Tool trusted-by-default-tool is configured as trusted",
+        );
       });
 
       test("marks data as trusted when no policies match but tool has dataIsTrustedByDefault", async () => {
@@ -121,7 +128,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();
@@ -146,7 +153,9 @@ describe("TrustedDataPolicyModel", async () => {
         );
 
         expect(result.isTrusted).toBe(true);
-        expect(result.reason).toContain("configured to trust data by default");
+        expect(result.reason).toContain(
+          "Tool trusted-by-default-with-policies is configured as trusted",
+        );
       });
 
       test("respects policy match over dataIsTrustedByDefault", async () => {
@@ -157,7 +166,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();
@@ -675,7 +684,7 @@ describe("TrustedDataPolicyModel", async () => {
           parameters: {},
           description: "Tool that trusts data by default",
           allowUsageWhenUntrustedDataIsPresent: false,
-          dataIsTrustedByDefault: true,
+          toolResultTreatment: "trusted",
         });
 
         const tools = await ToolModel.findAll();

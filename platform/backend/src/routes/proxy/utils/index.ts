@@ -25,6 +25,7 @@ export const persistTools = async (
       name: toolName,
       parameters: toolParameters,
       description: toolDescription,
+      toolResultTreatment: "untrusted", // Default to untrusted for new tools
     });
   }
 };

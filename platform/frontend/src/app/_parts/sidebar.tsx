@@ -25,6 +25,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
+import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
   Sidebar,
   SidebarContent,
@@ -259,6 +260,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        <DefaultCredentialsWarning />
         <SignedIn>
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>

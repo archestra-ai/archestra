@@ -49,8 +49,10 @@ const getPortFromUrl = (): number => {
  * Parse CORS origins from environment variable
  * Supports:
  * - Comma-separated list: "https://example.com,https://app.example.com"
- * - Wildcard for all origins: "*"
- * - Empty/undefined: defaults to "*" in development, localhost regex in production
+ * - Empty/undefined: defaults to localhost regex (both http and https on any port)
+ *
+ * Note: Wildcard "*" is not supported when using credentials mode.
+ * The frontend uses credentials: 'include', so we must specify exact origins.
  */
 const getCorsOrigins = (): string | string[] | RegExp[] => {
   const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;

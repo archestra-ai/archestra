@@ -1,11 +1,10 @@
-import AgentModel from "@/models/agent";
-import ToolModel from "@/models/tool";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
-import type { Tool } from "@/types";
-import type { ChatCompletionRequestMessages } from "../types";
-import { evaluateIfContextIsTrusted } from "./trusted-data";
+import { AgentModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import type { OpenAi, Tool } from "@/types";
+import { evaluateIfContextIsTrusted } from "./openai";
 
-describe("trusted-data utils", () => {
+type Messages = OpenAi.Types.ChatCompletionsRequest["messages"];
+
+describe("trusted-data openai utils", () => {
   let agentId: string;
   let toolId: string;
 
@@ -30,12 +29,16 @@ describe("trusted-data utils", () => {
 
   describe("evaluateIfContextIsTrusted", () => {
     test("returns trusted context when no tool messages exist", async () => {
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Hi there!" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.filteredMessages).toEqual(messages);
@@ -52,7 +55,7 @@ describe("trusted-data utils", () => {
         description: "Block hacker emails",
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         { role: "user", content: "Get emails" },
         {
           role: "assistant",
@@ -81,7 +84,11 @@ describe("trusted-data utils", () => {
         { role: "assistant", content: "Here are your emails" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       // Context should be untrusted and blocked tool message should be filtered
       expect(result.contextIsTrusted).toBe(false);
@@ -122,7 +129,7 @@ describe("trusted-data utils", () => {
         description: "Allow trusted emails",
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "assistant",
           content: null,
@@ -149,7 +156,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.filteredMessages).toEqual(messages);
@@ -166,7 +177,7 @@ describe("trusted-data utils", () => {
         description: "Allow trusted emails",
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "assistant",
           content: null,
@@ -190,7 +201,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       // Context should be untrusted when no policies match
       expect(result.contextIsTrusted).toBe(false);
@@ -217,7 +232,7 @@ describe("trusted-data utils", () => {
         description: "Block malicious source",
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "assistant",
           content: null,
@@ -265,7 +280,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       // Context should be untrusted if any tool message is blocked or untrusted
       expect(result.contextIsTrusted).toBe(false);
@@ -320,7 +339,7 @@ describe("trusted-data utils", () => {
     });
 
     test("handles tool messages without matching tool definition", async () => {
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "tool",
           tool_call_id: "call_unknown",
@@ -328,7 +347,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       // Should mark as untrusted when tool is not found
       expect(result.contextIsTrusted).toBe(false);
@@ -336,7 +359,7 @@ describe("trusted-data utils", () => {
     });
 
     test("handles invalid JSON in tool message content", async () => {
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "tool",
           tool_call_id: "call_123",
@@ -344,7 +367,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       // Should handle gracefully and mark as untrusted
       expect(result.contextIsTrusted).toBe(false);
@@ -352,13 +379,17 @@ describe("trusted-data utils", () => {
     });
 
     test("preserves non-tool messages unchanged", async () => {
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         { role: "user", content: "Hello" },
         { role: "assistant", content: "Hi there!" },
         { role: "system", content: "You are helpful" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.filteredMessages).toEqual(messages);
@@ -375,7 +406,7 @@ describe("trusted-data utils", () => {
         dataIsTrustedByDefault: true,
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "assistant",
           content: null,
@@ -397,7 +428,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.filteredMessages).toEqual(messages);
@@ -427,7 +462,7 @@ describe("trusted-data utils", () => {
         description: "Block dangerous data",
       });
 
-      const messages: ChatCompletionRequestMessages = [
+      const messages: Messages = [
         {
           role: "assistant",
           content: null,
@@ -449,7 +484,11 @@ describe("trusted-data utils", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(messages, agentId);
+      const result = await evaluateIfContextIsTrusted(
+        messages,
+        agentId,
+        "test-api-key",
+      );
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.filteredMessages[1].content).toContain("[Content blocked");

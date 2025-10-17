@@ -1,6 +1,10 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL } from "@shared";
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
+  DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
+} from "@shared";
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -26,11 +30,11 @@ export function DefaultCredentialsWarning() {
             admin email. To secure your workspace and prevent unauthorized
             access, please set the{" "}
             <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm inline">
-              BETTER_AUTH_ADMIN_EMAIL
+              {DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME}
             </code>{" "}
             and{" "}
             <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-              BETTER_AUTH_ADMIN_PASSWORD
+              {DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME}
             </code>{" "}
             environment variables.
           </p>

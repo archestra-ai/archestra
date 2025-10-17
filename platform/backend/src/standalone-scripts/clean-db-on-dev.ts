@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
-import db from "../database";
+import config from "@/config";
+import db from "@/database";
 
 /**
  * Completely clears the database by:
@@ -10,7 +11,7 @@ import db from "../database";
  */
 export const clearDb = async (): Promise<void> => {
   // Safety check: only allow in non-production environments
-  if (process.env.NODE_ENV === "production") {
+  if (config.production) {
     throw new Error(
       "❌ Cannot clear database in production environment. This operation is only allowed in development.",
     );

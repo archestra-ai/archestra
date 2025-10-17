@@ -11,12 +11,21 @@ import type {
 import { auth } from "@/auth";
 import { checkPermission } from "./permission-middleware";
 
+const routeIsUnauthenticated = (request: FastifyRequest) => {
+  return (
+    request.url.startsWith("/api/auth") ||
+    request.url.startsWith("/v1/openai") ||
+    request.url.startsWith("/v1/anthropic") ||
+    request.url.startsWith("/v1/gemini") ||
+    request.url === "/openapi.json"
+  );
+};
+
 export const authMiddleware = async (
   request: FastifyRequest,
   reply: FastifyReply,
 ) => {
-  if (request.url.startsWith("/api/auth")) return;
-  if (request.url === "/openapi.json") return;
+  if (routeIsUnauthenticated(request)) return;
 
   const headers = new Headers();
   Object.entries(request.headers).forEach(([key, value]) => {

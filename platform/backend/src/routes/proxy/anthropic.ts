@@ -6,7 +6,6 @@ import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { Anthropic, ErrorResponseSchema, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
-import { AnthropicMessagesTransformer } from "./transformers";
 import * as utils from "./utils";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -23,7 +22,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "/v1",
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+      // Support Anthropic SDK standard format:
+      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
+      const isMessagesRoute =
+        request.method === "POST" &&
+        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
+          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
+
+      if (isMessagesRoute) {
         // Skip proxy for this route - we handle it below
         next(new Error("skip"));
       } else {
@@ -60,113 +66,43 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     }
 
-    const { authorization: anthropicApiKey } = headers;
+    const { "x-api-key": anthropicApiKey } = headers;
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
-    const transformer = new AnthropicMessagesTransformer();
 
     try {
-      // Convert Anthropic request to common format for processing
-      const commonRequest = transformer.requestToOpenAI(body);
+      if (body.tools) {
+        const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
-      await utils.persistTools(commonRequest.tools, resolvedAgentId);
+        for (const tool of body.tools) {
+          // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
+          if (
+            tool.type === undefined ||
+            tool.type === null ||
+            tool.type === "custom"
+          ) {
+            transformedTools.push({
+              toolName: tool.name,
+              toolParameters: tool.input_schema,
+              toolDescription: tool.description,
+            });
+          }
+        }
+
+        await utils.persistTools(transformedTools, resolvedAgentId);
+      }
 
       // Process messages with trusted data policies dynamically
       const { filteredMessages, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          commonRequest.messages,
+          {
+            provider: "anthropic",
+            messages: body.messages,
+          },
           resolvedAgentId,
           anthropicApiKey,
         );
 
       if (stream) {
-        // reply.header("Content-Type", "text/event-stream");
-        // reply.header("Cache-Control", "no-cache");
-        // reply.header("Connection", "keep-alive");
-
-        // // Handle streaming response
-        // const stream = await anthropicClient.messages.create({
-        //   ...body,
-        //   messages: filteredMessages,
-        //   stream: true,
-        // });
-
-        // const chatCompletionChunksAndMessage =
-        //   await utils.streaming.handleChatCompletions(stream);
-
-        // let assistantMessage = chatCompletionChunksAndMessage.message;
-        // // Chat.Completions.ChatCompletionChunk
-        // let chunks: AnthropicProvider[] = chatCompletionChunksAndMessage.chunks;
-
-        // // Evaluate tool invocation policies dynamically
-        // const toolInvocationRefusal =
-        //   await utils.toolInvocation.evaluatePolicies(
-        //     assistantMessage,
-        //     resolvedAgentId,
-        //     contextIsTrusted,
-        //   );
-
-        // if (toolInvocationRefusal) {
-        //   /**
-        //    * Tool invocation was blocked
-        //    *
-        //    * Overwrite the assistant message that will be persisted
-        //    * Plus send a single chunk, representing the refusal message instead of original chunks
-        //    */
-        //   assistantMessage = toolInvocationRefusal.message;
-        //   chunks = [
-        //     {
-        //       id: "chatcmpl-blocked",
-        //       object: "chat.completion.chunk",
-        //       created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
-        //       model: body.model,
-        //       choices: [
-        //         {
-        //           index: 0,
-        //           delta:
-        //             toolInvocationRefusal.message as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-        //           finish_reason: "stop",
-        //           logprobs: null,
-        //         },
-        //       ],
-        //     },
-        //   ];
-        // }
-
-        // // Store the complete interaction
-        // await InteractionModel.create({
-        //   agentId: resolvedAgentId,
-        //   type: "anthropic:messages",
-        //   request: body,
-        //   response: {
-        //     id: chunks[0]?.id || "chatcmpl-unknown",
-        //     object: "chat.completion",
-        //     created: chunks[0]?.created || Date.now() / 1000,
-        //     model: body.model,
-        //     choices: [
-        //       {
-        //         index: 0,
-        //         message: assistantMessage,
-        //         finish_reason: "stop",
-        //         logprobs: null,
-        //       },
-        //     ],
-        //   },
-        // });
-
-        // for (const chunk of chunks) {
-        //   /**
-        //    * The setTimeout here is used simply to simulate the streaming delay (and make it look more natural)
-        //    */
-        //   reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-        //   await new Promise((resolve) =>
-        //     setTimeout(resolve, Math.random() * 10),
-        //   );
-        // }
-
-        // reply.raw.write("data: [DONE]\n\n");
-        // reply.raw.end();
-        // return reply;
-
         return reply.code(400).send({
           error: {
             message: "Streaming is not supported for Anthropic. Coming soon!",
@@ -176,39 +112,46 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else {
         // Non-streaming response
         const response = await anthropicClient.messages.create({
-          ...body,
+          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+          ...(body as any),
           messages: filteredMessages,
           stream: false,
         });
 
-        // Convert to common format for policy evaluation
-        const commonResponse = transformer.responseToOpenAI(response);
+        const toolCalls = response.content.filter(
+          (content) => content.type === "tool_use",
+        );
 
-        // Evaluate tool invocation policies
-        const assistantMessage = commonResponse.choices[0]?.message;
-        if (assistantMessage) {
+        if (toolCalls) {
           const toolInvocationRefusal =
             await utils.toolInvocation.evaluatePolicies(
-              assistantMessage,
+              toolCalls.map((toolCall) => ({
+                toolCallName: toolCall.name,
+                toolCallArgs: JSON.stringify(toolCall.input),
+              })),
               resolvedAgentId,
               contextIsTrusted,
             );
 
           if (toolInvocationRefusal) {
-            commonResponse.choices = [toolInvocationRefusal];
-            // Convert back to Anthropic format
-            const refusalResponse =
-              transformer.responseFromOpenAI(commonResponse);
+            const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+            response.content = [
+              {
+                type: "text",
+                text: contentMessage,
+                citations: null,
+              },
+            ];
 
             // Store the interaction with refusal
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
-              response: refusalResponse,
+              response: response,
             });
 
-            return reply.send(refusalResponse);
+            return reply.send(response);
           }
         }
 
@@ -241,11 +184,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   };
 
   /**
+   * Anthropic SDK standard format (with /v1 prefix)
    * No agentId is provided -- agent is created/fetched based on the user-agent header
-   * or if the user-agent header is not present, a default agent is used
    */
   fastify.post(
-    `${API_PREFIX}/${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithDefaultAgent",
@@ -268,10 +211,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
    */
   fastify.post(
-    `${API_PREFIX}/:agentId/${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: "anthropicMessagesWithAgent",

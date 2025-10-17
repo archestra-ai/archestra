@@ -25,7 +25,7 @@ function InvitationsListContent({
   const cancelMutation = useCancelInvitation();
 
   const handleCopy = async (id: string, email: string) => {
-    const link = `${window.location.origin}/accept-invitation/${id}?email=${encodeURIComponent(email)}`;
+    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${id}&email=${encodeURIComponent(email)}`;
     await navigator.clipboard.writeText(link);
     toast.success("Link copied to clipboard");
   };

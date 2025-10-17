@@ -21,3 +21,6 @@ export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "admin123";
+
+export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
+export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_PASSWORD";

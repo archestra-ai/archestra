@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent } from "@/types";
@@ -26,7 +27,7 @@ class AgentModel {
   static async getAgentOrCreateDefault(
     name: string | undefined,
   ): Promise<Agent> {
-    const agentName = name || "Default Agent";
+    const agentName = name || DEFAULT_AGENT_NAME;
 
     const [agent] = await db
       .select()

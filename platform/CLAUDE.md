@@ -414,10 +414,11 @@ The backend integrates advanced security guardrails:
   - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
-  - `toolResultTreatment`: How tool outputs are handled:
-    - `"trusted"`: Tool outputs are automatically trusted
+  - `toolResultTreatment`: How tool outputs are handled (default: "untrusted"):
+    - `"trusted"`: Tool outputs are automatically marked as trusted
     - `"sanitize_with_dual_llm"`: Tool outputs go through dual LLM sanitization before use
     - `"untrusted"`: Tool outputs are marked as untrusted data
+  - This field replaces the deprecated `data_is_trusted_by_default` field
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents
   - Stores argument path, operator, value, action, and reason

@@ -17,12 +17,6 @@ import config from "@/lib/config";
 
 const { proxyUrl: apiProxyUrl } = config.api;
 
-const providerDisplayNames: Record<SupportedProviders, string> = {
-  openai: "OpenAI",
-  gemini: "Gemini",
-  anthropic: "Anthropic",
-};
-
 interface ProxyConnectionInstructionsProps {
   agentId?: string;
 }

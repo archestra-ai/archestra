@@ -173,8 +173,8 @@ export function ToolResultPolicies({
           <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
           <p className="text-sm text-muted-foreground">
             Tool results impact agent decisions and actions. This policy allows
-            to mark tool results as &ldquo;trusted&rdquo; or &ldquo;untrusted&rdquo; to prevent agent
-            acting on untrusted data.{" "}
+            to mark tool results as &ldquo;trusted&rdquo; or
+            &ldquo;untrusted&rdquo; to prevent agent acting on untrusted data.{" "}
             <a
               href="https://www.archestra.ai/docs/platform-dynamic-tools"
               target="_blank"
@@ -194,7 +194,9 @@ export function ToolResultPolicies({
           </div>
           <Select
             value={tool.toolResultTreatment}
-            onValueChange={(value: "trusted" | "sanitize_with_dual_llm" | "untrusted") => {
+            onValueChange={(
+              value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
+            ) => {
               toolPatchMutation.mutate({
                 id: tool.id,
                 toolResultTreatment: value,
@@ -270,7 +272,9 @@ export function ToolResultPolicies({
                 variant="ghost"
                 size="sm"
                 className="hover:text-red-500 ml-2"
-                onClick={() => toolResultPoliciesDeleteMutation.mutate(policy.id)}
+                onClick={() =>
+                  toolResultPoliciesDeleteMutation.mutate(policy.id)
+                }
               >
                 <Trash2Icon className="w-4 h-4" />
               </Button>

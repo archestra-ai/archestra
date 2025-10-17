@@ -534,18 +534,17 @@ function ToolsList({
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!hasSelection}
-                  >
+                  <Button size="sm" variant="outline" disabled={!hasSelection}>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() =>
-                      handleBulkAction("toolResultTreatment", "sanitize_with_dual_llm")
+                      handleBulkAction(
+                        "toolResultTreatment",
+                        "sanitize_with_dual_llm",
+                      )
                     }
                   >
                     Sanitize with Dual LLM

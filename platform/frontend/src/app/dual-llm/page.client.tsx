@@ -218,9 +218,9 @@ function DualLLMContent({
             </h1>
             <p className="text-sm text-muted-foreground">
               The Dual LLM quarantine pattern protects your main agent from
-              prompt injection attacks by isolating untrusted data in a
-              separate agent that can only respond via structured multiple
-              choice answers.{" "}
+              prompt injection attacks by isolating untrusted data in a separate
+              agent that can only respond via structured multiple choice
+              answers.{" "}
               <a
                 href="https://archestra.ai/docs/platform-dual-llm"
                 target="_blank"

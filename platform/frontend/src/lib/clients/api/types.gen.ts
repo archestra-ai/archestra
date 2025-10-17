@@ -3658,7 +3658,7 @@ export type GetToolsResponses = {
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
 export type UpdateToolData = {
-    body: {
+    body?: {
         id?: string;
         agentId?: string;
         name?: string;
@@ -3679,7 +3679,7 @@ export type UpdateToolData = {
         };
         description?: string | null;
         allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt?: unknown;
         updatedAt?: unknown;
     };

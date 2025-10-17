@@ -242,6 +242,7 @@ platform/
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
 │                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
+│                   ├── dual-llm-client.ts     # Provider-agnostic LLM client interface for dual LLM pattern
 │                   └── dual-llm-subagent.ts  # Dual LLM pattern implementation for quarantining untrusted data
 ├── frontend/          # Next.js web application
 │   └── src/
@@ -265,7 +266,9 @@ The platform implements the Dual LLM Quarantine Pattern to prevent prompt inject
 - **Quarantined Agent**: Examines untrusted data but can only respond with structured multiple choice answers
 - **Information Flow**: Controlled Q&A rounds between agents (configurable max rounds)
 - **Configuration**: Manage prompts and settings at http://localhost:3000/dual-llm
-- **Implementation**: See `platform/backend/src/routes/proxy/utils/dual-llm-subagent.ts`
+- **Implementation**: 
+  - `dual-llm-subagent.ts`: Core dual LLM pattern implementation
+  - `dual-llm-client.ts`: Provider-agnostic interface supporting both OpenAI and Anthropic
 - **Database**: 
   - Configuration stored in `dual_llm_config` table
   - Results stored in `dual_llm_result` table for auditing
@@ -302,6 +305,7 @@ The production backend provides:
   - Requires `ANTHROPIC_API_KEY` environment variable
   - Anthropic API requests require `x-api-key` header with API key
   - Tool invocation policies evaluation now supports Anthropic format
+  - Dual LLM pattern fully supported for quarantining untrusted data
   - Note: Streaming support coming soon
 
 #### REST API Endpoints

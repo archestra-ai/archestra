@@ -68,14 +68,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectAgentSchema,
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       try {
-        const agent = await AgentModel.create(request.body);
-        return reply.send(agent);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        return reply.send(await AgentModel.create(request.body, user.id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -101,14 +112,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectAgentSchema,
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
       try {
-        const agent = await AgentModel.findById(id);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agent = await AgentModel.findById(
+          request.params.id,
+          user.id,
+          user.isAdmin,
+        );
 
         if (!agent) {
           return reply.status(404).send({
@@ -143,7 +170,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: InsertAgentSchema.omit({
+        body: UpdateAgentSchema.omit({
           id: true,
           createdAt: true,
           updatedAt: true,

@@ -11,7 +11,9 @@ export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),
   usersWithAccess: z.array(z.string()),
 });
-export const InsertAgentSchema = createInsertSchema(schema.agentsTable);
+export const InsertAgentSchema = createInsertSchema(schema.agentsTable).extend({
+  usersWithAccess: z.array(z.string()),
+});
 
 export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable).extend({
   usersWithAccess: z.array(z.string()),

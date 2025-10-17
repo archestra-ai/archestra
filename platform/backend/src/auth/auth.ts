@@ -10,6 +10,7 @@ import { ac, adminRole, memberRole } from "./access-control";
 
 const {
   baseURL,
+  production,
   auth: { secret },
 } = config;
 
@@ -57,7 +58,7 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
-      secure: true,
+      secure: production, // Only use secure cookies in production (HTTPS required)
     },
   },
 

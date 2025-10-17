@@ -242,6 +242,7 @@ platform/
 │                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
 │                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
+│                   ├── dual-llm-client.ts     # Provider-agnostic LLM client interface for dual LLM pattern
 │                   └── dual-llm-subagent.ts  # Dual LLM pattern implementation for quarantining untrusted data
 ├── frontend/          # Next.js web application
 │   └── src/
@@ -265,11 +266,16 @@ The platform implements the Dual LLM Quarantine Pattern to prevent prompt inject
 - **Quarantined Agent**: Examines untrusted data but can only respond with structured multiple choice answers
 - **Information Flow**: Controlled Q&A rounds between agents (configurable max rounds)
 - **Configuration**: Manage prompts and settings at http://localhost:3000/dual-llm
-- **Implementation**: See `platform/backend/src/routes/proxy/utils/dual-llm-subagent.ts`
+- **Implementation**: 
+  - `dual-llm-subagent.ts`: Core dual LLM pattern implementation
+  - `dual-llm-client.ts`: Provider-agnostic interface supporting both OpenAI and Anthropic
 - **Database**: 
   - Configuration stored in `dual_llm_config` table
   - Results stored in `dual_llm_result` table for auditing
-- **Usage**: Automatically invoked when processing untrusted tool outputs if enabled in configuration
+- **Usage**: 
+  - Automatically invoked when tool's `toolResultTreatment` is set to "sanitize_with_dual_llm"
+  - Can be triggered by trusted data policies with action "sanitize_with_dual_llm"
+  - Provides an additional security layer for handling potentially malicious tool outputs
 
 ### Development Orchestration
 
@@ -299,6 +305,7 @@ The production backend provides:
   - Requires `ANTHROPIC_API_KEY` environment variable
   - Anthropic API requests require `x-api-key` header with API key
   - Tool invocation policies evaluation now supports Anthropic format
+  - Dual LLM pattern fully supported for quarantining untrusted data
   - Note: Streaming support coming soon
 
 #### REST API Endpoints
@@ -381,6 +388,9 @@ The backend integrates advanced security guardrails:
     3. Process continues for configured number of rounds (maxRounds)
     4. Final summary is generated based on the Q&A conversation
   - Results stored in database for auditing and analysis
+  - Can be triggered via:
+    - Tool `toolResultTreatment` set to "sanitize_with_dual_llm"
+    - Trusted data policy action "sanitize_with_dual_llm"
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
@@ -388,12 +398,13 @@ The backend integrates advanced security guardrails:
   - Tools can be configured with:
     - `allow_usage_when_untrusted_data_is_present`: Allow tool to run with untrusted data
     - `data_is_trusted_by_default`: Mark tool outputs as trusted by default
-- **Trusted Data Policies**: Mark specific data patterns as trusted or blocked
+- **Trusted Data Policies**: Mark specific data patterns as trusted, blocked, or for sanitization
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
   - Actions:
-    - `allow`: Mark data as trusted
+    - `mark_as_trusted`: Mark data as trusted
     - `block_always`: Prevent data from reaching LLM (blocked data is filtered out before sending to the model)
+    - `sanitize_with_dual_llm`: Apply dual LLM sanitization to potentially untrusted data
 - **Taint Analysis**: Tracks untrusted data through the system
 - **Database Persistence**: All interactions stored in PostgreSQL with direct agent links
 
@@ -407,11 +418,16 @@ The backend integrates advanced security guardrails:
   - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
+  - `toolResultTreatment`: How tool outputs are handled (default: "untrusted"):
+    - `"trusted"`: Tool outputs are automatically marked as trusted
+    - `"sanitize_with_dual_llm"`: Tool outputs go through dual LLM sanitization before use
+    - `"untrusted"`: Tool outputs are marked as untrusted data
+  - This field replaces the deprecated `data_is_trusted_by_default` field
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents
   - Stores argument path, operator, value, action, and reason
-- **TrustedDataPolicy**: Policies for marking data as trusted or blocked
-  - Stores attribute path, operator, value, and action ("mark_as_trusted" or "block_always")
+- **TrustedDataPolicy**: Policies for marking data as trusted, blocked, or for sanitization
+  - Stores attribute path, operator, value, and action ("mark_as_trusted", "block_always", or "sanitize_with_dual_llm")
 - **AgentToolInvocationPolicy**: Junction table linking agents to their policies
 - **DualLlmConfig**: Configuration for dual LLM quarantine pattern
   - Stores prompts for main agent, quarantined agent, and summary generation

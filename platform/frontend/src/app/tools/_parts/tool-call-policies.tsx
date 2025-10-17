@@ -198,7 +198,7 @@ export function ToolCallPolicies({
         disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
         disabledText="This tool has no parameters"
       >
-        <Plus className="w-3.5 h-3.5 mr-1" /> Add policy for tool parameters
+        <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters
       </ButtonWithTooltip>
     </div>
   );

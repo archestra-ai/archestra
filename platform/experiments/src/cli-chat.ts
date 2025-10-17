@@ -45,6 +45,7 @@ const parseArgs = (): {
   stream: boolean;
   model: string;
   provider: Provider;
+  agentId: string | null;
 } => {
   if (process.argv.includes("--help")) {
     console.log(`
@@ -54,6 +55,7 @@ Options:
 --stream                  Stream the response
 --model <model>           The model to use for the chat (default: gpt-4o for openai, gemini-2.5-flash for gemini)
 --provider <provider>     The provider to use (openai or gemini, default: openai)
+--agent-id <uuid>         The agent ID to use (optional, creates agent-specific proxy URL)
 --debug                   Print debug messages
 --help                    Print this help message
     `);
@@ -62,6 +64,7 @@ Options:
 
   const modelIndex = process.argv.indexOf("--model");
   const providerIndex = process.argv.indexOf("--provider");
+  const agentIdIndex = process.argv.indexOf("--agent-id");
 
   const provider = (
     providerIndex !== -1 ? process.argv[providerIndex + 1] : "openai"
@@ -77,6 +80,7 @@ Options:
     stream: process.argv.includes("--stream"),
     model: modelIndex !== -1 ? process.argv[modelIndex + 1] : defaultModel,
     provider,
+    agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
   };
 };
 
@@ -319,14 +323,19 @@ const cliChatWithOpenAI = async (options: {
   debug: boolean;
   stream: boolean;
   model: string;
+  agentId: string | null;
 }) => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not set");
   }
 
+  const baseURL = options.agentId
+    ? `${ARCHESTRA_API_BASE_PROXY_URL}/openai/${options.agentId}`
+    : `${ARCHESTRA_API_BASE_PROXY_URL}/openai`;
+
   const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-    baseURL: `${ARCHESTRA_API_BASE_PROXY_URL}/openai`,
+    baseURL,
   });
 
   const { includeExternalEmail, includeMaliciousEmail, debug, stream, model } =
@@ -488,15 +497,20 @@ const cliChatWithGemini = async (options: {
   debug: boolean;
   stream: boolean;
   model: string;
+  agentId: string | null;
 }) => {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set");
   }
 
+  const baseUrl = options.agentId
+    ? `${ARCHESTRA_API_BASE_PROXY_URL}/gemini/${options.agentId}`
+    : `${ARCHESTRA_API_BASE_PROXY_URL}/gemini`;
+
   const gemini = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
     httpOptions: {
-      baseUrl: `${ARCHESTRA_API_BASE_PROXY_URL}/gemini`,
+      baseUrl,
       apiVersion: "",
       headers: {
         "User-Agent": USER_AGENT,

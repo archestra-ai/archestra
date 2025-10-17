@@ -1,3 +1,4 @@
+import { createTestAdmin, createTestUser } from "@/test-utils";
 import AgentModel from "./agent";
 import InteractionModel from "./interaction";
 
@@ -6,7 +7,10 @@ describe("InteractionModel", () => {
 
   beforeEach(async () => {
     // Create test agent
-    const agent = await AgentModel.create({ name: "Test Agent" });
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      usersWithAccess: [],
+    });
     agentId = agent.id;
   });
 
@@ -153,7 +157,10 @@ describe("InteractionModel", () => {
   describe("getAllInteractionsForAgent", () => {
     test("returns all interactions for a specific agent", async () => {
       // Create another agent
-      const otherAgent = await AgentModel.create({ name: "Other Agent" });
+      const otherAgent = await AgentModel.create({
+        name: "Other Agent",
+        usersWithAccess: [],
+      });
 
       // Create interactions for both agents
       await InteractionModel.create({
@@ -214,6 +221,213 @@ describe("InteractionModel", () => {
         await InteractionModel.getAllInteractionsForAgent(agentId);
       expect(agentInteractions).toHaveLength(1);
       expect(agentInteractions[0].agentId).toBe(agentId);
+    });
+  });
+
+  describe("Access Control", () => {
+    test("admin can see all interactions", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
+      const agent1 = await AgentModel.create(
+        { name: "Agent 1", usersWithAccess: [] },
+        user1Id,
+      );
+      const agent2 = await AgentModel.create(
+        { name: "Agent 2", usersWithAccess: [] },
+        user2Id,
+      );
+
+      await InteractionModel.create({
+        agentId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        agentId: agent2.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAll(adminId, true);
+      expect(interactions).toHaveLength(2);
+    });
+
+    test("member only sees interactions for accessible agents", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
+      const agent1 = await AgentModel.create(
+        { name: "Agent 1", usersWithAccess: [] },
+        user1Id,
+      );
+      const agent2 = await AgentModel.create(
+        { name: "Agent 2", usersWithAccess: [] },
+        user2Id,
+      );
+
+      await InteractionModel.create({
+        agentId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await InteractionModel.create({
+        agentId: agent2.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAll(user1Id, false);
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].agentId).toBe(agent1.id);
+    });
+
+    test("member with no access sees no interactions", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
+      const agent1 = await AgentModel.create(
+        { name: "Agent 1", usersWithAccess: [] },
+        user1Id,
+      );
+
+      await InteractionModel.create({
+        agentId: agent1.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const interactions = await InteractionModel.findAll(user2Id, false);
+      expect(interactions).toHaveLength(0);
+    });
+
+    test("findById returns interaction for admin", async () => {
+      const user1Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        user1Id,
+      );
+
+      const interaction = await InteractionModel.create({
+        agentId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(
+        interaction.id,
+        adminId,
+        true,
+      );
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(interaction.id);
+    });
+
+    test("findById returns interaction for user with agent access", async () => {
+      const user1Id = await createTestUser();
+
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        user1Id,
+      );
+
+      const interaction = await InteractionModel.create({
+        agentId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(
+        interaction.id,
+        user1Id,
+        false,
+      );
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(interaction.id);
+    });
+
+    test("findById returns null for user without agent access", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        user1Id,
+      );
+
+      const interaction = await InteractionModel.create({
+        agentId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(
+        interaction.id,
+        user2Id,
+        false,
+      );
+      expect(found).toBeNull();
     });
   });
 });

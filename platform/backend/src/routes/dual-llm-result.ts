@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getUserFromRequest } from "@/auth/utils";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
   ErrorResponseSchema,
@@ -56,15 +57,31 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: z.array(SelectDualLlmResultSchema),
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { interactionId } }, reply) => {
+    async (request, reply) => {
       try {
-        // Get the interaction
-        const interaction = await InteractionModel.findById(interactionId);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        // Get the interaction with access control
+        const interaction = await InteractionModel.findById(
+          request.params.interactionId,
+          user.id,
+          user.isAdmin,
+        );
         if (!interaction) {
           return reply.status(404).send({
             error: {

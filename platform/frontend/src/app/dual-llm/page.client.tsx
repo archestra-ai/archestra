@@ -39,7 +39,6 @@ function DualLLMContent({
   const { data: config } = useDualLlmConfig({ initialData });
   const updateConfig = useUpdateDualLlmConfig();
 
-  const [enabled, setEnabled] = useState(config?.enabled ?? false);
   const [mainAgentPrompt, setMainAgentPrompt] = useState(
     config?.mainAgentPrompt || "",
   );
@@ -194,7 +193,7 @@ function DualLLMContent({
     updateConfig.mutate({
       id: config.id,
       data: {
-        enabled,
+        enabled: true, // Always keep enabled
         mainAgentPrompt,
         quarantinedAgentPrompt,
         summaryPrompt,
@@ -204,7 +203,6 @@ function DualLLMContent({
   };
 
   const hasChanges =
-    enabled !== config?.enabled ||
     mainAgentPrompt !== config?.mainAgentPrompt ||
     quarantinedAgentPrompt !== config?.quarantinedAgentPrompt ||
     summaryPrompt !== config?.summaryPrompt ||
@@ -214,32 +212,24 @@ function DualLLMContent({
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight mb-2">
-                Dual LLM Agent Configuration
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                The Dual LLM quarantine pattern protects your main agent from
-                prompt injection attacks by isolating untrusted data in a
-                separate agent that can only respond via structured multiple
-                choice answers.{" "}
-                <a
-                  href="https://archestra.ai/docs/platform-dual-llm"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Read the docs →
-                </a>
-              </p>
-            </div>
-            <Button
-              onClick={handleSave}
-              disabled={!hasChanges || updateConfig.isPending}
-            >
-              {updateConfig.isPending ? "Saving..." : "Save changes"}
-            </Button>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight mb-2">
+              Dual LLM Agent Configuration
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              The Dual LLM quarantine pattern protects your main agent from
+              prompt injection attacks by isolating untrusted data in a separate
+              agent that can only respond via structured multiple choice
+              answers.{" "}
+              <a
+                href="https://archestra.ai/docs/platform-dual-llm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Read the docs →
+              </a>
+            </p>
           </div>
         </div>
       </div>
@@ -437,36 +427,6 @@ function DualLLMContent({
               </p>
             </div>
           </div>
-          <div className="border border-border rounded-lg p-6 bg-card">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="enabled" className="text-sm font-semibold">
-                  Enable Dual LLM Analysis
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, untrusted data will be processed through the
-                  dual LLM quarantine pattern
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="enabled"
-                  checked={enabled}
-                  onCheckedChange={setEnabled}
-                />
-                {enabled !== config?.enabled && (
-                  <Button
-                    size="sm"
-                    onClick={handleSave}
-                    disabled={updateConfig.isPending}
-                  >
-                    {updateConfig.isPending ? "Saving..." : "Save"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="border border-border rounded-lg p-6 bg-card">
             <Label htmlFor="max-rounds" className="text-sm font-semibold">
               Max Quarantine Rounds

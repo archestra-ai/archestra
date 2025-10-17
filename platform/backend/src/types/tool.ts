@@ -15,8 +15,15 @@ const ToolParametersContentSchema = z.union([
   OpenAi.Tools.FunctionDefinitionParametersSchema,
 ]);
 
+export const ToolResultTreatmentSchema = z.enum([
+  "trusted",
+  "sanitize_with_dual_llm",
+  "untrusted",
+]);
+
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
+  toolResultTreatment: ToolResultTreatmentSchema,
 });
 
 export const SelectToolWithAgentSchema = SelectToolSchema.omit({
@@ -30,9 +37,11 @@ export const SelectToolWithAgentSchema = SelectToolSchema.omit({
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
+  toolResultTreatment: ToolResultTreatmentSchema.optional(),
 });
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
-  parameters: ToolParametersContentSchema,
+  parameters: ToolParametersContentSchema.optional(),
+  toolResultTreatment: ToolResultTreatmentSchema.optional(),
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
@@ -41,3 +50,4 @@ export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 
 export type ToolParametersContent = z.infer<typeof ToolParametersContentSchema>;
+export type ToolResultTreatment = z.infer<typeof ToolResultTreatmentSchema>;

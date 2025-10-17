@@ -1,8 +1,4 @@
-import {
-  DualLlmConfigModel,
-  DualLlmResultModel,
-  TrustedDataPolicyModel,
-} from "@/models";
+import { DualLlmResultModel, TrustedDataPolicyModel } from "@/models";
 import type { OpenAi } from "@/types";
 import { DualLlmSubagent } from "../dual-llm-subagent";
 
@@ -52,8 +48,6 @@ export const evaluateIfContextIsTrusted = async (
   filteredMessages: Messages;
   contextIsTrusted: boolean;
 }> => {
-  // Load dual LLM configuration to check if analysis is enabled
-  const dualLlmConfig = await DualLlmConfigModel.getDefault();
   const filteredMessages: Messages = [];
   let hasUntrustedData = false;
 
@@ -78,7 +72,7 @@ export const evaluateIfContextIsTrusted = async (
 
       if (toolName) {
         // Evaluate trusted data policy dynamically
-        const { isTrusted, isBlocked, reason } =
+        const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
           await TrustedDataPolicyModel.evaluate(agentId, toolName, toolResult);
 
         if (!isTrusted) {
@@ -90,7 +84,7 @@ export const evaluateIfContextIsTrusted = async (
             ...message,
             content: `[Content blocked by policy${reason ? `: ${reason}` : ""}]`,
           });
-        } else if (dualLlmConfig.enabled) {
+        } else if (shouldSanitizeWithDualLlm) {
           // First, check if this tool call has already been analyzed
           const existingResult = await DualLlmResultModel.findByToolCallId(
             message.tool_call_id,
@@ -112,8 +106,11 @@ export const evaluateIfContextIsTrusted = async (
              * 4. Returns a safe summary instead of raw untrusted data
              */
             const dualLlmSubagent = await DualLlmSubagent.create(
-              messages,
-              message,
+              {
+                provider: "openai",
+                messages,
+                currentMessage: message,
+              },
               agentId,
               apiKey,
             );
@@ -127,6 +124,7 @@ export const evaluateIfContextIsTrusted = async (
               content: await dualLlmSubagent.processWithMainAgent(),
             });
           }
+          hasUntrustedData = false;
         } else {
           filteredMessages.push(message);
         }

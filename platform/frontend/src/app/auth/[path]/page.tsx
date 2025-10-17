@@ -76,6 +76,10 @@ export default async function AuthPage({
               footer: "hidden",
               form: { forgotPasswordLink: "hidden" },
             }}
+            localization={{
+              EMAIL_PLACEHOLDER: "admin@example.com",
+              PASSWORD_PLACEHOLDER: "password",
+            }}
           />
         </main>
       </Suspense>

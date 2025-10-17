@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -10,6 +10,7 @@ import type {
   PaginationQuery,
   SortingQuery,
 } from "@/types";
+import AgentAccessControlModel from "./agent-access-control";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {
@@ -21,11 +22,31 @@ class InteractionModel {
     return interaction;
   }
 
-  static async findAll(): Promise<Interaction[]> {
-    const rows = await db
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<Interaction[]> {
+    let query = db
       .select()
       .from(schema.interactionsTable)
-      .orderBy(desc(schema.interactionsTable.createdAt));
+      .orderBy(desc(schema.interactionsTable.createdAt))
+      .$dynamic();
+
+    // Apply access control filtering for non-admins
+    if (userId && !isAdmin) {
+      const accessibleAgentIds =
+        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.interactionsTable.agentId, accessibleAgentIds),
+      );
+    }
+
+    const rows = await query;
     return rows as Interaction[];
   }
 
@@ -35,18 +56,40 @@ class InteractionModel {
   static async findAllPaginated(
     pagination: PaginationQuery,
     sorting?: SortingQuery,
+    userId?: string,
+    isAdmin?: boolean,
   ): Promise<PaginatedResult<Interaction>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = InteractionModel.getOrderByClause(sorting);
+
+    // Build where clause for access control
+    let whereClause: SQL | undefined;
+    if (userId && !isAdmin) {
+      const accessibleAgentIds =
+        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+
+      whereClause = inArray(
+        schema.interactionsTable.agentId,
+        accessibleAgentIds,
+      );
+    }
 
     const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(schema.interactionsTable)
+        .where(whereClause)
         .orderBy(orderByClause)
         .limit(pagination.limit)
         .offset(pagination.offset),
-      db.select({ total: count() }).from(schema.interactionsTable),
+      db
+        .select({ total: count() })
+        .from(schema.interactionsTable)
+        .where(whereClause),
     ]);
 
     return createPaginatedResult(
@@ -79,13 +122,33 @@ class InteractionModel {
     }
   }
 
-  static async findById(id: string): Promise<Interaction | null> {
+  static async findById(
+    id: string,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<Interaction | null> {
     const [interaction] = await db
       .select()
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.id, id));
 
-    return (interaction as Interaction) || null;
+    if (!interaction) {
+      return null;
+    }
+
+    // Check access control for non-admins
+    if (userId && !isAdmin) {
+      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+        userId,
+        interaction.agentId,
+        false,
+      );
+      if (!hasAccess) {
+        return null;
+      }
+    }
+
+    return interaction as Interaction;
   }
 
   static async getAllInteractionsForAgent(

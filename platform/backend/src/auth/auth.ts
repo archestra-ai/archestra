@@ -1,3 +1,4 @@
+import { ac, adminRole, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -6,7 +7,6 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ac, adminRole, memberRole } from "./access-control";
 
 const {
   baseURL,

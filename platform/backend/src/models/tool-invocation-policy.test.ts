@@ -12,7 +12,10 @@ describe("ToolInvocationPolicyModel", () => {
 
   beforeEach(async () => {
     // Create test agent
-    const agent = await AgentModel.create({ name: "Test Agent" });
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      usersWithAccess: [],
+    });
     agentId = agent.id;
 
     // Create test tool
@@ -22,7 +25,7 @@ describe("ToolInvocationPolicyModel", () => {
       parameters: {},
       description: "Test tool",
       allowUsageWhenUntrustedDataIsPresent: false,
-      dataIsTrustedByDefault: false,
+      toolResultTreatment: "untrusted",
     });
 
     const tool = await ToolModel.findByName(toolName);
@@ -153,7 +156,7 @@ describe("ToolInvocationPolicyModel", () => {
           parameters: {},
           description: "Tool that allows untrusted data",
           allowUsageWhenUntrustedDataIsPresent: true,
-          dataIsTrustedByDefault: false,
+          toolResultTreatment: "untrusted",
         });
 
         const result = await ToolInvocationPolicyModel.evaluate(
@@ -175,7 +178,7 @@ describe("ToolInvocationPolicyModel", () => {
           parameters: {},
           description: "Tool that allows untrusted data",
           allowUsageWhenUntrustedDataIsPresent: true,
-          dataIsTrustedByDefault: false,
+          toolResultTreatment: "untrusted",
         });
 
         const tool = await ToolModel.findByName(

@@ -17,6 +17,8 @@ export const BLOCKED_DEMO_INTERACTION_ID =
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
+  CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
+  AgentActionsDropdownTrigger: "agent-actions-dropdown-trigger",
   DeleteAgentButton: "delete-agent-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
@@ -27,3 +29,5 @@ export const DEFAULT_ADMIN_PASSWORD = "password";
 export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
+
+export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";

@@ -1,11 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getUserFromRequest } from "@/auth/utils";
 import { AgentModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertAgentSchema,
   RouteId,
   SelectAgentSchema,
+  UpdateAgentSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -19,13 +21,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         response: {
           200: z.array(SelectAgentSchema),
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async (_, reply) => {
+    async (request, reply) => {
       try {
-        const agents = await AgentModel.findAll();
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agents = await AgentModel.findAll(user.id, user.isAdmin);
         return reply.send(agents);
       } catch (error) {
         fastify.log.error(error);
@@ -54,14 +68,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectAgentSchema,
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       try {
-        const agent = await AgentModel.create(request.body);
-        return reply.send(agent);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        return reply.send(await AgentModel.create(request.body, user.id));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -87,14 +112,30 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectAgentSchema,
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
       try {
-        const agent = await AgentModel.findById(id);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agent = await AgentModel.findById(
+          request.params.id,
+          user.id,
+          user.isAdmin,
+        );
 
         if (!agent) {
           return reply.status(404).send({
@@ -129,7 +170,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: InsertAgentSchema.omit({
+        body: UpdateAgentSchema.omit({
           id: true,
           createdAt: true,
           updatedAt: true,

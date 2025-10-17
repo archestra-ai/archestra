@@ -5,7 +5,13 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@shared"],
   devIndicators: {
     position: "bottom-right",
-  }
+  },
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+    incomingRequests: true
+  },
 };
 
 export default nextConfig;

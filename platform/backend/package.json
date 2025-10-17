@@ -10,6 +10,7 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
+    "dev:debug": "tsup --watch --onSuccess \"node --inspect-brk dist/server.js\"",
     "test": "vitest",
     "lint": "biome check",
     "lint:fix": "biome check --write",

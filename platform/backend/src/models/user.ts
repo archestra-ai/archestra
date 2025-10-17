@@ -1,6 +1,6 @@
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
 import { eq } from "drizzle-orm";
-import { auth } from "@/auth";
+import { auth } from "@/auth/auth";
 import db from "@/database";
 import { user } from "@/database/schemas";
 

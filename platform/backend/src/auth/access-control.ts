@@ -1,0 +1,36 @@
+import type { Action, Resource } from "@shared";
+import { createAccessControl } from "better-auth/plugins/access";
+
+const allAvailableActions: Record<Resource, Action[]> = {
+  agent: ["create", "read", "update", "delete"],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  dualLlmConfig: ["create", "read", "update", "delete"],
+  dualLlmResult: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
+  settings: ["read", "update"],
+  organization: ["create", "read", "update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create"],
+};
+
+export const ac = createAccessControl(allAvailableActions);
+
+// all permissions granted
+export const adminRole = ac.newRole({
+  ...allAvailableActions,
+});
+
+// all but the following:
+// - read-only access for agents
+// - no access to settings, organization, member, dual llm and invitation resources
+export const memberRole = ac.newRole({
+  ...allAvailableActions,
+  agent: ["read"],
+  dualLlmConfig: [],
+  dualLlmResult: [],
+  settings: [],
+  organization: [],
+  member: [],
+  invitation: [],
+});

@@ -9,4 +9,5 @@ export const createClientConfig: CreateClientConfig = (config) => ({
   ...config,
   baseUrl: env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL") || "http://localhost:9000",
   credentials: "include",
+  throwOnError: true,
 });

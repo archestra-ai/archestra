@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ac, adminRole, memberRole, ownerRole } from "./permission";
+import { ac, adminRole, memberRole } from "./access-control";
 
 export const auth = betterAuth({
   baseURL: config.baseURL,
@@ -16,7 +16,6 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: false, // Disable organization creation by users
       ac,
       roles: {
-        owner: ownerRole,
         admin: adminRole,
         member: memberRole,
       },
@@ -239,7 +238,7 @@ export const auth = betterAuth({
                 id: crypto.randomUUID(),
                 organizationId: org[0].id,
                 userId: user.id,
-                role: "owner",
+                role: "admin",
                 createdAt: new Date(),
               });
 

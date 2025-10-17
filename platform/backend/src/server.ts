@@ -2,7 +2,6 @@ import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
 import {
-  type FastifyPluginAsyncZod,
   jsonSchemaTransform,
   jsonSchemaTransformObject,
   serializerCompiler,
@@ -10,8 +9,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { authMiddleware } from "@/auth/auth-middleware";
 import config from "@/config";
-import { authMiddleware, authMiddleware2 } from "@/middleware/auth-middleware";
 import {
   Anthropic,
   Gemini,
@@ -118,8 +117,7 @@ const start = async () => {
       version,
     }));
 
-    fastify.addHook("preHandler", authMiddleware);
-    fastify.addHook("preHandler", authMiddleware2.handle);
+    fastify.addHook("preHandler", authMiddleware.handle);
 
     fastify.register(routes.authRoutes);
     fastify.register(routes.anthropicProxyRoutes);

@@ -7,6 +7,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  type RowSelectionState,
   type SortingState,
   useReactTable,
   type VisibilityState,
@@ -39,6 +40,9 @@ interface DataTableProps<TData, TValue> {
   onSortingChange?: (sorting: SortingState) => void;
   manualSorting?: boolean;
   sorting?: SortingState;
+  onRowClick?: (row: TData, event: React.MouseEvent) => void;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -50,6 +54,9 @@ export function DataTable<TData, TValue>({
   onSortingChange,
   manualSorting = false,
   sorting: controlledSorting,
+  onRowClick,
+  rowSelection,
+  onRowSelectionChange,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -70,6 +77,15 @@ export function DataTable<TData, TValue>({
         setInternalSorting(newSorting);
       }
     },
+    onRowSelectionChange: (updater) => {
+      if (!onRowSelectionChange) return;
+
+      const currentSelection = table.getState().rowSelection || {};
+      const newSelection =
+        typeof updater === "function" ? updater(currentSelection) : updater;
+
+      onRowSelectionChange(newSelection);
+    },
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -83,9 +99,13 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       columnVisibility,
-      pagination: pagination
-        ? { pageIndex: pagination.pageIndex, pageSize: pagination.pageSize }
-        : undefined,
+      rowSelection: rowSelection || {},
+      ...(pagination && {
+        pagination: {
+          pageIndex: pagination.pageIndex,
+          pageSize: pagination.pageSize,
+        },
+      }),
     },
     onPaginationChange: (updater) => {
       if (!onPaginationChange) return;
@@ -105,6 +125,9 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full space-y-4">
+      {(pagination || !manualPagination) && (
+        <DataTablePagination table={table} totalRows={pagination?.total} />
+      )}
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
@@ -112,7 +135,12 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead
+                      key={header.id}
+                      style={{
+                        width: header.getSize(),
+                      }}
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -131,9 +159,19 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className={
+                    onRowClick ? "cursor-pointer hover:bg-muted/50" : ""
+                  }
+                  onClick={(e) => onRowClick?.(row.original, e)}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      data-column-id={cell.column.id}
+                      style={{
+                        width: cell.column.getSize(),
+                      }}
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
@@ -155,7 +193,9 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} totalRows={pagination?.total} />
+      {(pagination || !manualPagination) && (
+        <DataTablePagination table={table} totalRows={pagination?.total} />
+      )}
     </div>
   );
 }

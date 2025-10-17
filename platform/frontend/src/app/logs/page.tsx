@@ -1,3 +1,5 @@
+import type { ErrorExtended } from "@shared";
+import { ServerErrorFallback } from "@/components/error-fallback";
 import {
   type GetAgentsResponses,
   type GetInteractionsResponses,
@@ -56,6 +58,7 @@ export default async function LogsPageServer() {
     };
   } catch (error) {
     console.error(error);
+    return <ServerErrorFallback error={error as ErrorExtended} />;
   }
   return <LogsPage initialData={initialData} />;
 }

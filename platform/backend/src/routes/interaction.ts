@@ -6,6 +6,7 @@ import {
   createSortingQuerySchema,
   ErrorResponseSchema,
   PaginationQuerySchema,
+  RouteId,
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
@@ -15,7 +16,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/interactions",
     {
       schema: {
-        operationId: "getInteractions",
+        operationId: RouteId.GetInteractions,
         description: "Get all interactions with pagination and sorting",
         tags: ["Interaction"],
         querystring: z
@@ -64,7 +65,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/interactions/:interactionId",
     {
       schema: {
-        operationId: "getInteraction",
+        operationId: RouteId.GetInteraction,
         description: "Get interaction by ID",
         tags: ["Interaction"],
         params: z.object({

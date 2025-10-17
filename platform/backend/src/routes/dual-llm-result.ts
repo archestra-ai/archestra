@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
   ErrorResponseSchema,
+  RouteId,
   SelectDualLlmResultSchema,
   UuidIdSchema,
 } from "@/types";
@@ -13,7 +14,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-results/by-tool-call-id/:toolCallId",
     {
       schema: {
-        operationId: "getDualLlmResultByToolCallId",
+        operationId: RouteId.GetDualLlmResultByToolCallId,
         description: "Get dual LLM result by tool call ID",
         tags: ["Dual LLM Results"],
         params: z.object({
@@ -47,7 +48,7 @@ const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/dual-llm-results/by-interaction/:interactionId",
     {
       schema: {
-        operationId: "getDualLlmResultsByInteraction",
+        operationId: RouteId.GetDualLlmResultsByInteraction,
         description: "Get all dual LLM results for an interaction",
         tags: ["Dual LLM Results"],
         params: z.object({

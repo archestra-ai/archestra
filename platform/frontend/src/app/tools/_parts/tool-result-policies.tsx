@@ -180,8 +180,10 @@ export function ToolResultPolicies({
         <div>
           <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
           <p className="text-sm text-muted-foreground">
-            Tool results impact agent decisions and actions. This policy allows to mark tool results as "trusted" or "untrusted" to prevent agent acting on untrusted data.
-            {' '}<a
+            Tool results impact agent decisions and actions. This policy allows
+            to mark tool results as "trusted" or "untrusted" to prevent agent
+            acting on untrusted data.{" "}
+            <a
               href="https://www.archestra.ai/docs/platform-dynamic-tools"
               target="_blank"
               rel="noopener noreferrer"
@@ -190,8 +192,7 @@ export function ToolResultPolicies({
               Read more about Dynamic Tools.
             </a>
           </p>
-          <p className="text-sm text-muted-foreground mt-2">
-          </p>
+          <p className="text-sm text-muted-foreground mt-2"></p>
         </div>
       </div>
       <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">

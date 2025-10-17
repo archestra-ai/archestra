@@ -23,9 +23,7 @@ export function ToolReadonlyDetails({
                   className="inline-flex items-center gap-1.5 bg-muted px-2 py-1 rounded text-xs"
                 >
                   <code className="font-medium text-foreground">{key}</code>
-                  <span className="text-muted-foreground">
-                    {value.type}
-                  </span>
+                  <span className="text-muted-foreground">{value.type}</span>
                   {isRequired && (
                     <span className="text-primary font-medium">*</span>
                   )}

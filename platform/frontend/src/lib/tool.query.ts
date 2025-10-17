@@ -26,9 +26,12 @@ export function useTools({
 export function useToolPatchMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (updatedTool: UpdateToolData["body"] & { id: string }) => {
-      const result = (await updateTool({ body: updatedTool, path: { id: updatedTool.id } }))
-        .data ?? null;
+    mutationFn: async (
+      updatedTool: UpdateToolData["body"] & { id: string },
+    ) => {
+      const result =
+        (await updateTool({ body: updatedTool, path: { id: updatedTool.id } }))
+          .data ?? null;
       return result;
     },
     onSuccess: (data, variables) => {
@@ -48,10 +51,10 @@ export function useToolPatchMutation() {
         const newTools = [...old];
         newTools[toolIndex] = {
           ...data,
-          agent: data.agent || existingTool.agent
+          agent: data.agent || existingTool.agent,
         };
         return newTools;
       });
-    }
+    },
   });
 }

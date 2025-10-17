@@ -35,22 +35,32 @@ export function ToolDetailsDialog({
                 {tool.name}
               </DialogTitle>
               {tool.description && (
-                <p className="text-sm text-muted-foreground mt-1">{tool.description}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {tool.description}
+                </p>
               )}
             </div>
             <div className="flex gap-6 text-sm ml-6">
               <div>
-                <div className="text-xs font-medium text-muted-foreground">Agent</div>
-                <div className="text-sm text-foreground mt-0.5">{tool.agent?.name || "-"}</div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Agent
+                </div>
+                <div className="text-sm text-foreground mt-0.5">
+                  {tool.agent?.name || "-"}
+                </div>
               </div>
               <div>
-                <div className="text-xs font-medium text-muted-foreground">Detected</div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Detected
+                </div>
                 <div className="text-sm text-foreground mt-0.5">
                   {formatDate({ date: tool.createdAt })}
                 </div>
               </div>
               <div>
-                <div className="text-xs font-medium text-muted-foreground">Updated</div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Updated
+                </div>
                 <div className="text-sm text-foreground mt-0.5">
                   {formatDate({ date: tool.updatedAt })}
                 </div>

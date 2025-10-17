@@ -79,10 +79,11 @@ export function DataTable<TData, TValue>({
     },
     onRowSelectionChange: (updater) => {
       if (!onRowSelectionChange) return;
-      
+
       const currentSelection = table.getState().rowSelection || {};
-      const newSelection = typeof updater === "function" ? updater(currentSelection) : updater;
-      
+      const newSelection =
+        typeof updater === "function" ? updater(currentSelection) : updater;
+
       onRowSelectionChange(newSelection);
     },
     getCoreRowModel: getCoreRowModel(),
@@ -134,7 +135,7 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead 
+                    <TableHead
                       key={header.id}
                       style={{
                         width: header.getSize(),
@@ -164,7 +165,7 @@ export function DataTable<TData, TValue>({
                   onClick={(e) => onRowClick?.(row.original, e)}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell 
+                    <TableCell
                       key={cell.id}
                       data-column-id={cell.column.id}
                       style={{

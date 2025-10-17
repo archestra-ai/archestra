@@ -48,8 +48,6 @@ export function DefaultCredentialsWarning({
       </AlertTitle>
       <AlertDescription className="text-xs mt-1">
         <p className="break-words">
-          Archestra's default admin credentials are enabled:
-          <br />
           <code className="inline-block break-all mx-0.5">
             - {DEFAULT_ADMIN_EMAIL}
           </code>

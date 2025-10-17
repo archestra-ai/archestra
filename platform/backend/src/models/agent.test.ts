@@ -1,3 +1,4 @@
+import { createTestAdmin, createTestUser } from "@/test-utils";
 import AgentModel from "./agent";
 import AgentAccessControlModel from "./agent-access-control";
 
@@ -11,7 +12,7 @@ describe("AgentModel", () => {
 
   describe("Access Control", () => {
     test("auto-grants creator access when agent is created", async () => {
-      const creatorUserId = "user-123";
+      const creatorUserId = await createTestUser();
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
         creatorUserId,
@@ -25,131 +26,155 @@ describe("AgentModel", () => {
     });
 
     test("grants access to additional users when provided", async () => {
-      const creatorUserId = "user-123";
-      const additionalUserIds = ["user-456", "user-789"];
+      const creatorUserId = await createTestUser();
+      const user2Id = await createTestUser();
+      const user3Id = await createTestUser();
 
       const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: additionalUserIds },
+        { name: "Test Agent", usersWithAccess: [user2Id, user3Id] },
         creatorUserId,
       );
 
       expect(agent.usersWithAccess).toContain(creatorUserId);
-      expect(agent.usersWithAccess).toContain("user-456");
-      expect(agent.usersWithAccess).toContain("user-789");
+      expect(agent.usersWithAccess).toContain(user2Id);
+      expect(agent.usersWithAccess).toContain(user3Id);
       expect(agent.usersWithAccess).toHaveLength(3);
     });
 
     test("admin can see all agents", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const user3Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
       await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
       await AgentModel.create(
         { name: "Agent 2", usersWithAccess: [] },
-        "user-2",
+        user2Id,
       );
       await AgentModel.create(
         { name: "Agent 3", usersWithAccess: [] },
-        "user-3",
+        user3Id,
       );
 
-      const agents = await AgentModel.findAll("admin-user", true);
+      const agents = await AgentModel.findAll(adminId, true);
       expect(agents).toHaveLength(3);
     });
 
     test("member only sees agents they have access to", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const user3Id = await createTestUser();
+
       const agent1 = await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
       await AgentModel.create(
         { name: "Agent 2", usersWithAccess: [] },
-        "user-2",
+        user2Id,
       );
       await AgentModel.create(
         { name: "Agent 3", usersWithAccess: [] },
-        "user-3",
+        user3Id,
       );
 
-      // Grant user-1 access to agent1 only (already has it as creator)
-      const agents = await AgentModel.findAll("user-1", false);
+      // user-1 only has access to agent1 (as creator)
+      const agents = await AgentModel.findAll(user1Id, false);
       expect(agents).toHaveLength(1);
       expect(agents[0].id).toBe(agent1.id);
     });
 
     test("member with no access sees empty list", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const user3Id = await createTestUser();
+
       await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
       await AgentModel.create(
         { name: "Agent 2", usersWithAccess: [] },
-        "user-2",
+        user2Id,
       );
 
-      const agents = await AgentModel.findAll("user-999", false);
+      const agents = await AgentModel.findAll(user3Id, false);
       expect(agents).toHaveLength(0);
     });
 
     test("findById returns agent for admin", async () => {
+      const user1Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
-      const foundAgent = await AgentModel.findById(
-        agent.id,
-        "admin-user",
-        true,
-      );
+      const foundAgent = await AgentModel.findById(agent.id, adminId, true);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
 
     test("findById returns agent for user with access", async () => {
+      const user1Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
-      const foundAgent = await AgentModel.findById(agent.id, "user-1", false);
+      const foundAgent = await AgentModel.findById(agent.id, user1Id, false);
       expect(foundAgent).not.toBeNull();
       expect(foundAgent?.id).toBe(agent.id);
     });
 
     test("findById returns null for user without access", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
-      const foundAgent = await AgentModel.findById(agent.id, "user-999", false);
+      const foundAgent = await AgentModel.findById(agent.id, user2Id, false);
       expect(foundAgent).toBeNull();
     });
 
     test("update syncs usersWithAccess correctly", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const user3Id = await createTestUser();
+
       const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: ["user-2"] },
-        "user-1",
+        { name: "Test Agent", usersWithAccess: [user2Id] },
+        user1Id,
       );
 
       expect(agent.usersWithAccess).toHaveLength(2); // user-1 (creator) + user-2
 
       // Update to only include user-3
       const updatedAgent = await AgentModel.update(agent.id, {
-        usersWithAccess: ["user-3"],
+        usersWithAccess: [user3Id],
       });
 
       expect(updatedAgent?.usersWithAccess).toHaveLength(1);
-      expect(updatedAgent?.usersWithAccess).toContain("user-3");
-      expect(updatedAgent?.usersWithAccess).not.toContain("user-1");
-      expect(updatedAgent?.usersWithAccess).not.toContain("user-2");
+      expect(updatedAgent?.usersWithAccess).toContain(user3Id);
+      expect(updatedAgent?.usersWithAccess).not.toContain(user1Id);
+      expect(updatedAgent?.usersWithAccess).not.toContain(user2Id);
     });
 
     test("update without usersWithAccess keeps existing permissions", async () => {
+      const user1Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       const initialUsers = agent.usersWithAccess;
@@ -164,9 +189,12 @@ describe("AgentModel", () => {
     });
 
     test("usersWithAccess is always populated in responses", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: ["user-2"] },
-        "user-1",
+        { name: "Test Agent", usersWithAccess: [user2Id] },
+        user1Id,
       );
 
       expect(agent.usersWithAccess).toBeDefined();

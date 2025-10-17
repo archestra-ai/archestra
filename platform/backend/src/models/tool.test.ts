@@ -1,16 +1,21 @@
+import { createTestAdmin, createTestUser } from "@/test-utils";
 import AgentModel from "./agent";
 import ToolModel from "./tool";
 
 describe("ToolModel", () => {
   describe("Access Control", () => {
     test("admin can see all tools", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
       const agent1 = await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
       const agent2 = await AgentModel.create(
         { name: "Agent 2", usersWithAccess: [] },
-        "user-2",
+        user2Id,
       );
 
       await ToolModel.create({
@@ -27,7 +32,7 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll("admin-user", true);
+      const tools = await ToolModel.findAll(adminId, true);
       expect(tools).toHaveLength(2);
     });
 
@@ -61,9 +66,12 @@ describe("ToolModel", () => {
     });
 
     test("member with no access sees no tools", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent1 = await AgentModel.create(
         { name: "Agent 1", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       await ToolModel.create({
@@ -73,14 +81,17 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const tools = await ToolModel.findAll("user-999", false);
+      const tools = await ToolModel.findAll(user2Id, false);
       expect(tools).toHaveLength(0);
     });
 
     test("findById returns tool for admin", async () => {
+      const user1Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       const tool = await ToolModel.create({
@@ -90,15 +101,17 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, "admin-user", true);
+      const found = await ToolModel.findById(tool.id, adminId, true);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
 
     test("findById returns tool for user with agent access", async () => {
+      const user1Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       const tool = await ToolModel.create({
@@ -108,15 +121,18 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, "user-1", false);
+      const found = await ToolModel.findById(tool.id, user1Id, false);
       expect(found).not.toBeNull();
       expect(found?.id).toBe(tool.id);
     });
 
     test("findById returns null for user without agent access", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       const tool = await ToolModel.create({
@@ -126,14 +142,17 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findById(tool.id, "user-999", false);
+      const found = await ToolModel.findById(tool.id, user2Id, false);
       expect(found).toBeNull();
     });
 
     test("findByName returns tool for admin", async () => {
+      const user1Id = await createTestUser();
+      const adminId = await createTestAdmin();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       await ToolModel.create({
@@ -143,19 +162,17 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName(
-        "unique-tool",
-        "admin-user",
-        true,
-      );
+      const found = await ToolModel.findByName("unique-tool", adminId, true);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("unique-tool");
     });
 
     test("findByName returns tool for user with agent access", async () => {
+      const user1Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       await ToolModel.create({
@@ -165,15 +182,18 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("user-tool", "user-1", false);
+      const found = await ToolModel.findByName("user-tool", user1Id, false);
       expect(found).not.toBeNull();
       expect(found?.name).toBe("user-tool");
     });
 
     test("findByName returns null for user without agent access", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
       const agent = await AgentModel.create(
         { name: "Test Agent", usersWithAccess: [] },
-        "user-1",
+        user1Id,
       );
 
       await ToolModel.create({
@@ -185,7 +205,7 @@ describe("ToolModel", () => {
 
       const found = await ToolModel.findByName(
         "restricted-tool",
-        "user-999",
+        user2Id,
         false,
       );
       expect(found).toBeNull();

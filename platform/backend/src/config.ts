@@ -57,7 +57,9 @@ const getCorsOrigins = (): string | string[] | RegExp[] => {
 
   if (!allowedFrontendOrigins) {
     // Default: allow all origins in development, localhost only in production
-    return isDevelopment ? [/^https?:\/\/localhost(:\d+)?$/] : [/^https?:\/\/localhost(:\d+)?$/];
+    return isDevelopment
+      ? [/^https?:\/\/localhost(:\d+)?$/]
+      : [/^https?:\/\/localhost(:\d+)?$/];
   }
 
   if (allowedFrontendOrigins === "*") {

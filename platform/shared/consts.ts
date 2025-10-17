@@ -19,7 +19,7 @@ export const E2eTestId = {
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
-export const DEFAULT_ADMIN_EMAIL = "admin@localhost";
+export const DEFAULT_ADMIN_EMAIL = "admin@localhost.ai";
 export const DEFAULT_ADMIN_PASSWORD = "password";
 
 export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";

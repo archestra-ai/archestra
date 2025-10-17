@@ -12,6 +12,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthUIProvider
       authClient={authClient}
+      redirectTo="/test-agent"
       navigate={router.push}
       replace={router.replace}
       onSessionChange={() => {

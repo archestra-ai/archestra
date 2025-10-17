@@ -2,7 +2,7 @@
 
 import { E2eTestId } from "@shared";
 import { MoreVertical, Pencil, Plug, Plus, Trash2, X } from "lucide-react";
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
@@ -409,6 +409,18 @@ function CreateAgentDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  const adminMemberIds = useMemo(() => {
+    return getAdminMembers().map((member) => member.user.id);
+  }, [getAdminMembers]);
+
+  /**
+   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
+   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
+   */
+  const filteredAssignedUserIds = useMemo(() => {
+    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
+  }, [assignedUserIds, adminMemberIds]);
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
@@ -466,7 +478,7 @@ function CreateAgentDialog({
                     </SelectContent>
                   </Select>
                   {getAdminMembers().length > 0 ||
-                  assignedUserIds.length > 0 ? (
+                  filteredAssignedUserIds.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {getAdminMembers().map((member) => (
                         <Badge
@@ -477,7 +489,7 @@ function CreateAgentDialog({
                           <span>{member.user.email} (Admin)</span>
                         </Badge>
                       ))}
-                      {assignedUserIds.map((userId) => {
+                      {filteredAssignedUserIds.map((userId) => {
                         const user = getUserById(userId);
                         return (
                           <Badge
@@ -621,6 +633,18 @@ function EditAgentDialog({
     [orgMembers],
   );
 
+  const adminMemberIds = useMemo(() => {
+    return getAdminMembers().map((member) => member.user.id);
+  }, [getAdminMembers]);
+
+  /**
+   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
+   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
+   */
+  const filteredAssignedUserIds = useMemo(() => {
+    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
+  }, [assignedUserIds, adminMemberIds]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -672,7 +696,8 @@ function EditAgentDialog({
                   )}
                 </SelectContent>
               </Select>
-              {getAdminMembers().length > 0 || assignedUserIds.length > 0 ? (
+              {getAdminMembers().length > 0 ||
+              filteredAssignedUserIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {getAdminMembers().map((member) => (
                     <Badge
@@ -683,7 +708,7 @@ function EditAgentDialog({
                       <span>{member.user.email} (Admin)</span>
                     </Badge>
                   ))}
-                  {assignedUserIds.map((userId) => {
+                  {filteredAssignedUserIds.map((userId) => {
                     const user = getUserById(userId);
                     return (
                       <Badge

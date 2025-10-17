@@ -9,8 +9,10 @@ export const BLOCKED_DEMO_TOOL_IDS = {
   sendEmails: "56c09564-fe92-4a28-ad66-87d40599f971",
   getMyEmails: "ca152b02-767e-48d3-9ba6-8a7ac56c897d",
 };
-export const ALLOWED_DEMO_INTERACTION_ID = "293bfa6f-afef-4631-96c9-22891c4d60e6";
-export const BLOCKED_DEMO_INTERACTION_ID = "df5e094d-bbb8-4837-ba28-1761cfb714b6";
+export const ALLOWED_DEMO_INTERACTION_ID =
+  "293bfa6f-afef-4631-96c9-22891c4d60e6";
+export const BLOCKED_DEMO_INTERACTION_ID =
+  "df5e094d-bbb8-4837-ba28-1761cfb714b6";
 
 export const E2eTestId = {
   AgentsTable: "agents-table",
@@ -20,7 +22,8 @@ export const E2eTestId = {
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
-export const DEFAULT_ADMIN_PASSWORD = "admin123";
+export const DEFAULT_ADMIN_PASSWORD = "password";
 
 export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
-export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_PASSWORD";
+export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
+  "ARCHESTRA_AUTH_ADMIN_PASSWORD";

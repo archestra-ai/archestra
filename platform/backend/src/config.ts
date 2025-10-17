@@ -50,7 +50,7 @@ const getPortFromUrl = (): number => {
  * Supports:
  * - Comma-separated list: "https://example.com,https://app.example.com"
  * - Wildcard for all origins: "*"
- * - Empty/undefined: defaults to "*" in development, localhost regex in production
+ * - Empty/undefined: defaults to localhost regex pattern
  */
 const getCorsOrigins = (): string | string[] | RegExp[] => {
   const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
@@ -68,6 +68,23 @@ const getCorsOrigins = (): string | string[] | RegExp[] => {
   return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
 };
 
+/**
+ * Get trusted origins for better-auth
+ * Converts CORS origins to a format that better-auth accepts (string[])
+ * Note: better-auth doesn't support RegExp or wildcard, so we convert them to explicit URLs
+ */
+const getTrustedOrigins = (): string[] => {
+  const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
+
+  if (!allowedFrontendOrigins) {
+    // Default: Common localhost URLs for development
+    return ["http://localhost:3000"];
+  }
+
+  // Split comma-separated list and trim whitespace
+  return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
+};
+
 export default {
   baseURL: process.env.ARCHESTRA_API_BASE_URL,
   api: {
@@ -79,6 +96,7 @@ export default {
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
+    trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
     adminDefaultPassword:

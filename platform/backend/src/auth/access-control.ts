@@ -21,11 +21,9 @@ export const adminRole = ac.newRole({
   ...allAvailableActions,
 });
 
-// all but the following:
 // - read-only access for agents
 // - full access to tools, policies, interactions
 export const memberRole = ac.newRole({
-  ...allAvailableActions,
   agent: ["read"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],

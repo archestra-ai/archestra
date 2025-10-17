@@ -3307,6 +3307,31 @@ export type GetAgentsResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
     }>;
 };
 
@@ -3346,6 +3371,31 @@ export type CreateAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
     };
 };
 
@@ -3436,6 +3486,31 @@ export type GetAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
     };
 };
 
@@ -3486,6 +3561,31 @@ export type UpdateAgentResponses = {
         isDemo: boolean;
         createdAt: string;
         updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            allowUsageWhenUntrustedDataIsPresent: boolean;
+            dataIsTrustedByDefault: boolean;
+            createdAt: string;
+            updatedAt: string;
+        }>;
     };
 };
 

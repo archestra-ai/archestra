@@ -1,9 +1,7 @@
 import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Agent, InsertAgent, Tool } from "@/types";
-
-type AgentWithTools = Agent & { tools: Tool[] };
+import type { Agent, InsertAgent } from "@/types";
 
 class AgentModel {
   static async create(agent: InsertAgent): Promise<Agent> {
@@ -11,10 +9,14 @@ class AgentModel {
       .insert(schema.agentsTable)
       .values(agent)
       .returning();
-    return createdAgent;
+
+    return {
+      ...createdAgent,
+      tools: [],
+    };
   }
 
-  static async findAll(): Promise<AgentWithTools[]> {
+  static async findAll(): Promise<Agent[]> {
     const agents = await db.select().from(schema.agentsTable);
 
     const agentsWithTools = await Promise.all(
@@ -28,7 +30,7 @@ class AgentModel {
           ...agent,
           tools,
         };
-      })
+      }),
     );
 
     return agentsWithTools;

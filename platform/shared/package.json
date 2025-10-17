@@ -11,6 +11,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "better-auth": "^1.3.27"
+  },
   "devDependencies": {
     "typescript": "^5.9.2"
   }

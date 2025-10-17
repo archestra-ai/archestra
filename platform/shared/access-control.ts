@@ -1,5 +1,32 @@
-import type { Action, Resource } from "@shared";
 import { createAccessControl } from "better-auth/plugins/access";
+
+/**
+ * Available resources
+ */
+export type Resource =
+  | "agent"
+  | "tool"
+  | "policy"
+  | "interaction"
+  | "dualLlmConfig"
+  | "dualLlmResult"
+  | "settings"
+  | "organization"
+  | "member"
+  | "invitation"
+
+/**
+ * Available actions
+ */
+export type Action = "create" | "read" | "update" | "delete";
+
+/**
+ * Permission string format: "resource:action"
+ * Examples: "agent:create", "tool:read", "org:delete"
+ */
+export type Permission = `${Resource}:${Action}`;
+
+export type Role = "admin" | "member";
 
 const allAvailableActions: Record<Resource, Action[]> = {
   agent: ["create", "read", "update", "delete"],
@@ -29,3 +56,4 @@ export const memberRole = ac.newRole({
   policy: ["create", "read", "update", "delete"],
   interaction: ["create", "read", "update", "delete"],
 });
+

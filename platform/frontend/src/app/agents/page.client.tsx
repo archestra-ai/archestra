@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { WithPermission } from "@/components/with-permission";
 import {
   useAgents,
   useCreateAgent,
@@ -86,13 +87,15 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                 </a>
               </p>
             </div>
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              data-testid={E2eTestId.CreateAgentButton}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Agent
-            </Button>
+            <WithPermission permissions={["agent:create"]}>
+              <Button
+                onClick={() => setIsCreateDialogOpen(true)}
+                data-testid={E2eTestId.CreateAgentButton}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Create Agent
+              </Button>
+            </WithPermission>
           </div>
         </div>
       </div>
@@ -117,7 +120,9 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                     <TableHead>Name</TableHead>
                     <TableHead>Agent ID</TableHead>
                     <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <WithPermission permissions={["agent:delete"]}>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </WithPermission>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -136,30 +141,32 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                           day: "numeric",
                         })}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              setEditingAgent({
-                                id: agent.id,
-                                name: agent.name,
-                              })
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                            onClick={() => setDeletingAgentId(agent.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      <WithPermission permissions={["agent:delete"]}>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() =>
+                                setEditingAgent({
+                                  id: agent.id,
+                                  name: agent.name,
+                                })
+                              }
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                              onClick={() => setDeletingAgentId(agent.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </WithPermission>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -6,7 +6,10 @@ describe("InteractionModel", () => {
 
   beforeEach(async () => {
     // Create test agent
-    const agent = await AgentModel.create({ name: "Test Agent" });
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      usersWithAccess: [],
+    });
     agentId = agent.id;
   });
 

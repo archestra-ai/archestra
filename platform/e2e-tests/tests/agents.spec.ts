@@ -9,9 +9,15 @@ test('can create and delete an agent', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Name' }).fill(AGENT_NAME);
   await page.locator("[type=submit]").click();
   await page.waitForTimeout(1000);
+
+  // Close the "How to connect" modal which shows up after creating an agent
+  await page.getByTestId(E2eTestId.CreateAgentCloseHowToConnectButton).click();
+
+  // Check if the agent is created
   await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).toBeVisible();
 
-  // delete created agent
+  // Delete created agent - first open the dropdown which contains the action buttons
+  await page.getByTestId(`${E2eTestId.AgentActionsDropdownTrigger}-${AGENT_NAME}`).click();
   await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`).click();
   await page.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).not.toBeVisible();

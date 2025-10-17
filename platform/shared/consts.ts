@@ -15,6 +15,8 @@ export const BLOCKED_DEMO_INTERACTION_ID = "df5e094d-bbb8-4837-ba28-1761cfb714b6
 export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
+  CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
+  AgentActionsDropdownTrigger: "agent-actions-dropdown-trigger",
   DeleteAgentButton: "delete-agent-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

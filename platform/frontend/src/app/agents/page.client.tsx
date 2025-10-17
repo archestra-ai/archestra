@@ -236,7 +236,11 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`${E2eTestId.AgentActionsDropdownTrigger}-${agent.name}`}
+                              >
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -523,7 +527,11 @@ function CreateAgentDialog({
               <ProxyConnectionInstructions agentId={createdAgent.id} />
             </div>
             <DialogFooter>
-              <Button type="button" onClick={handleClose}>
+              <Button
+                type="button"
+                onClick={handleClose}
+                data-testid={E2eTestId.CreateAgentCloseHowToConnectButton}
+              >
                 Close
               </Button>
             </DialogFooter>

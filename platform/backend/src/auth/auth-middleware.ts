@@ -70,7 +70,7 @@ class AuthMiddleware {
  * Routes not configured throws 403.
  * If a route should bypass the check, it should be configured in shouldSkipAuthCheck() method.
  * Each config has structure: { [routeId]: { [resource1]: [action1, action2], [resource2]: [action1] } }
- * That would mean that the route the route (routeId) requires all the permissions to pass the check:
+ * That would mean that the route (routeId) requires all the permissions to pass the check:
  * `resource1:action1` AND `resource1:action2` AND `resource2:action1`
  */
 const routePermissionsConfig: Partial<

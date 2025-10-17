@@ -23,14 +23,11 @@ export const adminRole = ac.newRole({
 
 // all but the following:
 // - read-only access for agents
-// - no access to settings, organization, member, dual llm and invitation resources
+// - full access to tools, policies, interactions
 export const memberRole = ac.newRole({
   ...allAvailableActions,
   agent: ["read"],
-  dualLlmConfig: [],
-  dualLlmResult: [],
-  settings: [],
-  organization: [],
-  member: [],
-  invitation: [],
+  tool: ["create", "read", "update", "delete"],
+  policy: ["create", "read", "update", "delete"],
+  interaction: ["create", "read", "update", "delete"],
 });

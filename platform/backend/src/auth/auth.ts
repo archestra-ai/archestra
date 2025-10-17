@@ -6,10 +6,11 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { ac, adminRole, memberRole, ownerRole } from "./permission";
+import { ac, adminRole, memberRole } from "./access-control";
 
 const {
   baseURL,
+  production,
   auth: { secret },
 } = config;
 
@@ -23,7 +24,6 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: false, // Disable organization creation by users
       ac,
       roles: {
-        owner: ownerRole,
         admin: adminRole,
         member: memberRole,
       },
@@ -58,7 +58,7 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "archestra",
     defaultCookieAttributes: {
-      secure: true,
+      secure: production, // Only use secure cookies in production (HTTPS required)
     },
   },
 
@@ -249,7 +249,7 @@ export const auth = betterAuth({
                 id: crypto.randomUUID(),
                 organizationId: org[0].id,
                 userId: user.id,
-                role: "owner",
+                role: "admin",
                 createdAt: new Date(),
               });
 

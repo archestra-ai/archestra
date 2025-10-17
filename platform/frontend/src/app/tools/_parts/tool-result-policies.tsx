@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type {
-  GetToolsResponse,
+  GetToolsResponses,
   GetTrustedDataPoliciesResponse,
 } from "@/lib/clients/api";
 import { useDualLlmConfig } from "@/lib/dual-llm-config.query";
@@ -42,7 +42,7 @@ function AttributePathExamples() {
       >
         <AccordionTrigger className="px-4 hover:no-underline">
           <span className="text-sm font-medium">
-            Attribute Path Syntax Examples
+            📖 Attribute Path Syntax Cheat Sheet
           </span>
         </AccordionTrigger>
         <AccordionContent className="px-4">
@@ -154,7 +154,7 @@ function AttributePathExamples() {
 export function ToolResultPolicies({
   tool,
 }: {
-  tool: GetToolsResponse["200"];
+  tool: GetToolsResponses["200"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
@@ -177,55 +177,23 @@ export function ToolResultPolicies({
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-row items-start justify-between">
-          <div>
-            <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
-            <p className="text-sm text-muted-foreground">
-              Control which data from tool results is marked as trusted or
-              blocked.
-              <br />
-              <br />
-              By default, all data returned by tools is marked as "untrusted"
-              unless you configure it otherwise. Trusted Data Policies let you:
-            </p>
-            <ul className="text-sm text-muted-foreground">
-              <li>• Mark tool results as trusted/untrusted by default</li>
-              <li>
-                • Mark data as trusted based on the values of specific fields in
-                tool responses
-              </li>
-              <li>
-                • Block specific data from ever reaching the LLM entirely
-                (filtered before being sent to the LLM)
-              </li>
-            </ul>
-            <p className="text-sm text-muted-foreground mt-2">
-              This is part of Archestra's{" "}
-              <a
-                href="https://www.archestra.ai/docs/platform-dynamic-tools"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                Dynamic Tools
-              </a>{" "}
-              security system, which adapts agent capabilities based on data
-              trust levels to prevent lethal-trifecta attacks.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() =>
-              toolResultPoliciesCreateMutation.mutate({ toolId: tool.id })
-            }
-          >
-            <Plus className="w-3.5 h-3.5" /> Add
-          </Button>
+        <div>
+          <h3 className="text-sm font-semibold mb-1">Tool Result Policies</h3>
+          <p className="text-sm text-muted-foreground">
+            Tool results impact agent decisions and actions. This policy allows
+            to mark tool results as "trusted" or "untrusted" to prevent agent
+            acting on untrusted data.{" "}
+            <a
+              href="https://www.archestra.ai/docs/platform-dynamic-tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              Read more about Dynamic Tools.
+            </a>
+          </p>
+          <p className="text-sm text-muted-foreground mt-2"></p>
         </div>
-
-        <AttributePathExamples />
       </div>
       <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
         <div className="flex items-center gap-3">
@@ -358,6 +326,16 @@ export function ToolResultPolicies({
           </div>
         </PolicyCard>
       ))}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() =>
+          toolResultPoliciesCreateMutation.mutate({ toolId: tool.id })
+        }
+      >
+        <Plus className="w-3.5 h-3.5 mr-1" /> Add Tool Result Policy
+      </Button>
+      <AttributePathExamples />
     </div>
   );
 }

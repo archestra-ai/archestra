@@ -4,6 +4,7 @@ import { ToolInvocationPolicyModel, TrustedDataPolicyModel } from "@/models";
 import {
   AutonomyPolicyOperator,
   ErrorResponseSchema,
+  RouteId,
   ToolInvocation,
   TrustedData,
   UuidIdSchema,
@@ -14,7 +15,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/operators",
     {
       schema: {
-        operationId: "getOperators",
+        operationId: RouteId.GetOperators,
         description: "Get all supported policy operators",
         tags: ["Autonomy Policies"],
         response: {
@@ -51,7 +52,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/tool-invocation",
     {
       schema: {
-        operationId: "getToolInvocationPolicies",
+        operationId: RouteId.GetToolInvocationPolicies,
         description: "Get all tool invocation policies",
         tags: ["Tool Invocation Policies"],
         response: {
@@ -81,7 +82,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/tool-invocation",
     {
       schema: {
-        operationId: "createToolInvocationPolicy",
+        operationId: RouteId.CreateToolInvocationPolicy,
         description: "Create a new tool invocation policy",
         tags: ["Tool Invocation Policies"],
         body: ToolInvocation.InsertToolInvocationPolicySchema.omit({
@@ -116,7 +117,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/tool-invocation/:id",
     {
       schema: {
-        operationId: "getToolInvocationPolicy",
+        operationId: RouteId.GetToolInvocationPolicy,
         description: "Get tool invocation policy by ID",
         tags: ["Tool Invocation Policies"],
         params: z.object({
@@ -160,7 +161,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/tool-invocation/:id",
     {
       schema: {
-        operationId: "updateToolInvocationPolicy",
+        operationId: RouteId.UpdateToolInvocationPolicy,
         description: "Update a tool invocation policy",
         tags: ["Tool Invocation Policies"],
         params: z.object({
@@ -209,7 +210,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/autonomy-policies/tool-invocation/:id",
     {
       schema: {
-        operationId: "deleteToolInvocationPolicy",
+        operationId: RouteId.DeleteToolInvocationPolicy,
         description: "Delete a tool invocation policy",
         tags: ["Tool Invocation Policies"],
         params: z.object({
@@ -253,7 +254,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/trusted-data-policies",
     {
       schema: {
-        operationId: "getTrustedDataPolicies",
+        operationId: RouteId.GetTrustedDataPolicies,
         description: "Get all trusted data policies",
         tags: ["Trusted Data Policies"],
         response: {
@@ -283,7 +284,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/trusted-data-policies",
     {
       schema: {
-        operationId: "createTrustedDataPolicy",
+        operationId: RouteId.CreateTrustedDataPolicy,
         description: "Create a new trusted data policy",
         tags: ["Trusted Data Policies"],
         body: TrustedData.InsertTrustedDataPolicySchema.omit({
@@ -318,7 +319,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/trusted-data-policies/:id",
     {
       schema: {
-        operationId: "getTrustedDataPolicy",
+        operationId: RouteId.GetTrustedDataPolicy,
         description: "Get trusted data policy by ID",
         tags: ["Trusted Data Policies"],
         params: z.object({
@@ -362,7 +363,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/trusted-data-policies/:id",
     {
       schema: {
-        operationId: "updateTrustedDataPolicy",
+        operationId: RouteId.UpdateTrustedDataPolicy,
         description: "Update a trusted data policy",
         tags: ["Trusted Data Policies"],
         params: z.object({
@@ -411,7 +412,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/trusted-data-policies/:id",
     {
       schema: {
-        operationId: "deleteTrustedDataPolicy",
+        operationId: RouteId.DeleteTrustedDataPolicy,
         description: "Delete a trusted data policy",
         tags: ["Trusted Data Policies"],
         params: z.object({

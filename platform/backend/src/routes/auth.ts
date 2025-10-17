@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { auth } from "@/auth";
+import { auth } from "@/auth/auth";
 
 // Register authentication endpoint
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {

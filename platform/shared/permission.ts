@@ -9,9 +9,9 @@ export type Resource =
   | "dualLlmConfig"
   | "dualLlmResult"
   | "settings"
+  | "organization"
   | "member"
-  | "organisation"
-  | "invitation";
+  | "invitation"
 
 /**
  * Available actions

@@ -5,7 +5,7 @@ import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
@@ -294,7 +294,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/${CHAT_COMPLETIONS_SUFFIX}`,
     {
       schema: {
-        operationId: "openAiChatCompletionsWithDefaultAgent",
+        operationId: RouteId.OpenAiChatCompletionsWithDefaultAgent,
         description:
           "Create a chat completion with OpenAI (uses default agent)",
         tags: ["llm-proxy"],
@@ -321,7 +321,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/:agentId/${CHAT_COMPLETIONS_SUFFIX}`,
     {
       schema: {
-        operationId: "openAiChatCompletionsWithAgent",
+        operationId: RouteId.OpenAiChatCompletionsWithAgent,
         description:
           "Create a chat completion with OpenAI for a specific agent",
         tags: ["llm-proxy"],

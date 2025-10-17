@@ -384,6 +384,9 @@ The backend integrates advanced security guardrails:
     3. Process continues for configured number of rounds (maxRounds)
     4. Final summary is generated based on the Q&A conversation
   - Results stored in database for auditing and analysis
+  - Can be triggered via:
+    - Tool `toolResultTreatment` set to "sanitize_with_dual_llm"
+    - Trusted data policy action "sanitize_with_dual_llm"
 - **Tool Invocation Policies**: Fine-grained control over tool usage
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
@@ -411,7 +414,10 @@ The backend integrates advanced security guardrails:
   - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata and trust configuration
-  - `toolResultTreatment`: How tool outputs are handled ("trusted", "sanitize_with_dual_llm", "untrusted")
+  - `toolResultTreatment`: How tool outputs are handled:
+    - `"trusted"`: Tool outputs are automatically trusted
+    - `"sanitize_with_dual_llm"`: Tool outputs go through dual LLM sanitization before use
+    - `"untrusted"`: Tool outputs are marked as untrusted data
 - **ToolInvocationPolicy**: Policies for controlling tool usage
   - Links to tools and agents
   - Stores argument path, operator, value, action, and reason

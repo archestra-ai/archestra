@@ -177,16 +177,8 @@ function LogsTable({
       cell: ({ row }) => {
         const interaction = new DynamicInteraction(row.original);
         return (
-          <Badge
-            variant="secondary"
-            className="text-xs whitespace-normal break-words text-center"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="font-semibold">{interaction.provider}</span>
-              <span className="text-[10px] opacity-80">
-                {interaction.modelName}
-              </span>
-            </div>
+          <Badge variant="secondary" className="text-xs whitespace-normal">
+            {interaction.provider} ({interaction.modelName})
           </Badge>
         );
       },

@@ -139,7 +139,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     message:
       | AnthropicMessagesRequest["messages"][number]
       | { role: "assistant"; content: AnthropicMessagesResponse["content"] },
-    dualLlmResults?: DualLlmResult[],
+    _dualLlmResults?: DualLlmResult[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;

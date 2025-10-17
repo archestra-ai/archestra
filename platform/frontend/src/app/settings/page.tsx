@@ -6,14 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CodeText } from "@/components/code-text";
 import { Button } from "@/components/ui/button";
-// TODO: uncomment out once we officially have 100% support for 2nd provider
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { SupportedProviders } from "@/lib/clients/api/types.gen";
 import config from "@/lib/config";
 
@@ -35,8 +34,7 @@ export default function SettingsPage() {
     }>
   >([]);
   const [copied, setCopied] = useState(false);
-  // TODO: remove _ when we have 100% support for all providers
-  const [selectedProvider, _setSelectedProvider] =
+  const [selectedProvider, setSelectedProvider] =
     useState<SupportedProviders>("openai");
 
   const particleIdRef = useRef(0);
@@ -348,8 +346,7 @@ export default function SettingsPage() {
               <div className="border-t pt-6">
                 <h3 className="font-medium mb-2">Proxy Endpoint</h3>
                 <div className="space-y-3">
-                  {/* TODO: uncomment out once we officially have 100% support for Anthropic */}
-                  {/* <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Provider:</span>
                     <Select
                       value={selectedProvider}
@@ -362,11 +359,12 @@ export default function SettingsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="gemini">Gemini</SelectItem>
+                        {/* TODO: uncomment out once we officially have 100% support for Gemini */}
+                        {/* <SelectItem value="gemini">Gemini</SelectItem> */}
                         <SelectItem value="anthropic">Anthropic</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div> */}
+                  </div>
                   <div className="bg-muted rounded-md p-3 flex items-center justify-between">
                     <CodeText className="text-sm">
                       {`${apiProxyUrl}/${selectedProvider}`}

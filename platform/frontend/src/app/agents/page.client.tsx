@@ -1,11 +1,12 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
+import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,6 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -59,6 +66,10 @@ export default function AgentsPage({
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [connectingAgent, setConnectingAgent] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
@@ -137,28 +148,45 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                         })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              setEditingAgent({
-                                id: agent.id,
-                                name: agent.name,
-                              })
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                            onClick={() => setDeletingAgentId(agent.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setConnectingAgent({
+                                  id: agent.id,
+                                  name: agent.name,
+                                })
+                              }
+                            >
+                              <Plug className="h-4 w-4" />
+                              Connect
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setEditingAgent({
+                                  id: agent.id,
+                                  name: agent.name,
+                                })
+                              }
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                              onClick={() => setDeletingAgentId(agent.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}

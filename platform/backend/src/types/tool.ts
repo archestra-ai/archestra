@@ -42,7 +42,7 @@ export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
   toolResultTreatment: ToolResultTreatmentSchema,
-});
+}).partial();
 
 export type Tool = z.infer<typeof SelectToolSchema>;
 export type ToolWithAgent = z.infer<typeof SelectToolWithAgentSchema>;

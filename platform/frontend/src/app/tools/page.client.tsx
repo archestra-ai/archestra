@@ -6,7 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +15,12 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -340,8 +346,8 @@ function ToolsList({
 
           const treatmentLabels = {
             trusted: "Trusted",
-            sanitize_with_dual_llm: "Sanitize with Dual LLM",
             untrusted: "Untrusted",
+            sanitize_with_dual_llm: "Sanitize with Dual LLM",
           };
 
           return (
@@ -367,10 +373,10 @@ function ToolsList({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="trusted">Trusted</SelectItem>
+                <SelectItem value="untrusted">Untrusted</SelectItem>
                 <SelectItem value="sanitize_with_dual_llm">
                   Sanitize with Dual LLM
                 </SelectItem>
-                <SelectItem value="untrusted">Untrusted</SelectItem>
               </SelectContent>
             </Select>
           );
@@ -520,22 +526,32 @@ function ToolsList({
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  handleBulkAction("toolResultTreatment", "sanitize_with_dual_llm")
-                }
-                disabled={!hasSelection}
-              >
-                Sanitize with Dual LLM
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
                   handleBulkAction("toolResultTreatment", "untrusted")
                 }
                 disabled={!hasSelection}
               >
                 Untrusted
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasSelection}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleBulkAction("toolResultTreatment", "sanitize_with_dual_llm")
+                    }
+                  >
+                    Sanitize with Dual LLM
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </ButtonGroup>
           </div>
           <div className="ml-2 h-4 w-px bg-border" />

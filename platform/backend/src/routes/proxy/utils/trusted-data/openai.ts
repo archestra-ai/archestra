@@ -127,6 +127,7 @@ export const evaluateIfContextIsTrusted = async (
               content: await dualLlmSubagent.processWithMainAgent(),
             });
           }
+          hasUntrustedData = false;
         } else {
           filteredMessages.push(message);
         }

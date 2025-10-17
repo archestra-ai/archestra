@@ -152,8 +152,6 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
-  console.log(agents);
-
   return (
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">

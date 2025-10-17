@@ -143,7 +143,11 @@ describe("ToolModel", () => {
         parameters: {},
       });
 
-      const found = await ToolModel.findByName("unique-tool", "admin-user", true);
+      const found = await ToolModel.findByName(
+        "unique-tool",
+        "admin-user",
+        true,
+      );
       expect(found).not.toBeNull();
       expect(found?.name).toBe("unique-tool");
     });

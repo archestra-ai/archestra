@@ -110,11 +110,12 @@ NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific 
 
 # Allowed Frontend Origins (optional)
 ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"  # Comma-separated list of allowed frontend origins
-# If not set, defaults to "*" in development (NODE_ENV=development), localhost-only in production
+# If not set, defaults to localhost regex (allows http(s)://localhost on any port)
 # Examples:
 #   Single domain: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com"
 #   Multiple domains: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"
-#   All origins: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="*"
+#   Local development: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="http://localhost:3000"
+# Note: Wildcard "*" is not supported due to credentials mode (cookie-based authentication)
 
 # Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider

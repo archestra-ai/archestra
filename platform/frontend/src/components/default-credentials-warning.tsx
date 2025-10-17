@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  DEFAULT_ADMIN_EMAIL,
-  DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
-  DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
-} from "@shared";
-import { AlertTriangle } from "lucide-react";
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@shared";
+import { Link } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
@@ -18,25 +14,33 @@ export function DefaultCredentialsWarning() {
   }
 
   return (
-    <div className="px-6 pt-4">
-      <Alert variant="destructive" className="mb-4">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="text-md font-bold">
-          Security Warning: Default Admin Credentials Detected
+    <div className="px-2 pb-2">
+      <Alert variant="destructive" className="text-xs">
+        <AlertTitle className="text-xs font-semibold">
+          Default Admin Credentials Enabled
         </AlertTitle>
-        <AlertDescription>
-          <p>
-            You are currently logged in as the workspace owner using default
-            admin email. To secure your workspace and prevent unauthorized
-            access, please set the{" "}
-            <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm inline">
-              {DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME}
-            </code>{" "}
-            and{" "}
-            <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-              {DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME}
-            </code>{" "}
-            environment variables.
+        <AlertDescription className="text-xs mt-1">
+          <p className="break-words">
+            Archestra's default admin credentials are enabled:
+            <br />
+            <code className="inline-block break-all mx-0.5">
+              - {DEFAULT_ADMIN_EMAIL}
+            </code>
+            <br />
+            <code className="inline-block break-all mx-0.5">
+              - {DEFAULT_ADMIN_PASSWORD}
+            </code>
+          </p>
+          <p className="mt-1">
+            <a
+              href="https://www.archestra.ai/docs/platform-deployment#environment-variables"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center underline"
+            >
+              <Link className="mr-1 flex-shrink-0" size={12} />
+              Change if not running locally!
+            </a>
           </p>
         </AlertDescription>
       </Alert>

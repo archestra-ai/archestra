@@ -2,6 +2,7 @@ import { AuthView } from "@daveyplate/better-auth-ui";
 import { authViewPaths } from "@daveyplate/better-auth-ui/server";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import { LoadingSpinner } from "@/components/loading";
 import {
   Card,
@@ -69,18 +70,21 @@ export default async function AuthPage({
   return (
     <ErrorBoundary>
       <Suspense fallback={<LoadingSpinner />}>
-        <main className="container flex grow flex-col items-center justify-center self-center p-4 md:p-6 h-full">
-          <AuthView
-            path={path}
-            classNames={{
-              footer: "hidden",
-              form: { forgotPasswordLink: "hidden" },
-            }}
-            localization={{
-              EMAIL_PLACEHOLDER: "admin@example.com",
-              PASSWORD_PLACEHOLDER: "password",
-            }}
-          />
+        <main className="container flex grow flex-col items-center justify-center self-center h-full">
+          <div className="space-y-4 w-full max-w-md px-4 md:px-0">
+            {path === "sign-in" && (
+              <div className="max-w-sm p-0 m-0 pb-4">
+                <DefaultCredentialsWarning alwaysShow />
+              </div>
+            )}
+            <AuthView
+              path={path}
+              classNames={{
+                footer: "hidden",
+                form: { forgotPasswordLink: "hidden" },
+              }}
+            />
+          </div>
         </main>
       </Suspense>
     </ErrorBoundary>

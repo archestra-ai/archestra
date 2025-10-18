@@ -117,6 +117,11 @@ ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.ex
 #   Local development: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="http://localhost:3000"
 # Note: Wildcard "*" is not supported due to credentials mode (cookie-based authentication)
 
+# Auth Configuration (optional)
+ARCHESTRA_AUTH_SECRET=  # Secret for auth session encryption
+ARCHESTRA_AUTH_ADMIN_EMAIL=admin@example.com  # Default admin email
+ARCHESTRA_AUTH_ADMIN_PASSWORD=password  # Default admin password (CHANGE IN PRODUCTION)
+
 # Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider
 GEMINI_API_KEY=your-api-key-here  # Required for Gemini provider

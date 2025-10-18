@@ -110,12 +110,13 @@ NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific 
 
 # Allowed Origins (optional)
 # Controls which frontend origins can access the API (CORS and auth)
+# This variable is used for both Fastify CORS configuration and better-auth's trustedOrigins
 ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"  # Comma-separated list
 # If not set: defaults to localhost on any port (development mode)
 # Examples:
 #   Single domain: ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com"
 #   Multiple domains: ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"
-#   Allow all: ARCHESTRA_ALLOWED_ORIGINS="*" (use with caution in production)
+#   Allow all: ARCHESTRA_ALLOWED_ORIGINS="*" (NOT supported for better-auth - will reject all origins)
 
 # Auth Configuration (optional)
 ARCHESTRA_AUTH_SECRET=  # Secret for auth session encryption

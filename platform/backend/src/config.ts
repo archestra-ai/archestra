@@ -46,88 +46,72 @@ const getPortFromUrl = (): number => {
 };
 
 /**
- * Parse CORS origins from environment variable
- * Supports:
- * - Comma-separated list: "https://example.com,https://app.example.com"
- * - Wildcard for all origins: "*"
- * - Empty/undefined: derives from ARCHESTRA_API_BASE_URL
+ * Parse allowed origins from environment variable.
+ *
+ * ARCHESTRA_ALLOWED_ORIGINS can be:
+ * - Not set: Allows localhost on any port (development mode)
+ * - "https://app.example.com": Single origin
+ * - "https://app.example.com,https://admin.example.com": Multiple origins
+ * - "*": Allow all origins (use with caution in production)
  */
-const getCorsOrigins = (): string | string[] | RegExp[] => {
-  const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
+const parseAllowedOrigins = (): string[] => {
+  const env = process.env.ARCHESTRA_ALLOWED_ORIGINS?.trim();
 
-  if (!allowedFrontendOrigins) {
-    // Extract domain from ARCHESTRA_API_BASE_URL and use it for CORS
-    const baseURL = process.env.ARCHESTRA_API_BASE_URL;
-
-    if (baseURL) {
-      try {
-        const url = new URL(baseURL);
-
-        // For localhost, use regex to support any port
-        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-          return [/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
-        }
-
-        // For production domains, allow the exact origin
-        const origin = `${url.protocol}//${url.hostname}`;
-        return [origin];
-      } catch {
-        // Invalid URL, fall through to default
-      }
-    }
-
-    // Default fallback: localhost regex pattern
-    return [/^https?:\/\/localhost(:\d+)?$/];
+  // Development: use empty array to signal "use defaults"
+  if (!env || env === "") {
+    return [];
   }
 
-  if (allowedFrontendOrigins === "*") {
-    return "*";
-  }
-
-  // Split comma-separated list and trim whitespace
-  return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
-};
-
-/**
- * Get trusted origins for better-auth
- * Converts CORS origins to a format that better-auth accepts (string[])
- * Note: better-auth supports wildcard patterns
- */
-const getBetterAuthTrustedOrigins = (): string[] => {
-  const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
-
-  if (!allowedFrontendOrigins) {
-    // Extract domain from ARCHESTRA_API_BASE_URL and use it as trusted origin
-    const baseURL = process.env.ARCHESTRA_API_BASE_URL;
-
-    if (baseURL) {
-      try {
-        const url = new URL(baseURL);
-        const origin = `${url.protocol}//${url.hostname}`;
-
-        // For localhost, use wildcard to support any port
-        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-          return ["*://localhost:*", "*://127.0.0.1:*"];
-        }
-
-        // For production domains, use the exact origin
-        return [origin];
-      } catch {
-        // Invalid URL, fall through to default
-      }
-    }
-
-    // Default fallback: localhost with wildcard port
-    return ["*://localhost:*"];
-  }
-
-  // Support wildcard for all origins if explicitly set
-  if (allowedFrontendOrigins === "*") {
+  // Allow all origins
+  if (env === "*") {
     return ["*"];
   }
 
-  // Split comma-separated list and trim whitespace
-  return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
+  // Comma-separated list of specific origins
+  return env
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+};
+
+/**
+ * Get CORS origin configuration for Fastify.
+ * Returns RegExp for localhost (development), boolean for wildcard, or string[] for specific origins.
+ */
+const getCorsOrigins = (): RegExp | boolean | string[] => {
+  const origins = parseAllowedOrigins();
+
+  // Default: allow localhost on any port for development
+  if (origins.length === 0) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  }
+
+  // Wildcard: allow all origins
+  if (origins.includes("*")) {
+    return true;
+  }
+
+  return origins;
+};
+
+/**
+ * Get trusted origins for better-auth.
+ * Returns wildcard patterns for localhost (development) or specific origins for production.
+ */
+const getTrustedOrigins = (): string[] | undefined => {
+  const origins = parseAllowedOrigins();
+
+  // Default: allow localhost wildcards for development
+  if (origins.length === 0) {
+    return [
+      "http://localhost:*",
+      "https://localhost:*",
+      "http://127.0.0.1:*",
+      "https://127.0.0.1:*",
+    ];
+  }
+
+  return origins;
 };
 
 export default {
@@ -141,7 +125,7 @@ export default {
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
-    trustedOrigins: getBetterAuthTrustedOrigins(),
+    trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
     adminDefaultPassword:

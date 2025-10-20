@@ -3665,7 +3665,7 @@ export type GetFeaturesResponses = {
      * Default Response
      */
     200: {
-        mcp_gateway: boolean;
+        mcp_registry: boolean;
     };
 };
 

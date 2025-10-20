@@ -56,7 +56,7 @@ interface MenuItem {
 const getNavigationItems = (
   isAuthenticated: boolean,
   role: Role,
-  mcpGatewayEnabled: boolean,
+  mcpRegistryEnabled: boolean,
 ): MenuItem[] => {
   return [
     {
@@ -81,11 +81,11 @@ const getNavigationItems = (
             url: "/tools",
             icon: FileJson2,
           },
-          ...(mcpGatewayEnabled
+          ...(mcpRegistryEnabled
             ? [
                 {
-                  title: "MCP Gateway",
-                  url: "/mcp-gateway",
+                  title: "MCP Registry",
+                  url: "/mcp-registry",
                   icon: Router,
                 },
               ]
@@ -126,7 +126,7 @@ export function AppSidebar() {
   const [starCount, setStarCount] = useState<number | null>(null);
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
-  const mcpGatewayEnabled = useFeatureFlag("mcp_gateway");
+  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
 
   useEffect(() => {
     fetch("https://api.github.com/repos/archestra-ai/archestra")
@@ -152,35 +152,37 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated, role, mcpGatewayEnabled).map(
-                (item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={item.url === pathname}>
-                      <a href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </a>
-                    </SidebarMenuButton>
-                    {item.subItems && (
-                      <SidebarMenuSub>
-                        {item.subItems.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={subItem.url === pathname}
-                            >
-                              <a href={subItem.url}>
-                                {subItem.icon && <subItem.icon />}
-                                <span>{subItem.title}</span>
-                              </a>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    )}
-                  </SidebarMenuItem>
-                ),
-              )}
+              {getNavigationItems(
+                isAuthenticated,
+                role,
+                mcpRegistryEnabled,
+              ).map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={item.url === pathname}>
+                    <a href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </a>
+                  </SidebarMenuButton>
+                  {item.subItems && (
+                    <SidebarMenuSub>
+                      {item.subItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={subItem.url === pathname}
+                          >
+                            <a href={subItem.url}>
+                              {subItem.icon && <subItem.icon />}
+                              <span>{subItem.title}</span>
+                            </a>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

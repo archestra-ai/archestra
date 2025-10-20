@@ -20,7 +20,7 @@ export function DualLLMPage({
   initialData?: GetDefaultDualLlmConfigResponses["200"];
 }) {
   return (
-    <div className="container mx-auto overflow-y-auto">
+    <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <DualLLMContent initialData={initialData} />

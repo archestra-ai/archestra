@@ -7,11 +7,11 @@ import {
   getMcpServers,
 } from "@/lib/clients/api";
 import { getServerApiHeaders } from "@/lib/server-utils";
-import McpGatewayPage from "./page.client";
+import McpRegistryPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-export default async function McpGatewayPageServer() {
+export default async function McpRegistryPageServer() {
   let initialData: {
     catalog: GetMcpCatalogResponses["200"];
     servers: GetMcpServersResponses["200"];
@@ -31,5 +31,5 @@ export default async function McpGatewayPageServer() {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
 
-  return <McpGatewayPage initialData={initialData} />;
+  return <McpRegistryPage initialData={initialData} />;
 }

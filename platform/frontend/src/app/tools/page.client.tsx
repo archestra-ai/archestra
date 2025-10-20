@@ -58,7 +58,7 @@ export function ToolsPage({
   }, [queryClient]);
 
   return (
-    <div className="container mx-auto overflow-y-auto">
+    <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <ToolsList key="tools-list-component" initialData={initialData} />

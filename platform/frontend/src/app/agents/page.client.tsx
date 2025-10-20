@@ -69,7 +69,7 @@ export default function AgentsPage({
   initialData: GetAgentsResponses["200"];
 }) {
   return (
-    <div className="container mx-auto overflow-y-auto">
+    <div className="w-full h-full">
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
           <Agents initialData={initialData} />

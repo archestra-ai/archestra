@@ -13,7 +13,7 @@ const featuresRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Features"],
         response: {
           200: z.strictObject({
-            mcp_gateway: z.boolean(),
+            mcp_registry: z.boolean(),
           }),
         },
       },

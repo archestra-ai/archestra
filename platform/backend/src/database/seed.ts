@@ -629,8 +629,8 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
  * Seeds MCP catalog from JSON file
  */
 async function seedMcpCatalog(): Promise<void> {
-  if (!config.features.mcp_gateway) {
-    console.log("✓ MCP gateway feature is disabled, skipping");
+  if (!config.features.mcp_registry) {
+    console.log("✓ MCP registry feature is disabled, skipping");
     return;
   }
 

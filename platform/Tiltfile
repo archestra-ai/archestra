@@ -8,6 +8,14 @@ is_prod = os.getenv('PROD') == 'true'
 # Disable analytics in local development
 os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
 
+# set NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to the same value as ARCHESTRA_API_BASE_URL
+# so it's accessible by the frontend
+api_base_url = os.getenv("ARCHESTRA_API_BASE_URL")
+next_pubic_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
+if not next_pubic_api_base_url and api_base_url and api_base_url != "":
+  os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
+
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -104,7 +112,7 @@ local_resource(
 if is_prod:
   local_resource(
     'pnpm-prod',
-    cmd='pnpm build',
+    cmd='rm -rf frontend/.next && pnpm build',
     serve_cmd='pnpm start',
     labels=['prod'],
     resource_deps=['db-migrate-and-seed']

@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import config from "@/lib/config";
 
 export function DefaultCredentialsWarning({
   alwaysShow = false,
@@ -57,7 +56,7 @@ export function DefaultCredentialsWarning({
 
   useEffect(() => {
     // Fetch the default credentials status from the backend API
-    fetch(`${config.api.baseUrl}/api/auth/default-credentials-status`)
+    fetch("/api/auth/default-credentials-status")
       .then((res) => res.json())
       .then((data) => setDefaultCredentialsEnabled(data.enabled))
       .catch(() => setDefaultCredentialsEnabled(false));

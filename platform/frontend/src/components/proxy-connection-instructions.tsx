@@ -15,7 +15,7 @@ import {
 import type { SupportedProviders } from "@/lib/clients/api/types.gen";
 import config from "@/lib/config";
 
-const { proxyUrl: apiProxyUrl } = config.api;
+const { displayProxyUrl: apiProxyUrl } = config.api;
 
 interface ProxyConnectionInstructionsProps {
   agentId?: string;

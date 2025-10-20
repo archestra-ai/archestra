@@ -45,33 +45,58 @@ const getPortFromUrl = (): number => {
   }
 };
 
+const parseAllowedOrigins = (): string[] => {
+  // Development: use empty array to signal "use defaults" (localhost regex)
+  if (isDevelopment) {
+    return [];
+  }
+
+  // ARCHESTRA_FRONTEND_URL if set
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl && frontendUrl !== "") {
+    return [frontendUrl];
+  }
+
+  return [];
+};
+
 /**
- * Parse CORS origins from environment variable
- * Supports:
- * - Comma-separated list: "https://example.com,https://app.example.com"
- * - Empty/undefined: defaults to localhost regex (both http and https on any port)
- *
- * Note: Wildcard "*" is not supported when using credentials mode.
- * The frontend uses credentials: 'include', so we must specify exact origins.
+ * Get CORS origin configuration for Fastify.
+ * Returns RegExp for localhost (development) or string[] for specific origins.
  */
-const getCorsOrigins = (): string | string[] | RegExp[] => {
-  const allowedFrontendOrigins = process.env.ARCHESTRA_ALLOWED_FRONTEND_ORIGINS;
+const getCorsOrigins = (): RegExp | boolean | string[] => {
+  const origins = parseAllowedOrigins();
 
-  if (!allowedFrontendOrigins) {
-    // Default: allow localhost origins in both development and production
-    return [/^https?:\/\/localhost(:\d+)?$/];
+  // Default: allow localhost on any port for development
+  if (origins.length === 0) {
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
   }
 
-  if (allowedFrontendOrigins === "*") {
-    return "*";
+  return origins;
+};
+
+/**
+ * Get trusted origins for better-auth.
+ * Returns wildcard patterns for localhost (development) or specific origins for production.
+ */
+const getTrustedOrigins = (): string[] | undefined => {
+  const origins = parseAllowedOrigins();
+
+  // Default: allow localhost wildcards for development
+  if (origins.length === 0) {
+    return [
+      "http://localhost:*",
+      "https://localhost:*",
+      "http://127.0.0.1:*",
+      "https://127.0.0.1:*",
+    ];
   }
 
-  // Split comma-separated list and trim whitespace
-  return allowedFrontendOrigins.split(",").map((origin) => origin.trim());
+  return origins;
 };
 
 export default {
-  baseURL: process.env.ARCHESTRA_API_BASE_URL,
+  baseURL: process.env.ARCHESTRA_FRONTEND_URL,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),
@@ -81,11 +106,13 @@ export default {
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
+    trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
     adminDefaultPassword:
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
+    cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
   },
   database: {
     url: process.env.DATABASE_URL,

@@ -108,20 +108,14 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Proxy URL displayed in UI (defaults to http://localhost:9000/v1)
 NEXT_PUBLIC_ARCHESTRA_API_BASE_URL="http://localhost:9000"  # Frontend-specific env var (defaults to ARCHESTRA_API_BASE_URL if not set)
 
-# Allowed Origins (optional)
-# Controls which frontend origins can access the API (CORS and auth)
-# This variable is used for both Fastify CORS configuration and better-auth's trustedOrigins
-ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"  # Comma-separated list
-# If not set: defaults to localhost on any port (development mode)
+# Allowed Frontend Origins (optional)
+ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"  # Comma-separated list of allowed frontend origins
+# If not set, defaults to localhost regex (allows http(s)://localhost on any port)
 # Examples:
-#   Single domain: ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com"
-#   Multiple domains: ARCHESTRA_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"
-#   Allow all: ARCHESTRA_ALLOWED_ORIGINS="*" (NOT supported for better-auth - will reject all origins)
-
-# Auth Configuration (optional)
-ARCHESTRA_AUTH_SECRET=  # Secret for auth session encryption
-ARCHESTRA_AUTH_ADMIN_EMAIL=admin@example.com  # Default admin email
-ARCHESTRA_AUTH_ADMIN_PASSWORD=password  # Default admin password (CHANGE IN PRODUCTION)
+#   Single domain: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com"
+#   Multiple domains: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="https://app.example.com,https://dashboard.example.com"
+#   Local development: ARCHESTRA_ALLOWED_FRONTEND_ORIGINS="http://localhost:3000"
+# Note: Wildcard "*" is not supported due to credentials mode (cookie-based authentication)
 
 # Provider API Keys (server-side configuration)
 OPENAI_API_KEY=your-api-key-here  # Required for OpenAI provider

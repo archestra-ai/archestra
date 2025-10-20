@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path, { resolve } from "node:path";
 import * as readline from "node:readline/promises";
+import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -36,7 +37,7 @@ const terminal = readline.createInterface({
   output: process.stdout,
 });
 
-type Provider = "openai" | "gemini";
+type Provider = "openai" | "gemini" | "anthropic";
 
 const parseArgs = (): {
   includeExternalEmail: boolean;
@@ -54,7 +55,7 @@ Options:
 --include-malicious-email Include malicious email in mock Gmail data
 --stream                  Stream the response
 --model <model>           The model to use for the chat (default: gpt-4o for openai, gemini-2.5-flash for gemini)
---provider <provider>     The provider to use (openai or gemini, default: openai)
+--provider <provider>     The provider to use (openai, gemini, or anthropic, default: openai)
 --agent-id <uuid>         The agent ID to use (optional, creates agent-specific proxy URL)
 --debug                   Print debug messages
 --help                    Print this help message
@@ -68,17 +69,26 @@ Options:
 
   const provider = (
     providerIndex !== -1 ? process.argv[providerIndex + 1] : "openai"
-  ) as Provider;
+  ).toLowerCase() as Provider;
+  const isGoogle = ["gemini", "google"].includes(provider);
 
-  const isGoogle = ["gemini", "google"].includes(provider.toLowerCase());
-  const defaultModel = isGoogle ? "gemini-2.5-flash" : "gpt-4o";
+  let model;
+  if (modelIndex !== -1) {
+    model = process.argv[modelIndex + 1];
+  } else if (isGoogle) {
+    model = "gemini-2.5-flash";
+  } else if (provider === "anthropic") {
+    model = "claude-3-5-sonnet-20241022";
+  } else {
+    model = "gpt-4o";
+  }
 
   return {
     includeExternalEmail: process.argv.includes("--include-external-email"),
     includeMaliciousEmail: process.argv.includes("--include-malicious-email"),
     debug: process.argv.includes("--debug"),
     stream: process.argv.includes("--stream"),
-    model: modelIndex !== -1 ? process.argv[modelIndex + 1] : defaultModel,
+    model,
     provider,
     agentId: agentIdIndex !== -1 ? process.argv[agentIdIndex + 1] : null,
   };
@@ -703,6 +713,266 @@ const cliChatWithGemini = async (options: {
   }
 };
 
+/**
+ * Anthropic-specific chat handler
+ */
+const cliChatWithAnthropic = async (options: {
+  includeExternalEmail: boolean;
+  includeMaliciousEmail: boolean;
+  debug: boolean;
+  stream: boolean;
+  model: string;
+  agentId: string | null;
+}) => {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is not set");
+  }
+
+  const baseURL = options.agentId
+    ? `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/v1/${options.agentId}`
+    : `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/v1`;
+
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    baseURL,
+    defaultHeaders: {
+      "User-Agent": USER_AGENT,
+    },
+  });
+
+  const { includeExternalEmail, includeMaliciousEmail, debug, stream, model } =
+    options;
+
+  const messages: Anthropic.MessageParam[] = [];
+
+  printStartMessage(model, "anthropic");
+
+  while (true) {
+    const userInput = await terminal.question("You: ");
+
+    if (userInput === HELP_COMMAND) {
+      handleHelpCommand();
+      continue;
+    } else if (userInput === EXIT_COMMAND) {
+      handleExitCommand();
+    }
+
+    messages.push({ role: "user", content: userInput });
+
+    // Loop to handle function calls
+    let continueLoop = true;
+    let stepCount = 0;
+    const maxSteps = 5;
+
+    while (continueLoop && stepCount < maxSteps) {
+      stepCount++;
+
+      // Convert OpenAI tool definitions to Anthropic format
+      const tools = getToolDefinitions().map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: tool.function.parameters,
+      }));
+
+      let assistantMessage: Anthropic.Message;
+
+      if (stream) {
+        const streamResponse = await anthropic.messages.create({
+          model,
+          messages,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          tools,
+          stream: true,
+        });
+
+        // Accumulate streaming response
+        const accumulatedContent: Anthropic.ContentBlock[] = [];
+        let currentToolUse: any = null;
+
+        if (stepCount === 1) {
+          process.stdout.write("\nAssistant: ");
+        }
+
+        for await (const chunk of streamResponse) {
+          if (chunk.type === "content_block_start") {
+            if (chunk.content_block.type === "text") {
+              // Start of text block
+              currentToolUse = null;
+            } else if (chunk.content_block.type === "tool_use") {
+              // Start of tool use block
+              currentToolUse = {
+                ...chunk.content_block,
+                input: {},
+              };
+            }
+          } else if (chunk.type === "content_block_delta") {
+            if (chunk.delta.type === "text_delta") {
+              // Text content
+              process.stdout.write(chunk.delta.text);
+              // Update the last text block or create a new one
+              const lastBlock =
+                accumulatedContent[accumulatedContent.length - 1];
+              if (lastBlock && lastBlock.type === "text") {
+                lastBlock.text += chunk.delta.text;
+              } else {
+                accumulatedContent.push({
+                  type: "text",
+                  text: chunk.delta.text,
+                });
+              }
+            } else if (chunk.delta.type === "input_json_delta") {
+              // Tool input JSON delta
+              if (currentToolUse) {
+                // Parse and merge the JSON delta
+                try {
+                  const partialJson = JSON.parse(
+                    chunk.delta.partial_json || "{}",
+                  );
+                  currentToolUse.input = {
+                    ...currentToolUse.input,
+                    ...partialJson,
+                  };
+                } catch {
+                  // If not valid JSON yet, accumulate the string
+                  if (!currentToolUse.inputString) {
+                    currentToolUse.inputString = "";
+                  }
+                  currentToolUse.inputString += chunk.delta.partial_json;
+                }
+              }
+            }
+          } else if (chunk.type === "content_block_stop") {
+            if (currentToolUse) {
+              // Finalize tool use block
+              if (currentToolUse.inputString) {
+                try {
+                  currentToolUse.input = JSON.parse(currentToolUse.inputString);
+                } catch {
+                  currentToolUse.input = {};
+                }
+                delete currentToolUse.inputString;
+              }
+              accumulatedContent.push(currentToolUse);
+              currentToolUse = null;
+            }
+          } else if (chunk.type === "message_stop") {
+            // Message complete
+            assistantMessage = {
+              id: "msg_" + Date.now(),
+              type: "message",
+              role: "assistant",
+              content: accumulatedContent,
+              model,
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 0, output_tokens: 0 },
+            };
+          }
+        }
+      } else {
+        const response = await anthropic.messages.create({
+          model,
+          messages,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          tools,
+          stream: false,
+        });
+
+        assistantMessage = response;
+
+        // Print text content if present
+        const textBlocks = assistantMessage.content.filter(
+          (block): block is Anthropic.TextBlock => block.type === "text",
+        );
+        if (textBlocks.length > 0) {
+          const text = textBlocks.map((b) => b.text).join("");
+          process.stdout.write(`\nAssistant: ${text}`);
+        }
+      }
+
+      // Add assistant message to history
+      messages.push({
+        role: "assistant",
+        content: assistantMessage.content,
+      });
+
+      // Check for tool use blocks
+      const toolUseBlocks = assistantMessage.content.filter(
+        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
+      );
+
+      if (toolUseBlocks.length > 0) {
+        // Execute each tool call
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+        for (const toolUse of toolUseBlocks) {
+          if (toolUse.type !== "tool_use") continue;
+
+          const toolName = toolUse.name;
+          const toolArgs = toolUse.input;
+
+          if (debug) {
+            console.log(
+              `\n[DEBUG] Calling tool: ${toolName} with args:`,
+              toolArgs,
+            );
+          }
+
+          try {
+            const toolResult = await executeToolCall(
+              toolName,
+              toolArgs,
+              includeExternalEmail,
+              includeMaliciousEmail,
+            );
+
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: toolUse.id,
+              content: JSON.stringify(toolResult),
+            });
+
+            if (debug) {
+              console.log(`[DEBUG] Tool result:`, toolResult);
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: toolUse.id,
+              content: JSON.stringify({ error: errorMessage }),
+              is_error: true,
+            });
+
+            if (debug) {
+              console.error(`[DEBUG] Tool error:`, errorMessage);
+            }
+          }
+        }
+
+        // Add tool results to messages
+        messages.push({
+          role: "user",
+          content: toolResults,
+        });
+      } else {
+        // No tool calls, stop the loop
+        continueLoop = false;
+      }
+    }
+
+    if (stepCount >= maxSteps) {
+      console.log("\n[Max steps reached]");
+    }
+
+    process.stdout.write("\n\n");
+  }
+};
+
 const cliChatWithGuardrails = async () => {
   const options = parseArgs();
 
@@ -710,6 +980,8 @@ const cliChatWithGuardrails = async () => {
     await cliChatWithOpenAI(options);
   } else if (options.provider === "gemini") {
     await cliChatWithGemini(options);
+  } else if (options.provider === "anthropic") {
+    await cliChatWithAnthropic(options);
   } else {
     throw new Error(`Unsupported provider: ${options.provider}`);
   }

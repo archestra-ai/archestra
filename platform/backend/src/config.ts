@@ -46,13 +46,17 @@ const getPortFromUrl = (): number => {
 };
 
 const parseAllowedOrigins = (): string[] => {
+  // Development: use empty array to signal "use defaults" (localhost regex)
+  if (isDevelopment) {
+    return [];
+  }
+
   // ARCHESTRA_FRONTEND_URL if set
   const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
   if (frontendUrl && frontendUrl !== "") {
     return [frontendUrl];
   }
 
-  // Development: use empty array to signal "use defaults" (localhost regex)
   return [];
 };
 

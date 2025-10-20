@@ -30,7 +30,7 @@ export function DefaultCredentialsWarning({
         setCopiedPassword(true);
         setTimeout(() => setCopiedPassword(false), 2000);
       }
-    } catch (error) {
+    } catch (_error) {
       // Fallback for older browsers or when clipboard API is not available
       const textArea = document.createElement("textarea");
       textArea.value = text;

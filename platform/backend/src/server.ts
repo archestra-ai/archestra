@@ -127,6 +127,7 @@ const start = async () => {
     fastify.register(routes.geminiProxyRoutes);
 
     fastify.register(routes.agentRoutes);
+    fastify.register(routes.featuresRoutes);
     fastify.register(routes.interactionRoutes);
     fastify.register(routes.toolRoutes);
     fastify.register(routes.autonomyPolicyRoutes);

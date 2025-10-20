@@ -99,6 +99,9 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 
+  // Features Routes
+  GetFeatures: "getFeatures",
+
   // Tool Routes
   GetTools: "getTools",
   UpdateTool: "updateTool",

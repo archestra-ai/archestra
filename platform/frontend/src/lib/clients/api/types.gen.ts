@@ -3653,6 +3653,24 @@ export type UpdateAgentResponses = {
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
 
+export type GetFeaturesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/features';
+};
+
+export type GetFeaturesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mcp_gateway: boolean;
+    };
+};
+
+export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
+
 export type GetInteractionsData = {
     body?: never;
     path?: never;

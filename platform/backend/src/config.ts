@@ -117,6 +117,9 @@ export default {
   database: {
     url: process.env.DATABASE_URL,
   },
+  features: {
+    mcp_gateway: process.env.FEATURES_MCP_GATEWAY_ENABLED === "true",
+  },
   debug: isDevelopment,
   production: isProduction,
   benchmark: {

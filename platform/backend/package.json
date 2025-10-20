@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsup",
-    "start": "node dist/server.js",
+    "start": "NODE_ENV=production node dist/server.js",
     "dev": "tsup --watch --onSuccess \"node dist/server.js\"",
     "dev:debug": "tsup --watch --onSuccess \"node --inspect-brk dist/server.js\"",
     "test": "vitest",

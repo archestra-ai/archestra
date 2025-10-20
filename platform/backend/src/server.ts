@@ -77,7 +77,13 @@ const start = async () => {
     await fastify.register(fastifyCors, {
       origin: corsOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Cookie",
+      ],
+      exposedHeaders: ["Set-Cookie"],
       credentials: true,
     });
 

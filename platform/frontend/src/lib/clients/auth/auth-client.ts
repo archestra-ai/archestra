@@ -1,5 +1,9 @@
 import { ac, adminRole, memberRole } from "@shared";
-import { adminClient, organizationClient } from "better-auth/client/plugins";
+import {
+  adminClient,
+  apiKeyClient,
+  organizationClient,
+} from "better-auth/client/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config";
@@ -16,6 +20,7 @@ export const authClient = createAuthClient({
     }),
     nextCookies(),
     adminClient(),
+    apiKeyClient(),
   ],
   fetchOptions: {
     credentials: "include",

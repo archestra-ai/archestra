@@ -141,6 +141,13 @@
       "when": 1760985331673,
       "tag": "0019_curvy_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1760992046940,
+      "tag": "0020_ancient_sprite",
+      "breakpoints": true
     }
   ]
 }

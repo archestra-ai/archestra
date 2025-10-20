@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ApiKeysCard,
   DeleteAccountCard,
   OrganizationMembersCard,
   SecuritySettingsCards,
@@ -124,6 +125,7 @@ function SettingsContent() {
           <TabsContent value="account">
             <div className="space-y-6">
               <SecuritySettingsCards />
+              <ApiKeysCard />
               <DeleteAccountCard />
             </div>
           </TabsContent>

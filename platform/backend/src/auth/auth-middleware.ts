@@ -38,7 +38,8 @@ class AuthMiddleware {
       url.startsWith("/v1/gemini") ||
       url.startsWith("/json") ||
       url === "/openapi.json" ||
-      url === "/health"
+      url === "/health" ||
+      url === "/api/features"
     ) {
       return true;
     }

@@ -89,16 +89,21 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resolvedAgentId,
       );
 
-      // Process messages with trusted data policies dynamically
-      const { filteredMessages, contextIsTrusted } =
+      // Convert to common format and evaluate trusted data policies
+      const commonMessages = utils.adapters.openai.toCommonFormat(messages);
+      const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          {
-            provider: "openai",
-            messages,
-          },
+          commonMessages,
           resolvedAgentId,
           openAiApiKey,
+          "openai",
         );
+
+      // Apply updates back to OpenAI messages
+      const filteredMessages = utils.adapters.openai.applyUpdates(
+        messages,
+        toolResultUpdates,
+      );
 
       if (stream) {
         reply.header("Content-Type", "text/event-stream");

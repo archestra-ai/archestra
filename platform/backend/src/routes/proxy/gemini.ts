@@ -79,14 +79,32 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // TODO: Persist tools if present
       // await utils.persistTools(commonRequest.tools, resolvedAgentId);
 
-      // TODO:
-      // Process messages with trusted data policies dynamically
-      // const { filteredMessages, contextIsTrusted } =
-      //   await utils.trustedData.evaluateIfContextIsTrusted(
-      //     commonRequest.messages,
-      //     resolvedAgentId,
-      //     geminiApiKey,
-      //   );
+      // Convert to common format and evaluate trusted data policies
+      const commonMessages = utils.adapters.gemini.toCommonFormat(
+        body.contents || [],
+      );
+      const { toolResultUpdates, contextIsTrusted: _contextIsTrusted } =
+        await utils.trustedData.evaluateIfContextIsTrusted(
+          commonMessages,
+          resolvedAgentId,
+          geminiApiKey,
+          /**
+           * TODO: gemini isn't properly supported yet...
+           */
+          "openai",
+        );
+
+      // Apply updates back to Gemini contents
+      const filteredContents = utils.adapters.gemini.applyUpdates(
+        body.contents || [],
+        toolResultUpdates,
+      );
+
+      // Use filtered contents in request
+      const processedBody = {
+        ...body,
+        contents: filteredContents,
+      };
 
       if (stream) {
         // reply.header("Content-Type", "text/event-stream");
@@ -208,7 +226,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Non-streaming response
         const response = await genAI.models.generateContent({
           model: modelName,
-          ...body,
+          ...processedBody,
         });
 
         // Convert to common format for policy evaluation

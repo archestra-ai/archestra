@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import type { SupportedProviders } from "./types";
 
 /**
  * Common message format for dual LLM Q&A conversation
@@ -181,11 +182,13 @@ Return only the JSON object, no other text.`;
  * Factory function to create the appropriate LLM client
  */
 export function createDualLlmClient(
-  provider: "openai" | "anthropic",
+  provider: SupportedProviders,
   apiKey: string,
 ): DualLlmClient {
-  if (provider === "anthropic") {
-    return new AnthropicDualLlmClient(apiKey);
+  switch (provider) {
+    case "anthropic":
+      return new AnthropicDualLlmClient(apiKey);
+    case "openai":
+      return new OpenAiDualLlmClient(apiKey);
   }
-  return new OpenAiDualLlmClient(apiKey);
 }

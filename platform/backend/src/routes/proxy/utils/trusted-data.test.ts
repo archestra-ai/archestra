@@ -1,6 +1,7 @@
 import { AgentModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import type { OpenAi, Tool } from "@/types";
-import { evaluateIfContextIsTrusted } from "./openai";
+import * as openAiAdapter from "./adapters/openai";
+import { evaluateIfContextIsTrusted } from "./trusted-data";
 
 type Messages = OpenAi.Types.ChatCompletionsRequest["messages"];
 
@@ -37,17 +38,22 @@ describe("trusted-data openai utils", () => {
         { role: "assistant", content: "Hi there!" },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
       );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
+      );
 
       expect(result.contextIsTrusted).toBe(true);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
-    test("marks context as untrusted and filters messages when tool message matches block policy", async () => {
+    test("marks context as untrusted and updates tool results when tool message matches block policy", async () => {
       // Create a block policy
       await TrustedDataPolicyModel.create({
         toolId,
@@ -87,15 +93,20 @@ describe("trusted-data openai utils", () => {
         { role: "assistant", content: "Here are your emails" },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
+      );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
       );
 
       // Context should be untrusted and blocked tool message should be filtered
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages).toEqual([
+      expect(filteredMessages).toEqual([
         { role: "user", content: "Get emails" },
         {
           role: "assistant",
@@ -159,14 +170,19 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
       );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
+      );
 
       expect(result.contextIsTrusted).toBe(true);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("marks context as untrusted when no policies match", async () => {
@@ -204,15 +220,20 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
+      );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
       );
 
       // Context should be untrusted when no policies match
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("handles multiple tool messages with mixed trust", async () => {
@@ -283,15 +304,20 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
+      );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
       );
 
       // Context should be untrusted if any tool message is blocked or untrusted
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages).toEqual([
+      expect(filteredMessages).toEqual([
         {
           role: "assistant",
           content: null,
@@ -350,15 +376,20 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
+      );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
       );
 
       // Should mark as untrusted when tool is not found
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("handles invalid JSON in tool message content", async () => {
@@ -370,15 +401,20 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
+      );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
       );
 
       // Should handle gracefully and mark as untrusted
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("preserves non-tool messages unchanged", async () => {
@@ -388,14 +424,19 @@ describe("trusted-data openai utils", () => {
         { role: "system", content: "You are helpful" },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
       );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
+      );
 
       expect(result.contextIsTrusted).toBe(true);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("marks context as trusted when tool has dataIsTrustedByDefault", async () => {
@@ -431,14 +472,19 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
       );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
+      );
 
       expect(result.contextIsTrusted).toBe(true);
-      expect(result.filteredMessages).toEqual(messages);
+      expect(filteredMessages).toEqual(messages);
     });
 
     test("block policies override dataIsTrustedByDefault", async () => {
@@ -487,14 +533,19 @@ describe("trusted-data openai utils", () => {
         },
       ];
 
+      const commonMessages = openAiAdapter.toCommonFormat(messages);
       const result = await evaluateIfContextIsTrusted(
-        messages,
+        commonMessages,
         agentId,
         "test-api-key",
       );
+      const filteredMessages = openAiAdapter.applyUpdates(
+        messages,
+        result.toolResultUpdates,
+      );
 
       expect(result.contextIsTrusted).toBe(false);
-      expect(result.filteredMessages[1].content).toContain("[Content blocked");
+      expect(filteredMessages[1].content).toContain("[Content blocked");
     });
   });
 });

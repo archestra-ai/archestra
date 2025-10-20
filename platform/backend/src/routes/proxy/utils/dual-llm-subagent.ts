@@ -1,28 +1,11 @@
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { Anthropic, DualLlmConfig, OpenAi } from "@/types";
+import type { DualLlmConfig } from "@/types";
 import {
   createDualLlmClient,
   type DualLlmClient,
   type DualLlmMessage,
 } from "./dual-llm-client";
-
-/**
- * Parameters for creating a DualLlmSubagent with OpenAI provider
- */
-type OpenAiParams = {
-  provider: "openai";
-  messages: OpenAi.Types.ChatCompletionsRequest["messages"];
-  currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number];
-};
-
-/**
- * Parameters for creating a DualLlmSubagent with Anthropic provider
- */
-type AnthropicParams = {
-  provider: "anthropic";
-  messages: Anthropic.Types.MessagesRequest["messages"];
-  toolUseId: string; // For Anthropic, we need the tool_use_id to find the tool result
-};
+import type { CommonDualLlmParams, SupportedProviders } from "./types";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -57,191 +40,20 @@ export class DualLlmSubagent {
     this.toolResult = toolResult;
   }
 
-  /**
-   * Create a DualLlmSubagent instance with OpenAI provider
-   */
   static async create(
-    params: OpenAiParams,
+    params: CommonDualLlmParams,
     agentId: string,
     apiKey: string,
-  ): Promise<DualLlmSubagent>;
-
-  /**
-   * Create a DualLlmSubagent instance with Anthropic provider
-   */
-  static async create(
-    params: AnthropicParams,
-    agentId: string,
-    apiKey: string,
-  ): Promise<DualLlmSubagent>;
-
-  /**
-   * Create a DualLlmSubagent instance with configuration loaded from database
-   */
-  static async create(
-    params: OpenAiParams | AnthropicParams,
-    agentId: string,
-    apiKey: string,
+    provider: SupportedProviders,
   ): Promise<DualLlmSubagent> {
-    const config = await DualLlmConfigModel.getDefault();
-    const llmClient = createDualLlmClient(params.provider, apiKey);
-
-    // Extract user request and tool result based on provider
-    if (params.provider === "openai") {
-      // OpenAI: tool results are in "tool" role messages
-      const { currentMessage, messages } = params;
-
-      if (currentMessage.role !== "tool") {
-        throw new Error("currentMessage must be a tool message");
-      }
-
-      const toolCallId = currentMessage.tool_call_id;
-      const userRequest =
-        DualLlmSubagent.extractUserRequestFromOpenAi(messages);
-      const toolResult =
-        DualLlmSubagent.extractToolResultFromOpenAi(currentMessage);
-
-      return new DualLlmSubagent(
-        config,
-        agentId,
-        toolCallId,
-        llmClient,
-        userRequest,
-        toolResult,
-      );
-    }
-
-    // Anthropic: tool results are in user message content blocks
-    const { messages, toolUseId } = params;
-    const userRequest =
-      DualLlmSubagent.extractUserRequestFromAnthropic(messages);
-    const toolResult = DualLlmSubagent.extractToolResultFromAnthropic(
-      messages,
-      toolUseId,
-    );
-
     return new DualLlmSubagent(
-      config,
+      await DualLlmConfigModel.getDefault(),
       agentId,
-      toolUseId,
-      llmClient,
-      userRequest,
-      toolResult,
+      params.toolCallId,
+      createDualLlmClient(provider, apiKey),
+      params.userRequest,
+      params.toolResult,
     );
-  }
-
-  /**
-   * Extract the user's original request from OpenAI messages.
-   * Gets the last user message from the conversation.
-   */
-  private static extractUserRequestFromOpenAi(
-    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
-  ): string {
-    const userContent =
-      messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
-      "process this data";
-
-    // Convert to string if it's an array (multimodal content)
-    return typeof userContent === "string"
-      ? userContent
-      : JSON.stringify(userContent);
-  }
-
-  /**
-   * Extract the user's original request from Anthropic messages.
-   * Gets the last user message that doesn't contain tool results.
-   */
-  private static extractUserRequestFromAnthropic(
-    messages: Anthropic.Types.MessagesRequest["messages"],
-  ): string {
-    // Find the last user message that doesn't contain tool_result blocks
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message.role === "user") {
-        if (typeof message.content === "string") {
-          return message.content;
-        }
-        // If content is an array, look for text blocks (not tool_result blocks)
-        if (Array.isArray(message.content)) {
-          const textBlock = message.content.find(
-            (block) =>
-              block.type === "text" &&
-              "text" in block &&
-              typeof block.text === "string",
-          );
-          if (textBlock && "text" in textBlock) {
-            return textBlock.text;
-          }
-        }
-      }
-    }
-    return "process this data";
-  }
-
-  /**
-   * Extract the tool result data from OpenAI tool message.
-   * Parses JSON if possible, otherwise returns as-is.
-   */
-  private static extractToolResultFromOpenAi(
-    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
-  ): unknown {
-    if (currentMessage.role !== "tool") {
-      throw new Error("Current message is not a tool message");
-    }
-
-    const content = currentMessage.content;
-
-    if (typeof content === "string") {
-      try {
-        return JSON.parse(content);
-      } catch {
-        // If content is not valid JSON, use it as-is
-        return content;
-      }
-    }
-
-    return content;
-  }
-
-  /**
-   * Extract the tool result data from Anthropic messages.
-   * Finds the tool_result content block with the given toolUseId.
-   */
-  private static extractToolResultFromAnthropic(
-    messages: Anthropic.Types.MessagesRequest["messages"],
-    toolUseId: string,
-  ): unknown {
-    // Find the user message containing the tool_result block
-    for (const message of messages) {
-      if (
-        message.role === "user" &&
-        Array.isArray(message.content) &&
-        message.content.length > 0
-      ) {
-        for (const contentBlock of message.content) {
-          if (
-            contentBlock.type === "tool_result" &&
-            "tool_use_id" in contentBlock &&
-            contentBlock.tool_use_id === toolUseId
-          ) {
-            const content = contentBlock.content;
-
-            if (typeof content === "string") {
-              try {
-                return JSON.parse(content);
-              } catch {
-                // If content is not valid JSON, use it as-is
-                return content;
-              }
-            }
-
-            return content;
-          }
-        }
-      }
-    }
-
-    throw new Error(`Tool result not found for toolUseId: ${toolUseId}`);
   }
 
   /**

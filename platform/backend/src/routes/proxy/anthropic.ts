@@ -91,16 +91,23 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await utils.persistTools(transformedTools, resolvedAgentId);
       }
 
-      // Process messages with trusted data policies dynamically
-      const { filteredMessages, contextIsTrusted } =
+      // Convert to common format and evaluate trusted data policies
+      const commonMessages = utils.adapters.anthropic.toCommonFormat(
+        body.messages,
+      );
+      const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          {
-            provider: "anthropic",
-            messages: body.messages,
-          },
+          commonMessages,
           resolvedAgentId,
           anthropicApiKey,
+          "anthropic",
         );
+
+      // Apply updates back to Anthropic messages
+      const filteredMessages = utils.adapters.anthropic.applyUpdates(
+        body.messages,
+        toolResultUpdates,
+      );
 
       if (stream) {
         return reply.code(400).send({

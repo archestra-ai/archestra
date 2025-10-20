@@ -116,6 +116,41 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+
+  fastify.delete(
+    "/api/mcp_server/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteMcpServer,
+        description: "Delete/uninstall an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return reply.send({
+          success: await McpServerModel.delete(request.params.id),
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
 };
 
 export default mcpServerRoutes;

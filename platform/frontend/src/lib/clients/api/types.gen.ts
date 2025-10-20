@@ -4087,6 +4087,49 @@ export type InstallMcpServerResponses = {
 
 export type InstallMcpServerResponse = InstallMcpServerResponses[keyof InstallMcpServerResponses];
 
+export type DeleteMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type DeleteMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpServerError = DeleteMcpServerErrors[keyof DeleteMcpServerErrors];
+
+export type DeleteMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpServerResponse = DeleteMcpServerResponses[keyof DeleteMcpServerResponses];
+
 export type GetMcpServerData = {
     body?: never;
     path: {

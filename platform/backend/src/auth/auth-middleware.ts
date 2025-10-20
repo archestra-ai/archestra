@@ -189,6 +189,9 @@ const routePermissionsConfig: Partial<
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
+  [RouteId.DeleteMcpServer]: {
+    mcpServer: ["delete"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

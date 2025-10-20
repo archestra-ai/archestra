@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   ALLOWED_DEMO_INTERACTION_ID,
   ALLOWED_DEMO_TOOL_IDS,
@@ -8,12 +10,15 @@ import {
 import AgentModel from "@/models/agent";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
+import McpCatalogModel from "@/models/mcp-catalog";
+import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import User from "@/models/user";
 import type {
   InsertAgent,
   InsertDualLlmConfig,
   InsertInteraction,
+  InsertMcpCatalog,
   InsertTool,
   InteractionRequest,
   InteractionResponse,
@@ -33,6 +38,7 @@ export async function seedDatabase(): Promise<void> {
     await seedTools();
     await seedInteractions();
     await seedDualLlmConfig();
+    await seedMcpCatalog();
 
     console.log("\n✅ Database seed completed successfully!\n");
   } catch (error) {
@@ -615,5 +621,47 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
     console.log("✓ Seeded default dual LLM configuration");
   } else {
     console.log("✓ Dual LLM configuration already exists, skipping");
+  }
+}
+
+/**
+ * Seeds MCP catalog from JSON file
+ */
+async function seedMcpCatalog(): Promise<void> {
+  // 1. Get or create default organization
+  const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  // 2. Check if catalog has already been seeded
+  if (defaultOrg.hasSeededMcpCatalog) {
+    console.log("✓ MCP catalog already seeded, skipping");
+    return;
+  }
+
+  // 3. Read and parse catalog seed JSON file
+  try {
+    // Get the path relative to the backend root directory
+    const seedFilePath = path.resolve(
+      process.cwd(),
+      "src/database/mcp-catalog-seed.json",
+    );
+
+    const seedData = await fs.readFile(seedFilePath, "utf-8");
+    const catalogItems: { name: string }[] = JSON.parse(seedData);
+
+    // 4. Create catalog items
+    for (const item of catalogItems) {
+      const catalogData: InsertMcpCatalog = {
+        name: item.name,
+      };
+      await McpCatalogModel.create(catalogData);
+      console.log(`✓ Seeded MCP catalog item: ${item.name}`);
+    }
+
+    // 5. Mark organization as seeded
+    await OrganizationModel.updateSeededMcpCatalogFlag(defaultOrg.id, true);
+    console.log("✓ Marked organization as having seeded MCP catalog");
+  } catch (error) {
+    console.error("❌ Error seeding MCP catalog:", error);
+    // Don't throw here - we want seeding to continue even if this fails
   }
 }

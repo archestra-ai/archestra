@@ -134,6 +134,13 @@
       "when": 1760736474351,
       "tag": "0018_wet_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1760985331673,
+      "tag": "0019_curvy_screwball",
+      "breakpoints": true
     }
   ]
 }

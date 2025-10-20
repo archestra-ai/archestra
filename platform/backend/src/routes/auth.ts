@@ -36,8 +36,8 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Check if a user with the default email exists
         const [adminUser] = await db
           .select()
-          .from(schema.user)
-          .where(eq(schema.user.email, DEFAULT_ADMIN_EMAIL))
+          .from(schema.usersTable)
+          .where(eq(schema.usersTable.email, DEFAULT_ADMIN_EMAIL))
           .limit(1);
 
         // Default credentials are enabled only if:

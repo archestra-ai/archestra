@@ -102,6 +102,18 @@ export const RouteId = {
   // Features Routes
   GetFeatures: "getFeatures",
 
+  // MCP Catalog Routes
+  GetMcpCatalog: "getMcpCatalog",
+  CreateMcpCatalogItem: "createMcpCatalogItem",
+  GetMcpCatalogItem: "getMcpCatalogItem",
+  UpdateMcpCatalogItem: "updateMcpCatalogItem",
+  DeleteMcpCatalogItem: "deleteMcpCatalogItem",
+
+  // MCP Server Routes
+  GetMcpServers: "getMcpServers",
+  GetMcpServer: "getMcpServer",
+  InstallMcpServer: "installMcpServer",
+
   // Tool Routes
   GetTools: "getTools",
   UpdateTool: "updateTool",

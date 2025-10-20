@@ -7,7 +7,7 @@ import db, { schema } from "@/database";
  */
 export async function createTestUser(email?: string): Promise<string> {
   const userId = crypto.randomUUID();
-  await db.insert(schema.user).values({
+  await db.insert(schema.usersTable).values({
     id: userId,
     name: `Test User ${userId.substring(0, 8)}`,
     email: email || `${userId}@test.com`,
@@ -23,7 +23,7 @@ export async function createTestUser(email?: string): Promise<string> {
  */
 export async function createTestAdmin(email?: string): Promise<string> {
   const userId = crypto.randomUUID();
-  await db.insert(schema.user).values({
+  await db.insert(schema.usersTable).values({
     id: userId,
     name: `Admin User ${userId.substring(0, 8)}`,
     email: email || `${userId}@test.com`,

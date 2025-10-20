@@ -5,4 +5,7 @@ export * from "./dual-llm-config";
 export * from "./dual-llm-result";
 export * from "./interaction";
 export * from "./llm-providers";
+export * from "./mcp-catalog";
+export * from "./mcp-server";
+export * from "./organization";
 export * from "./tool";

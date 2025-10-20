@@ -165,6 +165,30 @@ const routePermissionsConfig: Partial<
   [RouteId.GetDualLlmResultByToolCallId]: {
     dualLlmResult: ["read"],
   },
+  [RouteId.GetMcpCatalog]: {
+    mcpCatalog: ["read"],
+  },
+  [RouteId.CreateMcpCatalogItem]: {
+    mcpCatalog: ["create"],
+  },
+  [RouteId.GetMcpCatalogItem]: {
+    mcpCatalog: ["read"],
+  },
+  [RouteId.UpdateMcpCatalogItem]: {
+    mcpCatalog: ["update"],
+  },
+  [RouteId.DeleteMcpCatalogItem]: {
+    mcpCatalog: ["delete"],
+  },
+  [RouteId.GetMcpServers]: {
+    mcpServer: ["read"],
+  },
+  [RouteId.GetMcpServer]: {
+    mcpServer: ["read"],
+  },
+  [RouteId.InstallMcpServer]: {
+    mcpServer: ["create"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

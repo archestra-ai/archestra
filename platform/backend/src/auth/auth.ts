@@ -42,9 +42,9 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"
     schema: {
-      user: schema.user,
+      user: schema.usersTable,
       session: schema.session,
-      organization: schema.organization,
+      organization: schema.organizationsTable,
       member: schema.member,
       invitation: schema.invitation,
       account: schema.account,
@@ -237,7 +237,7 @@ export const auth = betterAuth({
             const orgSlug = `org-${user.id.substring(0, 8)}`;
 
             const org = await db
-              .insert(schema.organization)
+              .insert(schema.organizationsTable)
               .values({
                 id: crypto.randomUUID(),
                 name: orgName,

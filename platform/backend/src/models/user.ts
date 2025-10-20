@@ -11,8 +11,8 @@ class User {
     try {
       const existing = await db
         .select()
-        .from(schema.user)
-        .where(eq(schema.user.email, email));
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.email, email));
       if (existing.length > 0) {
         console.log("Admin already exists:", email);
         return;
@@ -28,12 +28,12 @@ class User {
 
       if (result) {
         await db
-          .update(schema.user)
+          .update(schema.usersTable)
           .set({
             role: "admin",
             emailVerified: true,
           })
-          .where(eq(schema.user.email, email));
+          .where(eq(schema.usersTable.email, email));
 
         console.log("Admin user created successfully:", email);
       }

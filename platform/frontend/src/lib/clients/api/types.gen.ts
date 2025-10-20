@@ -3803,6 +3803,337 @@ export type GetInteractionResponses = {
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
+export type GetMcpCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_catalog';
+};
+
+export type GetMcpCatalogErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpCatalogError = GetMcpCatalogErrors[keyof GetMcpCatalogErrors];
+
+export type GetMcpCatalogResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
+
+export type CreateMcpCatalogItemData = {
+    body: {
+        name: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_catalog';
+};
+
+export type CreateMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateMcpCatalogItemError = CreateMcpCatalogItemErrors[keyof CreateMcpCatalogItemErrors];
+
+export type CreateMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateMcpCatalogItemResponse = CreateMcpCatalogItemResponses[keyof CreateMcpCatalogItemResponses];
+
+export type DeleteMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type DeleteMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpCatalogItemError = DeleteMcpCatalogItemErrors[keyof DeleteMcpCatalogItemErrors];
+
+export type DeleteMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpCatalogItemResponse = DeleteMcpCatalogItemResponses[keyof DeleteMcpCatalogItemResponses];
+
+export type GetMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type GetMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpCatalogItemError = GetMcpCatalogItemErrors[keyof GetMcpCatalogItemErrors];
+
+export type GetMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpCatalogItemResponses];
+
+export type UpdateMcpCatalogItemData = {
+    body?: {
+        name?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type UpdateMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateMcpCatalogItemError = UpdateMcpCatalogItemErrors[keyof UpdateMcpCatalogItemErrors];
+
+export type UpdateMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateMcpCatalogItemResponse = UpdateMcpCatalogItemResponses[keyof UpdateMcpCatalogItemResponses];
+
+export type GetMcpServersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type GetMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServersError = GetMcpServersErrors[keyof GetMcpServersErrors];
+
+export type GetMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        catalogId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersResponses];
+
+export type InstallMcpServerData = {
+    body: {
+        name: string;
+        catalogId?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type InstallMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type InstallMcpServerError = InstallMcpServerErrors[keyof InstallMcpServerErrors];
+
+export type InstallMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type InstallMcpServerResponse = InstallMcpServerResponses[keyof InstallMcpServerResponses];
+
+export type GetMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type GetMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerError = GetMcpServerErrors[keyof GetMcpServerErrors];
+
+export type GetMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
 export type GetToolsData = {
     body?: never;
     path?: never;

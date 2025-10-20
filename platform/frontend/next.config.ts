@@ -12,6 +12,19 @@ const nextConfig: NextConfig = {
     },
     incomingRequests: true
   },
+  async rewrites() {
+    const backendUrl = process.env.ARCHESTRA_API_BASE_URL || 'http://localhost:9000';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+      {
+        source: '/v1/:path*',
+        destination: `${backendUrl}/v1/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

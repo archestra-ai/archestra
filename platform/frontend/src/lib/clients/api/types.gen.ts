@@ -2074,6 +2074,35 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
+export type GetApiAuthDefaultCredentialsStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/default-credentials-status';
+};
+
+export type GetApiAuthDefaultCredentialsStatusErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        enabled: boolean;
+    };
+};
+
+export type GetApiAuthDefaultCredentialsStatusError = GetApiAuthDefaultCredentialsStatusErrors[keyof GetApiAuthDefaultCredentialsStatusErrors];
+
+export type GetApiAuthDefaultCredentialsStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        enabled: boolean;
+    };
+};
+
+export type GetApiAuthDefaultCredentialsStatusResponse = GetApiAuthDefaultCredentialsStatusResponses[keyof GetApiAuthDefaultCredentialsStatusResponses];
+
 export type GetApiAuthBy__Data = {
     body?: never;
     path: {
@@ -3337,7 +3366,7 @@ export type GetAgentsResponses = {
             };
             description: string | null;
             allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             createdAt: string;
             updatedAt: string;
         }>;
@@ -3412,7 +3441,7 @@ export type CreateAgentResponses = {
             };
             description: string | null;
             allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             createdAt: string;
             updatedAt: string;
         }>;
@@ -3537,7 +3566,7 @@ export type GetAgentResponses = {
             };
             description: string | null;
             allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             createdAt: string;
             updatedAt: string;
         }>;
@@ -3614,7 +3643,7 @@ export type UpdateAgentResponses = {
             };
             description: string | null;
             allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
+            toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
             createdAt: string;
             updatedAt: string;
         }>;
@@ -4731,6 +4760,15 @@ export type GetDualLlmResultsByInteractionData = {
 };
 
 export type GetDualLlmResultsByInteractionErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */

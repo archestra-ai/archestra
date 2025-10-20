@@ -82,7 +82,7 @@
     "tailwindcss": "^4.1.13",
     "tsx": "^4.20.5",
     "typescript": "~5.9.2",
-    "vite": "^7.1.5",
+    "vite": "^7.1.11",
     "vitest": "^3.2.4",
     "wdio-electron-service": "^9.1.2",
     "wdio-wait-for": "^3.1.0"

@@ -7,6 +7,7 @@ import {
   BLOCKED_DEMO_INTERACTION_ID,
   DEMO_AGENT_ID,
 } from "@shared";
+import config from "@/config";
 import AgentModel from "@/models/agent";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
@@ -628,6 +629,11 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
  * Seeds MCP catalog from JSON file
  */
 async function seedMcpCatalog(): Promise<void> {
+  if (!config.features.mcp_gateway) {
+    console.log("✓ MCP gateway feature is disabled, skipping");
+    return;
+  }
+
   // 1. Get or create default organization
   const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
 

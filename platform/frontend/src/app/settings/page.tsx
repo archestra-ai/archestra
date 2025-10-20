@@ -246,7 +246,7 @@ export default function SettingsPage() {
                 <div className="flex flex-col items-center z-10">
                   <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center relative border-2 border-gray-200">
                     <Image
-                      src="/logo-light-mode.png"
+                      src="/logo.png"
                       alt="Archestra.AI"
                       width={60}
                       height={60}

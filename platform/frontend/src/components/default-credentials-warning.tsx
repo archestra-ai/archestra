@@ -19,7 +19,6 @@ export function DefaultCredentialsWarning({
 
   useEffect(() => {
     // Fetch the default credentials status from the backend API
-    // Using relative URL to leverage Next.js rewrites
     fetch("/api/auth/default-credentials-status")
       .then((res) => res.json())
       .then((data) => setDefaultCredentialsEnabled(data.enabled))

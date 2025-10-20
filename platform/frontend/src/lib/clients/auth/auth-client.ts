@@ -5,7 +5,7 @@ import { createAuthClient } from "better-auth/react";
 import config from "@/lib/config";
 
 export const authClient = createAuthClient({
-  baseURL: "", // Use relative URL to leverage Next.js rewrites
+  baseURL: "", // Always use relative URLs (proxied through Next.js)
   plugins: [
     organizationClient({
       ac,

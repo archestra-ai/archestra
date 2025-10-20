@@ -45,27 +45,15 @@ const getPortFromUrl = (): number => {
   }
 };
 
-/**
- * Parse allowed origins from environment variable.
- *
- * ARCHESTRA_ALLOWED_ORIGINS can be:
- * - Not set: Allows localhost on any port (development mode)
- * - "https://frontend.archestra.ai": Single origin
- * - "https://frontend.archestra.ai,https://fe.archestra.ai": Multiple origins
- */
 const parseAllowedOrigins = (): string[] => {
-  const env = process.env.ARCHESTRA_ALLOWED_ORIGINS?.trim();
-
-  // Development: use empty array to signal "use defaults"
-  if (!env || env === "") {
-    return [];
+  // ARCHESTRA_FRONTEND_URL if set
+  const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
+  if (frontendUrl && frontendUrl !== "") {
+    return [frontendUrl];
   }
 
-  // Comma-separated list of specific origins
-  return env
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  // Development: use empty array to signal "use defaults" (localhost regex)
+  return [];
 };
 
 /**
@@ -104,7 +92,7 @@ const getTrustedOrigins = (): string[] | undefined => {
 };
 
 export default {
-  baseURL: process.env.ARCHESTRA_API_BASE_URL,
+  baseURL: process.env.ARCHESTRA_FRONTEND_URL,
   api: {
     host: "0.0.0.0",
     port: getPortFromUrl(),
@@ -114,25 +102,12 @@ export default {
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
-    trustedOrigins: ["*"], // revert and make it work later
+    trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
     adminDefaultPassword:
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
-    /**
-     * Cookie domain for cross-subdomain authentication.
-     *
-     * Examples:
-     * - Same domain, different ports (localhost:3000 + localhost:9000):
-     *   Leave undefined or set to empty string
-     *
-     * - Different subdomains (frontend.archestra.ai + backend.archestra.ai):
-     *   Set to ".archestra.ai"
-     *
-     * - Production (app.example.com + api.example.com):
-     *   Set to ".example.com"
-     */
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
   },
   database: {

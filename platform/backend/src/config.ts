@@ -114,7 +114,7 @@ export default {
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
-    trustedOrigins: getTrustedOrigins(),
+    trustedOrigins: ["*"], // revert and make it work later
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
     adminDefaultPassword:

@@ -11,7 +11,7 @@ import db, { schema } from "@/database";
 const {
   baseURL,
   production,
-  auth: { secret, cookieDomain },
+  auth: { secret, cookieDomain, trustedOrigins },
 } = config;
 
 export const auth = betterAuth({
@@ -37,11 +37,7 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins: [
-    "http://localhost:3000",
-    "http://frontend.archestra.ai:3000",
-    "https://archestra.ai",
-  ],
+  trustedOrigins,
 
   database: drizzleAdapter(db, {
     provider: "pg", // or "mysql", "sqlite"

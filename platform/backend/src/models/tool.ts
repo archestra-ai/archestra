@@ -1,6 +1,6 @@
 import { desc, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertTool, Tool, UpdateTool } from "@/types";
+import type { ExtendedTool, InsertTool, Tool, UpdateTool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
 import AgentToolModel from "./agent-tool";
 
@@ -32,7 +32,7 @@ class ToolModel {
     }
 
     // Check access control for non-admins
-    if (userId && !isAdmin) {
+    if (tool.agentId && userId && !isAdmin) {
       const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
         userId,
         tool.agentId,
@@ -46,9 +46,12 @@ class ToolModel {
     return tool;
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean) {
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<ExtendedTool[]> {
     // Get all tools
-    let toolsQuery = db
+    let query = db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -58,100 +61,54 @@ class ToolModel {
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: schema.toolsTable.toolResultTreatment,
         source: schema.toolsTable.source,
-        mcpServerId: schema.toolsTable.mcpServerId,
-        agentId: schema.toolsTable.agentId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        mcpServer: {
+          id: schema.mcpServersTable.id,
+          name: schema.mcpServersTable.name,
+        },
       })
       .from(schema.toolsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.toolsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
       .orderBy(desc(schema.toolsTable.createdAt))
       .$dynamic();
 
-    // Apply access control filtering for non-admins
+    /**
+     * Apply access control filtering for non-admins
+     *
+     * If the user is not an admin, we basically allow them to see all tools that are assigned to agents
+     * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
+     */
     if (userId && !isAdmin) {
       const accessibleAgentIds =
         await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      const mcpServerSourceClause = eq(schema.toolsTable.source, "mcp_server");
 
       if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      // For proxy tools, filter by agentId
-      // For MCP tools, we'll filter by assigned agents later
-      toolsQuery = toolsQuery.where(
-        or(
-          inArray(schema.toolsTable.agentId, accessibleAgentIds),
-          eq(schema.toolsTable.source, "mcp_server"),
-        ),
-      );
-    }
-
-    const tools = await toolsQuery;
-
-    // Enrich with agent data
-    const enrichedTools = await Promise.all(
-      tools.map(async (tool) => {
-        let agent = null;
-        let assignedAgents = undefined;
-
-        if (tool.source === "proxy" && tool.agentId) {
-          // For proxy tools, fetch the direct agent
-          const agentData = await db
-            .select({
-              id: schema.agentsTable.id,
-              name: schema.agentsTable.name,
-            })
-            .from(schema.agentsTable)
-            .where(eq(schema.agentsTable.id, tool.agentId))
-            .limit(1);
-
-          agent = agentData[0] || null;
-        } else if (tool.source === "mcp_server") {
-          // For MCP tools, fetch assigned agents
-          const agentIds = await AgentToolModel.findAgentIdsByTool(tool.id);
-
-          if (agentIds.length > 0) {
-            assignedAgents = await db
-              .select({
-                id: schema.agentsTable.id,
-                name: schema.agentsTable.name,
-              })
-              .from(schema.agentsTable)
-              .where(inArray(schema.agentsTable.id, agentIds));
-          } else {
-            assignedAgents = [];
-          }
-        }
-
-        // Omit agentId from the response
-        const { agentId, ...toolWithoutAgentId } = tool;
-
-        return {
-          ...toolWithoutAgentId,
-          agent,
-          assignedAgents,
-        };
-      }),
-    );
-
-    // Filter out MCP tools that aren't assigned to accessible agents (for non-admins)
-    if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
-
-      return enrichedTools.filter((tool) => {
-        if (tool.source === "proxy") {
-          return true; // Already filtered by query
-        }
-        // For MCP tools, check if any assigned agent is accessible
-        return (
-          tool.assignedAgents &&
-          tool.assignedAgents.some((a) => accessibleAgentIds.includes(a.id))
+        query = query.where(mcpServerSourceClause);
+      } else {
+        query = query.where(
+          or(
+            inArray(schema.toolsTable.agentId, accessibleAgentIds),
+            mcpServerSourceClause,
+          ),
         );
-      });
+      }
     }
 
-    return enrichedTools;
+    return query;
   }
 
   static async findByName(
@@ -169,7 +126,7 @@ class ToolModel {
     }
 
     // Check access control for non-admins
-    if (userId && !isAdmin) {
+    if (tool.agentId && userId && !isAdmin) {
       const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
         userId,
         tool.agentId,

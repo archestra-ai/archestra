@@ -15,13 +15,13 @@ const ToolParametersContentSchema = z.union([
   OpenAi.Tools.FunctionDefinitionParametersSchema,
 ]);
 
-export const ToolResultTreatmentSchema = z.enum([
+const ToolResultTreatmentSchema = z.enum([
   "trusted",
   "sanitize_with_dual_llm",
   "untrusted",
 ]);
 
-export const ToolSourceSchema = z.enum(["proxy", "mcp_server"]);
+const ToolSourceSchema = z.enum(["proxy", "mcp_server"]);
 
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
@@ -29,23 +29,24 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   source: ToolSourceSchema,
 });
 
-export const SelectToolWithAgentSchema = SelectToolSchema.omit({
+export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
+  mcpServerId: true,
 }).extend({
+  // Nullable for MCP tools
   agent: z
     .object({
       id: z.string(),
       name: z.string(),
     })
-    .nullable(), // Nullable for MCP tools
-  assignedAgents: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-      }),
-    )
-    .optional(), // For MCP tools, list of agents they're assigned to
+    .nullable(),
+  // Nullable for tools "sniffed" from LLM proxy requests
+  mcpServer: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
 });
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
@@ -60,7 +61,7 @@ export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
-export type ToolWithAgent = z.infer<typeof SelectToolWithAgentSchema>;
+export type ExtendedTool = z.infer<typeof ExtendedSelectToolSchema>;
 export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 

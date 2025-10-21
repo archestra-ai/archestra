@@ -1,7 +1,8 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTool, Tool, UpdateTool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
+import AgentToolModel from "./agent-tool";
 
 class ToolModel {
   static async create(tool: InsertTool): Promise<Tool> {
@@ -124,6 +125,58 @@ class ToolModel {
       .returning();
     if (!updatedTool) return null;
     return updatedTool;
+  }
+
+  /**
+   * Assign an MCP tool to an agent
+   */
+  static async assignToAgent(toolId: string, agentId: string) {
+    return AgentToolModel.create(agentId, toolId);
+  }
+
+  /**
+   * Unassign an MCP tool from an agent
+   */
+  static async unassignFromAgent(toolId: string, agentId: string) {
+    return AgentToolModel.delete(agentId, toolId);
+  }
+
+  /**
+   * Get all tools for an agent (both proxy-sniffed and MCP tools)
+   * Proxy-sniffed tools are those with agentId set directly
+   * MCP tools are those assigned via the agent_tools junction table
+   */
+  static async getToolsByAgent(agentId: string): Promise<Tool[]> {
+    // Get tool IDs assigned via junction table (MCP tools)
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+
+    // Query for tools that are either:
+    // 1. Directly associated with the agent (proxy-sniffed, agentId set)
+    // 2. Assigned via junction table (MCP tools, agentId is null)
+    const conditions = [eq(schema.toolsTable.agentId, agentId)];
+
+    if (assignedToolIds.length > 0) {
+      conditions.push(inArray(schema.toolsTable.id, assignedToolIds));
+    }
+
+    const tools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(or(...conditions))
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    return tools;
+  }
+
+  /**
+   * Get all tools for an MCP server
+   */
+  static async findByMcpServer(mcpServerId: string): Promise<Tool[]> {
+    return await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
+      .orderBy(desc(schema.toolsTable.createdAt));
   }
 }
 

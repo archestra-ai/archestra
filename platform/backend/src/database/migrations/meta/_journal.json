@@ -148,6 +148,13 @@
       "when": 1760992046940,
       "tag": "0020_ancient_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1761055200000,
+      "tag": "0021_mcp_tools_support",
+      "breakpoints": true
     }
   ]
 }

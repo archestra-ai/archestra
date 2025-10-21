@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { McpServerModel } from "@/models";
+import { AgentToolModel, McpServerModel, ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertMcpServerSchema,
@@ -94,6 +94,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: true,
           createdAt: true,
           updatedAt: true,
+        }).extend({
+          agentIds: z.array(UuidIdSchema).optional(),
         }),
         response: {
           200: SelectMcpServerSchema,
@@ -103,7 +105,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        return reply.send(await McpServerModel.create(request.body));
+        const { agentIds, ...serverData } = request.body;
+
+        // Create the MCP server
+        const mcpServer = await McpServerModel.create(serverData);
+
+        // Get the listed tools from the MCP server (mock for now)
+        const listedTools = McpServerModel.getListedTools();
+
+        // Persist each tool with source='mcp_server' and mcpServerId
+        for (const tool of listedTools) {
+          const createdTool = await ToolModel.create({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+            source: "mcp_server",
+            mcpServerId: mcpServer.id,
+            toolResultTreatment: "untrusted", // Default to untrusted
+          });
+
+          // If agentIds were provided, create agent-tool assignments
+          if (agentIds && agentIds.length > 0) {
+            for (const agentId of agentIds) {
+              await AgentToolModel.create(agentId, createdTool.id);
+            }
+          }
+        }
+
+        return reply.send(mcpServer);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

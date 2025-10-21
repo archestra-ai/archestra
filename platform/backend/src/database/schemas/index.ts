@@ -1,5 +1,6 @@
 export { default as agentsTable } from "./agent";
 export { default as agentAccessControlTable } from "./agent-access-control";
+export { default as agentToolsTable } from "./agent-tool";
 export {
   account,
   apikey,

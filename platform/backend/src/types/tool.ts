@@ -21,9 +21,12 @@ export const ToolResultTreatmentSchema = z.enum([
   "untrusted",
 ]);
 
+export const ToolSourceSchema = z.enum(["proxy", "mcp_server"]);
+
 export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
   toolResultTreatment: ToolResultTreatmentSchema,
+  source: ToolSourceSchema,
 });
 
 export const SelectToolWithAgentSchema = SelectToolSchema.omit({
@@ -38,10 +41,12 @@ export const SelectToolWithAgentSchema = SelectToolSchema.omit({
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
   toolResultTreatment: ToolResultTreatmentSchema.optional(),
+  source: ToolSourceSchema.optional(),
 });
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema.optional(),
   toolResultTreatment: ToolResultTreatmentSchema.optional(),
+  source: ToolSourceSchema.optional(),
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
@@ -51,3 +56,4 @@ export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 
 export type ToolParametersContent = z.infer<typeof ToolParametersContentSchema>;
 export type ToolResultTreatment = z.infer<typeof ToolResultTreatmentSchema>;
+export type ToolSource = z.infer<typeof ToolSourceSchema>;

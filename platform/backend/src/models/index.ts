@@ -1,5 +1,6 @@
 export { default as AgentModel } from "./agent";
 export { default as AgentAccessControlModel } from "./agent-access-control";
+export { default as AgentToolModel } from "./agent-tool";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
 export { default as DualLlmResultModel } from "./dual-llm-result";
 export { default as InteractionModel } from "./interaction";

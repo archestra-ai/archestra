@@ -60,7 +60,7 @@ export const createArchestraMcpServer = () => {
               text: `Found ${tools.length} tools for agent ${requestedAgentId}:\n\n${tools
                 .map(
                   (tool) =>
-                    `• ${tool.name}: ${tool.description || "No description"} (${tool.source})`,
+                    `• ${tool.name}: ${tool.description || "No description"}`,
                 )
                 .join("\n")}\n\nTools: ${JSON.stringify(
                 tools.map((tool) => ({
@@ -68,7 +68,6 @@ export const createArchestraMcpServer = () => {
                   name: tool.name,
                   description: tool.description,
                   parameters: tool.parameters,
-                  source: tool.source,
                 })),
                 null,
                 2,

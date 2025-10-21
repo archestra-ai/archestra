@@ -141,9 +141,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             name: ToolModel.slugifyName(mcpServer.name, tool.name),
             description: tool.description,
             parameters: tool.inputSchema,
-            source: "mcp_server",
             mcpServerId: mcpServer.id,
-            toolResultTreatment: "untrusted",
           });
 
           // If agentIds were provided, create agent-tool assignments

@@ -134,6 +134,34 @@ class AgentToolModel {
 
     return query;
   }
+
+  static async getSecurityConfig(
+    agentId: string,
+    toolName: string,
+  ): Promise<{
+    allowUsageWhenUntrustedDataIsPresent: boolean;
+    toolResultTreatment: "trusted" | "sanitize_with_dual_llm" | "untrusted";
+  } | null> {
+    const [agentTool] = await db
+      .select({
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.toolsTable.name, toolName),
+        ),
+      );
+
+    return agentTool || null;
+  }
 }
 
 export default AgentToolModel;

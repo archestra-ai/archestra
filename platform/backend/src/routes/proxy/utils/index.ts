@@ -25,7 +25,6 @@ export const persistTools = async (
       name: toolName,
       parameters: toolParameters,
       description: toolDescription,
-      source: "proxy",
     });
 
     // Create the agent-tool relationship

@@ -31,6 +31,5 @@ export const persistTools = async (
 };
 
 export * as adapters from "./adapters";
-export * as streaming from "./streaming";
 export * as toolInvocation from "./tool-invocation";
 export * as trustedData from "./trusted-data";

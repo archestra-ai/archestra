@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentTool, InsertAgentTool } from "@/types";
+import AgentAccessControlModel from "./agent-access-control";
 
 class AgentToolModel {
   static async create(
@@ -79,7 +80,7 @@ class AgentToolModel {
     isAdmin?: boolean,
   ): Promise<AgentTool[]> {
     // Get all agent-tool relationships with joined agent and tool details
-    const query = db
+    let query = db
       .select({
         id: schema.agentToolsTable.id,
         allowUsageWhenUntrustedDataIsPresent:
@@ -98,10 +99,8 @@ class AgentToolModel {
           parameters: schema.toolsTable.parameters,
           createdAt: schema.toolsTable.createdAt,
           updatedAt: schema.toolsTable.updatedAt,
-          mcpServer: {
-            id: schema.mcpServersTable.id,
-            name: schema.mcpServersTable.name,
-          },
+          mcpServerId: schema.toolsTable.mcpServerId,
+          mcpServerName: schema.mcpServersTable.name,
         },
       })
       .from(schema.agentToolsTable)
@@ -121,8 +120,16 @@ class AgentToolModel {
 
     // Apply access control filtering for non-admins if needed
     if (userId && !isAdmin) {
-      // Add access control logic here if needed
-      // For now, show all agent-tool relationships
+      const accessibleAgentIds =
+        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      if (accessibleAgentIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.agentToolsTable.agentId, accessibleAgentIds),
+      );
     }
 
     return query;

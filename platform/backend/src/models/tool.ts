@@ -1,4 +1,4 @@
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool, UpdateTool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
@@ -66,10 +66,6 @@ class ToolModel {
         name: schema.toolsTable.name,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
-        allowUsageWhenUntrustedDataIsPresent:
-          schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
-        toolResultTreatment: schema.toolsTable.toolResultTreatment,
-        source: schema.toolsTable.source,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         agent: {
@@ -103,7 +99,7 @@ class ToolModel {
       const accessibleAgentIds =
         await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
 
-      const mcpServerSourceClause = eq(schema.toolsTable.source, "mcp_server");
+      const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
       if (accessibleAgentIds.length === 0) {
         query = query.where(mcpServerSourceClause);

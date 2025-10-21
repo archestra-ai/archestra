@@ -12,6 +12,10 @@ A central place for teams and enterprises to manage MCP and agents at scale.
 
 <div align="center">
 
+<div align="center">
+<img src="/docs/assets/archestra.png" alt="Trifecta" />
+</div>
+
 [![License](https://img.shields.io/github/license/archestra-ai/archestra)](LICENSE)
 <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/archestra-ai/archestra"/>
 <img alt="Github Last Commit" src="https://img.shields.io/github/last-commit/archestra-ai/archestra"/>
@@ -23,11 +27,6 @@ A central place for teams and enterprises to manage MCP and agents at scale.
   - <a href="https://github.com/archestra-ai/archestra/issues">Bug reports</a>
   - <a href="https://join.slack.com/t/archestracommunity/shared_invite/zt-39yk4skox-zBF1NoJ9u4t59OU8XxQChg">Slack Commuity</a>
 </p>
-
-<div align="center">
-<img src="/docs/assets/archestra.png" alt="Trifecta" />
-</div>
-
 </div>
 
 ## Quickstart

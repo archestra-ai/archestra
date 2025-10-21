@@ -7,6 +7,7 @@ import {
   BLOCKED_DEMO_INTERACTION_ID,
   DEMO_AGENT_ID,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import config from "@/config";
 import AgentModel from "@/models/agent";
 import DualLlmConfigModel from "@/models/dual-llm-config";
@@ -24,6 +25,7 @@ import type {
   InteractionRequest,
   InteractionResponse,
 } from "@/types";
+import db, { schema } from ".";
 
 /**
  * Main seed function
@@ -34,7 +36,7 @@ export async function seedDatabase(): Promise<void> {
 
   try {
     // Seed in correct order (respecting foreign keys)
-    await seedAdminUser();
+    await seedAdminUserAndDefaultOrg();
     await seedAgents();
     await seedTools();
     await seedInteractions();
@@ -51,9 +53,28 @@ export async function seedDatabase(): Promise<void> {
 /**
  * Seeds admin user
  */
-async function seedAdminUser(): Promise<void> {
-  await User.createAdminUser();
-  console.log("✓ Seeded admin user");
+async function seedAdminUserAndDefaultOrg(): Promise<void> {
+  const user = await User.createOrGetExistingDefaultAdminUser();
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  if (!user || !org) {
+    throw new Error("Failed to seed admin user and default organization");
+  }
+  const existingMember = await db
+    .select()
+    .from(schema.member)
+    .where(eq(schema.member.userId, user.id))
+    .limit(1);
+  if (!existingMember[0]) {
+    await db.insert(schema.member).values({
+      id: crypto.randomUUID(),
+      organizationId: org.id,
+      userId: user.id,
+      role: "admin",
+      createdAt: new Date(),
+    });
+  }
+
+  console.log("✓ Seeded admin user and default organization");
 }
 
 /**

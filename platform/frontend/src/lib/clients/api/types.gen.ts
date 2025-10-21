@@ -2074,14 +2074,14 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
-export type GetApiAuthDefaultCredentialsStatusData = {
+export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/api/auth/default-credentials-status';
 };
 
-export type GetApiAuthDefaultCredentialsStatusErrors = {
+export type GetDefaultCredentialsStatusErrors = {
     /**
      * Default Response
      */
@@ -2090,9 +2090,9 @@ export type GetApiAuthDefaultCredentialsStatusErrors = {
     };
 };
 
-export type GetApiAuthDefaultCredentialsStatusError = GetApiAuthDefaultCredentialsStatusErrors[keyof GetApiAuthDefaultCredentialsStatusErrors];
+export type GetDefaultCredentialsStatusError = GetDefaultCredentialsStatusErrors[keyof GetDefaultCredentialsStatusErrors];
 
-export type GetApiAuthDefaultCredentialsStatusResponses = {
+export type GetDefaultCredentialsStatusResponses = {
     /**
      * Default Response
      */
@@ -2101,7 +2101,7 @@ export type GetApiAuthDefaultCredentialsStatusResponses = {
     };
 };
 
-export type GetApiAuthDefaultCredentialsStatusResponse = GetApiAuthDefaultCredentialsStatusResponses[keyof GetApiAuthDefaultCredentialsStatusResponses];
+export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
 
 export type GetApiAuthBy__Data = {
     body?: never;

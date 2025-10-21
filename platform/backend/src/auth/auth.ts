@@ -229,50 +229,61 @@ export const auth = betterAuth({
             ?.split("invitationId=")[1]
             ?.split("&")[0];
 
-          // Skip organization creation if signing up via invitation
-          if (invitationId) {
-            console.log(
-              `⏭️ Skipping organization creation for user ${user.email} (signing up via invitation ${invitationId})`,
-            );
+          // If there is no invitation ID, it means this is a direct sign-up which is not allowed
+          if (!invitationId) {
             return;
           }
 
+          // Handle invitation sign-up: accept invitation and add user to organization
+          console.log(
+            `🔗 Processing invitation ${invitationId} for user ${user.email}`,
+          );
+
           try {
-            const orgName = `${user.name || user.email.split("@")[0]}'s Organization`;
-            const orgSlug = `org-${user.id.substring(0, 8)}`;
+            // Get the invitation from database
+            const invitation = await db
+              .select()
+              .from(schema.invitation)
+              .where(eq(schema.invitation.id, invitationId))
+              .limit(1);
 
-            const org = await db
-              .insert(schema.organizationsTable)
-              .values({
-                id: crypto.randomUUID(),
-                name: orgName,
-                slug: orgSlug,
-                createdAt: new Date(),
-              })
-              .returning();
-
-            if (org[0]) {
-              await db.insert(schema.member).values({
-                id: crypto.randomUUID(),
-                organizationId: org[0].id,
-                userId: user.id,
-                role: "admin",
-                createdAt: new Date(),
-              });
-
-              await db
-                .update(schema.session)
-                .set({ activeOrganizationId: org[0].id })
-                .where(eq(schema.session.id, sessionId));
-
-              console.log(
-                `✅ Default organization created and set as active for user ${user.email}:`,
-                org[0].name,
-              );
+            if (!invitation[0]) {
+              console.error(`❌ Invitation ${invitationId} not found`);
+              return;
             }
+
+            // Create member row linking user to organization
+            await db.insert(schema.member).values({
+              id: crypto.randomUUID(),
+              organizationId: invitation[0].organizationId,
+              userId: user.id,
+              role: invitation[0].role || "member",
+              createdAt: new Date(),
+            });
+
+            // Mark invitation as accepted
+            await db
+              .update(schema.invitation)
+              .set({ status: "accepted" })
+              .where(eq(schema.invitation.id, invitationId));
+
+            // Set the organization as active in the session
+            await db
+              .update(schema.session)
+              .set({ activeOrganizationId: invitation[0].organizationId })
+              .where(eq(schema.session.id, sessionId));
+
+            console.log(
+              `✅ Invitation accepted: user ${user.email} added to organization ${invitation[0].organizationId} as ${invitation[0].role || "member"}`,
+            );
           } catch (error) {
-            console.error("❌ Failed to create default organization:", error);
+            console.error(
+              `❌ Failed to accept invitation ${invitationId}:`,
+              error,
+            );
           }
+
+          return;
         }
       }
 

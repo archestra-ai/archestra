@@ -32,8 +32,11 @@ export const getHealth = <ThrowOnError extends boolean = false>(options?: Option
     });
 };
 
-export const getApiAuthDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetApiAuthDefaultCredentialsStatusData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetApiAuthDefaultCredentialsStatusResponses, GetApiAuthDefaultCredentialsStatusErrors, ThrowOnError>({
+/**
+ * Get default credentials status
+ */
+export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({
         url: '/api/auth/default-credentials-status',
         ...options
     });

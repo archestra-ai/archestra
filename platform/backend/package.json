@@ -30,6 +30,7 @@
     "@fastify/http-proxy": "^11.3.0",
     "@fastify/swagger": "^9.5.2",
     "@google/genai": "^1.24.0",
+    "@modelcontextprotocol/sdk": "^1.20.1",
     "@shared": "workspace:*",
     "@socotra/modelcontextprotocol-sdk": "^1.20.1",
     "ai": "^5.0.57",

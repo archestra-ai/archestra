@@ -18,7 +18,12 @@ class ToolModel {
   }
 
   static async createToolIfNotExists(tool: InsertTool) {
-    return db.insert(schema.toolsTable).values(tool).onConflictDoNothing();
+    const [createdTool] = await db
+      .insert(schema.toolsTable)
+      .values(tool)
+      .onConflictDoNothing()
+      .returning();
+    return createdTool;
   }
 
   static async findById(

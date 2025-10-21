@@ -1,5 +1,19 @@
 [
   {
-    "name": "Example MCP Server"
+    "name": "GitHub MCP Server",
+    "description": "Official GitHub MCP server providing repository management, file operations, and issue/PR functionality",
+    "repository": "https://github.com/github/github-mcp-server",
+    "installationCommand": "npx -y @github/github-mcp-server",
+    "requiresAuth": true,
+    "authDescription": "Requires GitHub Personal Access Token with appropriate repository permissions",
+    "authFields": [
+      {
+        "name": "githubToken",
+        "label": "GitHub Personal Access Token",
+        "type": "password",
+        "required": true,
+        "description": "A GitHub PAT with repo permissions for the repositories you want to access"
+      }
+    ]
   }
 ]

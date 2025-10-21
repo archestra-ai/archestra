@@ -99,6 +99,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectMcpServerSchema,
+          400: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
@@ -107,17 +108,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const { agentIds, ...serverData } = request.body;
 
+        // Validate metadata if provided (for servers that require authentication)
+        if (
+          serverData.metadata &&
+          Object.keys(serverData.metadata).length > 0
+        ) {
+          const isValid = await McpServerModel.validateConnection(
+            serverData.name,
+            serverData.metadata,
+          );
+
+          if (!isValid) {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "Failed to connect to MCP server with provided credentials",
+                type: "validation_error",
+              },
+            });
+          }
+        }
+
         // Create the MCP server
         const mcpServer = await McpServerModel.create(serverData);
 
-        /**
-         * NOTE: the following code is just mocking out an "mcp server installation" for now..
-         * in the future, we will need to actually install the MCP server and get the tools from it.
-         *
-         * Get the listed tools from the MCP server (mocked for now)
-         * and persist them as tools in the database with source='mcp_server' and mcpServerId
-         */
-        for (const tool of McpServerModel.getListedTools()) {
+        // Get real tools from the MCP server
+        const tools = await McpServerModel.getToolsFromServer(mcpServer);
+
+        // Persist tools in the database with source='mcp_server' and mcpServerId
+        for (const tool of tools) {
           const createdTool = await ToolModel.create({
             name: ToolModel.slugifyName(mcpServer.name, tool.name),
             description: tool.description,

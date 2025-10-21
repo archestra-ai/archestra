@@ -9,6 +9,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { streamableHttp } from "fastify-mcp";
 import { z } from "zod";
 import config from "@/config";
+import { AgentToolModel, ToolModel } from "@/models";
 
 export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({

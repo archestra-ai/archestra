@@ -1,4 +1,4 @@
-import { AgentModel, ToolModel } from "@/models";
+import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 
 /**
  * Get or create the default agent based on the user-agent header
@@ -20,13 +20,16 @@ export const persistTools = async (
   agentId: string,
 ) => {
   for (const { toolName, toolParameters, toolDescription } of tools) {
-    await ToolModel.createToolIfNotExists({
-      agentId,
+    // Create or get the tool
+    const tool = await ToolModel.createToolIfNotExists({
       name: toolName,
       parameters: toolParameters,
       description: toolDescription,
-      toolResultTreatment: "untrusted", // Default to untrusted for new tools
+      source: "proxy",
     });
+
+    // Create the agent-tool relationship
+    await AgentToolModel.createIfNotExists(agentId, tool.id);
   }
 };
 

@@ -1,6 +1,12 @@
 import { eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import mcpClientService from "@/services/mcp-client";
+import type {
+  InsertMcpServer,
+  McpServer,
+  McpServerMetadata,
+  UpdateMcpServer,
+} from "@/types";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -62,15 +68,45 @@ class McpServerModel {
   }
 
   /**
-   * Get the list of tools provided by this MCP server
-   * For now, this returns mock data. Eventually this will call the actual MCP client's tools/list
+   * Get the list of tools from a specific MCP server instance
    */
-  static getListedTools(): Array<{
-    name: string;
-    description: string;
-    inputSchema: Record<string, unknown>;
-  }> {
-    // Mock MCP tools based on MCP specification
+  static async getToolsFromServer(mcpServer: McpServer): Promise<
+    Array<{
+      name: string;
+      description: string;
+      inputSchema: Record<string, unknown>;
+    }>
+  > {
+    /**
+     * NOTE: this is just for demo purposes for right now.. should be removed once we have full support here..
+     *
+     * For GitHub MCP server, extract token from metadata and connect
+     */
+    if (mcpServer.name === "GitHub MCP Server" && mcpServer.metadata) {
+      const metadata = mcpServer.metadata;
+      const githubToken = metadata.githubToken as string;
+
+      if (githubToken) {
+        try {
+          const config = mcpClientService.createGitHubConfig(githubToken);
+          const tools = await mcpClientService.connectAndGetTools(config);
+          // Transform to ensure description is always a string
+          return tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description || `Tool: ${tool.name}`,
+            inputSchema: tool.inputSchema,
+          }));
+        } catch (error) {
+          console.error(`Failed to get tools from GitHub MCP server:`, error);
+        }
+      }
+    }
+
+    /**
+     * For other/unknown servers, return mock data
+     *
+     * Soon we will add support for all mcp servers here...
+     */
     return [
       {
         name: "read_file",
@@ -120,6 +156,23 @@ class McpServerModel {
         },
       },
     ];
+  }
+
+  /**
+   * Validate that an MCP server can be connected to with given metadata
+   */
+  static async validateConnection(
+    serverName: string,
+    metadata: McpServerMetadata,
+  ): Promise<boolean> {
+    if (serverName === "GitHub MCP Server") {
+      const githubToken = metadata.githubToken as string;
+      if (githubToken) {
+        return await mcpClientService.validateGitHubConnection(githubToken);
+      }
+    }
+
+    return false;
   }
 }
 

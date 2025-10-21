@@ -51,6 +51,14 @@ class AgentToolModel {
       .limit(1);
     return !!result;
   }
+
+  static async createIfNotExists(agentId: string, toolId: string) {
+    const exists = await AgentToolModel.exists(agentId, toolId);
+    if (!exists) {
+      return await AgentToolModel.create(agentId, toolId);
+    }
+    return null;
+  }
 }
 
 export default AgentToolModel;

@@ -96,6 +96,16 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteAgent]: {
     agent: ["delete"],
   },
+  [RouteId.GetAgentTools]: {
+    agent: ["read"],
+    tool: ["read"],
+  },
+  [RouteId.AssignToolToAgent]: {
+    agent: ["update"],
+  },
+  [RouteId.UnassignToolFromAgent]: {
+    agent: ["update"],
+  },
   [RouteId.GetTools]: {
     tool: ["read"],
   },

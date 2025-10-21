@@ -3347,7 +3347,9 @@ export type GetAgentsResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string;
+            agentId: string | null;
+            source: 'proxy' | 'mcp_server';
+            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3422,7 +3424,9 @@ export type CreateAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string;
+            agentId: string | null;
+            source: 'proxy' | 'mcp_server';
+            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3547,7 +3551,9 @@ export type GetAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string;
+            agentId: string | null;
+            source: 'proxy' | 'mcp_server';
+            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3624,7 +3630,9 @@ export type UpdateAgentResponses = {
         updatedAt: string;
         tools: Array<{
             id: string;
-            agentId: string;
+            agentId: string | null;
+            source: 'proxy' | 'mcp_server';
+            mcpServerId: string | null;
             name: string;
             /**
              *
@@ -3652,6 +3660,152 @@ export type UpdateAgentResponses = {
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type UnassignToolFromAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/{toolId}';
+};
+
+export type UnassignToolFromAgentErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UnassignToolFromAgentError = UnassignToolFromAgentErrors[keyof UnassignToolFromAgentErrors];
+
+export type UnassignToolFromAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
+
+export type AssignToolToAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/{toolId}';
+};
+
+export type AssignToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AssignToolToAgentError = AssignToolToAgentErrors[keyof AssignToolToAgentErrors];
+
+export type AssignToolToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
+
+export type GetAgentToolsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools';
+};
+
+export type GetAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentToolsError = GetAgentToolsErrors[keyof GetAgentToolsErrors];
+
+export type GetAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string | null;
+        source: 'proxy' | 'mcp_server';
+        mcpServerId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
 
 export type GetFeaturesData = {
     body?: never;
@@ -4052,6 +4206,7 @@ export type InstallMcpServerData = {
     body: {
         name: string;
         catalogId?: string | null;
+        agentIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -4213,6 +4368,7 @@ export type GetToolsResponses = {
      */
     200: Array<{
         id: string;
+        source: 'proxy' | 'mcp_server';
         name: string;
         /**
          *
@@ -4237,7 +4393,11 @@ export type GetToolsResponses = {
         agent: {
             id: string;
             name: string;
-        };
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
     }>;
 };
 
@@ -4246,7 +4406,9 @@ export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 export type UpdateToolData = {
     body?: {
         id?: string;
-        agentId?: string;
+        agentId?: string | null;
+        source?: 'proxy' | 'mcp_server';
+        mcpServerId?: string | null;
         name?: string;
         /**
          *
@@ -4305,7 +4467,9 @@ export type UpdateToolResponses = {
      */
     200: {
         id: string;
-        agentId: string;
+        agentId: string | null;
+        source: 'proxy' | 'mcp_server';
+        mcpServerId: string | null;
         name: string;
         /**
          *

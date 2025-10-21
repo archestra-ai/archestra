@@ -421,147 +421,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
     return filteredAgentTools.slice(startIndex, endIndex);
   }, [filteredAgentTools, pageIndex, pageSize]);
 
-  // Early return if no tools
-  if (!agentTools?.length) {
-    return (
-      <div className="w-full h-full">
-        <div className="border-b border-border bg-card/30">
-          <div className="max-w-7xl mx-auto px-8 py-8">
-            <h1 className="text-2xl font-semibold tracking-tight mb-2">
-              Tools
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Here you can find the tools parsed from the interactions between
-              your agents and LLMs. If you don't see the tools you expect,
-              please ensure that your agents are properly configured to use
-              Archestra as an LLM proxy, and trigger some interactions.
-            </p>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <p className="text-muted-foreground">No tools found</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Bulk actions component
-  const BulkActions = () => {
-    const hasSelection = selectedTools.length > 0;
-
-    return (
-      <div className="mb-6 flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
-        <div className="flex items-center gap-3">
-          {hasSelection ? (
-            <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-semibold text-primary">
-                  {selectedTools.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium">
-                {selectedTools.length === 1
-                  ? "tool selected"
-                  : `tools selected`}
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              In untrusted context:
-            </span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
-                }
-                disabled={!hasSelection}
-              >
-                Allow
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction(
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    false,
-                  )
-                }
-                disabled={!hasSelection}
-              >
-                Block
-              </Button>
-            </ButtonGroup>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Results are:</span>
-            <TooltipProvider>
-              <ButtonGroup>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "trusted")
-                  }
-                  disabled={!hasSelection}
-                >
-                  Trusted
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction("toolResultTreatment", "untrusted")
-                  }
-                  disabled={!hasSelection}
-                >
-                  Untrusted
-                </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        handleBulkAction(
-                          "toolResultTreatment",
-                          "sanitize_with_dual_llm",
-                        )
-                      }
-                      disabled={!hasSelection}
-                    >
-                      Dual LLM
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sanitize with Dual LLM</p>
-                  </TooltipContent>
-                </Tooltip>
-              </ButtonGroup>
-            </TooltipProvider>
-          </div>
-          <div className="ml-2 h-4 w-px bg-border" />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={clearSelection}
-            disabled={!hasSelection}
-          >
-            Clear selection
-          </Button>
-        </div>
-      </div>
-    );
-  };
+  const hasSelection = selectedTools.length > 0;
 
   return (
     <div className="w-full h-full">
@@ -569,10 +429,13 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
           <p className="text-sm text-muted-foreground">
-            Here you can find the tools parsed from the interactions between
-            your agents and LLMs. If you don't see the tools you expect, please
-            ensure that your agents are properly configured to use Archestra as
-            an LLM proxy, and trigger some interactions.
+            Tools displayed here are either detected from requests between
+            agents and LLMs, or sourced from installed MCP servers. Only tools
+            assigned to agents are shown.
+            <br />
+            <br />
+            To assign MCP server tools to an agent, navigate to the Agents page
+            and use the "Assign Tools" action.
           </p>
         </div>
       </div>
@@ -603,7 +466,121 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           </div>
         </div>
 
-        <BulkActions />
+        <div className="mb-6 flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
+          <div className="flex items-center gap-3">
+            {hasSelection ? (
+              <>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-sm font-semibold text-primary">
+                    {selectedTools.length}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">
+                  {selectedTools.length === 1
+                    ? "tool selected"
+                    : `tools selected`}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Select tools to apply bulk actions
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                In untrusted context:
+              </span>
+              <ButtonGroup>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction(
+                      "allowUsageWhenUntrustedDataIsPresent",
+                      true,
+                    )
+                  }
+                  disabled={!hasSelection}
+                >
+                  Allow
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction(
+                      "allowUsageWhenUntrustedDataIsPresent",
+                      false,
+                    )
+                  }
+                  disabled={!hasSelection}
+                >
+                  Block
+                </Button>
+              </ButtonGroup>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Results are:
+              </span>
+              <TooltipProvider>
+                <ButtonGroup>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleBulkAction("toolResultTreatment", "trusted")
+                    }
+                    disabled={!hasSelection}
+                  >
+                    Trusted
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleBulkAction("toolResultTreatment", "untrusted")
+                    }
+                    disabled={!hasSelection}
+                  >
+                    Untrusted
+                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          handleBulkAction(
+                            "toolResultTreatment",
+                            "sanitize_with_dual_llm",
+                          )
+                        }
+                        disabled={!hasSelection}
+                      >
+                        Dual LLM
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Sanitize with Dual LLM</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </ButtonGroup>
+              </TooltipProvider>
+            </div>
+            <div className="ml-2 h-4 w-px bg-border" />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={!hasSelection}
+            >
+              Clear selection
+            </Button>
+          </div>
+        </div>
 
         {(filteredAgentTools?.length || 0) === 0 && searchQuery ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">

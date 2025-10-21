@@ -160,7 +160,7 @@ local_resource(
   # propogate the required environment variables (ie. DATABASE_URL)
   serve_cmd='cd backend && pnpm db:studio',
   labels=['database'],
-  resource_deps=['db-migrate-and-seed']
+  resource_deps=['postgresql']
 )
 
 local_resource(

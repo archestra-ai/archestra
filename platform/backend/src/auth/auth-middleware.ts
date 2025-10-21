@@ -103,17 +103,22 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAllAgentTools]: {
+    agent: ["read"],
+    tool: ["read"],
+  },
   [RouteId.AssignToolToAgent]: {
     agent: ["update"],
   },
   [RouteId.UnassignToolFromAgent]: {
     agent: ["update"],
   },
+  [RouteId.UpdateAgentTool]: {
+    agent: ["update"],
+    tool: ["update"],
+  },
   [RouteId.GetTools]: {
     tool: ["read"],
-  },
-  [RouteId.UpdateTool]: {
-    tool: ["update"],
   },
   [RouteId.GetInteractions]: {
     interaction: ["read"],

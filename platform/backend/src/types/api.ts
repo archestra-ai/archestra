@@ -127,7 +127,6 @@ export const RouteId = {
 
   // Tool Routes
   GetTools: "getTools",
-  UpdateTool: "updateTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",

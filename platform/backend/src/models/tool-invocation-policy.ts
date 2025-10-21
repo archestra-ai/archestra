@@ -79,7 +79,10 @@ class ToolInvocationPolicyModel {
       .from(schema.agentToolsTable)
       .innerJoin(
         schema.toolInvocationPoliciesTable,
-        eq(schema.agentToolsTable.id, schema.toolInvocationPoliciesTable.agentToolId),
+        eq(
+          schema.agentToolsTable.id,
+          schema.toolInvocationPoliciesTable.agentToolId,
+        ),
       )
       .innerJoin(
         schema.toolsTable,
@@ -102,9 +105,13 @@ class ToolInvocationPolicyModel {
 
     // If we don't have the tool config from policies, fetch it from agent-tool relationship
     if (allowUsageWhenUntrustedDataIsPresent === null) {
-      const securityConfig = await AgentToolModel.getSecurityConfig(agentId, toolName);
+      const securityConfig = await AgentToolModel.getSecurityConfig(
+        agentId,
+        toolName,
+      );
       if (securityConfig) {
-        allowUsageWhenUntrustedDataIsPresent = securityConfig.allowUsageWhenUntrustedDataIsPresent;
+        allowUsageWhenUntrustedDataIsPresent =
+          securityConfig.allowUsageWhenUntrustedDataIsPresent;
       }
     }
 

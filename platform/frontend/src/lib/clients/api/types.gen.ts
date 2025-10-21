@@ -2455,7 +2455,7 @@ export type GetAllAgentToolsResponses = {
     200: Array<{
         id: string;
         allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: string;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2633,6 +2633,58 @@ export type GetAgentToolsResponses = {
 };
 
 export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
+
+export type UpdateAgentToolData = {
+    body?: {
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent-tools/{id}';
+};
+
+export type UpdateAgentToolErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateAgentToolError = UpdateAgentToolErrors[keyof UpdateAgentToolErrors];
+
+export type UpdateAgentToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id?: string;
+        agentId?: string;
+        toolId?: string;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt?: string;
+        updatedAt?: string;
+    };
+};
+
+export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
 export type DeleteV1AnthropicData = {
     body?: never;
@@ -5437,90 +5489,3 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
-
-export type UpdateToolData = {
-    body?: {
-        id?: string;
-        agentId?: string | null;
-        mcpServerId?: string | null;
-        name?: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description?: string | null;
-        createdAt?: unknown;
-        updatedAt?: unknown;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/tools/{id}';
-};
-
-export type UpdateToolErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateToolError = UpdateToolErrors[keyof UpdateToolErrors];
-
-export type UpdateToolResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        agentId: string | null;
-        mcpServerId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateToolResponse = UpdateToolResponses[keyof UpdateToolResponses];

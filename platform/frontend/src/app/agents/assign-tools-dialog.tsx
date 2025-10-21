@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Server } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,8 +35,7 @@ export function AssignToolsDialog({
 }: AssignToolsDialogProps) {
   // Fetch all tools and filter for MCP tools
   const { data: allTools, isLoading: isLoadingAllTools } = useTools({});
-  const mcpTools =
-    allTools?.filter((tool) => tool.source === "mcp_server") || [];
+  const mcpTools = allTools?.filter((tool) => tool.mcpServer !== null) || [];
 
   // Fetch currently assigned tools for this agent
   const { data: agentTools, isLoading: isLoadingAgentTools } = useAgentTools(
@@ -52,8 +51,8 @@ export function AssignToolsDialog({
   useEffect(() => {
     if (agentTools) {
       const mcpToolIds = agentTools
-        .filter((tool: { source: string }) => tool.source === "mcp_server")
-        .map((tool: { id: string }) => tool.id);
+        .filter((tool) => tool.mcpServerId !== null)
+        .map((tool) => tool.id);
       setSelectedToolIds(new Set(mcpToolIds));
     }
   }, [agentTools]);
@@ -64,7 +63,7 @@ export function AssignToolsDialog({
   const isLoading = isLoadingAllTools || isLoadingAgentTools;
   const isSaving = assignTool.isPending || unassignTool.isPending;
 
-  function handleToggleTool(toolId: string) {
+  const handleToggleTool = useCallback((toolId: string) => {
     setSelectedToolIds((prev) => {
       const next = new Set(prev);
       if (next.has(toolId)) {
@@ -74,16 +73,16 @@ export function AssignToolsDialog({
       }
       return next;
     });
-  }
+  }, []);
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     if (!agentTools) return;
 
     // Get current MCP tool IDs assigned to this agent
     const currentToolIds = new Set(
       agentTools
-        .filter((tool: { source: string }) => tool.source === "mcp_server")
-        .map((tool: { id: string }) => tool.id),
+        .filter((tool) => tool.mcpServerId !== null)
+        .map((tool) => tool.id),
     );
 
     // Determine which tools to assign and unassign
@@ -111,7 +110,14 @@ export function AssignToolsDialog({
     } catch (_error) {
       toast.error("Failed to update tool assignments");
     }
-  }
+  }, [
+    agent,
+    agentTools,
+    assignTool,
+    unassignTool,
+    onOpenChange,
+    selectedToolIds,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

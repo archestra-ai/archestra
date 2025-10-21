@@ -104,6 +104,7 @@ export const RouteId = {
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
+  UpdateAgentTool: "updateAgentTool",
 
   // Features Routes
   GetFeatures: "getFeatures",

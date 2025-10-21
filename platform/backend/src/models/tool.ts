@@ -1,6 +1,6 @@
 import { desc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { ExtendedTool, InsertTool, Tool, UpdateTool } from "@/types";
+import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
 import AgentToolModel from "./agent-tool";
 
@@ -143,16 +143,6 @@ class ToolModel {
     }
 
     return tool;
-  }
-
-  static async update(toolId: string, tool: UpdateTool) {
-    const [updatedTool] = await db
-      .update(schema.toolsTable)
-      .set(tool)
-      .where(eq(schema.toolsTable.id, toolId))
-      .returning();
-    if (!updatedTool) return null;
-    return updatedTool;
   }
 
   /**

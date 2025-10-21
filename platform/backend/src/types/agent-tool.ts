@@ -13,7 +13,12 @@ const ToolResultTreatmentSchema = z.enum([
   "untrusted",
 ]);
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+export const SelectAgentToolSchema = createSelectSchema(
+  schema.agentToolsTable,
+  {
+    toolResultTreatment: ToolResultTreatmentSchema,
+  },
+)
   .omit({
     agentId: true,
     toolId: true,

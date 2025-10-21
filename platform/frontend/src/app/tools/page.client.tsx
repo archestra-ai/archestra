@@ -30,11 +30,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAgentTools } from "@/lib/agent-tool.query";
-import type {
-  GetAllAgentToolsResponses,
-  GetToolsResponses,
-} from "@/lib/clients/api";
+import {
+  useAgentToolPatchMutation,
+  useAllAgentTools,
+} from "@/lib/agent-tools.query";
+import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -42,12 +42,12 @@ import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
-import { useToolPatchMutation } from "@/lib/tool.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
 type AgentToolData = GetAllAgentToolsResponses["200"][number];
+type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
 export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   const queryClient = useQueryClient();
@@ -86,8 +86,8 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 }
 
 function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
-  const { data: agentTools } = useAgentTools();
-  const toolPatchMutation = useToolPatchMutation();
+  const { data: agentTools } = useAllAgentTools({ initialData });
+  const agentToolPatchMutation = useAgentToolPatchMutation();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
 
@@ -177,7 +177,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         // Skip tools with custom policies for the relevant field
         if (field === "allowUsageWhenUntrustedDataIsPresent") {
           const hasCustomInvocationPolicy =
-            invocationPolicies?.byToolId[tool.id]?.length > 0;
+            invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
           if (hasCustomInvocationPolicy) {
             skippedCount++;
             return;
@@ -186,14 +186,14 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
 
         if (field === "toolResultTreatment") {
           const hasCustomResultPolicy =
-            resultPolicies?.byToolId[tool.id]?.length > 0;
+            resultPolicies?.byAgentToolId[tool.id]?.length > 0;
           if (hasCustomResultPolicy) {
             skippedCount++;
             return;
           }
         }
 
-        toolPatchMutation.mutate({
+        agentToolPatchMutation.mutate({
           id: tool.id,
           [field]: value,
         });
@@ -218,7 +218,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
       // Keep selection active after mutations
       // Users might want to apply multiple actions to the same selection
     },
-    [selectedTools, toolPatchMutation, invocationPolicies, resultPolicies],
+    [selectedTools, agentToolPatchMutation, invocationPolicies, resultPolicies],
   );
 
   const clearSelection = useCallback(() => {
@@ -296,7 +296,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         header: "In untrusted context",
         cell: ({ row }) => {
           const hasCustomPolicy =
-            invocationPolicies?.byToolId[row.original.id]?.length > 0;
+            invocationPolicies?.byAgentToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -309,7 +309,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
               <Switch
                 checked={row.original.allowUsageWhenUntrustedDataIsPresent}
                 onCheckedChange={(checked) => {
-                  toolPatchMutation.mutate({
+                  agentToolPatchMutation.mutate({
                     id: row.original.id,
                     allowUsageWhenUntrustedDataIsPresent: checked,
                   });
@@ -332,7 +332,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         header: "Results are",
         cell: ({ row }) => {
           const hasCustomPolicy =
-            resultPolicies?.byToolId[row.original.id]?.length > 0;
+            resultPolicies?.byAgentToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -340,7 +340,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
             );
           }
 
-          const treatmentLabels = {
+          const treatmentLabels: Record<ToolResultTreatment, string> = {
             trusted: "Trusted",
             untrusted: "Untrusted",
             sanitize_with_dual_llm: "Sanitize with Dual LLM",
@@ -349,13 +349,10 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           return (
             <Select
               value={row.original.toolResultTreatment}
-              onValueChange={(value) => {
-                toolPatchMutation.mutate({
+              onValueChange={(value: ToolResultTreatment) => {
+                agentToolPatchMutation.mutate({
                   id: row.original.id,
-                  toolResultTreatment: value as
-                    | "trusted"
-                    | "sanitize_with_dual_llm"
-                    | "untrusted",
+                  toolResultTreatment: value,
                 });
               }}
             >
@@ -368,11 +365,11 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="trusted">Trusted</SelectItem>
-                <SelectItem value="untrusted">Untrusted</SelectItem>
-                <SelectItem value="sanitize_with_dual_llm">
-                  Sanitize with Dual LLM
-                </SelectItem>
+                {Object.entries(treatmentLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           );
@@ -414,7 +411,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         size: 100,
       },
     ],
-    [invocationPolicies, resultPolicies, toolPatchMutation],
+    [invocationPolicies, resultPolicies, agentToolPatchMutation],
   );
 
   // Calculate the current page's data from filtered tools - moved before component definition
@@ -657,7 +654,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
         )}
 
         <ToolDetailsDialog
-          tool={
+          agentTool={
             selectedToolForDialog
               ? agentTools.find((t) => t.id === selectedToolForDialog.id) ||
                 selectedToolForDialog

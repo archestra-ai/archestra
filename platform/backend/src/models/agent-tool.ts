@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AgentTool, InsertAgentTool } from "@/types";
+import type { AgentTool, InsertAgentTool, UpdateAgentTool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
 
 class AgentToolModel {
@@ -73,6 +73,26 @@ class AgentToolModel {
       return await AgentToolModel.create(agentId, toolId);
     }
     return null;
+  }
+
+  static async update(
+    id: string,
+    data: Partial<
+      Pick<
+        UpdateAgentTool,
+        "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+      >
+    >,
+  ) {
+    const [agentTool] = await db
+      .update(schema.agentToolsTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.agentToolsTable.id, id))
+      .returning();
+    return agentTool;
   }
 
   static async findAll(

@@ -239,7 +239,6 @@ platform/
 │               ├── types/       # TypeScript types for proxy routes
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
-│                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
 │                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
 │                   ├── dual-llm-client.ts     # Provider-agnostic LLM client interface for dual LLM pattern

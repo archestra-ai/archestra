@@ -1,35 +1,35 @@
-import fastifyHttpProxy from "@fastify/http-proxy";
-import type { FastifyReply } from "fastify";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import OpenAIProvider from "openai";
-import { z } from "zod";
-import config from "@/config";
-import { AgentModel, InteractionModel } from "@/models";
-import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
-import { MockOpenAIClient } from "./mock-openai-client";
-import * as utils from "./utils";
+import fastifyHttpProxy from '@fastify/http-proxy';
+import type { FastifyReply } from 'fastify';
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import OpenAIProvider from 'openai';
+import { z } from 'zod';
+import config from '@/config';
+import { AgentModel, InteractionModel } from '@/models';
+import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from '@/types';
+import { PROXY_API_PREFIX } from './common';
+import { MockOpenAIClient } from './mock-openai-client';
+import * as utils from './utils';
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
-  const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
+  const CHAT_COMPLETIONS_SUFFIX = 'chat/completions';
 
   /**
    * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
    * This will proxy routes like /v1/openai/models to https://api.openai.com/v1/models
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.openai.com",
+    upstream: 'https://api.openai.com',
     prefix: API_PREFIX,
-    rewritePrefix: "/v1",
+    rewritePrefix: '/v1',
     // Exclude chat/completions route since we handle it specially below
     preHandler: (request, _reply, next) => {
       if (
-        request.method === "POST" &&
+        request.method === 'POST' &&
         request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
         // Skip proxy for this route - we handle it below
-        next(new Error("skip"));
+        next(new Error('skip'));
       } else {
         next();
       }
@@ -42,8 +42,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { messages, stream } = body;
-    let { tools } = body;
+    const { messages, tools, stream } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -53,7 +52,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
-            type: "not_found",
+            type: 'not_found',
           },
         });
       }
@@ -61,7 +60,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     } else {
       // Otherwise get or create default agent
       resolvedAgentId = await utils.getAgentIdFromRequest(
-        headers["user-agent"],
+        headers['user-agent'],
       );
     }
 
@@ -71,24 +70,19 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {
-      // Inject MCP tools assigned to this agent
-      const mcpTools =
-        await utils.mcpToolInjection.getMcpToolsForAgent(resolvedAgentId);
-      tools = utils.mcpToolInjection.mergeTools(tools, mcpTools);
-
       await utils.persistTools(
         (tools || []).map((tool) => {
-          if (tool.type === "function") {
+          if (tool.type === 'function') {
             return {
               toolName: tool.function.name,
               toolParameters: tool.function.parameters || {},
-              toolDescription: tool.function.description || "",
+              toolDescription: tool.function.description || '',
             };
           } else {
             return {
               toolName: tool.custom.name,
               toolParameters: tool.custom.format || {},
-              toolDescription: tool.custom.description || "",
+              toolDescription: tool.custom.description || '',
             };
           }
         }),
@@ -102,7 +96,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           commonMessages,
           resolvedAgentId,
           openAiApiKey,
-          "openai",
+          'openai',
         );
 
       // Apply updates back to OpenAI messages
@@ -112,15 +106,14 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
-        reply.header("Content-Type", "text/event-stream");
-        reply.header("Cache-Control", "no-cache");
-        reply.header("Connection", "keep-alive");
+        reply.header('Content-Type', 'text/event-stream');
+        reply.header('Cache-Control', 'no-cache');
+        reply.header('Connection', 'keep-alive');
 
         // Handle streaming response
         const stream = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
-          tools,
           stream: true,
         });
 
@@ -135,7 +128,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const toolInvocationRefusal =
           await utils.toolInvocation.evaluatePolicies(
             (assistantMessage.tool_calls || []).map((toolCall) => {
-              if (toolCall.type === "function") {
+              if (toolCall.type === 'function') {
                 return {
                   toolCallName: toolCall.function.name,
                   toolCallArgs: toolCall.function.arguments,
@@ -160,7 +153,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
            * Plus send a single chunk, representing the refusal message instead of original chunks
            */
           assistantMessage = {
-            role: "assistant",
+            role: 'assistant',
             /**
              * NOTE: the reason why we store the "refusal message" in both the refusal and content fields
              * is that most clients expect to see the content field, and don't conditionally render the refusal field
@@ -173,8 +166,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           chunks = [
             {
-              id: "chatcmpl-blocked",
-              object: "chat.completion.chunk",
+              id: 'chatcmpl-blocked',
+              object: 'chat.completion.chunk',
               created: Date.now() / 1000, // the type annotation for created mentions that it is in seconds
               model: body.model,
               choices: [
@@ -182,7 +175,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   index: 0,
                   delta:
                     assistantMessage as OpenAIProvider.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-                  finish_reason: "stop",
+                  finish_reason: 'stop',
                   logprobs: null,
                 },
               ],
@@ -193,18 +186,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          type: "openai:chatCompletions",
+          type: 'openai:chatCompletions',
           request: body,
           response: {
-            id: chunks[0]?.id || "chatcmpl-unknown",
-            object: "chat.completion",
+            id: chunks[0]?.id || 'chatcmpl-unknown',
+            object: 'chat.completion',
             created: chunks[0]?.created || Date.now() / 1000,
             model: body.model,
             choices: [
               {
                 index: 0,
                 message: assistantMessage,
-                finish_reason: "stop",
+                finish_reason: 'stop',
                 logprobs: null,
               },
             ],
@@ -221,26 +214,23 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
 
-        reply.raw.write("data: [DONE]\n\n");
+        reply.raw.write('data: [DONE]\n\n');
         reply.raw.end();
         return reply;
       } else {
-        // Execute MCP tool loop - this will handle tool calls and return final message
-        const finalAssistantMessage = await utils.handleMcpToolExecutionLoop(
-          openAiClient,
-          body,
-          filteredMessages,
-          tools,
-          resolvedAgentId,
-        );
+        const response = await openAiClient.chat.completions.create({
+          ...body,
+          messages: filteredMessages,
+          stream: false,
+        });
 
-        let assistantMessage = finalAssistantMessage;
+        let assistantMessage = response.choices[0].message;
 
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
           await utils.toolInvocation.evaluatePolicies(
             (assistantMessage.tool_calls || []).map((toolCall) => {
-              if (toolCall.type === "function") {
+              if (toolCall.type === 'function') {
                 return {
                   toolCallName: toolCall.function.name,
                   toolCallArgs: toolCall.function.arguments,
@@ -256,25 +246,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             contextIsTrusted,
           );
 
-        const response: OpenAi.Types.ChatCompletionResponse = {
-          id: "chatcmpl-" + Date.now(),
-          object: "chat.completion",
-          created: Math.floor(Date.now() / 1000),
-          model: body.model,
-          choices: [
-            {
-              index: 0,
-              message: assistantMessage,
-              finish_reason: "stop",
-              logprobs: null,
-            },
-          ],
-        };
-
         if (toolInvocationRefusal) {
           const [refusalMessage, contentMessage] = toolInvocationRefusal;
           assistantMessage = {
-            role: "assistant",
+            role: 'assistant',
             refusal: refusalMessage,
             content: contentMessage,
           };
@@ -282,7 +257,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             {
               index: 0,
               message: assistantMessage,
-              finish_reason: "stop",
+              finish_reason: 'stop',
               logprobs: null,
             },
           ];
@@ -291,7 +266,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          type: "openai:chatCompletions",
+          type: 'openai:chatCompletions',
           request: body,
           response,
         });
@@ -302,15 +277,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.error(error);
 
       const statusCode =
-        error instanceof Error && "status" in error
+        error instanceof Error && 'status' in error
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
       return reply.status(statusCode).send({
         error: {
           message:
-            error instanceof Error ? error.message : "Internal server error",
-          type: "api_error",
+            error instanceof Error ? error.message : 'Internal server error',
+          type: 'api_error',
         },
       });
     }
@@ -326,8 +301,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion with OpenAI (uses default agent)",
-        tags: ["llm-proxy"],
+          'Create a chat completion with OpenAI (uses default agent)',
+        tags: ['llm-proxy'],
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: {
@@ -353,8 +328,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.OpenAiChatCompletionsWithAgent,
         description:
-          "Create a chat completion with OpenAI for a specific agent",
-        tags: ["llm-proxy"],
+          'Create a chat completion with OpenAI for a specific agent',
+        tags: ['llm-proxy'],
         params: z.object({
           agentId: UuidIdSchema,
         }),

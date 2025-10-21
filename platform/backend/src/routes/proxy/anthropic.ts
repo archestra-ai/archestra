@@ -1,38 +1,37 @@
-import AnthropicProvider from "@anthropic-ai/sdk";
-import fastifyHttpProxy from "@fastify/http-proxy";
-import type { FastifyReply } from "fastify";
-import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
-import { AgentModel, InteractionModel } from "@/models";
-import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
-import { PROXY_API_PREFIX } from "./common";
-import * as utils from "./utils";
-import * as anthropicMcpInjection from "./utils/anthropic-mcp-injection";
+import AnthropicProvider from '@anthropic-ai/sdk';
+import fastifyHttpProxy from '@fastify/http-proxy';
+import type { FastifyReply } from 'fastify';
+import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import { AgentModel, InteractionModel } from '@/models';
+import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from '@/types';
+import { PROXY_API_PREFIX } from './common';
+import * as utils from './utils';
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
-  const MESSAGES_SUFFIX = "/messages";
+  const MESSAGES_SUFFIX = '/messages';
 
   /**
    * Register HTTP proxy for all Anthropic API routes EXCEPT messages routes
    * This will proxy routes like /v1/anthropic/models to https://api.anthropic.com/v1/models
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
+    upstream: 'https://api.anthropic.com',
     prefix: API_PREFIX,
-    rewritePrefix: "/v1",
+    rewritePrefix: '/v1',
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
       // Support Anthropic SDK standard format:
       // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
       const isMessagesRoute =
-        request.method === "POST" &&
+        request.method === 'POST' &&
         (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
           request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
 
       if (isMessagesRoute) {
         // Skip proxy for this route - we handle it below
-        next(new Error("skip"));
+        next(new Error('skip'));
       } else {
         next();
       }
@@ -45,8 +44,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { stream } = body;
-    let { tools } = body;
+    const { tools, stream } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -56,7 +54,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
-            type: "not_found",
+            type: 'not_found',
           },
         });
       }
@@ -64,19 +62,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     } else {
       // Otherwise get or create default agent
       resolvedAgentId = await utils.getAgentIdFromRequest(
-        headers["user-agent"],
+        headers['user-agent'],
       );
     }
 
-    const { "x-api-key": anthropicApiKey } = headers;
+    const { 'x-api-key': anthropicApiKey } = headers;
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
 
     try {
-      // Inject MCP tools assigned to this agent
-      const mcpTools =
-        await anthropicMcpInjection.getMcpToolsForAgent(resolvedAgentId);
-      tools = anthropicMcpInjection.mergeTools(tools, mcpTools);
-
       if (tools) {
         const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
@@ -85,7 +78,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (
             tool.type === undefined ||
             tool.type === null ||
-            tool.type === "custom"
+            tool.type === 'custom'
           ) {
             transformedTools.push({
               toolName: tool.name,
@@ -107,7 +100,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           commonMessages,
           resolvedAgentId,
           anthropicApiKey,
-          "anthropic",
+          'anthropic',
         );
 
       // Apply updates back to Anthropic messages
@@ -119,8 +112,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (stream) {
         return reply.code(400).send({
           error: {
-            message: "Streaming is not supported for Anthropic. Coming soon!",
-            type: "not_supported",
+            message: 'Streaming is not supported for Anthropic. Coming soon!',
+            type: 'not_supported',
           },
         });
       } else {
@@ -134,7 +127,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         const toolCalls = response.content.filter(
-          (content) => content.type === "tool_use",
+          (content) => content.type === 'tool_use',
         );
 
         if (toolCalls) {
@@ -152,7 +145,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const [_refusalMessage, contentMessage] = toolInvocationRefusal;
             response.content = [
               {
-                type: "text",
+                type: 'text',
                 text: contentMessage,
                 citations: null,
               },
@@ -161,7 +154,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Store the interaction with refusal
             await InteractionModel.create({
               agentId: resolvedAgentId,
-              type: "anthropic:messages",
+              type: 'anthropic:messages',
               request: body,
               response: response,
             });
@@ -173,7 +166,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
-          type: "anthropic:messages",
+          type: 'anthropic:messages',
           request: body,
           response: response,
         });
@@ -184,15 +177,15 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       fastify.log.error(error);
 
       const statusCode =
-        error instanceof Error && "status" in error
+        error instanceof Error && 'status' in error
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
       return reply.status(statusCode).send({
         error: {
           message:
-            error instanceof Error ? error.message : "Internal server error",
-          type: "api_error",
+            error instanceof Error ? error.message : 'Internal server error',
+          type: 'api_error',
         },
       });
     }
@@ -207,8 +200,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithDefaultAgent,
-        description: "Send a message to Anthropic using the default agent",
-        tags: ["llm-proxy"],
+        description: 'Send a message to Anthropic using the default agent',
+        tags: ['llm-proxy'],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
         response: {
@@ -234,8 +227,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
-        description: "Send a message to Anthropic using a specific agent",
-        tags: ["llm-proxy"],
+        description: 'Send a message to Anthropic using a specific agent',
+        tags: ['llm-proxy'],
         params: z.object({
           agentId: UuidIdSchema,
         }),

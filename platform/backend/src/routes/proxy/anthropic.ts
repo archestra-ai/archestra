@@ -122,7 +122,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
-          tools,
           stream: false,
         });
 

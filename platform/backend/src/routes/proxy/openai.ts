@@ -303,9 +303,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             for (const chunk of chunks) {
               if (chunk.choices[0]?.delta?.tool_calls) {
                 reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-                await new Promise((resolve) =>
-                  setTimeout(resolve, Math.random() * 10),
-                );
               }
             }
           }

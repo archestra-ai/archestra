@@ -6,9 +6,9 @@ import {
 import type { z } from "zod";
 import { schema } from "@/database";
 
-export const SelectMcpServerSchema = createSelectSchema(schema.mcpServerTable);
-export const InsertMcpServerSchema = createInsertSchema(schema.mcpServerTable);
-export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServerTable);
+export const SelectMcpServerSchema = createSelectSchema(schema.mcpServersTable);
+export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable);
+export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable);
 
 export type McpServer = z.infer<typeof SelectMcpServerSchema>;
 export type InsertMcpServer = z.infer<typeof InsertMcpServerSchema>;

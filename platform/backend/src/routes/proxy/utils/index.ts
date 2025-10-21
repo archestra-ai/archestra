@@ -1,4 +1,4 @@
-import { AgentModel, ToolModel } from '@/models';
+import { AgentModel, ToolModel } from "@/models";
 
 /**
  * Get or create the default agent based on the user-agent header
@@ -25,12 +25,12 @@ export const persistTools = async (
       name: toolName,
       parameters: toolParameters,
       description: toolDescription,
-      toolResultTreatment: 'untrusted', // Default to untrusted for new tools
+      toolResultTreatment: "untrusted", // Default to untrusted for new tools
     });
   }
 };
 
-export * as adapters from './adapters';
-export * as streaming from './streaming';
-export * as toolInvocation from './tool-invocation';
-export * as trustedData from './trusted-data';
+export * as adapters from "./adapters";
+export * as streaming from "./streaming";
+export * as toolInvocation from "./tool-invocation";
+export * as trustedData from "./trusted-data";

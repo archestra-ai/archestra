@@ -1,12 +1,25 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AgentTool } from "@/types";
+import type { AgentTool, InsertAgentTool } from "@/types";
 
 class AgentToolModel {
-  static async create(agentId: string, toolId: string) {
+  static async create(
+    agentId: string,
+    toolId: string,
+    options?: Partial<
+      Pick<
+        InsertAgentTool,
+        "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+      >
+    >,
+  ) {
     const [agentTool] = await db
       .insert(schema.agentToolsTable)
-      .values({ agentId, toolId })
+      .values({
+        agentId,
+        toolId,
+        ...options,
+      })
       .returning();
     return agentTool;
   }

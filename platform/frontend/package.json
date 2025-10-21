@@ -12,7 +12,7 @@
     "lint:fix:unsafe": "biome check --write --unsafe",
     "type-check": "tsc --noEmit",
     "test": "vitest",
-    "codegen:api-client": "openapi-ts",
+    "codegen:api-client": "tsx openapi-ts.ts",
     "check:ci": "pnpm type-check && pnpm test && biome ci"
   },
   "dependencies": {

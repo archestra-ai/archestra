@@ -12,6 +12,8 @@ import type {
  * @param messages - Messages in common format
  * @param agentId - The agent ID
  * @param apiKey - API key for the LLM provider
+ * @param onDualLlmStart - Optional callback when dual LLM processing starts
+ * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
  * @returns Object with tool result updates and trust status
  */
 export async function evaluateIfContextIsTrusted(
@@ -19,12 +21,20 @@ export async function evaluateIfContextIsTrusted(
   agentId: string,
   apiKey: string,
   provider: SupportedProviders,
+  onDualLlmStart?: () => void,
+  onDualLlmProgress?: (progress: {
+    question: string;
+    options: string[];
+    answer: string;
+  }) => void,
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
+  usedDualLlm: boolean;
 }> {
   const toolResultUpdates: ToolResultUpdates = {};
   let hasUntrustedData = false;
+  let usedDualLlm = false;
 
   // Process each message looking for tool calls
   for (const message of messages) {
@@ -53,7 +63,14 @@ export async function evaluateIfContextIsTrusted(
             // Use cached result from database
             toolResultUpdates[toolCallId] = existingResult.result;
           } else {
+            // Notify that dual LLM processing is starting (only once)
+            if (!usedDualLlm && onDualLlmStart) {
+              onDualLlmStart();
+            }
+
             // Run Dual LLM quarantine pattern
+            usedDualLlm = true;
+
             // Extract user request from messages (last user message)
             const userRequest = extractUserRequest(messages);
 
@@ -69,7 +86,8 @@ export async function evaluateIfContextIsTrusted(
             );
 
             // Get safe summary and store as update
-            const safeSummary = await dualLlmSubagent.processWithMainAgent();
+            const safeSummary =
+              await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
             toolResultUpdates[toolCallId] = safeSummary;
           }
 
@@ -84,6 +102,7 @@ export async function evaluateIfContextIsTrusted(
   return {
     toolResultUpdates,
     contextIsTrusted: !hasUntrustedData,
+    usedDualLlm,
   };
 }
 

@@ -91,12 +91,68 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
-      const { toolResultUpdates, contextIsTrusted } =
+
+      // For streaming requests, set headers first
+      if (stream) {
+        reply.header("Content-Type", "text/event-stream");
+        reply.header("Cache-Control", "no-cache");
+        reply.header("Connection", "keep-alive");
+      }
+
+      const { toolResultUpdates, contextIsTrusted, usedDualLlm } =
         await utils.trustedData.evaluateIfContextIsTrusted(
           commonMessages,
           resolvedAgentId,
           openAiApiKey,
           "openai",
+          stream
+            ? () => {
+                // Send initial indicator when dual LLM starts (streaming only)
+                const startChunk = {
+                  id: "chatcmpl-sanitizing",
+                  object: "chat.completion.chunk" as const,
+                  created: Date.now() / 1000,
+                  model: body.model,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        role: "assistant" as const,
+                        content: "Analyzing with Dual LLM:\n\n",
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(startChunk)}\n\n`);
+              }
+            : undefined,
+          stream
+            ? (progress) => {
+                // Stream Q&A progress with options
+                const optionsText = progress.options
+                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .join("\n");
+                const progressChunk = {
+                  id: "chatcmpl-sanitizing",
+                  object: "chat.completion.chunk" as const,
+                  created: Date.now() / 1000,
+                  model: body.model,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        content: `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                      },
+                      finish_reason: null,
+                      logprobs: null,
+                    },
+                  ],
+                };
+                reply.raw.write(`data: ${JSON.stringify(progressChunk)}\n\n`);
+              }
+            : undefined,
         );
 
       // Apply updates back to OpenAI messages
@@ -106,10 +162,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
-        reply.header("Content-Type", "text/event-stream");
-        reply.header("Cache-Control", "no-cache");
-        reply.header("Connection", "keep-alive");
-
         // Handle streaming response
         const stream = await openAiClient.chat.completions.create({
           ...body,

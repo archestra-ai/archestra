@@ -1,12 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
+/**
+ * NOTE: for right now this really only supports remote MCP servers and will of course need to be expanded out...
+ */
 interface McpServerConfig {
   name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
 }
 
 interface McpToolDefinition {
@@ -28,10 +30,10 @@ class McpClientService {
 
     try {
       // Create stdio transport for the MCP server
-      const transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args || [],
-        env: { ...process.env, ...config.env } as Record<string, string>,
+      const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        requestInit: {
+          headers: new Headers(config.headers),
+        },
       });
 
       // Create client and connect
@@ -78,24 +80,26 @@ class McpClientService {
   }
 
   /**
-   * Create configuration for GitHub MCP server
+   * Create configuration for a GitHub MCP server
    */
   createGitHubConfig = (githubToken: string): McpServerConfig => ({
     name: "github-mcp-server",
-    command: "npx",
-    args: ["-y", "@github/github-mcp-server"],
-    env: {
-      GITHUB_PERSONAL_ACCESS_TOKEN: githubToken,
+    url: "https://api.githubcopilot.com/mcp/",
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
     },
   });
 
   /**
    * Validate that a GitHub token can connect to the GitHub MCP server
+   *
+   * https://github.com/github/github-mcp-server?tab=readme-ov-file#install-in-vs-code
    */
   async validateGitHubConnection(githubToken: string): Promise<boolean> {
     try {
-      const config = this.createGitHubConfig(githubToken);
-      const tools = await this.connectAndGetTools(config);
+      const tools = await this.connectAndGetTools(
+        this.createGitHubConfig(githubToken),
+      );
       return tools.length > 0;
     } catch (error) {
       console.error("GitHub MCP validation failed:", error);

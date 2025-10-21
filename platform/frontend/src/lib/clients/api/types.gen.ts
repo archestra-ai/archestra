@@ -2074,1237 +2074,6 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
-export type GetDefaultCredentialsStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/default-credentials-status';
-};
-
-export type GetDefaultCredentialsStatusErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        enabled: boolean;
-    };
-};
-
-export type GetDefaultCredentialsStatusError = GetDefaultCredentialsStatusErrors[keyof GetDefaultCredentialsStatusErrors];
-
-export type GetDefaultCredentialsStatusResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        enabled: boolean;
-    };
-};
-
-export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
-
-export type GetApiAuthBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/api/auth/{*}';
-};
-
-export type GetApiAuthBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostApiAuthBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/api/auth/{*}';
-};
-
-export type PostApiAuthBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type DeleteV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type GetV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type HeadV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type OptionsV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PatchV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PostV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PutV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type DeleteV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type GetV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type HeadV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type OptionsV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PatchV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PostV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PutV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type AnthropicMessagesWithDefaultAgentData = {
-    body?: AnthropicMessagesRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        'anthropic-version': string;
-        'x-api-key': string;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/v1/messages';
-};
-
-export type AnthropicMessagesWithDefaultAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type AnthropicMessagesWithDefaultAgentError = AnthropicMessagesWithDefaultAgentErrors[keyof AnthropicMessagesWithDefaultAgentErrors];
-
-export type AnthropicMessagesWithDefaultAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: AnthropicMessagesResponse;
-};
-
-export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
-
-export type AnthropicMessagesWithAgentData = {
-    body?: AnthropicMessagesRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        'anthropic-version': string;
-        'x-api-key': string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/v1/anthropic/v1/{agentId}/messages';
-};
-
-export type AnthropicMessagesWithAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type AnthropicMessagesWithAgentError = AnthropicMessagesWithAgentErrors[keyof AnthropicMessagesWithAgentErrors];
-
-export type AnthropicMessagesWithAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: AnthropicMessagesResponse;
-};
-
-export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
-
-export type DeleteV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type DeleteV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type GetV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type HeadV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type OptionsV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PatchV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PostV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PutV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type DeleteV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type GetV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type HeadV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type OptionsV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PatchV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PostV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PutV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: OpenAiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for OpenAI
-         */
-        authorization: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/openai/chat/completions';
-};
-
-export type OpenAiChatCompletionsWithDefaultAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type OpenAiChatCompletionsWithDefaultAgentError = OpenAiChatCompletionsWithDefaultAgentErrors[keyof OpenAiChatCompletionsWithDefaultAgentErrors];
-
-export type OpenAiChatCompletionsWithDefaultAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: OpenAiChatCompletionResponse;
-};
-
-export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
-
-export type OpenAiChatCompletionsWithAgentData = {
-    body?: OpenAiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for OpenAI
-         */
-        authorization: string;
-    };
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/v1/openai/{agentId}/chat/completions';
-};
-
-export type OpenAiChatCompletionsWithAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type OpenAiChatCompletionsWithAgentError = OpenAiChatCompletionsWithAgentErrors[keyof OpenAiChatCompletionsWithAgentErrors];
-
-export type OpenAiChatCompletionsWithAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: OpenAiChatCompletionResponse;
-};
-
-export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
-
-export type DeleteV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type DeleteV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type GetV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type HeadV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type OptionsV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PatchV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PostV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PutV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type DeleteV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type GetV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type HeadV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type OptionsV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PatchV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PostV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PutV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1GeminiModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * API key for Google Gemini
-         */
-        'x-goog-api-key': string;
-    };
-    path: {
-        /**
-         * The model to use
-         */
-        model: string;
-    };
-    query?: never;
-    url: '/v1/gemini/models/{model}:generateContent';
-};
-
-export type PostV1GeminiModelsByModelGenerateContentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
-
-export type PostV1GeminiModelsByModelGenerateContentResponses = {
-    /**
-     * Default Response
-     */
-    200: GeminiGenerateContentResponse;
-};
-
-export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
-
-export type PostV1GeminiModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * API key for Google Gemini
-         */
-        'x-goog-api-key': string;
-    };
-    path: {
-        /**
-         * The model to use
-         */
-        model: string;
-    };
-    query?: never;
-    url: '/v1/gemini/models/{model}:streamGenerateContent';
-};
-
-export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
-
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * API key for Google Gemini
-         */
-        'x-goog-api-key': string;
-    };
-    path: {
-        agentId: string;
-        /**
-         * The model to use
-         */
-        model: string;
-    };
-    query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
-};
-
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
-
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
-    /**
-     * Default Response
-     */
-    200: GeminiGenerateContentResponse;
-};
-
-export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
-
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
-    body?: GeminiGenerateContentRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * API key for Google Gemini
-         */
-        'x-goog-api-key': string;
-    };
-    path: {
-        agentId: string;
-        /**
-         * The model to use
-         */
-        model: string;
-    };
-    query?: never;
-    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
-};
-
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
-
 export type GetAgentsData = {
     body?: never;
     path?: never;
@@ -3807,108 +2576,245 @@ export type GetAgentToolsResponses = {
 
 export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
 
-export type GetFeaturesData = {
+export type DeleteV1AnthropicData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/features';
+    url: '/v1/anthropic/';
 };
 
-export type GetFeaturesResponses = {
+export type DeleteV1AnthropicResponses = {
     /**
      * Default Response
      */
-    200: {
-        mcp_registry: boolean;
-    };
+    200: unknown;
 };
 
-export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
-
-export type GetInteractionsData = {
+export type GetV1AnthropicData = {
     body?: never;
     path?: never;
-    query?: {
-        /**
-         * Filter by agent ID
-         */
-        agentId?: string;
-        limit?: number;
-        offset?: number;
-        sortBy?: 'createdAt' | 'agentId' | 'model';
-        sortDirection?: 'asc' | 'desc';
-    };
-    url: '/api/interactions';
+    query?: never;
+    url: '/v1/anthropic/';
 };
 
-export type GetInteractionsErrors = {
+export type GetV1AnthropicResponses = {
     /**
      * Default Response
      */
-    401: {
+    200: unknown;
+};
+
+export type HeadV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type HeadV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type OptionsV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PatchV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PostV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/';
+};
+
+export type PutV1AnthropicResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type DeleteV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type GetV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type HeadV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type OptionsV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PatchV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PostV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{*}';
+};
+
+export type PutV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type AnthropicMessagesWithDefaultAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/v1/messages';
+};
+
+export type AnthropicMessagesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
         error: string | {
             message: string;
             type: string;
         };
     };
-};
-
-export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
-
-export type GetInteractionsResponses = {
     /**
      * Default Response
      */
-    200: {
-        data: Array<{
-            id: string;
-            agentId: string;
-            request: OpenAiChatCompletionRequest;
-            response: OpenAiChatCompletionResponse;
-            type: 'openai:chatCompletions';
-            createdAt: string;
-        } | {
-            id: string;
-            agentId: string;
-            request: GeminiGenerateContentRequest;
-            response: GeminiGenerateContentResponse;
-            type: 'gemini:generateContent';
-            createdAt: string;
-        } | {
-            id: string;
-            agentId: string;
-            request: AnthropicMessagesRequest;
-            response: AnthropicMessagesResponse;
-            type: 'anthropic:messages';
-            createdAt: string;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
-        };
-    };
-};
-
-export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
-
-export type GetInteractionData = {
-    body?: never;
-    path: {
-        interactionId: string;
-    };
-    query?: never;
-    url: '/api/interactions/{interactionId}';
-};
-
-export type GetInteractionErrors = {
-    /**
-     * Default Response
-     */
-    401: {
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -3923,578 +2829,197 @@ export type GetInteractionErrors = {
             type: string;
         };
     };
-};
-
-export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
-
-export type GetInteractionResponses = {
     /**
      * Default Response
      */
-    200: {
-        id: string;
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AnthropicMessagesWithDefaultAgentError = AnthropicMessagesWithDefaultAgentErrors[keyof AnthropicMessagesWithDefaultAgentErrors];
+
+export type AnthropicMessagesWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithDefaultAgentResponse = AnthropicMessagesWithDefaultAgentResponses[keyof AnthropicMessagesWithDefaultAgentResponses];
+
+export type AnthropicMessagesWithAgentData = {
+    body?: AnthropicMessagesRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        'anthropic-version': string;
+        'x-api-key': string;
+    };
+    path: {
         agentId: string;
-        request: OpenAiChatCompletionRequest;
-        response: OpenAiChatCompletionResponse;
-        type: 'openai:chatCompletions';
-        createdAt: string;
-    } | {
-        id: string;
-        agentId: string;
-        request: GeminiGenerateContentRequest;
-        response: GeminiGenerateContentResponse;
-        type: 'gemini:generateContent';
-        createdAt: string;
-    } | {
-        id: string;
-        agentId: string;
-        request: AnthropicMessagesRequest;
-        response: AnthropicMessagesResponse;
-        type: 'anthropic:messages';
-        createdAt: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/messages';
+};
+
+export type AnthropicMessagesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
     };
 };
 
-export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+export type AnthropicMessagesWithAgentError = AnthropicMessagesWithAgentErrors[keyof AnthropicMessagesWithAgentErrors];
 
-export type GetMcpCatalogData = {
+export type AnthropicMessagesWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
+
+export type DeleteMcpData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/mcp_catalog';
+    url: '/mcp';
 };
 
-export type GetMcpCatalogErrors = {
+export type DeleteMcpResponses = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
+    200: unknown;
 };
 
-export type GetMcpCatalogError = GetMcpCatalogErrors[keyof GetMcpCatalogErrors];
-
-export type GetMcpCatalogResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
-
-export type CreateMcpCatalogItemData = {
-    body: {
-        name: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/mcp_catalog';
-};
-
-export type CreateMcpCatalogItemErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateMcpCatalogItemError = CreateMcpCatalogItemErrors[keyof CreateMcpCatalogItemErrors];
-
-export type CreateMcpCatalogItemResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateMcpCatalogItemResponse = CreateMcpCatalogItemResponses[keyof CreateMcpCatalogItemResponses];
-
-export type DeleteMcpCatalogItemData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp_catalog/{id}';
-};
-
-export type DeleteMcpCatalogItemErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteMcpCatalogItemError = DeleteMcpCatalogItemErrors[keyof DeleteMcpCatalogItemErrors];
-
-export type DeleteMcpCatalogItemResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteMcpCatalogItemResponse = DeleteMcpCatalogItemResponses[keyof DeleteMcpCatalogItemResponses];
-
-export type GetMcpCatalogItemData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp_catalog/{id}';
-};
-
-export type GetMcpCatalogItemErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetMcpCatalogItemError = GetMcpCatalogItemErrors[keyof GetMcpCatalogItemErrors];
-
-export type GetMcpCatalogItemResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpCatalogItemResponses];
-
-export type UpdateMcpCatalogItemData = {
-    body?: {
-        name?: string;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp_catalog/{id}';
-};
-
-export type UpdateMcpCatalogItemErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateMcpCatalogItemError = UpdateMcpCatalogItemErrors[keyof UpdateMcpCatalogItemErrors];
-
-export type UpdateMcpCatalogItemResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateMcpCatalogItemResponse = UpdateMcpCatalogItemResponses[keyof UpdateMcpCatalogItemResponses];
-
-export type GetMcpServersData = {
+export type GetMcpData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/mcp_server';
+    url: '/mcp';
 };
 
-export type GetMcpServersErrors = {
+export type GetMcpResponses = {
     /**
      * Default Response
      */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
+    200: unknown;
 };
 
-export type GetMcpServersError = GetMcpServersErrors[keyof GetMcpServersErrors];
-
-export type GetMcpServersResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        catalogId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersResponses];
-
-export type InstallMcpServerData = {
-    body: {
-        name: string;
-        catalogId?: string | null;
-        agentIds?: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/mcp_server';
-};
-
-export type InstallMcpServerErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type InstallMcpServerError = InstallMcpServerErrors[keyof InstallMcpServerErrors];
-
-export type InstallMcpServerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        catalogId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type InstallMcpServerResponse = InstallMcpServerResponses[keyof InstallMcpServerResponses];
-
-export type DeleteMcpServerData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/{id}';
-};
-
-export type DeleteMcpServerErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteMcpServerError = DeleteMcpServerErrors[keyof DeleteMcpServerErrors];
-
-export type DeleteMcpServerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteMcpServerResponse = DeleteMcpServerResponses[keyof DeleteMcpServerResponses];
-
-export type GetMcpServerData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/mcp_server/{id}';
-};
-
-export type GetMcpServerErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetMcpServerError = GetMcpServerErrors[keyof GetMcpServerErrors];
-
-export type GetMcpServerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        catalogId: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
-
-export type GetToolsData = {
+export type PostMcpData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/tools';
+    url: '/mcp';
 };
 
-export type GetToolsErrors = {
+export type PostMcpResponses = {
     /**
      * Default Response
      */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
+    200: unknown;
 };
 
-export type GetToolsError = GetToolsErrors[keyof GetToolsErrors];
-
-export type GetToolsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        source: 'proxy' | 'mcp_server';
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        createdAt: string;
-        updatedAt: string;
-        agent: {
-            id: string;
-            name: string;
-        } | null;
-        mcpServer: {
-            id: string;
-            name: string;
-        } | null;
-    }>;
-};
-
-export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
-
-export type UpdateToolData = {
-    body?: {
-        id?: string;
-        agentId?: string | null;
-        source?: 'proxy' | 'mcp_server';
-        mcpServerId?: string | null;
-        name?: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description?: string | null;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        createdAt?: unknown;
-        updatedAt?: unknown;
-    };
-    path: {
-        id: string;
-    };
+export type GetDefaultCredentialsStatusData = {
+    body?: never;
+    path?: never;
     query?: never;
-    url: '/api/tools/{id}';
+    url: '/api/auth/default-credentials-status';
 };
 
-export type UpdateToolErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
+export type GetDefaultCredentialsStatusErrors = {
     /**
      * Default Response
      */
     500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
+        enabled: boolean;
     };
 };
 
-export type UpdateToolError = UpdateToolErrors[keyof UpdateToolErrors];
+export type GetDefaultCredentialsStatusError = GetDefaultCredentialsStatusErrors[keyof GetDefaultCredentialsStatusErrors];
 
-export type UpdateToolResponses = {
+export type GetDefaultCredentialsStatusResponses = {
     /**
      * Default Response
      */
     200: {
-        id: string;
-        agentId: string | null;
-        source: 'proxy' | 'mcp_server';
-        mcpServerId: string | null;
-        name: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description: string | null;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
-        createdAt: string;
-        updatedAt: string;
+        enabled: boolean;
     };
 };
 
-export type UpdateToolResponse = UpdateToolResponses[keyof UpdateToolResponses];
+export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
+
+export type GetApiAuthBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/api/auth/{*}';
+};
+
+export type GetApiAuthBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostApiAuthBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/api/auth/{*}';
+};
+
+export type PostApiAuthBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type GetOperatorsData = {
     body?: never;
@@ -5364,3 +3889,1589 @@ export type GetDualLlmResultsByInteractionResponses = {
 };
 
 export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
+
+export type GetFeaturesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/features';
+};
+
+export type GetFeaturesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mcp_registry: boolean;
+    };
+};
+
+export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
+
+export type DeleteV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type DeleteV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type GetV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type HeadV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type OptionsV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PatchV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PostV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1GeminiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/gemini/';
+};
+
+export type PutV1GeminiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type DeleteV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type GetV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type HeadV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type OptionsV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PatchV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PostV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1GeminiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/gemini/{*}';
+};
+
+export type PutV1GeminiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1GeminiModelsByModelGenerateContentData = {
+    body?: GeminiGenerateContentRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/models/{model}:generateContent';
+};
+
+export type PostV1GeminiModelsByModelGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiModelsByModelGenerateContentError = PostV1GeminiModelsByModelGenerateContentErrors[keyof PostV1GeminiModelsByModelGenerateContentErrors];
+
+export type PostV1GeminiModelsByModelGenerateContentResponses = {
+    /**
+     * Default Response
+     */
+    200: GeminiGenerateContentResponse;
+};
+
+export type PostV1GeminiModelsByModelGenerateContentResponse = PostV1GeminiModelsByModelGenerateContentResponses[keyof PostV1GeminiModelsByModelGenerateContentResponses];
+
+export type PostV1GeminiModelsByModelStreamGenerateContentData = {
+    body?: GeminiGenerateContentRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/models/{model}:streamGenerateContent';
+};
+
+export type PostV1GeminiModelsByModelStreamGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiModelsByModelStreamGenerateContentError = PostV1GeminiModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiModelsByModelStreamGenerateContentErrors];
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentData = {
+    body?: GeminiGenerateContentRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        agentId: string;
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/{agentId}/models/{model}:generateContent';
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentError = PostV1GeminiByAgentIdModelsByModelGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentErrors];
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponses = {
+    /**
+     * Default Response
+     */
+    200: GeminiGenerateContentResponse;
+};
+
+export type PostV1GeminiByAgentIdModelsByModelGenerateContentResponse = PostV1GeminiByAgentIdModelsByModelGenerateContentResponses[keyof PostV1GeminiByAgentIdModelsByModelGenerateContentResponses];
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData = {
+    body?: GeminiGenerateContentRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * API key for Google Gemini
+         */
+        'x-goog-api-key': string;
+    };
+    path: {
+        agentId: string;
+        /**
+         * The model to use
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent';
+};
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
+
+export type GetInteractionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent ID
+         */
+        agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'model';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/interactions';
+};
+
+export type GetInteractionsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInteractionsError = GetInteractionsErrors[keyof GetInteractionsErrors];
+
+export type GetInteractionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            request: OpenAiChatCompletionRequest;
+            response: OpenAiChatCompletionResponse;
+            type: 'openai:chatCompletions';
+            createdAt: string;
+        } | {
+            id: string;
+            agentId: string;
+            request: GeminiGenerateContentRequest;
+            response: GeminiGenerateContentResponse;
+            type: 'gemini:generateContent';
+            createdAt: string;
+        } | {
+            id: string;
+            agentId: string;
+            request: AnthropicMessagesRequest;
+            response: AnthropicMessagesResponse;
+            type: 'anthropic:messages';
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInteractionsResponse = GetInteractionsResponses[keyof GetInteractionsResponses];
+
+export type GetInteractionData = {
+    body?: never;
+    path: {
+        interactionId: string;
+    };
+    query?: never;
+    url: '/api/interactions/{interactionId}';
+};
+
+export type GetInteractionErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInteractionError = GetInteractionErrors[keyof GetInteractionErrors];
+
+export type GetInteractionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        request: OpenAiChatCompletionRequest;
+        response: OpenAiChatCompletionResponse;
+        type: 'openai:chatCompletions';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: GeminiGenerateContentRequest;
+        response: GeminiGenerateContentResponse;
+        type: 'gemini:generateContent';
+        createdAt: string;
+    } | {
+        id: string;
+        agentId: string;
+        request: AnthropicMessagesRequest;
+        response: AnthropicMessagesResponse;
+        type: 'anthropic:messages';
+        createdAt: string;
+    };
+};
+
+export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
+
+export type GetMcpCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_catalog';
+};
+
+export type GetMcpCatalogErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpCatalogError = GetMcpCatalogErrors[keyof GetMcpCatalogErrors];
+
+export type GetMcpCatalogResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
+
+export type CreateMcpCatalogItemData = {
+    body: {
+        name: string;
+        description?: string | null;
+        repository?: string | null;
+        installationCommand?: string | null;
+        requiresAuth?: boolean;
+        authDescription?: string | null;
+        authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_catalog';
+};
+
+export type CreateMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateMcpCatalogItemError = CreateMcpCatalogItemErrors[keyof CreateMcpCatalogItemErrors];
+
+export type CreateMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateMcpCatalogItemResponse = CreateMcpCatalogItemResponses[keyof CreateMcpCatalogItemResponses];
+
+export type DeleteMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type DeleteMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpCatalogItemError = DeleteMcpCatalogItemErrors[keyof DeleteMcpCatalogItemErrors];
+
+export type DeleteMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpCatalogItemResponse = DeleteMcpCatalogItemResponses[keyof DeleteMcpCatalogItemResponses];
+
+export type GetMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type GetMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpCatalogItemError = GetMcpCatalogItemErrors[keyof GetMcpCatalogItemErrors];
+
+export type GetMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpCatalogItemResponses];
+
+export type UpdateMcpCatalogItemData = {
+    body?: {
+        name?: string;
+        description?: string | null;
+        repository?: string | null;
+        installationCommand?: string | null;
+        requiresAuth?: boolean;
+        authDescription?: string | null;
+        authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_catalog/{id}';
+};
+
+export type UpdateMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateMcpCatalogItemError = UpdateMcpCatalogItemErrors[keyof UpdateMcpCatalogItemErrors];
+
+export type UpdateMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateMcpCatalogItemResponse = UpdateMcpCatalogItemResponses[keyof UpdateMcpCatalogItemResponses];
+
+export type GetMcpServersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type GetMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServersError = GetMcpServersErrors[keyof GetMcpServersErrors];
+
+export type GetMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersResponses];
+
+export type InstallMcpServerData = {
+    body: {
+        name: string;
+        catalogId?: string | null;
+        metadata?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        agentIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type InstallMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type InstallMcpServerError = InstallMcpServerErrors[keyof InstallMcpServerErrors];
+
+export type InstallMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type InstallMcpServerResponse = InstallMcpServerResponses[keyof InstallMcpServerResponses];
+
+export type DeleteMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type DeleteMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpServerError = DeleteMcpServerErrors[keyof DeleteMcpServerErrors];
+
+export type DeleteMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpServerResponse = DeleteMcpServerResponses[keyof DeleteMcpServerResponses];
+
+export type GetMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type GetMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerError = GetMcpServerErrors[keyof GetMcpServerErrors];
+
+export type GetMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type DeleteV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type DeleteV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type GetV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type HeadV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type OptionsV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PatchV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PostV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PutV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type DeleteV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type GetV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type HeadV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type OptionsV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PatchV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PostV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PutV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentData = {
+    body?: OpenAiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/chat/completions';
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentError = OpenAiChatCompletionsWithDefaultAgentErrors[keyof OpenAiChatCompletionsWithDefaultAgentErrors];
+
+export type OpenAiChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
+
+export type OpenAiChatCompletionsWithAgentData = {
+    body?: OpenAiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/chat/completions';
+};
+
+export type OpenAiChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithAgentError = OpenAiChatCompletionsWithAgentErrors[keyof OpenAiChatCompletionsWithAgentErrors];
+
+export type OpenAiChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tools';
+};
+
+export type GetToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetToolsError = GetToolsErrors[keyof GetToolsErrors];
+
+export type GetToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        source: 'proxy' | 'mcp_server';
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
+    }>;
+};
+
+export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type UpdateToolData = {
+    body?: {
+        id?: string;
+        agentId?: string | null;
+        source?: 'proxy' | 'mcp_server';
+        mcpServerId?: string | null;
+        name?: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description?: string | null;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt?: unknown;
+        updatedAt?: unknown;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tools/{id}';
+};
+
+export type UpdateToolErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateToolError = UpdateToolErrors[keyof UpdateToolErrors];
+
+export type UpdateToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string | null;
+        source: 'proxy' | 'mcp_server';
+        mcpServerId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateToolResponse = UpdateToolResponses[keyof UpdateToolResponses];

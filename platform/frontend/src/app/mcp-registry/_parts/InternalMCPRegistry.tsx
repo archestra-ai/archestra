@@ -1,5 +1,6 @@
 "use client";
 
+import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import {
   Download,
   MoreVertical,
@@ -38,6 +39,7 @@ import {
   useUpdateMcpCatalogItem,
 } from "@/lib/mcp-catalog.query";
 import { useInstallMcpServer } from "@/lib/mcp-server.query";
+import { GitHubInstallDialog } from "./github-install-dialog";
 
 export function InternalMCPRegistry({
   initialData,
@@ -63,9 +65,25 @@ export function InternalMCPRegistry({
   const [newItemName, setNewItemName] = useState("");
   const [editItemName, setEditItemName] = useState("");
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
+  const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<
+    GetMcpCatalogResponses["200"][number] | null
+  >(null);
 
   const handleInstall = useCallback(
     async (catalogItem: GetMcpCatalogResponses["200"][number]) => {
+      /**
+       * NOTE: THIS IS ABSOLUTELY TEMPORARY..
+       *
+       * Check if this is a GitHub MCP server that requires authentication
+       */
+      if (catalogItem.name === GITHUB_MCP_SERVER_NAME) {
+        setSelectedCatalogItem(catalogItem);
+        setIsGitHubDialogOpen(true);
+        return;
+      }
+
+      // For other servers, install directly
       try {
         await installMutation.mutateAsync({
           name: catalogItem.name,
@@ -75,6 +93,27 @@ export function InternalMCPRegistry({
       } catch (error) {
         toast.error(`Failed to install ${catalogItem.name}`);
         console.error("Install error:", error);
+      }
+    },
+    [installMutation],
+  );
+
+  const handleGitHubInstall = useCallback(
+    async (
+      catalogItem: GetMcpCatalogResponses["200"][number],
+      metadata: Record<string, unknown>,
+    ) => {
+      try {
+        await installMutation.mutateAsync({
+          name: catalogItem.name,
+          catalogId: catalogItem.id,
+          metadata,
+        });
+        toast.success(`Successfully installed ${catalogItem.name}`);
+      } catch (error) {
+        toast.error(`Failed to install ${catalogItem.name}`);
+        console.error("Install error:", error);
+        throw error; // Re-throw so the dialog can handle it
       }
     },
     [installMutation],
@@ -365,6 +404,17 @@ export function InternalMCPRegistry({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GitHubInstallDialog
+        isOpen={isGitHubDialogOpen}
+        onClose={() => {
+          setIsGitHubDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
+        onInstall={handleGitHubInstall}
+        catalogItem={selectedCatalogItem}
+        isInstalling={installMutation.isPending}
+      />
     </div>
   );
 }

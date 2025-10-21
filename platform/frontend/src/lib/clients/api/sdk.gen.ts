@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateMcpCatalogItemData, CreateMcpCatalogItemErrors, CreateMcpCatalogItemResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteMcpCatalogItemData, DeleteMcpCatalogItemErrors, DeleteMcpCatalogItemResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1AnthropicBy__Data, DeleteV1AnthropicBy__Responses, DeleteV1AnthropicData, DeleteV1AnthropicResponses, DeleteV1GeminiBy__Data, DeleteV1GeminiBy__Responses, DeleteV1GeminiData, DeleteV1GeminiResponses, DeleteV1OpenaiBy__Data, DeleteV1OpenaiBy__Responses, DeleteV1OpenaiData, DeleteV1OpenaiResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetMcpCatalogData, GetMcpCatalogErrors, GetMcpCatalogItemData, GetMcpCatalogItemErrors, GetMcpCatalogItemResponses, GetMcpCatalogResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1AnthropicBy__Data, GetV1AnthropicBy__Responses, GetV1AnthropicData, GetV1AnthropicResponses, GetV1GeminiBy__Data, GetV1GeminiBy__Responses, GetV1GeminiData, GetV1GeminiResponses, GetV1OpenaiBy__Data, GetV1OpenaiBy__Responses, GetV1OpenaiData, GetV1OpenaiResponses, HeadV1AnthropicBy__Data, HeadV1AnthropicBy__Responses, HeadV1AnthropicData, HeadV1AnthropicResponses, HeadV1GeminiBy__Data, HeadV1GeminiBy__Responses, HeadV1GeminiData, HeadV1GeminiResponses, HeadV1OpenaiBy__Data, HeadV1OpenaiBy__Responses, HeadV1OpenaiData, HeadV1OpenaiResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, OptionsV1AnthropicBy__Data, OptionsV1AnthropicBy__Responses, OptionsV1AnthropicData, OptionsV1AnthropicResponses, OptionsV1GeminiBy__Data, OptionsV1GeminiBy__Responses, OptionsV1GeminiData, OptionsV1GeminiResponses, OptionsV1OpenaiBy__Data, OptionsV1OpenaiBy__Responses, OptionsV1OpenaiData, OptionsV1OpenaiResponses, PatchV1AnthropicBy__Data, PatchV1AnthropicBy__Responses, PatchV1AnthropicData, PatchV1AnthropicResponses, PatchV1GeminiBy__Data, PatchV1GeminiBy__Responses, PatchV1GeminiData, PatchV1GeminiResponses, PatchV1OpenaiBy__Data, PatchV1OpenaiBy__Responses, PatchV1OpenaiData, PatchV1OpenaiResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostV1AnthropicBy__Data, PostV1AnthropicBy__Responses, PostV1AnthropicData, PostV1AnthropicResponses, PostV1GeminiBy__Data, PostV1GeminiBy__Responses, PostV1GeminiByAgentIdModelsByModelGenerateContentData, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, PostV1GeminiData, PostV1GeminiModelsByModelGenerateContentData, PostV1GeminiModelsByModelGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelStreamGenerateContentData, PostV1GeminiModelsByModelStreamGenerateContentErrors, PostV1GeminiResponses, PostV1OpenaiBy__Data, PostV1OpenaiBy__Responses, PostV1OpenaiData, PostV1OpenaiResponses, PutV1AnthropicBy__Data, PutV1AnthropicBy__Responses, PutV1AnthropicData, PutV1AnthropicResponses, PutV1GeminiBy__Data, PutV1GeminiBy__Responses, PutV1GeminiData, PutV1GeminiResponses, PutV1OpenaiBy__Data, PutV1OpenaiBy__Responses, PutV1OpenaiData, PutV1OpenaiResponses, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateMcpCatalogItemData, UpdateMcpCatalogItemErrors, UpdateMcpCatalogItemResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateMcpCatalogItemData, CreateMcpCatalogItemErrors, CreateMcpCatalogItemResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteMcpCatalogItemData, DeleteMcpCatalogItemErrors, DeleteMcpCatalogItemResponses, DeleteMcpData, DeleteMcpResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, DeleteV1AnthropicBy__Data, DeleteV1AnthropicBy__Responses, DeleteV1AnthropicData, DeleteV1AnthropicResponses, DeleteV1GeminiBy__Data, DeleteV1GeminiBy__Responses, DeleteV1GeminiData, DeleteV1GeminiResponses, DeleteV1OpenaiBy__Data, DeleteV1OpenaiBy__Responses, DeleteV1OpenaiData, DeleteV1OpenaiResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetMcpCatalogData, GetMcpCatalogErrors, GetMcpCatalogItemData, GetMcpCatalogItemErrors, GetMcpCatalogItemResponses, GetMcpCatalogResponses, GetMcpData, GetMcpResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetOpenapiJsonData, GetOpenapiJsonResponses, GetOperatorsData, GetOperatorsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetV1AnthropicBy__Data, GetV1AnthropicBy__Responses, GetV1AnthropicData, GetV1AnthropicResponses, GetV1GeminiBy__Data, GetV1GeminiBy__Responses, GetV1GeminiData, GetV1GeminiResponses, GetV1OpenaiBy__Data, GetV1OpenaiBy__Responses, GetV1OpenaiData, GetV1OpenaiResponses, HeadV1AnthropicBy__Data, HeadV1AnthropicBy__Responses, HeadV1AnthropicData, HeadV1AnthropicResponses, HeadV1GeminiBy__Data, HeadV1GeminiBy__Responses, HeadV1GeminiData, HeadV1GeminiResponses, HeadV1OpenaiBy__Data, HeadV1OpenaiBy__Responses, HeadV1OpenaiData, HeadV1OpenaiResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, OptionsV1AnthropicBy__Data, OptionsV1AnthropicBy__Responses, OptionsV1AnthropicData, OptionsV1AnthropicResponses, OptionsV1GeminiBy__Data, OptionsV1GeminiBy__Responses, OptionsV1GeminiData, OptionsV1GeminiResponses, OptionsV1OpenaiBy__Data, OptionsV1OpenaiBy__Responses, OptionsV1OpenaiData, OptionsV1OpenaiResponses, PatchV1AnthropicBy__Data, PatchV1AnthropicBy__Responses, PatchV1AnthropicData, PatchV1AnthropicResponses, PatchV1GeminiBy__Data, PatchV1GeminiBy__Responses, PatchV1GeminiData, PatchV1GeminiResponses, PatchV1OpenaiBy__Data, PatchV1OpenaiBy__Responses, PatchV1OpenaiData, PatchV1OpenaiResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostMcpData, PostMcpResponses, PostV1AnthropicBy__Data, PostV1AnthropicBy__Responses, PostV1AnthropicData, PostV1AnthropicResponses, PostV1GeminiBy__Data, PostV1GeminiBy__Responses, PostV1GeminiByAgentIdModelsByModelGenerateContentData, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, PostV1GeminiData, PostV1GeminiModelsByModelGenerateContentData, PostV1GeminiModelsByModelGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelStreamGenerateContentData, PostV1GeminiModelsByModelStreamGenerateContentErrors, PostV1GeminiResponses, PostV1OpenaiBy__Data, PostV1OpenaiBy__Responses, PostV1OpenaiData, PostV1OpenaiResponses, PutV1AnthropicBy__Data, PutV1AnthropicBy__Responses, PutV1AnthropicData, PutV1AnthropicResponses, PutV1GeminiBy__Data, PutV1GeminiBy__Responses, PutV1GeminiData, PutV1GeminiResponses, PutV1OpenaiBy__Data, PutV1OpenaiBy__Responses, PutV1OpenaiData, PutV1OpenaiResponses, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateMcpCatalogItemData, UpdateMcpCatalogItemErrors, UpdateMcpCatalogItemResponses, UpdateToolData, UpdateToolErrors, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateToolResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -33,25 +33,89 @@ export const getHealth = <ThrowOnError extends boolean = false>(options?: Option
 };
 
 /**
- * Get default credentials status
+ * Get all agents
  */
-export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({
-        url: '/api/auth/default-credentials-status',
+export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({
+        url: '/api/agents',
         ...options
     });
 };
 
-export const getApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiAuthBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetApiAuthBy__Responses, unknown, ThrowOnError>({
-        url: '/api/auth/{*}',
+/**
+ * Create a new agent
+ */
+export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
+        url: '/api/agents',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete an agent
+ */
+export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
         ...options
     });
 };
 
-export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<PostApiAuthBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostApiAuthBy__Responses, unknown, ThrowOnError>({
-        url: '/api/auth/{*}',
+/**
+ * Get agent by ID
+ */
+export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update an agent
+ */
+export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
+        url: '/api/agents/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Unassign a tool from an agent
+ */
+export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => {
+    return (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({
+        url: '/api/agents/{agentId}/tools/{toolId}',
+        ...options
+    });
+};
+
+/**
+ * Assign a tool to an agent
+ */
+export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
+        url: '/api/agents/{agentId}/tools/{toolId}',
+        ...options
+    });
+};
+
+/**
+ * Get all tools for an agent (both proxy-sniffed and MCP tools)
+ */
+export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({
+        url: '/api/agents/{agentId}/tools',
         ...options
     });
 };
@@ -182,531 +246,48 @@ export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>
     });
 };
 
-export const deleteV1Openai = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).delete<DeleteV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
+export const deleteMcp = <ThrowOnError extends boolean = false>(options?: Options<DeleteMcpData, ThrowOnError>) => {
+    return (options?.client ?? client).delete<DeleteMcpResponses, unknown, ThrowOnError>({
+        url: '/mcp',
         ...options
     });
 };
 
-export const getV1Openai = <ThrowOnError extends boolean = false>(options?: Options<GetV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
+export const getMcp = <ThrowOnError extends boolean = false>(options?: Options<GetMcpData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetMcpResponses, unknown, ThrowOnError>({
+        url: '/mcp',
         ...options
     });
 };
 
-export const headV1Openai = <ThrowOnError extends boolean = false>(options?: Options<HeadV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).head<HeadV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
-        ...options
-    });
-};
-
-export const optionsV1Openai = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).options<OptionsV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
-        ...options
-    });
-};
-
-export const patchV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PatchV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).patch<PatchV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
-        ...options
-    });
-};
-
-export const postV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PostV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
-        ...options
-    });
-};
-
-export const putV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PutV1OpenaiData, ThrowOnError>) => {
-    return (options?.client ?? client).put<PutV1OpenaiResponses, unknown, ThrowOnError>({
-        url: '/v1/openai/',
-        ...options
-    });
-};
-
-export const deleteV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const getV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const headV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const optionsV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const patchV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const postV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
-        ...options
-    });
-};
-
-export const putV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1OpenaiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).put<PutV1OpenaiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/openai/{*}',
+export const postMcp = <ThrowOnError extends boolean = false>(options?: Options<PostMcpData, ThrowOnError>) => {
+    return (options?.client ?? client).post<PostMcpResponses, unknown, ThrowOnError>({
+        url: '/mcp',
         ...options
     });
 };
 
 /**
- * Create a chat completion with OpenAI (uses default agent)
+ * Get default credentials status
  */
-export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
-        url: '/v1/openai/chat/completions',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Create a chat completion with OpenAI for a specific agent
- */
-export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
-        url: '/v1/openai/{agentId}/chat/completions',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-export const deleteV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).delete<DeleteV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
+export const getDefaultCredentialsStatus = <ThrowOnError extends boolean = false>(options?: Options<GetDefaultCredentialsStatusData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetDefaultCredentialsStatusResponses, GetDefaultCredentialsStatusErrors, ThrowOnError>({
+        url: '/api/auth/default-credentials-status',
         ...options
     });
 };
 
-export const getV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<GetV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
+export const getApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<GetApiAuthBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).get<GetApiAuthBy__Responses, unknown, ThrowOnError>({
+        url: '/api/auth/{*}',
         ...options
     });
 };
 
-export const headV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<HeadV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).head<HeadV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
+export const postApiAuthBy__ = <ThrowOnError extends boolean = false>(options: Options<PostApiAuthBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).post<PostApiAuthBy__Responses, unknown, ThrowOnError>({
+        url: '/api/auth/{*}',
         ...options
-    });
-};
-
-export const optionsV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).options<OptionsV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
-        ...options
-    });
-};
-
-export const patchV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PatchV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).patch<PatchV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
-        ...options
-    });
-};
-
-export const postV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PostV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).post<PostV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
-        ...options
-    });
-};
-
-export const putV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PutV1GeminiData, ThrowOnError>) => {
-    return (options?.client ?? client).put<PutV1GeminiResponses, unknown, ThrowOnError>({
-        url: '/v1/gemini/',
-        ...options
-    });
-};
-
-export const deleteV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const getV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).get<GetV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const headV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).head<HeadV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const optionsV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).options<OptionsV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const patchV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).patch<PatchV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const postV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-export const putV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1GeminiBy__Data, ThrowOnError>) => {
-    return (options.client ?? client).put<PutV1GeminiBy__Responses, unknown, ThrowOnError>({
-        url: '/v1/gemini/{*}',
-        ...options
-    });
-};
-
-/**
- * Generate content using Gemini
- * Generate content using Gemini (default agent)
- */
-export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:generateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Stream generated content using Gemini
- * Stream generated content using Gemini (default agent)
- */
-export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/models/{model}:streamGenerateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Generate content using Gemini (specific agent)
- * Generate content using Gemini with specific agent
- */
-export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:generateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Stream generated content using Gemini (specific agent)
- * Stream generated content using Gemini with specific agent
- */
-export const postV1GeminiByAgentIdModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, ThrowOnError>) => {
-    return (options.client ?? client).post<unknown, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, ThrowOnError>({
-        url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Get all agents
- */
-export const getAgents = <ThrowOnError extends boolean = false>(options?: Options<GetAgentsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetAgentsResponses, GetAgentsErrors, ThrowOnError>({
-        url: '/api/agents',
-        ...options
-    });
-};
-
-/**
- * Create a new agent
- */
-export const createAgent = <ThrowOnError extends boolean = false>(options: Options<CreateAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateAgentResponses, CreateAgentErrors, ThrowOnError>({
-        url: '/api/agents',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Delete an agent
- */
-export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options
-    });
-};
-
-/**
- * Get agent by ID
- */
-export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options
-    });
-};
-
-/**
- * Update an agent
- */
-export const updateAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateAgentResponses, UpdateAgentErrors, ThrowOnError>({
-        url: '/api/agents/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Unassign a tool from an agent
- */
-export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAgentData, ThrowOnError>) => {
-    return (options.client ?? client).delete<UnassignToolFromAgentResponses, UnassignToolFromAgentErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options
-    });
-};
-
-/**
- * Assign a tool to an agent
- */
-export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => {
-    return (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options
-    });
-};
-
-/**
- * Get all tools for an agent (both proxy-sniffed and MCP tools)
- */
-export const getAgentTools = <ThrowOnError extends boolean = false>(options: Options<GetAgentToolsData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetAgentToolsResponses, GetAgentToolsErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/tools',
-        ...options
-    });
-};
-
-/**
- * Get feature flags
- */
-export const getFeatures = <ThrowOnError extends boolean = false>(options?: Options<GetFeaturesData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetFeaturesResponses, unknown, ThrowOnError>({
-        url: '/api/features',
-        ...options
-    });
-};
-
-/**
- * Get all interactions with pagination and sorting
- */
-export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({
-        url: '/api/interactions',
-        ...options
-    });
-};
-
-/**
- * Get interaction by ID
- */
-export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({
-        url: '/api/interactions/{interactionId}',
-        ...options
-    });
-};
-
-/**
- * Get all MCP catalog items
- */
-export const getMcpCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetMcpCatalogData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpCatalogResponses, GetMcpCatalogErrors, ThrowOnError>({
-        url: '/api/mcp_catalog',
-        ...options
-    });
-};
-
-/**
- * Create a new MCP catalog item
- */
-export const createMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<CreateMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).post<CreateMcpCatalogItemResponses, CreateMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/mcp_catalog',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Delete an MCP catalog item
- */
-export const deleteMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteMcpCatalogItemResponses, DeleteMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/mcp_catalog/{id}',
-        ...options
-    });
-};
-
-/**
- * Get MCP catalog item by ID
- */
-export const getMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<GetMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpCatalogItemResponses, GetMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/mcp_catalog/{id}',
-        ...options
-    });
-};
-
-/**
- * Update an MCP catalog item
- */
-export const updateMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpCatalogItemData, ThrowOnError>) => {
-    return (options.client ?? client).put<UpdateMcpCatalogItemResponses, UpdateMcpCatalogItemErrors, ThrowOnError>({
-        url: '/api/mcp_catalog/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Get all installed MCP servers
- */
-export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServersData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetMcpServersResponses, GetMcpServersErrors, ThrowOnError>({
-        url: '/api/mcp_server',
-        ...options
-    });
-};
-
-/**
- * Install an MCP server (from catalog or custom)
- */
-export const installMcpServer = <ThrowOnError extends boolean = false>(options: Options<InstallMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
-    });
-};
-
-/**
- * Delete/uninstall an MCP server
- */
-export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}',
-        ...options
-    });
-};
-
-/**
- * Get MCP server by ID
- */
-export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => {
-    return (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({
-        url: '/api/mcp_server/{id}',
-        ...options
-    });
-};
-
-/**
- * Get all tools
- */
-export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
-    return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({
-        url: '/api/tools',
-        ...options
-    });
-};
-
-/**
- * Update a tool
- */
-export const updateTool = <ThrowOnError extends boolean = false>(options: Options<UpdateToolData, ThrowOnError>) => {
-    return (options.client ?? client).patch<UpdateToolResponses, UpdateToolErrors, ThrowOnError>({
-        url: '/api/tools/{id}',
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-        }
     });
 };
 
@@ -921,5 +502,445 @@ export const getDualLlmResultsByInteraction = <ThrowOnError extends boolean = fa
     return (options.client ?? client).get<GetDualLlmResultsByInteractionResponses, GetDualLlmResultsByInteractionErrors, ThrowOnError>({
         url: '/api/dual-llm-results/by-interaction/{interactionId}',
         ...options
+    });
+};
+
+/**
+ * Get feature flags
+ */
+export const getFeatures = <ThrowOnError extends boolean = false>(options?: Options<GetFeaturesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetFeaturesResponses, unknown, ThrowOnError>({
+        url: '/api/features',
+        ...options
+    });
+};
+
+export const deleteV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).delete<DeleteV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const getV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<GetV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const headV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<HeadV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).head<HeadV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const optionsV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).options<OptionsV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const patchV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PatchV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).patch<PatchV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const postV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PostV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).post<PostV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const putV1Gemini = <ThrowOnError extends boolean = false>(options?: Options<PutV1GeminiData, ThrowOnError>) => {
+    return (options?.client ?? client).put<PutV1GeminiResponses, unknown, ThrowOnError>({
+        url: '/v1/gemini/',
+        ...options
+    });
+};
+
+export const deleteV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const getV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).get<GetV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const headV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).head<HeadV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const optionsV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).options<OptionsV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const patchV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).patch<PatchV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const postV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+export const putV1GeminiBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1GeminiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).put<PutV1GeminiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/gemini/{*}',
+        ...options
+    });
+};
+
+/**
+ * Generate content using Gemini
+ * Generate content using Gemini (default agent)
+ */
+export const postV1GeminiModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/models/{model}:generateContent',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Stream generated content using Gemini
+ * Stream generated content using Gemini (default agent)
+ */
+export const postV1GeminiModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiModelsByModelStreamGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<unknown, PostV1GeminiModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/models/{model}:streamGenerateContent',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Generate content using Gemini (specific agent)
+ * Generate content using Gemini with specific agent
+ */
+export const postV1GeminiByAgentIdModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/{agentId}/models/{model}:generateContent',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Stream generated content using Gemini (specific agent)
+ * Stream generated content using Gemini with specific agent
+ */
+export const postV1GeminiByAgentIdModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, ThrowOnError>) => {
+    return (options.client ?? client).post<unknown, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, ThrowOnError>({
+        url: '/v1/gemini/{agentId}/models/{model}:streamGenerateContent',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get all interactions with pagination and sorting
+ */
+export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({
+        url: '/api/interactions',
+        ...options
+    });
+};
+
+/**
+ * Get interaction by ID
+ */
+export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({
+        url: '/api/interactions/{interactionId}',
+        ...options
+    });
+};
+
+/**
+ * Get all MCP catalog items
+ */
+export const getMcpCatalog = <ThrowOnError extends boolean = false>(options?: Options<GetMcpCatalogData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetMcpCatalogResponses, GetMcpCatalogErrors, ThrowOnError>({
+        url: '/api/mcp_catalog',
+        ...options
+    });
+};
+
+/**
+ * Create a new MCP catalog item
+ */
+export const createMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<CreateMcpCatalogItemData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateMcpCatalogItemResponses, CreateMcpCatalogItemErrors, ThrowOnError>({
+        url: '/api/mcp_catalog',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete an MCP catalog item
+ */
+export const deleteMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpCatalogItemData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteMcpCatalogItemResponses, DeleteMcpCatalogItemErrors, ThrowOnError>({
+        url: '/api/mcp_catalog/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get MCP catalog item by ID
+ */
+export const getMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<GetMcpCatalogItemData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpCatalogItemResponses, GetMcpCatalogItemErrors, ThrowOnError>({
+        url: '/api/mcp_catalog/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update an MCP catalog item
+ */
+export const updateMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpCatalogItemData, ThrowOnError>) => {
+    return (options.client ?? client).put<UpdateMcpCatalogItemResponses, UpdateMcpCatalogItemErrors, ThrowOnError>({
+        url: '/api/mcp_catalog/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get all installed MCP servers
+ */
+export const getMcpServers = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServersData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetMcpServersResponses, GetMcpServersErrors, ThrowOnError>({
+        url: '/api/mcp_server',
+        ...options
+    });
+};
+
+/**
+ * Install an MCP server (from catalog or custom)
+ */
+export const installMcpServer = <ThrowOnError extends boolean = false>(options: Options<InstallMcpServerData, ThrowOnError>) => {
+    return (options.client ?? client).post<InstallMcpServerResponses, InstallMcpServerErrors, ThrowOnError>({
+        url: '/api/mcp_server',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete/uninstall an MCP server
+ */
+export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteMcpServerResponses, DeleteMcpServerErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get MCP server by ID
+ */
+export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({
+        url: '/api/mcp_server/{id}',
+        ...options
+    });
+};
+
+export const deleteV1Openai = <ThrowOnError extends boolean = false>(options?: Options<DeleteV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).delete<DeleteV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const getV1Openai = <ThrowOnError extends boolean = false>(options?: Options<GetV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const headV1Openai = <ThrowOnError extends boolean = false>(options?: Options<HeadV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).head<HeadV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const optionsV1Openai = <ThrowOnError extends boolean = false>(options?: Options<OptionsV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).options<OptionsV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const patchV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PatchV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).patch<PatchV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const postV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PostV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).post<PostV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const putV1Openai = <ThrowOnError extends boolean = false>(options?: Options<PutV1OpenaiData, ThrowOnError>) => {
+    return (options?.client ?? client).put<PutV1OpenaiResponses, unknown, ThrowOnError>({
+        url: '/v1/openai/',
+        ...options
+    });
+};
+
+export const deleteV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<DeleteV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const getV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<GetV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).get<GetV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const headV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<HeadV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).head<HeadV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const optionsV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<OptionsV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).options<OptionsV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const patchV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PatchV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).patch<PatchV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const postV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PostV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).post<PostV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+export const putV1OpenaiBy__ = <ThrowOnError extends boolean = false>(options: Options<PutV1OpenaiBy__Data, ThrowOnError>) => {
+    return (options.client ?? client).put<PutV1OpenaiBy__Responses, unknown, ThrowOnError>({
+        url: '/v1/openai/{*}',
+        ...options
+    });
+};
+
+/**
+ * Create a chat completion with OpenAI (uses default agent)
+ */
+export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
+        url: '/v1/openai/chat/completions',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Create a chat completion with OpenAI for a specific agent
+ */
+export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => {
+    return (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
+        url: '/v1/openai/{agentId}/chat/completions',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Get all tools
+ */
+export const getTools = <ThrowOnError extends boolean = false>(options?: Options<GetToolsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetToolsResponses, GetToolsErrors, ThrowOnError>({
+        url: '/api/tools',
+        ...options
+    });
+};
+
+/**
+ * Update a tool
+ */
+export const updateTool = <ThrowOnError extends boolean = false>(options: Options<UpdateToolData, ThrowOnError>) => {
+    return (options.client ?? client).patch<UpdateToolResponses, UpdateToolErrors, ThrowOnError>({
+        url: '/api/tools/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };

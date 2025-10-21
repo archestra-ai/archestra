@@ -1,6 +1,7 @@
 import type { Action, Resource } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth/auth";
+import config from "@/config";
 import { RouteId } from "@/types";
 import { prepareErrorResponse } from "@/utils";
 
@@ -41,8 +42,7 @@ class AuthMiddleware {
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||
-      // Archestra MCP server doesn't require authentication
-      url === "/mcp"
+      url === config.archestraMcpServer.endpoint
     ) {
       return true;
     }

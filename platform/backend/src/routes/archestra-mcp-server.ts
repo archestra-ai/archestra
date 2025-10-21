@@ -9,14 +9,37 @@ import type { FastifyPluginAsync } from "fastify";
 import { streamableHttp } from "fastify-mcp";
 import { z } from "zod";
 import config from "@/config";
-import { AgentToolModel, ToolModel } from "@/models";
+import { ToolModel } from "@/models";
 
+/**
+ * TEMPORARY: Global agent context for MCP server
+ *
+ * This is a temporary solution using global state to track the active agent.
+ * This approach has limitations:
+ * - Race conditions with multiple concurrent connections
+ * - All MCP clients share the same agent context
+ * - No isolation between different client sessions
+ *
+ * TODO: Refactor to session-based approach using:
+ * - https://github.com/modelcontextprotocol/typescript-sdk?tab=readme-ov-file#with-session-management
+ * - https://github.com/haroldadmin/fastify-mcp?tab=readme-ov-file#session-management
+ *
+ * This will allow proper per-session agent context and tool isolation.
+ */
+const _currentAgentId: string | null = null;
+const _globalArchestraServer: McpServer | null = null;
+
+/**
+ * Session-isolated MCP server factory
+ * Each connection gets its own server instance with agent-specific tools
+ */
 export const createArchestraMcpServer = () => {
   const archestraMcpServer = new McpServer({
     name: "archestra-server",
     version: config.api.version,
   });
 
+  // Core platform tools (always available)
   archestraMcpServer.registerTool(
     "getAgentTools",
     {
@@ -26,70 +49,30 @@ export const createArchestraMcpServer = () => {
         agentId: z.string().describe("The ID of the agent to get tools for"),
       },
     },
-    async ({ agentId }) => {
+    async ({ agentId: requestedAgentId }) => {
       try {
-        // For now, return mock data. Later we can hook up real data using:
-        // const tools = await ToolModel.getToolsByAgent(agentId);
-
-        const mockTools = [
-          {
-            id: "tool-1",
-            name: "read_file",
-            description: "Read the contents of a file",
-            parameters: {
-              type: "object",
-              properties: {
-                path: {
-                  type: "string",
-                  description: "The path to the file to read",
-                },
-              },
-              required: ["path"],
-            },
-          },
-          {
-            id: "tool-2",
-            name: "write_file",
-            description: "Write content to a file",
-            parameters: {
-              type: "object",
-              properties: {
-                path: {
-                  type: "string",
-                  description: "The path to the file to write",
-                },
-                content: {
-                  type: "string",
-                  description: "The content to write to the file",
-                },
-              },
-              required: ["path", "content"],
-            },
-          },
-          {
-            id: "tool-3",
-            name: "list_directory",
-            description: "List the contents of a directory",
-            parameters: {
-              type: "object",
-              properties: {
-                path: {
-                  type: "string",
-                  description: "The path to the directory to list",
-                },
-              },
-              required: ["path"],
-            },
-          },
-        ];
+        const tools = await ToolModel.getToolsByAgent(requestedAgentId);
 
         return {
           content: [
             {
               type: "text",
-              text: `Found ${mockTools.length} tools for agent ${agentId}:\n\n${mockTools
-                .map((tool) => `• ${tool.name}: ${tool.description}`)
-                .join("\n")}\n\nTools: ${JSON.stringify(mockTools, null, 2)}`,
+              text: `Found ${tools.length} tools for agent ${requestedAgentId}:\n\n${tools
+                .map(
+                  (tool) =>
+                    `• ${tool.name}: ${tool.description || "No description"} (${tool.source})`,
+                )
+                .join("\n")}\n\nTools: ${JSON.stringify(
+                tools.map((tool) => ({
+                  id: tool.id,
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.parameters,
+                  source: tool.source,
+                })),
+                null,
+                2,
+              )}`,
             },
           ],
         };
@@ -98,7 +81,38 @@ export const createArchestraMcpServer = () => {
           content: [
             {
               type: "text",
-              text: `Error fetching tools for agent ${agentId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+              text: `Error fetching tools for agent ${requestedAgentId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            },
+          ],
+        };
+      }
+    },
+  );
+
+  archestraMcpServer.registerTool(
+    "listAvailableAgents",
+    {
+      title: "List available agents",
+      description: "List all agents in the platform",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        // This would need to be implemented in AgentModel
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Agent listing not yet implemented. Use getAgentTools with a specific agent ID to get agent-specific tools.",
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error listing agents: ${error instanceof Error ? error.message : "Unknown error"}`,
             },
           ],
         };
@@ -111,8 +125,8 @@ export const createArchestraMcpServer = () => {
 
 const archestraMcpServerPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(streamableHttp, {
-    stateful: false,
-    mcpEndpoint: "/mcp",
+    stateful: false, // Use stateless mode with global state for now
+    mcpEndpoint: config.archestraMcpServer.endpoint,
     /**
      * biome-ignore lint/suspicious/noExplicitAny: the typing is likely slightly off here since we are
      * using the @socotra/modelcontextprotocol-sdk forked package.. remove this once we

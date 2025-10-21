@@ -1,3 +1,4 @@
+import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import { eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import mcpClientService from "@/services/mcp-client";
@@ -82,7 +83,7 @@ class McpServerModel {
      *
      * For GitHub MCP server, extract token from metadata and connect
      */
-    if (mcpServer.name === "GitHub MCP Server" && mcpServer.metadata) {
+    if (mcpServer.name === GITHUB_MCP_SERVER_NAME && mcpServer.metadata) {
       const metadata = mcpServer.metadata;
       const githubToken = metadata.githubToken as string;
 
@@ -165,7 +166,7 @@ class McpServerModel {
     serverName: string,
     metadata: McpServerMetadata,
   ): Promise<boolean> {
-    if (serverName === "GitHub MCP Server") {
+    if (serverName === GITHUB_MCP_SERVER_NAME) {
       const githubToken = metadata.githubToken as string;
       if (githubToken) {
         return await mcpClientService.validateGitHubConnection(githubToken);

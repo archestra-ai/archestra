@@ -1,4 +1,4 @@
-# Archestra Platform
+# Archestra MCP Gateway (LLM, tool call, A2A Gateway)
 
 <div align="center">
 <img src="/docs/assets/trifecta.png" alt="Trifecta" />

@@ -150,7 +150,7 @@ export function InternalMCPRegistry({
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Add
+          Add custom server
         </Button>
       </div>
       <div className="relative">

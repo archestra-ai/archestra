@@ -42,7 +42,8 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { messages, tools, stream } = body;
+    const { messages, stream } = body;
+    let { tools } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -70,6 +71,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {
+      // Inject MCP tools assigned to this agent
+      const mcpTools =
+        await utils.mcpToolInjection.getMcpToolsForAgent(resolvedAgentId);
+      tools = utils.mcpToolInjection.mergeTools(tools, mcpTools);
+
       await utils.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
@@ -114,6 +120,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const stream = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
+          tools,
           stream: true,
         });
 
@@ -218,13 +225,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.raw.end();
         return reply;
       } else {
-        const response = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          stream: false,
-        });
+        // Execute MCP tool loop - this will handle tool calls and return final message
+        const finalAssistantMessage = await utils.handleMcpToolExecutionLoop(
+          openAiClient,
+          body,
+          filteredMessages,
+          tools,
+          resolvedAgentId,
+        );
 
-        let assistantMessage = response.choices[0].message;
+        let assistantMessage = finalAssistantMessage;
 
         // Evaluate tool invocation policies dynamically
         const toolInvocationRefusal =
@@ -245,6 +255,21 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             resolvedAgentId,
             contextIsTrusted,
           );
+
+        const response: OpenAi.Types.ChatCompletionResponse = {
+          id: "chatcmpl-" + Date.now(),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: body.model,
+          choices: [
+            {
+              index: 0,
+              message: assistantMessage,
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        };
 
         if (toolInvocationRefusal) {
           const [refusalMessage, contentMessage] = toolInvocationRefusal;

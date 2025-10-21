@@ -31,6 +31,9 @@ export const persistTools = async (
 };
 
 export * as adapters from "./adapters";
+export * as mcpToolExecution from "./mcp-tool-execution";
+export * as mcpToolInjection from "./mcp-tool-injection";
 export * as streaming from "./streaming";
 export * as toolInvocation from "./tool-invocation";
 export * as trustedData from "./trusted-data";
+export { handleMcpToolExecutionLoop } from "./openai-mcp-loop";

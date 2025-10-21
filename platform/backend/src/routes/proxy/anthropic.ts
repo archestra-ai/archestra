@@ -7,6 +7,7 @@ import { AgentModel, InteractionModel } from "@/models";
 import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
+import * as anthropicMcpInjection from "./utils/anthropic-mcp-injection";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
@@ -45,6 +46,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
   ) => {
     const { stream } = body;
+    let { tools } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -70,10 +72,15 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
 
     try {
-      if (body.tools) {
+      // Inject MCP tools assigned to this agent
+      const mcpTools =
+        await anthropicMcpInjection.getMcpToolsForAgent(resolvedAgentId);
+      tools = anthropicMcpInjection.mergeTools(tools, mcpTools);
+
+      if (tools) {
         const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
-        for (const tool of body.tools) {
+        for (const tool of tools) {
           // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
           if (
             tool.type === undefined ||
@@ -122,6 +129,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
+          tools,
           stream: false,
         });
 

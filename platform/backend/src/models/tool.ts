@@ -47,7 +47,8 @@ class ToolModel {
   }
 
   static async findAll(userId?: string, isAdmin?: boolean) {
-    let query = db
+    // Get all tools
+    let toolsQuery = db
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
@@ -56,18 +57,13 @@ class ToolModel {
         allowUsageWhenUntrustedDataIsPresent:
           schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
         toolResultTreatment: schema.toolsTable.toolResultTreatment,
+        source: schema.toolsTable.source,
+        mcpServerId: schema.toolsTable.mcpServerId,
+        agentId: schema.toolsTable.agentId,
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
-        agent: {
-          id: schema.agentsTable.id,
-          name: schema.agentsTable.name,
-        },
       })
       .from(schema.toolsTable)
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.toolsTable.agentId, schema.agentsTable.id),
-      )
       .orderBy(desc(schema.toolsTable.createdAt))
       .$dynamic();
 
@@ -80,12 +76,82 @@ class ToolModel {
         return [];
       }
 
-      query = query.where(
-        inArray(schema.toolsTable.agentId, accessibleAgentIds),
+      // For proxy tools, filter by agentId
+      // For MCP tools, we'll filter by assigned agents later
+      toolsQuery = toolsQuery.where(
+        or(
+          inArray(schema.toolsTable.agentId, accessibleAgentIds),
+          eq(schema.toolsTable.source, "mcp_server"),
+        ),
       );
     }
 
-    return query;
+    const tools = await toolsQuery;
+
+    // Enrich with agent data
+    const enrichedTools = await Promise.all(
+      tools.map(async (tool) => {
+        let agent = null;
+        let assignedAgents = undefined;
+
+        if (tool.source === "proxy" && tool.agentId) {
+          // For proxy tools, fetch the direct agent
+          const agentData = await db
+            .select({
+              id: schema.agentsTable.id,
+              name: schema.agentsTable.name,
+            })
+            .from(schema.agentsTable)
+            .where(eq(schema.agentsTable.id, tool.agentId))
+            .limit(1);
+
+          agent = agentData[0] || null;
+        } else if (tool.source === "mcp_server") {
+          // For MCP tools, fetch assigned agents
+          const agentIds = await AgentToolModel.findAgentIdsByTool(tool.id);
+
+          if (agentIds.length > 0) {
+            assignedAgents = await db
+              .select({
+                id: schema.agentsTable.id,
+                name: schema.agentsTable.name,
+              })
+              .from(schema.agentsTable)
+              .where(inArray(schema.agentsTable.id, agentIds));
+          } else {
+            assignedAgents = [];
+          }
+        }
+
+        // Omit agentId from the response
+        const { agentId, ...toolWithoutAgentId } = tool;
+
+        return {
+          ...toolWithoutAgentId,
+          agent,
+          assignedAgents,
+        };
+      }),
+    );
+
+    // Filter out MCP tools that aren't assigned to accessible agents (for non-admins)
+    if (userId && !isAdmin) {
+      const accessibleAgentIds =
+        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+
+      return enrichedTools.filter((tool) => {
+        if (tool.source === "proxy") {
+          return true; // Already filtered by query
+        }
+        // For MCP tools, check if any assigned agent is accessible
+        return (
+          tool.assignedAgents &&
+          tool.assignedAgents.some((a) => accessibleAgentIds.includes(a.id))
+        );
+      });
+    }
+
+    return enrichedTools;
   }
 
   static async findByName(

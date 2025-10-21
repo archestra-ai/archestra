@@ -32,10 +32,20 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
 export const SelectToolWithAgentSchema = SelectToolSchema.omit({
   agentId: true,
 }).extend({
-  agent: z.object({
-    id: z.string(),
-    name: z.string(),
-  }),
+  agent: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(), // Nullable for MCP tools
+  assignedAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(), // For MCP tools, list of agents they're assigned to
 });
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {

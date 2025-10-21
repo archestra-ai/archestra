@@ -177,6 +177,16 @@ class TrustedDataPolicyModel {
           ),
         );
 
+      // If no agent-tool relationship exists, default to untrusted
+      if (!agentTool) {
+        return {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: `Tool ${toolName} is not registered for this agent`,
+        };
+      }
+
       if (agentTool.toolResultTreatment === "trusted") {
         return {
           isTrusted: true,

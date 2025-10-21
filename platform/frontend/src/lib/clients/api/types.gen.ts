@@ -2483,10 +2483,8 @@ export type GetAllAgentToolsResponses = {
             };
             createdAt: string;
             updatedAt: string;
-            mcpServer: {
-                id: string;
-                name: string;
-            } | null;
+            mcpServerId: string | null;
+            mcpServerName: string | null;
         };
     }>;
 };

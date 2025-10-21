@@ -1,4 +1,9 @@
-import { AgentModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import {
+  AgentModel,
+  AgentToolModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+} from "@/models";
 import type { Tool } from "@/types";
 import { evaluateIfContextIsTrusted } from "./trusted-data";
 import type { CommonMessage } from "./types";
@@ -6,6 +11,7 @@ import type { CommonMessage } from "./types";
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
   let toolId: string;
+  let agentToolId: string;
 
   beforeEach(async () => {
     // Create test agent
@@ -21,12 +27,17 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       name: "get_emails",
       parameters: {},
       description: "Get emails",
-      allowUsageWhenUntrustedDataIsPresent: false,
-      toolResultTreatment: "untrusted",
     });
 
     const tool = await ToolModel.findByName("get_emails");
     toolId = (tool as Tool).id;
+
+    // Create agent-tool relationship with security settings
+    const agentTool = await AgentToolModel.create(agentId, toolId, {
+      allowUsageWhenUntrustedDataIsPresent: false,
+      toolResultTreatment: "untrusted",
+    });
+    agentToolId = agentTool.id;
   });
 
   describe("evaluateIfContextIsTrusted", () => {
@@ -50,7 +61,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted and blocks tool result when matching block policy", async () => {
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        toolId,
+        agentToolId,
         attributePath: "emails[*].from",
         operator: "contains",
         value: "hacker",
@@ -97,7 +108,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as trusted when tool result matches allow policy", async () => {
       // Create an allow policy
       await TrustedDataPolicyModel.create({
-        toolId,
+        agentToolId,
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
@@ -138,7 +149,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("marks context as untrusted when no policies match", async () => {
       // Create a policy that won't match
       await TrustedDataPolicyModel.create({
-        toolId,
+        agentToolId,
         attributePath: "emails[*].from",
         operator: "endsWith",
         value: "@trusted.com",
@@ -177,7 +188,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({
-        toolId,
+        agentToolId,
         attributePath: "source",
         operator: "equal",
         value: "trusted",
@@ -186,7 +197,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
 
       await TrustedDataPolicyModel.create({
-        toolId,
+        agentToolId,
         attributePath: "source",
         operator: "equal",
         value: "malicious",
@@ -310,6 +321,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         name: "trusted_tool",
         parameters: {},
         description: "Tool that trusts data by default",
+      });
+
+      const trustedTool = await ToolModel.findByName("trusted_tool");
+      const trustedToolId = (trustedTool as Tool).id;
+
+      // Create agent-tool relationship with trusted treatment
+      await AgentToolModel.create(agentId, trustedToolId, {
         allowUsageWhenUntrustedDataIsPresent: false,
         toolResultTreatment: "trusted",
       });
@@ -346,16 +364,24 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         name: "default_trusted_tool",
         parameters: {},
         description: "Tool that trusts data by default",
-        allowUsageWhenUntrustedDataIsPresent: false,
-        toolResultTreatment: "trusted",
       });
 
       const tool = await ToolModel.findByName("default_trusted_tool");
       const trustedToolId = (tool as Tool).id;
 
+      // Create agent-tool relationship with trusted treatment
+      const trustedAgentTool = await AgentToolModel.create(
+        agentId,
+        trustedToolId,
+        {
+          allowUsageWhenUntrustedDataIsPresent: false,
+          toolResultTreatment: "trusted",
+        },
+      );
+
       // Create a block policy
       await TrustedDataPolicyModel.create({
-        toolId: trustedToolId,
+        agentToolId: trustedAgentTool.id,
         attributePath: "dangerous",
         operator: "equal",
         value: "true",

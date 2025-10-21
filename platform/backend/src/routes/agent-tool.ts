@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { AgentModel, ToolModel } from "@/models";
+import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   RouteId,
@@ -57,7 +57,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Create the assignment
-        await ToolModel.assignToAgent(toolId, agentId);
+        await AgentToolModel.create(agentId, toolId);
 
         return reply.send({ success: true });
       } catch (error) {
@@ -97,7 +97,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const { agentId, toolId } = request.params;
 
-        const success = await ToolModel.unassignFromAgent(toolId, agentId);
+        const success = await AgentToolModel.delete(agentId, toolId);
 
         return reply.send({ success });
       } catch (error) {

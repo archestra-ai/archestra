@@ -151,20 +151,6 @@ class ToolModel {
   }
 
   /**
-   * Assign an MCP tool to an agent
-   */
-  static async assignToAgent(toolId: string, agentId: string) {
-    return AgentToolModel.create(agentId, toolId);
-  }
-
-  /**
-   * Unassign an MCP tool from an agent
-   */
-  static async unassignFromAgent(toolId: string, agentId: string) {
-    return AgentToolModel.delete(agentId, toolId);
-  }
-
-  /**
    * Get all tools for an agent (both proxy-sniffed and MCP tools)
    * Proxy-sniffed tools are those with agentId set directly
    * MCP tools are those assigned via the agent_tools junction table
@@ -189,17 +175,6 @@ class ToolModel {
       .orderBy(desc(schema.toolsTable.createdAt));
 
     return tools;
-  }
-
-  /**
-   * Get all tools for an MCP server
-   */
-  static async findByMcpServer(mcpServerId: string): Promise<Tool[]> {
-    return await db
-      .select()
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
-      .orderBy(desc(schema.toolsTable.createdAt));
   }
 }
 

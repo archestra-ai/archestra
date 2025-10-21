@@ -16,6 +16,7 @@ import {
   LogIn,
   type LucideIcon,
   MessagesSquare,
+  Package,
   Router,
   Settings,
   ShieldCheck,
@@ -80,6 +81,11 @@ const getNavigationItems = (
             title: "Tools",
             url: "/tools",
             icon: FileJson2,
+          },
+          {
+            title: "MCP Catalog",
+            url: "/mcp-catalog",
+            icon: Package,
           },
           ...(mcpRegistryEnabled
             ? [

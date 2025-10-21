@@ -114,7 +114,7 @@ export default function TestAgentPage() {
                 }`
           }`}
         >
-          <Card className="w-[600px] bg-primary/5 border-primary/20">
+          <Card className="w-[420px] bg-primary/5 border-primary/20">
             <CardContent className="flex gap-2 flex-row-reverse">
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <User className="w-3.5 h-3.5 text-primary" />

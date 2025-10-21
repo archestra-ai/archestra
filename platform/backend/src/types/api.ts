@@ -99,8 +99,16 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 
+  // Agent Tool Routes
+  AssignToolToAgent: "assignToolToAgent",
+  UnassignToolFromAgent: "unassignToolFromAgent",
+  GetAgentTools: "getAgentTools",
+
   // Features Routes
   GetFeatures: "getFeatures",
+
+  // Auth Routes
+  GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
 
   // MCP Catalog Routes
   GetMcpCatalog: "getMcpCatalog",

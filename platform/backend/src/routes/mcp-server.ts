@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { McpServerModel } from "@/models";
+import { AgentToolModel, McpServerModel, ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertMcpServerSchema,
@@ -94,6 +94,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: true,
           createdAt: true,
           updatedAt: true,
+        }).extend({
+          agentIds: z.array(UuidIdSchema).optional(),
         }),
         response: {
           200: SelectMcpServerSchema,
@@ -103,7 +105,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        return reply.send(await McpServerModel.create(request.body));
+        const { agentIds, ...serverData } = request.body;
+
+        // Create the MCP server
+        const mcpServer = await McpServerModel.create(serverData);
+
+        /**
+         * NOTE: the following code is just mocking out an "mcp server installation" for now..
+         * in the future, we will need to actually install the MCP server and get the tools from it.
+         *
+         * Get the listed tools from the MCP server (mocked for now)
+         * and persist them as tools in the database with source='mcp_server' and mcpServerId
+         */
+        for (const tool of McpServerModel.getListedTools()) {
+          const createdTool = await ToolModel.create({
+            name: ToolModel.slugifyName(mcpServer.name, tool.name),
+            description: tool.description,
+            parameters: tool.inputSchema,
+            source: "mcp_server",
+            mcpServerId: mcpServer.id,
+            toolResultTreatment: "untrusted",
+          });
+
+          // If agentIds were provided, create agent-tool assignments
+          if (agentIds && agentIds.length > 0) {
+            for (const agentId of agentIds) {
+              await AgentToolModel.create(agentId, createdTool.id);
+            }
+          }
+        }
+
+        return reply.send(mcpServer);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

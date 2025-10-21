@@ -31,6 +31,7 @@ class AuthMiddleware {
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
     }
+
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/v1/openai") ||
@@ -39,7 +40,9 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
-      url === "/api/features"
+      url === "/api/features" ||
+      // Archestra MCP server doesn't require authentication
+      url === "/mcp"
     ) {
       return true;
     }
@@ -95,6 +98,16 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.DeleteAgent]: {
     agent: ["delete"],
+  },
+  [RouteId.GetAgentTools]: {
+    agent: ["read"],
+    tool: ["read"],
+  },
+  [RouteId.AssignToolToAgent]: {
+    agent: ["update"],
+  },
+  [RouteId.UnassignToolFromAgent]: {
+    agent: ["update"],
   },
   [RouteId.GetTools]: {
     tool: ["read"],

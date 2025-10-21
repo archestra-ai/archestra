@@ -6,7 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, MoreHorizontal, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -15,12 +15,6 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,6 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { GetToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
@@ -511,47 +511,50 @@ function ToolsList({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Results are:</span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "trusted")
-                }
-                disabled={!hasSelection}
-              >
-                Trusted
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "untrusted")
-                }
-                disabled={!hasSelection}
-              >
-                Untrusted
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={!hasSelection}>
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() =>
-                      handleBulkAction(
-                        "toolResultTreatment",
-                        "sanitize_with_dual_llm",
-                      )
-                    }
-                  >
-                    Sanitize with Dual LLM
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
+            <TooltipProvider>
+              <ButtonGroup>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction("toolResultTreatment", "trusted")
+                  }
+                  disabled={!hasSelection}
+                >
+                  Trusted
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction("toolResultTreatment", "untrusted")
+                  }
+                  disabled={!hasSelection}
+                >
+                  Untrusted
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        handleBulkAction(
+                          "toolResultTreatment",
+                          "sanitize_with_dual_llm",
+                        )
+                      }
+                      disabled={!hasSelection}
+                    >
+                      Dual LLM
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Sanitize with Dual LLM</p>
+                  </TooltipContent>
+                </Tooltip>
+              </ButtonGroup>
+            </TooltipProvider>
           </div>
           <div className="ml-2 h-4 w-px bg-border" />
           <Button

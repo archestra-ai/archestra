@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "@/auth/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { RouteId } from "@/types";
 
 // Register authentication endpoints
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -13,6 +14,9 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     method: "GET",
     url: "/api/auth/default-credentials-status",
     schema: {
+      operationId: RouteId.GetDefaultCredentialsStatus,
+      description: "Get default credentials status",
+      tags: ["Auth"],
       response: {
         200: z.object({
           enabled: z.boolean(),

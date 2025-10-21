@@ -1,7 +1,15 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import { MoreVertical, Pencil, Plug, Plus, Trash2, X } from "lucide-react";
+import {
+  MoreVertical,
+  Pencil,
+  Plug,
+  Plus,
+  Trash2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -62,6 +70,8 @@ import {
 } from "@/lib/agent.query";
 import { useCurrentOrgMembers } from "@/lib/auth.query";
 import type { GetAgentsResponses } from "@/lib/clients/api";
+import { useFeatureFlag } from "@/lib/features.hook";
+import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
   initialData,
@@ -140,11 +150,15 @@ function AgentMembersBadges({
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
   const { data: orgMembers } = useCurrentOrgMembers();
+  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
+  const [assigningToolsAgent, setAssigningToolsAgent] = useState<
+    GetAgentsResponses["200"][number] | null
+  >(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
@@ -256,6 +270,14 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                                 <Plug className="h-4 w-4" />
                                 Connect
                               </DropdownMenuItem>
+                              {mcpRegistryEnabled && (
+                                <DropdownMenuItem
+                                  onClick={() => setAssigningToolsAgent(agent)}
+                                >
+                                  <Wrench className="h-4 w-4" />
+                                  Assign Tools
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() =>
                                   setEditingAgent({
@@ -299,6 +321,14 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
             agent={connectingAgent}
             open={!!connectingAgent}
             onOpenChange={(open) => !open && setConnectingAgent(null)}
+          />
+        )}
+
+        {assigningToolsAgent && (
+          <AssignToolsDialog
+            agent={assigningToolsAgent}
+            open={!!assigningToolsAgent}
+            onOpenChange={(open) => !open && setAssigningToolsAgent(null)}
           />
         )}
 

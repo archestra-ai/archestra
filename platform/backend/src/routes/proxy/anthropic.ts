@@ -44,7 +44,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { stream } = body;
+    const { tools, stream } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -70,10 +70,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
 
     try {
-      if (body.tools) {
+      if (tools) {
         const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
 
-        for (const tool of body.tools) {
+        for (const tool of tools) {
           // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
           if (
             tool.type === undefined ||

@@ -103,6 +103,7 @@ export default {
     name: "Archestra Platform API",
     version: packageJson.version,
     corsOrigins: getCorsOrigins(),
+    authHeaderName: "X-Archestra-API-Key",
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,

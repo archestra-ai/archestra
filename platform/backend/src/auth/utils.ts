@@ -7,9 +7,8 @@ import { auth } from "@/auth/auth";
 export async function getUserFromRequest(
   request: FastifyRequest,
 ): Promise<{ id: string; isAdmin: boolean } | null> {
-  const headers = new Headers(request.headers as HeadersInit);
   const session = await auth.api.getSession({
-    headers,
+    headers: new Headers(request.headers as HeadersInit),
     query: { disableCookieCache: true },
   });
 

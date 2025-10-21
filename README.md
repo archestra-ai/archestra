@@ -1,4 +1,14 @@
-# Archestra Platform
+# Archestra Gateway
+
+A central place for teams and enterprises to manage MCP and agents at scale.
+- MCP Gateway
+- LLM Gateway
+- Guardrails preventing "The Lethal Trifecta"
+- Private MCP Registry
+- MCP Orchestrator
+- Lightweight & efficient
+- Role-Based-Access-Control for multi-team usage
+- Metrics exporter
 
 <div align="center">
 <img src="/docs/assets/trifecta.png" alt="Trifecta" />

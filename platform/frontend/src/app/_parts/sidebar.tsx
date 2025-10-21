@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
@@ -45,6 +44,7 @@ import {
 import { WithRole } from "@/components/with-permission";
 import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
 import { useFeatureFlag } from "@/lib/features.hook";
+import { useGithubStars } from "@/lib/github.query";
 
 interface MenuItem {
   title: string;
@@ -123,21 +123,10 @@ const userItems: MenuItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [starCount, setStarCount] = useState<number | null>(null);
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
   const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
-
-  useEffect(() => {
-    fetch("https://api.github.com/repos/archestra-ai/archestra")
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.stargazers_count) {
-          setStarCount(data.stargazers_count);
-        }
-      })
-      .catch((error) => console.error("Error fetching GitHub stars:", error));
-  }, []);
+  const { data: starCount } = useGithubStars();
 
   return (
     <Sidebar>
@@ -228,9 +217,7 @@ export function AppSidebar() {
                       Star us on GitHub
                       <span className="flex items-center gap-1 text-xs">
                         <Star className="h-3 w-3" />
-                        {starCount !== null
-                          ? starCount.toLocaleString()
-                          : "..."}
+                        {starCount}
                       </span>
                     </span>
                   </a>

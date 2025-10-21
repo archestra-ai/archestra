@@ -148,6 +148,13 @@
       "when": 1760992046940,
       "tag": "0020_ancient_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1761045400180,
+      "tag": "0021_fresh_daredevil",
+      "breakpoints": true
     }
   ]
 }

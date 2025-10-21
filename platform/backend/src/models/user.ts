@@ -4,7 +4,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 
 class User {
-  static async createAdminUser() {
+  static async createOrGetExistingDefaultAdminUser() {
     const email = config.auth.adminDefaultEmail;
     const password = config.auth.adminDefaultPassword;
 
@@ -15,7 +15,7 @@ class User {
         .where(eq(schema.usersTable.email, email));
       if (existing.length > 0) {
         console.log("Admin already exists:", email);
-        return;
+        return existing[0];
       }
 
       const result = await auth.api.signUpEmail({
@@ -25,7 +25,6 @@ class User {
           name: "Admin",
         },
       });
-
       if (result) {
         await db
           .update(schema.usersTable)
@@ -37,6 +36,7 @@ class User {
 
         console.log("Admin user created successfully:", email);
       }
+      return result.user;
     } catch (err) {
       console.error("Failed to create admin:", err);
     }

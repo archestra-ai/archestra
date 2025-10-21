@@ -354,9 +354,9 @@ The production backend provides:
     - `PUT /api/trusted-data-policies/:id` - Update policy
     - `DELETE /api/trusted-data-policies/:id` - Delete policy
 - **Tool Management**:
-  - `GET /api/tools` - List all tools
+  - `GET /api/tools` - List all tools (no longer contains security configurations)
   - `GET /api/agent-tools` - List agent-tool relationships with security configurations
-  - `POST /api/agent-tools` - Create agent-tool relationship
+  - `POST /api/agent-tools` - Create agent-tool relationship with security settings
   - `PATCH /api/agent-tools/:agentId/:toolId` - Update agent-tool security configuration
   - `DELETE /api/agent-tools/:agentId/:toolId` - Remove agent-tool relationship
 - **Dual LLM Configuration**:
@@ -421,7 +421,7 @@ The backend integrates advanced security guardrails:
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
 - **Tool**: Stores available tools with metadata
   - Links to agents (for proxy-sniffed tools) or MCP servers (for MCP tools)
-  - No longer contains security configuration (moved to AgentTool)
+  - Security configuration fields removed (moved to AgentTool junction table)
 - **AgentTool**: Junction table linking agents to tools with security configuration
   - `allowUsageWhenUntrustedDataIsPresent`: Allow tool to run with untrusted data
   - `toolResultTreatment`: How tool outputs are handled (default: "untrusted"):
@@ -429,10 +429,10 @@ The backend integrates advanced security guardrails:
     - `"sanitize_with_dual_llm"`: Tool outputs go through dual LLM sanitization before use
     - `"untrusted"`: Tool outputs are marked as untrusted data
 - **ToolInvocationPolicy**: Policies for controlling tool usage
-  - Links to agent-tool relationships (not tools directly)
+  - Links to agent-tool relationships via `agent_tool_id` (not tools directly)
   - Stores argument path, operator, value, action, and reason
 - **TrustedDataPolicy**: Policies for marking data as trusted, blocked, or for sanitization
-  - Links to agent-tool relationships (not tools directly)
+  - Links to agent-tool relationships via `agent_tool_id` (not tools directly)
   - Stores attribute path, operator, value, and action ("mark_as_trusted", "block_always", or "sanitize_with_dual_llm")
 - **DualLlmConfig**: Configuration for dual LLM quarantine pattern
   - Stores prompts for main agent, quarantined agent, and summary generation

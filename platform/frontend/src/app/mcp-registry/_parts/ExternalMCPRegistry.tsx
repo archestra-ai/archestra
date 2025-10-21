@@ -1,22 +1,45 @@
 "use client";
 
-import { BookOpen, FileText, Github, Loader2, Search, Tag } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  Github,
+  Loader2,
+  Plus,
+  Search,
+  Tag,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { GetMcpCatalogResponses } from "@/lib/clients/api";
+import {
+  useCreateMcpCatalogItem,
+  useMcpCatalog,
+} from "@/lib/mcp-catalog.query";
 import {
   type McpServer,
   useMcpRegistryServersInfinite,
 } from "@/lib/mcp-registry-external.query";
 import { ReadmeDialog } from "./readme-dialog";
 
-export default function McpCatalogPage() {
+export default function McpCatalogPage({
+  catalogItems: initialCatalogItems,
+}: {
+  catalogItems?: GetMcpCatalogResponses["200"];
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [readmeServer, setReadmeServer] = useState<McpServer | null>(null);
+
+  // Get catalog items for filtering (with live updates)
+  const { data: catalogItems } = useMcpCatalog({
+    initialData: initialCatalogItems,
+  });
 
   // Use server-side search
   const {
@@ -27,6 +50,19 @@ export default function McpCatalogPage() {
     hasNextPage,
     isFetchingNextPage,
   } = useMcpRegistryServersInfinite(searchQuery);
+
+  // Mutation for adding servers to catalog
+  const createMutation = useCreateMcpCatalogItem();
+
+  const handleAddToCatalog = async (server: McpServer) => {
+    try {
+      await createMutation.mutateAsync({ name: server.name });
+      toast.success(`Added "${server.name}" to your MCP servers`);
+    } catch (error) {
+      toast.error(`Failed to add "${server.name}"`);
+      console.error("Add to catalog error:", error);
+    }
+  };
 
   // Flatten all pages into a single array of servers
   const servers = useMemo(() => {
@@ -66,31 +102,38 @@ export default function McpCatalogPage() {
   const filteredServers = useMemo(() => {
     if (!servers) return [];
 
+    // Create a Set of catalog item names for efficient lookup
+    const catalogServerNames = new Set(
+      catalogItems?.map((item) => item.name) || [],
+    );
+
+    // Filter out servers already in catalog
+    let filtered = servers.filter(
+      (server) => !catalogServerNames.has(server.name),
+    );
+
     // Filter by category (client-side only)
     if (selectedCategory) {
-      return servers.filter((server) =>
+      filtered = filtered.filter((server) =>
         server.categories?.includes(selectedCategory),
       );
     }
 
-    return servers;
-  }, [servers, selectedCategory]);
+    return filtered;
+  }, [servers, selectedCategory, catalogItems]);
 
   return (
     <div className="w-full h-full">
-      <div className="border-b border-border bg-card/30">
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight mb-2">
-            MCP Catalog
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Browse and discover Model Context Protocol (MCP) servers from the
-            official registry.
-          </p>
-        </div>
+      <div className="">
+        <h1 className="text-lg font-semibold tracking-tight mb-2">
+          External MCP Registry
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Browse and discover Model Context Protocol (MCP) servers from the
+          official registry.
+        </p>
       </div>
-
-      <div className="max-w-7xl mx-auto px-8 py-8 space-y-6">
+      <div className="mx-auto py-4 space-y-6">
         {/* Search Bar */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -107,7 +150,7 @@ export default function McpCatalogPage() {
           <div className="space-y-2">
             <h2 className="text-sm font-medium flex items-center gap-2">
               <Tag className="h-4 w-4" />
-              Categories (JUST MOCK - REVERT I NOT NEEDED)
+              Categories (JUST MOCK - REVERT IF NOT NEEDED)
             </h2>
             <div className="flex flex-wrap gap-2">
               <Badge
@@ -216,18 +259,37 @@ export default function McpCatalogPage() {
                           </div>
                         )}
 
-                        <div className="flex flex-wrap gap-2 mt-auto pt-3">
-                          {server.repository && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setReadmeServer(server)}
-                                className="flex-1"
-                              >
-                                <FileText className="h-4 w-4 mr-1" />
-                                README
-                              </Button>
+                        <div className="flex flex-col gap-2 mt-auto pt-3">
+                          <div className="flex flex-wrap gap-2">
+                            {server.repository && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setReadmeServer(server)}
+                                  className="flex-1"
+                                >
+                                  <FileText className="h-4 w-4 mr-1" />
+                                  README
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                  className="flex-1"
+                                >
+                                  <a
+                                    href={server.repository}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <Github className="h-4 w-4 mr-1" />
+                                    Code
+                                  </a>
+                                </Button>
+                              </>
+                            )}
+                            {server.homepage && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -235,33 +297,25 @@ export default function McpCatalogPage() {
                                 className="flex-1"
                               >
                                 <a
-                                  href={server.repository}
+                                  href={server.homepage}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >
-                                  <Github className="h-4 w-4 mr-1" />
-                                  Code
+                                  <BookOpen className="h-4 w-4 mr-1" />
+                                  Docs
                                 </a>
                               </Button>
-                            </>
-                          )}
-                          {server.homepage && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                              className="flex-1"
-                            >
-                              <a
-                                href={server.homepage}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <BookOpen className="h-4 w-4 mr-1" />
-                                Docs
-                              </a>
-                            </Button>
-                          )}
+                            )}
+                          </div>
+                          <Button
+                            onClick={() => handleAddToCatalog(server)}
+                            disabled={createMutation.isPending}
+                            size="sm"
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            {createMutation.isPending ? "Adding..." : "Add"}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>

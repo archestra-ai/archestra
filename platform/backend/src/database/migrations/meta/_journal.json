@@ -169,6 +169,13 @@
       "when": 1761065690824,
       "tag": "0023_misty_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1761076030798,
+      "tag": "0024_strange_xavin",
+      "breakpoints": true
     }
   ]
 }

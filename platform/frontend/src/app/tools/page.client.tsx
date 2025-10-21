@@ -30,7 +30,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GetToolsResponses } from "@/lib/clients/api";
+import { useAgentTools } from "@/lib/agent-tool.query";
+import type {
+  GetAllAgentToolsResponses,
+  GetToolsResponses,
+} from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -38,16 +42,14 @@ import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
-import { useToolPatchMutation, useTools } from "@/lib/tool.query";
+import { useToolPatchMutation } from "@/lib/tool.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
-export function ToolsPage({
-  initialData,
-}: {
-  initialData?: GetToolsResponses["200"];
-}) {
+type AgentToolData = GetAllAgentToolsResponses["200"][number];
+
+export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   const queryClient = useQueryClient();
 
   // Prefetch policy data on mount
@@ -68,8 +70,6 @@ export function ToolsPage({
   );
 }
 
-type ToolData = GetToolsResponses["200"][number];
-
 // Reusable sort icon component
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
@@ -85,19 +85,15 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function ToolsList({
-  initialData,
-}: {
-  initialData?: GetToolsResponses["200"];
-}) {
-  const { data: tools } = useTools({ initialData });
+function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
+  const { data: agentTools } = useAgentTools();
   const toolPatchMutation = useToolPatchMutation();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
 
   // Dialog state - combined into single state
   const [selectedToolForDialog, setSelectedToolForDialog] =
-    useState<ToolData | null>(null);
+    useState<AgentToolData | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,7 +103,7 @@ function ToolsList({
     { id: "createdAt", desc: true },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<ToolData[]>([]);
+  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
 
   // Pagination from URL
   const searchParams = useSearchParams();
@@ -121,15 +117,15 @@ function ToolsList({
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || "50");
 
-  // Filter tools based on search query
-  const filteredTools = useMemo(() => {
-    if (!searchQuery.trim()) return tools || [];
+  // Filter agent-tools based on search query
+  const filteredAgentTools = useMemo(() => {
+    if (!searchQuery.trim()) return agentTools || [];
 
     const query = searchQuery.toLowerCase();
-    return (tools || []).filter((tool) =>
-      tool.name.toLowerCase().includes(query),
+    return agentTools.filter((agentTool) =>
+      agentTool.tool?.name.toLowerCase().includes(query),
     );
-  }, [tools, searchQuery]);
+  }, [agentTools, searchQuery]);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -152,7 +148,7 @@ function ToolsList({
 
       // Calculate the current page's data from filtered tools
       const startIndex = pageIndex * pageSize;
-      const pageTools = (filteredTools || []).slice(
+      const pageTools = (filteredAgentTools || []).slice(
         startIndex,
         startIndex + pageSize,
       );
@@ -164,7 +160,7 @@ function ToolsList({
 
       setSelectedTools(newSelectedTools);
     },
-    [filteredTools, pageIndex, pageSize],
+    [filteredAgentTools, pageIndex, pageSize],
   );
 
   // Bulk action handler - unified for both types
@@ -231,7 +227,7 @@ function ToolsList({
   }, []);
 
   // Column definitions - moved before early return to fix hook order
-  const columns: ColumnDef<ToolData>[] = useMemo(
+  const columns: ColumnDef<AgentToolData>[] = useMemo(
     () => [
       {
         id: "select",
@@ -251,7 +247,7 @@ function ToolsList({
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.name}`}
+            aria-label={`Select ${row.original.tool.name}`}
           />
         ),
         size: 50,
@@ -270,7 +266,7 @@ function ToolsList({
         ),
         cell: ({ row }) => (
           <div className="font-medium text-foreground truncate">
-            {row.original.name}
+            {row.original.tool.name}
           </div>
         ),
         size: 250,
@@ -319,7 +315,7 @@ function ToolsList({
                   });
                 }}
                 onClick={(e) => e.stopPropagation()}
-                aria-label={`Allow ${row.original.name} in untrusted context`}
+                aria-label={`Allow ${row.original.tool.name} in untrusted context`}
               />
               <span className="text-xs text-muted-foreground">
                 {row.original.allowUsageWhenUntrustedDataIsPresent
@@ -407,7 +403,7 @@ function ToolsList({
         header: "Parameters",
         cell: ({ row }) => {
           const paramCount = Object.keys(
-            row.original.parameters?.properties || {},
+            row.original.tool.parameters?.properties || {},
           ).length;
           return (
             <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
@@ -425,11 +421,11 @@ function ToolsList({
   const paginatedTools = useMemo(() => {
     const startIndex = pageIndex * pageSize;
     const endIndex = startIndex + pageSize;
-    return (filteredTools || []).slice(startIndex, endIndex);
-  }, [filteredTools, pageIndex, pageSize]);
+    return filteredAgentTools.slice(startIndex, endIndex);
+  }, [filteredAgentTools, pageIndex, pageSize]);
 
   // Early return if no tools
-  if (!tools?.length) {
+  if (!agentTools?.length) {
     return (
       <div className="w-full h-full">
         <div className="border-b border-border bg-card/30">
@@ -612,7 +608,7 @@ function ToolsList({
 
         <BulkActions />
 
-        {(filteredTools?.length || 0) === 0 && searchQuery ? (
+        {(filteredAgentTools?.length || 0) === 0 && searchQuery ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
@@ -652,7 +648,7 @@ function ToolsList({
             pagination={{
               pageIndex,
               pageSize,
-              total: filteredTools?.length || 0,
+              total: filteredAgentTools?.length || 0,
             }}
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
@@ -663,7 +659,7 @@ function ToolsList({
         <ToolDetailsDialog
           tool={
             selectedToolForDialog
-              ? tools.find((t) => t.id === selectedToolForDialog.id) ||
+              ? agentTools.find((t) => t.id === selectedToolForDialog.id) ||
                 selectedToolForDialog
               : null
           }

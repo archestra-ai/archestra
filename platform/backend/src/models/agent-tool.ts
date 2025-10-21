@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { AgentTool } from "@/types";
 
 class AgentToolModel {
   static async create(agentId: string, toolId: string) {
@@ -58,6 +59,60 @@ class AgentToolModel {
       return await AgentToolModel.create(agentId, toolId);
     }
     return null;
+  }
+
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<AgentTool[]> {
+    // Get all agent-tool relationships with joined agent and tool details
+    const query = db
+      .select({
+        id: schema.agentToolsTable.id,
+        allowUsageWhenUntrustedDataIsPresent:
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+        createdAt: schema.agentToolsTable.createdAt,
+        updatedAt: schema.agentToolsTable.updatedAt,
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+        },
+        tool: {
+          id: schema.toolsTable.id,
+          name: schema.toolsTable.name,
+          description: schema.toolsTable.description,
+          parameters: schema.toolsTable.parameters,
+          createdAt: schema.toolsTable.createdAt,
+          updatedAt: schema.toolsTable.updatedAt,
+          mcpServer: {
+            id: schema.mcpServersTable.id,
+            name: schema.mcpServersTable.name,
+          },
+        },
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .$dynamic();
+
+    // Apply access control filtering for non-admins if needed
+    if (userId && !isAdmin) {
+      // Add access control logic here if needed
+      // For now, show all agent-tool relationships
+    }
+
+    return query;
   }
 }
 

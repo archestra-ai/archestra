@@ -3,13 +3,47 @@ import {
   createSelectSchema,
   createUpdateSchema,
 } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 import { schema } from "@/database";
+import { ToolParametersContentSchema } from "./tool";
 
-export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable);
+const ToolResultTreatmentSchema = z.enum([
+  "trusted",
+  "sanitize_with_dual_llm",
+  "untrusted",
+]);
+
+export const SelectAgentToolSchema = createSelectSchema(schema.agentToolsTable)
+  .omit({
+    agentId: true,
+    toolId: true,
+  })
+  .extend({
+    agent: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+    tool: z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string().nullable(),
+      parameters: ToolParametersContentSchema,
+      createdAt: z.date(),
+      updatedAt: z.date(),
+      mcpServer: z
+        .object({
+          id: z.string(),
+          name: z.string(),
+        })
+        .nullable(),
+    }),
+  });
+
 export const InsertAgentToolSchema = createInsertSchema(schema.agentToolsTable);
 export const UpdateAgentToolSchema = createUpdateSchema(schema.agentToolsTable);
 
 export type AgentTool = z.infer<typeof SelectAgentToolSchema>;
 export type InsertAgentTool = z.infer<typeof InsertAgentToolSchema>;
 export type UpdateAgentTool = z.infer<typeof UpdateAgentToolSchema>;
+
+export type ToolResultTreatment = z.infer<typeof ToolResultTreatmentSchema>;

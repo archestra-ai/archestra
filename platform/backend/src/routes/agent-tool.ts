@@ -1,17 +1,58 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getUserFromRequest } from "@/auth/utils";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   RouteId,
+  SelectAgentToolSchema,
   SelectToolSchema,
   UuidIdSchema,
 } from "@/types";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  /**
-   * Assign a tool to an agent
-   */
+  fastify.get(
+    "/api/agent-tools",
+    {
+      schema: {
+        operationId: RouteId.GetAllAgentTools,
+        description: "Get all agent-tool relationships with details",
+        tags: ["Agent Tools"],
+        response: {
+          200: z.array(SelectAgentToolSchema),
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agentTools = await AgentToolModel.findAll(user.id, user.isAdmin);
+        return reply.send(agentTools);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
   fastify.post(
     "/api/agents/:agentId/tools/:toolId",
     {
@@ -73,9 +114,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Unassign a tool from an agent
-   */
   fastify.delete(
     "/api/agents/:agentId/tools/:toolId",
     {
@@ -113,9 +151,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  /**
-   * Get all tools for an agent (both proxy-sniffed and MCP tools)
-   */
   fastify.get(
     "/api/agents/:agentId/tools",
     {

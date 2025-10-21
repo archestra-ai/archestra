@@ -102,6 +102,9 @@ export const RouteId = {
   // Features Routes
   GetFeatures: "getFeatures",
 
+  // Auth Routes
+  GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+
   // MCP Catalog Routes
   GetMcpCatalog: "getMcpCatalog",
   CreateMcpCatalogItem: "createMcpCatalogItem",

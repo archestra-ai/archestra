@@ -229,11 +229,56 @@ export const auth = betterAuth({
             ?.split("invitationId=")[1]
             ?.split("&")[0];
 
-          // Skip organization creation if signing up via invitation
+          // Handle invitation sign-up: accept invitation and add user to organization
           if (invitationId) {
             console.log(
-              `⏭️ Skipping organization creation for user ${user.email} (signing up via invitation ${invitationId})`,
+              `🔗 Processing invitation ${invitationId} for user ${user.email}`,
             );
+
+            try {
+              // Get the invitation from database
+              const invitation = await db
+                .select()
+                .from(schema.invitation)
+                .where(eq(schema.invitation.id, invitationId))
+                .limit(1);
+
+              if (!invitation[0]) {
+                console.error(`❌ Invitation ${invitationId} not found`);
+                return;
+              }
+
+              // Create member row linking user to organization
+              await db.insert(schema.member).values({
+                id: crypto.randomUUID(),
+                organizationId: invitation[0].organizationId,
+                userId: user.id,
+                role: invitation[0].role || "member",
+                createdAt: new Date(),
+              });
+
+              // Mark invitation as accepted
+              await db
+                .update(schema.invitation)
+                .set({ status: "accepted" })
+                .where(eq(schema.invitation.id, invitationId));
+
+              // Set the organization as active in the session
+              await db
+                .update(schema.session)
+                .set({ activeOrganizationId: invitation[0].organizationId })
+                .where(eq(schema.session.id, sessionId));
+
+              console.log(
+                `✅ Invitation accepted: user ${user.email} added to organization ${invitation[0].organizationId} as ${invitation[0].role || "member"}`,
+              );
+            } catch (error) {
+              console.error(
+                `❌ Failed to accept invitation ${invitationId}:`,
+                error,
+              );
+            }
+
             return;
           }
 

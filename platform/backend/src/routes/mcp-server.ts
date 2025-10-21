@@ -119,7 +119,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
          */
         for (const tool of McpServerModel.getListedTools()) {
           const createdTool = await ToolModel.create({
-            name: tool.name,
+            name: ToolModel.slugifyName(mcpServer.name, tool.name),
             description: tool.description,
             parameters: tool.inputSchema,
             source: "mcp_server",

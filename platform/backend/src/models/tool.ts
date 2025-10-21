@@ -5,6 +5,10 @@ import AgentAccessControlModel from "./agent-access-control";
 import AgentToolModel from "./agent-tool";
 
 class ToolModel {
+  static slugifyName(mcpServerName: string, toolName: string): string {
+    return `${mcpServerName}__${toolName}`.toLowerCase().replace(/ /g, "_");
+  }
+
   static async create(tool: InsertTool): Promise<Tool> {
     const [createdTool] = await db
       .insert(schema.toolsTable)

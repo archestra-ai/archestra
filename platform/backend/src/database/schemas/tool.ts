@@ -27,7 +27,7 @@ const toolsTable = pgTable(
     source: text("source").$type<ToolSource>().notNull().default("proxy"),
     // mcpServerId is set for MCP tools, null for proxy-sniffed tools
     mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
-      onDelete: "set null",
+      onDelete: "cascade",
     }),
     name: text("name").notNull(),
     parameters: jsonb("parameters")

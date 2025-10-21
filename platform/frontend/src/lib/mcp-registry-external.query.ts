@@ -27,7 +27,7 @@ export function useMcpRegistryServers() {
 
 // Fetch servers with infinite scroll pagination support
 // By default, fetches only the latest version of each server
-export function useMcpRegistryServersInfinite(search?: string, limit = 30) {
+export function useMcpRegistryServersInfinite(search?: string, limit = 50) {
   return useInfiniteQuery({
     queryKey: ["mcp-registry-external", "servers-infinite", search, limit],
     queryFn: async ({ pageParam }): Promise<ServerListResponse> => {

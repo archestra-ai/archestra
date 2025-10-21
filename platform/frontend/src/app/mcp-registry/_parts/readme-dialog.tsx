@@ -17,10 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { McpServer } from "@/lib/mcp-registry-external.query";
+import type { ServerResponse } from "@/lib/clients/mcp-registry";
 
 interface ReadmeDialogProps {
-  server: McpServer | null;
+  server: ServerResponse | null;
   onClose: () => void;
 }
 
@@ -136,7 +136,7 @@ export function ReadmeDialog({ server, onClose }: ReadmeDialogProps) {
     }
 
     const fetchReadme = async () => {
-      if (!server.repository) {
+      if (!server.server.repository?.url) {
         setError("No repository URL available");
         setLoading(false);
         return;
@@ -148,7 +148,7 @@ export function ReadmeDialog({ server, onClose }: ReadmeDialogProps) {
       try {
         // Convert GitHub URL to raw README URL
         // https://github.com/222wcnm/BiliStalkerMCP -> https://raw.githubusercontent.com/222wcnm/BiliStalkerMCP/main/README.md
-        const githubMatch = server.repository.match(
+        const githubMatch = server.server.repository.url.match(
           /github\.com\/([^/]+)\/([^/]+)/,
         );
 
@@ -195,11 +195,11 @@ export function ReadmeDialog({ server, onClose }: ReadmeDialogProps) {
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>{server?.name || "Server"} README</DialogTitle>
+          <DialogTitle>{server?.server.name || "Server"} README</DialogTitle>
           <DialogDescription>
-            {server?.repository && (
+            {server?.server.repository?.url && (
               <a
-                href={server.repository}
+                href={server.server.repository.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline inline-flex items-center gap-1"

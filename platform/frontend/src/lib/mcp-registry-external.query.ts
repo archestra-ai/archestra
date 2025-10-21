@@ -1,92 +1,19 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-
-// Official MCP Registry API response types
-// Based on https://registry.modelcontextprotocol.io/docs#/operations/list-servers-v0.1
-interface McpServerApiResponse {
-  server: {
-    name: string;
-    description?: string;
-    repository?: {
-      url?: string;
-      source?: string;
-    };
-    version?: string;
-    vendor?: string;
-    homepage?: string;
-  };
-  _meta?: {
-    "io.modelcontextprotocol.registry/official"?: {
-      status?: string;
-      publishedAt?: string;
-      updatedAt?: string;
-      isLatest?: boolean;
-    };
-  };
-}
-
-interface McpRegistryApiResponse {
-  servers: McpServerApiResponse[];
-  metadata: {
-    nextCursor?: string;
-    count: number;
-  };
-}
-
-export interface McpServer {
-  id: string;
-  name: string;
-  description?: string;
-  author?: string;
-  homepage?: string;
-  repository?: string;
-  categories?: string[];
-  tags?: string[];
-  version?: string;
-  license?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  sourceUrl?: string;
-  vendor?: string;
-}
-
-function transformMcpServer(
-  item: McpServerApiResponse,
-  index: number,
-): McpServer {
-  const server = item.server;
-  const meta = item._meta?.["io.modelcontextprotocol.registry/official"];
-
-  return {
-    id: server.name || `server-${index}`,
-    name: server.name,
-    description: server.description,
-    author: server.vendor,
-    homepage: server.homepage,
-    repository: server.repository?.url,
-    version: server.version,
-    createdAt: meta?.publishedAt,
-    updatedAt: meta?.updatedAt,
-    vendor: server.vendor,
-    sourceUrl: server.repository?.url,
-  };
-}
+import { useInfiniteQuery, useSuspenseQuery } from "@tanstack/react-query";
+import {
+  listServersV01,
+  type ServerListResponse,
+} from "./clients/mcp-registry";
 
 // Fetch all servers from the official MCP Registry API
-// Uses Next.js rewrites to proxy the request and avoid CORS issues
 export function useMcpRegistryServers() {
-  return useQuery({
+  return useSuspenseQuery({
     queryKey: ["mcp-registry-external", "servers"],
-    queryFn: async (): Promise<McpServer[]> => {
-      const response = await fetch("/api/mcp-registry-proxy");
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch MCP servers: ${response.status} ${response.statusText}`,
-        );
+    queryFn: async (): Promise<ServerListResponse> => {
+      const response = await listServersV01();
+      if (!response.data) {
+        throw new Error("No data returned from MCP registry");
       }
-      const data: McpRegistryApiResponse = await response.json();
-
-      // Transform the API response to our interface
-      return data.servers.map(transformMcpServer);
+      return response.data;
     },
   });
 }
@@ -95,24 +22,18 @@ export function useMcpRegistryServers() {
 export function useMcpRegistryServersInfinite(search?: string, limit = 30) {
   return useInfiniteQuery({
     queryKey: ["mcp-registry-external", "servers-infinite", search, limit],
-    queryFn: async ({ pageParam }): Promise<McpRegistryApiResponse> => {
-      const params = new URLSearchParams();
-      if (pageParam) {
-        params.append("cursor", pageParam);
+    queryFn: async ({ pageParam }): Promise<ServerListResponse> => {
+      const response = await listServersV01({
+        query: {
+          cursor: pageParam,
+          search: search?.trim(),
+          limit,
+        },
+      });
+      if (!response.data) {
+        throw new Error("No data returned from MCP registry");
       }
-      if (search?.trim()) {
-        params.append("search", search.trim());
-      }
-      params.append("limit", limit.toString());
-
-      const url = `/api/mcp-registry-proxy?${params.toString()}`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch MCP servers: ${response.status} ${response.statusText}`,
-        );
-      }
-      return await response.json();
+      return response.data;
     },
     getNextPageParam: (lastPage) => lastPage.metadata.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,

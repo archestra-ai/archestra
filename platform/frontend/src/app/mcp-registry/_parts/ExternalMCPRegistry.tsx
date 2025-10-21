@@ -17,14 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { GetMcpCatalogResponses } from "@/lib/clients/api";
+import type { ServerResponse } from "@/lib/clients/mcp-registry";
 import {
   useCreateMcpCatalogItem,
   useMcpCatalog,
 } from "@/lib/mcp-catalog.query";
-import {
-  type McpServer,
-  useMcpRegistryServersInfinite,
-} from "@/lib/mcp-registry-external.query";
+import { useMcpRegistryServersInfinite } from "@/lib/mcp-registry-external.query";
 import { ReadmeDialog } from "./readme-dialog";
 
 export default function McpCatalogPage({
@@ -34,7 +32,7 @@ export default function McpCatalogPage({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [readmeServer, setReadmeServer] = useState<McpServer | null>(null);
+  const [readmeServer, setReadmeServer] = useState<ServerResponse | null>(null);
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useMcpCatalog({
@@ -54,12 +52,14 @@ export default function McpCatalogPage({
   // Mutation for adding servers to catalog
   const createMutation = useCreateMcpCatalogItem();
 
-  const handleAddToCatalog = async (server: McpServer) => {
+  const handleAddToCatalog = async (serverResponse: ServerResponse) => {
     try {
-      await createMutation.mutateAsync({ name: server.name });
-      toast.success(`Added "${server.name}" to your MCP servers`);
+      await createMutation.mutateAsync({ name: serverResponse.server.name });
+      toast.success(
+        `Added "${serverResponse.server.name}" to your MCP servers`,
+      );
     } catch (error) {
-      toast.error(`Failed to add "${server.name}"`);
+      toast.error(`Failed to add "${serverResponse.server.name}"`);
       console.error("Add to catalog error:", error);
     }
   };
@@ -67,35 +67,7 @@ export default function McpCatalogPage({
   // Flatten all pages into a single array of servers
   const servers = useMemo(() => {
     if (!data) return [];
-    let globalIndex = 0;
-    return data.pages.flatMap((page) =>
-      page.servers.map((item) => {
-        const server = item.server;
-        const meta = item._meta?.["io.modelcontextprotocol.registry/official"];
-
-        // Create unique ID using name + version + global index to handle all edge cases
-        const baseId = server.version
-          ? `${server.name}:${server.version}`
-          : server.name || "unknown";
-        const uniqueId = `${baseId}-${globalIndex++}`;
-
-        return {
-          id: uniqueId,
-          name: server.name,
-          description: server.description,
-          author: server.vendor,
-          homepage: server.homepage,
-          repository: server.repository?.url,
-          version: server.version,
-          createdAt: meta?.publishedAt,
-          updatedAt: meta?.updatedAt,
-          vendor: server.vendor,
-          sourceUrl: server.repository?.url,
-          categories: [] as string[],
-          tags: [] as string[],
-        };
-      }),
-    );
+    return data.pages.flatMap((page) => page.servers || []);
   }, [data]);
 
   // Apply client-side category filtering (search is server-side)
@@ -108,19 +80,19 @@ export default function McpCatalogPage({
     );
 
     // Filter out servers already in catalog
-    let filtered = servers.filter(
-      (server) => !catalogServerNames.has(server.name),
+    const filtered = servers.filter(
+      (serverResponse) => !catalogServerNames.has(serverResponse.server.name),
     );
 
-    // Filter by category (client-side only)
-    if (selectedCategory) {
-      filtered = filtered.filter((server) =>
-        server.categories?.includes(selectedCategory),
-      );
-    }
+    // Filter by category (client-side only) - categories not currently provided by API
+    // if (selectedCategory) {
+    //   filtered = filtered.filter((serverResponse) =>
+    //     serverResponse.server.categories?.includes(selectedCategory),
+    //   );
+    // }
 
     return filtered;
-  }, [servers, selectedCategory, catalogItems]);
+  }, [servers, catalogItems]);
 
   return (
     <div className="w-full h-full">
@@ -228,50 +200,62 @@ export default function McpCatalogPage({
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredServers.map((server) => (
-                    <Card key={server.id} className="flex flex-col">
-                      <CardHeader>
-                        <CardTitle className="text-lg">{server.name}</CardTitle>
-                        {server.author && (
-                          <p className="text-sm text-muted-foreground">
-                            by {server.author}
-                          </p>
-                        )}
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col space-y-3">
-                        {server.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-3">
-                            {server.description}
-                          </p>
-                        )}
+                  {filteredServers.map((serverResponse, index) => {
+                    const server = serverResponse.server;
+                    const uniqueKey = `${server.name}-${server.version}-${index}`;
 
-                        {server.categories && server.categories.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {server.categories.map((category) => (
-                              <Badge
-                                key={category}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {category}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                    return (
+                      <Card key={uniqueKey} className="flex flex-col">
+                        <CardHeader>
+                          <CardTitle className="text-lg">
+                            {server.name}
+                          </CardTitle>
+                          {server.title && (
+                            <p className="text-sm text-muted-foreground">
+                              {server.title}
+                            </p>
+                          )}
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col space-y-3">
+                          {server.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-3">
+                              {server.description}
+                            </p>
+                          )}
 
-                        <div className="flex flex-col gap-2 mt-auto pt-3">
-                          <div className="flex flex-wrap gap-2">
-                            {server.repository && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setReadmeServer(server)}
-                                  className="flex-1"
-                                >
-                                  <FileText className="h-4 w-4 mr-1" />
-                                  README
-                                </Button>
+                          <div className="flex flex-col gap-2 mt-auto pt-3">
+                            <div className="flex flex-wrap gap-2">
+                              {server.repository?.url && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setReadmeServer(serverResponse)
+                                    }
+                                    className="flex-1"
+                                  >
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    README
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    asChild
+                                    className="flex-1"
+                                  >
+                                    <a
+                                      href={server.repository.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      <Github className="h-4 w-4 mr-1" />
+                                      Code
+                                    </a>
+                                  </Button>
+                                </>
+                              )}
+                              {server.websiteUrl && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -279,47 +263,30 @@ export default function McpCatalogPage({
                                   className="flex-1"
                                 >
                                   <a
-                                    href={server.repository}
+                                    href={server.websiteUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                   >
-                                    <Github className="h-4 w-4 mr-1" />
-                                    Code
+                                    <BookOpen className="h-4 w-4 mr-1" />
+                                    Docs
                                   </a>
                                 </Button>
-                              </>
-                            )}
-                            {server.homepage && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                className="flex-1"
-                              >
-                                <a
-                                  href={server.homepage}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <BookOpen className="h-4 w-4 mr-1" />
-                                  Docs
-                                </a>
-                              </Button>
-                            )}
+                              )}
+                            </div>
+                            <Button
+                              onClick={() => handleAddToCatalog(serverResponse)}
+                              disabled={createMutation.isPending}
+                              size="sm"
+                              className="w-full"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              {createMutation.isPending ? "Adding..." : "Add"}
+                            </Button>
                           </div>
-                          <Button
-                            onClick={() => handleAddToCatalog(server)}
-                            disabled={createMutation.isPending}
-                            size="sm"
-                            className="w-full"
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            {createMutation.isPending ? "Adding..." : "Add"}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 {/* Load More Button */}

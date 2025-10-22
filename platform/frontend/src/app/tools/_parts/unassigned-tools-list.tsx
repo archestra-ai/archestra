@@ -57,7 +57,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 
 export function UnassignedToolsList({
   tools,
-  onToolClick,
+  onToolClick: _onToolClick,
   onAssignClick,
 }: UnassignedToolsListProps) {
   const [searchQuery, setSearchQuery] = useState("");

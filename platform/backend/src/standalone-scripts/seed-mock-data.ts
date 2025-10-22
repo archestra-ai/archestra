@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import db, { schema } from "@/database";
+import { seedAdminUserAndDefaultOrg } from "@/database/seed";
 import {
   generateMockAgents,
   generateMockInteractions,
@@ -11,14 +12,13 @@ async function seedMockData() {
 
   // Step 0: Clean existing mock data (in correct order due to foreign keys)
   console.log("Cleaning existing data...");
-  await db.delete(schema.interactionsTable);
-  await db.delete(schema.dualLlmResultsTable);
-  await db.delete(schema.toolInvocationPoliciesTable);
-  await db.delete(schema.trustedDataPoliciesTable);
-  await db.delete(schema.agentToolsTable);
-  await db.delete(schema.toolsTable);
-  await db.delete(schema.agentsTable);
+  for (const table of Object.values(schema)) {
+    await db.delete(table);
+  }
   console.log("✅ Cleaned existing data");
+
+  // Default user and org
+  await seedAdminUserAndDefaultOrg();
 
   // Step 1: Create agents
   console.log("\nCreating agents...");

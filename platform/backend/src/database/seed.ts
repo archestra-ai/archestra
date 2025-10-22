@@ -54,7 +54,7 @@ export async function seedDatabase(): Promise<void> {
 /**
  * Seeds admin user
  */
-async function seedAdminUserAndDefaultOrg(): Promise<void> {
+export async function seedAdminUserAndDefaultOrg(): Promise<void> {
   const user = await User.createOrGetExistingDefaultAdminUser();
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {

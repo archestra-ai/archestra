@@ -115,18 +115,16 @@ export function AssignAgentDialog({
             ) : (
               <div className="divide-y">
                 {filteredAgents.map((agent) => (
-                  <button
-                    type="button"
+                  <div
                     key={agent.id}
                     className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 w-full text-left"
-                    onClick={() => toggleAgent(agent.id)}
                   >
                     <Checkbox
                       checked={selectedAgentIds.includes(agent.id)}
                       onCheckedChange={() => toggleAgent(agent.id)}
                     />
                     <span className="text-sm">{agent.name}</span>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}

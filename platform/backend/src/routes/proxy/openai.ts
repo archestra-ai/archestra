@@ -384,7 +384,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.raw.end();
         return reply;
       } else {
-        const response = await openAiClient.chat.completions.create({
+        let response = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
           tools: mergedTools.length > 0 ? mergedTools : undefined,
@@ -428,6 +428,44 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               logprobs: null,
             },
           ];
+        } else if (
+          assistantMessage.tool_calls &&
+          assistantMessage.tool_calls.length > 0
+        ) {
+          // Tool calls are allowed - execute MCP tools
+          const commonToolCalls = utils.adapters.openai.toolCallsToCommon(
+            assistantMessage.tool_calls,
+          );
+
+          const mcpResults = await utils.tools.executeMcpToolCalls(
+            commonToolCalls,
+            resolvedAgentId,
+          );
+
+          if (mcpResults.length > 0) {
+            // Convert MCP results to OpenAI tool messages and append to response
+            const toolMessages =
+              utils.adapters.openai.toolResultsToMessages(mcpResults);
+
+            // For non-streaming, we need to make another LLM call with the tool results
+            const updatedMessages = [
+              ...filteredMessages,
+              assistantMessage,
+              ...toolMessages,
+            ];
+
+            // Make another call with the tool results
+            const finalResponse = await openAiClient.chat.completions.create({
+              ...body,
+              messages: updatedMessages,
+              tools: mergedTools.length > 0 ? mergedTools : undefined,
+              stream: false,
+            });
+
+            // Update the response with the final LLM response
+            response = finalResponse;
+            assistantMessage = finalResponse.choices[0].message;
+          }
         }
 
         // Store the complete interaction

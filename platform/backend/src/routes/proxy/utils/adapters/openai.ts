@@ -1,4 +1,4 @@
-import type { OpenAi } from "@/types";
+import type { CommonToolCall, CommonToolResult, OpenAi } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
@@ -120,4 +120,61 @@ export function extractUserRequest(messages: OpenAiMessages): string {
   return typeof userContent === "string"
     ? userContent
     : JSON.stringify(userContent);
+}
+
+/**
+ * Convert OpenAI tool calls to common format for MCP execution
+ */
+export function toolCallsToCommon(
+  toolCalls: Array<{
+    id: string;
+    type: string;
+    function?: { name: string; arguments: string };
+    custom?: { name: string; input: string };
+  }>,
+): CommonToolCall[] {
+  return toolCalls.map((toolCall) => {
+    let name: string;
+    let args: Record<string, unknown>;
+
+    if (toolCall.type === "function" && toolCall.function) {
+      name = toolCall.function.name;
+      try {
+        args = JSON.parse(toolCall.function.arguments);
+      } catch {
+        args = {};
+      }
+    } else if (toolCall.custom) {
+      name = toolCall.custom.name;
+      try {
+        args = JSON.parse(toolCall.custom.input);
+      } catch {
+        args = {};
+      }
+    } else {
+      name = "unknown";
+      args = {};
+    }
+
+    return {
+      id: toolCall.id,
+      name,
+      arguments: args,
+    };
+  });
+}
+
+/**
+ * Convert common tool results to OpenAI tool message format
+ */
+export function toolResultsToMessages(
+  results: CommonToolResult[],
+): Array<{ role: "tool"; tool_call_id: string; content: string }> {
+  return results.map((result) => ({
+    role: "tool" as const,
+    tool_call_id: result.id,
+    content: result.isError
+      ? `Error: ${result.error || "Tool execution failed"}`
+      : JSON.stringify(result.content),
+  }));
 }

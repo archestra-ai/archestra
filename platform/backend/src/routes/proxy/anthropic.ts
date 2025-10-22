@@ -163,7 +163,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       } else {
         // Non-streaming response
-        const response = await anthropicClient.messages.create({
+        let response = await anthropicClient.messages.create({
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
@@ -205,6 +205,47 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return reply.send(response);
+          } else if (toolCalls.length > 0) {
+            // Tool calls are allowed - execute MCP tools
+            const commonToolCalls = utils.adapters.anthropic.toolCallsToCommon(
+              toolCalls as Array<{
+                id: string;
+                name: string;
+                input: Record<string, unknown>;
+              }>,
+            );
+            const mcpResults = await utils.tools.executeMcpToolCalls(
+              commonToolCalls,
+              resolvedAgentId,
+            );
+
+            if (mcpResults.length > 0) {
+              // Convert MCP results to Anthropic tool result messages
+              const toolResultMessages =
+                utils.adapters.anthropic.toolResultsToMessages(mcpResults);
+
+              // Make another call with the tool results
+              const updatedMessages = [
+                ...filteredMessages,
+                {
+                  role: "assistant" as const,
+                  content: response.content,
+                },
+                ...toolResultMessages,
+              ];
+
+              // Make final call with tool results
+              const finalResponse = await anthropicClient.messages.create({
+                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                ...(body as any),
+                messages: updatedMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                stream: false,
+              });
+
+              // Update the response with the final LLM response
+              response = finalResponse;
+            }
           }
         }
 

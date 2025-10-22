@@ -1,5 +1,7 @@
 import { createTestAdmin, createTestUser } from "@/test-utils";
 import AgentModel from "./agent";
+import AgentToolModel from "./agent-tool";
+import McpServerModel from "./mcp-server";
 import ToolModel from "./tool";
 
 describe("ToolModel", () => {
@@ -212,6 +214,271 @@ describe("ToolModel", () => {
         false,
       );
       expect(found).toBeNull();
+    });
+  });
+
+  describe("getMcpToolsAssignedToAgent", () => {
+    test("returns empty array when no tools provided", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent([], agent.id);
+      expect(result).toEqual([]);
+    });
+
+    test("returns empty array when no MCP tools assigned to agent", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      // Create a proxy-sniffed tool (no mcpServerId)
+      await ToolModel.create({
+        agentId: agent.id,
+        name: "proxy_tool",
+        description: "Proxy Tool",
+        parameters: {},
+      });
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["proxy_tool", "non_existent"],
+        agent.id,
+      );
+      expect(result).toEqual([]);
+    });
+
+    test("returns MCP tools with server metadata for assigned tools", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      // Create an MCP server with GitHub metadata
+      const mcpServer = await McpServerModel.create({
+        name: "test-github-server",
+        metadata: {
+          githubToken: "test-github-token-123",
+          url: "https://api.githubcopilot.com/mcp/",
+          headers: { Authorization: "Bearer test-github-token-123" },
+        },
+      });
+
+      // Create an MCP tool
+      const mcpTool = await ToolModel.create({
+        name: "github_mcp_server__list_issues",
+        description: "List GitHub issues",
+        parameters: {
+          type: "object",
+          properties: {
+            repo: { type: "string" },
+            count: { type: "number" },
+          },
+        },
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign tool to agent
+      await AgentToolModel.create(agent.id, mcpTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["github_mcp_server__list_issues"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        toolName: "github_mcp_server__list_issues",
+        mcpServerInstallationMetadata: {
+          githubToken: "test-github-token-123",
+          url: "https://api.githubcopilot.com/mcp/",
+          headers: { Authorization: "Bearer test-github-token-123" },
+        },
+      });
+    });
+
+    test("filters to only requested tool names", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      // Create an MCP server
+      const mcpServer = await McpServerModel.create({
+        name: "test-server",
+        metadata: { githubToken: "token" },
+      });
+
+      // Create multiple MCP tools
+      const tool1 = await ToolModel.create({
+        name: "tool_one",
+        description: "First tool",
+        parameters: {},
+        mcpServerId: mcpServer.id,
+      });
+
+      const tool2 = await ToolModel.create({
+        name: "tool_two",
+        description: "Second tool",
+        parameters: {},
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign both tools to agent
+      await AgentToolModel.create(agent.id, tool1.id);
+      await AgentToolModel.create(agent.id, tool2.id);
+
+      // Request only one tool
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["tool_one"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].toolName).toBe("tool_one");
+    });
+
+    test("returns empty array when tools exist but not assigned to agent", async () => {
+      const user1Id = await createTestUser();
+      const user2Id = await createTestUser();
+
+      const agent1 = await AgentModel.create(
+        { name: "Agent 1", usersWithAccess: [] },
+        user1Id,
+      );
+
+      const agent2 = await AgentModel.create(
+        { name: "Agent 2", usersWithAccess: [] },
+        user2Id,
+      );
+
+      // Create an MCP server and tool
+      const mcpServer = await McpServerModel.create({
+        name: "test-server",
+        metadata: { githubToken: "token" },
+      });
+
+      const mcpTool = await ToolModel.create({
+        name: "exclusive_tool",
+        description: "Exclusive tool",
+        parameters: {},
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign tool to agent1 only
+      await AgentToolModel.create(agent1.id, mcpTool.id);
+
+      // Request tool for agent2 (should return empty)
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["exclusive_tool"],
+        agent2.id,
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    test("excludes proxy-sniffed tools (tools with agentId set)", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      // Create an MCP server
+      const mcpServer = await McpServerModel.create({
+        name: "test-server",
+        metadata: { githubToken: "token" },
+      });
+
+      // Create a proxy-sniffed tool (with agentId)
+      await ToolModel.create({
+        agentId: agent.id,
+        name: "proxy_tool",
+        description: "Proxy Tool",
+        parameters: {},
+      });
+
+      // Create an MCP tool (no agentId, linked via mcpServerId)
+      const mcpTool = await ToolModel.create({
+        name: "mcp_tool",
+        description: "MCP Tool",
+        parameters: {},
+        mcpServerId: mcpServer.id,
+      });
+
+      // Assign MCP tool to agent
+      await AgentToolModel.create(agent.id, mcpTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["proxy_tool", "mcp_tool"],
+        agent.id,
+      );
+
+      // Should only return the MCP tool, not the proxy-sniffed tool
+      expect(result).toHaveLength(1);
+      expect(result[0].toolName).toBe("mcp_tool");
+    });
+
+    test("handles multiple MCP tools with different servers", async () => {
+      const userId = await createTestUser();
+      const agent = await AgentModel.create(
+        { name: "Test Agent", usersWithAccess: [] },
+        userId,
+      );
+
+      // Create two MCP servers
+      const server1 = await McpServerModel.create({
+        name: "github-server",
+        metadata: { githubToken: "github-token" },
+      });
+
+      const server2 = await McpServerModel.create({
+        name: "other-server",
+        metadata: { apiKey: "other-key" },
+      });
+
+      // Create tools for each server
+      const githubTool = await ToolModel.create({
+        name: "github_list_issues",
+        description: "List GitHub issues",
+        parameters: {},
+        mcpServerId: server1.id,
+      });
+
+      const otherTool = await ToolModel.create({
+        name: "other_tool",
+        description: "Other tool",
+        parameters: {},
+        mcpServerId: server2.id,
+      });
+
+      // Assign both tools to agent
+      await AgentToolModel.create(agent.id, githubTool.id);
+      await AgentToolModel.create(agent.id, otherTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["github_list_issues", "other_tool"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+
+      const githubResult = result.find(
+        (r) => r.toolName === "github_list_issues",
+      );
+      const otherResult = result.find((r) => r.toolName === "other_tool");
+
+      expect(githubResult?.mcpServerInstallationMetadata).toEqual({
+        githubToken: "github-token",
+      });
+      expect(otherResult?.mcpServerInstallationMetadata).toEqual({
+        apiKey: "other-key",
+      });
     });
   });
 });

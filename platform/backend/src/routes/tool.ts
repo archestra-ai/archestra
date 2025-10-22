@@ -50,6 +50,48 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+
+  fastify.get(
+    "/api/tools/unassigned",
+    {
+      schema: {
+        operationId: RouteId.GetUnassignedTools,
+        description: "Get all tools that have no agent relationships",
+        tags: ["Tools"],
+        response: {
+          200: z.array(ExtendedSelectToolSchema),
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const tools = await ToolModel.findUnassigned();
+        return reply.send(tools);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
 };
 
 export default toolRoutes;

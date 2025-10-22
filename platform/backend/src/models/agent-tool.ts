@@ -53,6 +53,13 @@ class AgentToolModel {
     return results.map((r) => r.agentId);
   }
 
+  static async findAllAssignedToolIds(): Promise<string[]> {
+    const results = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable);
+    return [...new Set(results.map((r) => r.toolId))];
+  }
+
   static async exists(agentId: string, toolId: string): Promise<boolean> {
     const [result] = await db
       .select()

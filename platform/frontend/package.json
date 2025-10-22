@@ -75,7 +75,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/date-fns": "^2.6.3",
     "@types/lodash-es": "^4.17.12",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",

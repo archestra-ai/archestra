@@ -53,7 +53,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.10",
     "@types/lodash": "^4.17.20",
-    "@types/node": "^20.0.0",
+    "@types/node": "^24.9.1",
     "@types/pg": "^8.15.5",
     "@types/uuid": "^11.0.0",
     "tsc-alias": "^1.8.10",

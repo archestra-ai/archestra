@@ -41,6 +41,10 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
+      url === "/health/detailed" ||
+      url === "/ready" ||
+      url === "/live" ||
+      url === "/metrics" ||
       url === "/api/features" ||
       url === config.archestraMcpServer.endpoint
     ) {

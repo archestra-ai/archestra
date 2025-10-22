@@ -56,5 +56,9 @@ export function useDefaultCredentialsEnabled() {
       const { data } = await getDefaultCredentialsStatus();
       return data?.enabled ?? false;
     },
+    // Refetch when window is focused to catch password changes
+    refetchOnWindowFocus: true,
+    // Keep data fresh with shorter stale time
+    staleTime: 10000, // 10 seconds
   });
 }

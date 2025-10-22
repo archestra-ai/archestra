@@ -306,7 +306,7 @@ The production backend provides:
   - Anthropic API requests require `x-api-key` header with API key
   - Tool invocation policies evaluation now supports Anthropic format
   - Dual LLM pattern fully supported for quarantining untrusted data
-  - Note: Streaming support coming soon
+  - Streaming support: Full Server-Sent Events (SSE) streaming for real-time responses
 
 #### REST API Endpoints
 

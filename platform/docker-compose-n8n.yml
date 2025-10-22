@@ -28,7 +28,6 @@ services:
       - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@archestra-db:5432/archestra
-      - BENCHMARK_MOCK_MODE=true
     volumes:
       - archestra_data:/app/data
     depends_on:

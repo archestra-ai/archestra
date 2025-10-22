@@ -6,6 +6,7 @@ export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
+export { default as healthRoutes } from "./health";
 export { default as interactionRoutes } from "./interaction";
 export { default as mcpCatalogRoutes } from "./mcp-catalog";
 export { default as mcpServerRoutes } from "./mcp-server";

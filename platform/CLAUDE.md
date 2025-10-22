@@ -240,6 +240,7 @@ platform/
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
+│                   ├── tools.ts              # MCP tool persistence and injection
 │                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
 │                   ├── dual-llm-client.ts     # Provider-agnostic LLM client interface for dual LLM pattern
 │                   └── dual-llm-subagent.ts  # Dual LLM pattern implementation for quarantining untrusted data
@@ -379,6 +380,12 @@ The production backend provides:
 
 The backend integrates advanced security guardrails:
 
+- **MCP Tool Injection**: Automatic injection of Model Context Protocol (MCP) tools at the proxy level
+  - Tools from incoming requests are persisted to the database
+  - Agent-assigned MCP tools are automatically injected into LLM requests
+  - Assigned tools take priority over request tools with the same name
+  - Supports OpenAI and Anthropic providers (Gemini support prepared)
+  - Tools are linked to agents via the agent_tools junction table
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
   - Main Agent: Formulates questions without access to untrusted data
   - Quarantined Agent: Accesses untrusted data but can only respond via structured multiple choice

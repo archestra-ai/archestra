@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_catalog" ADD COLUMN "version" text;

@@ -1,53 +1,28 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import type {
-  ColumnDef,
-  RowSelectionState,
-  SortingState,
-} from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { Suspense, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  useAgentToolPatchMutation,
-  useAllAgentTools,
-} from "@/lib/agent-tools.query";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAllAgentTools } from "@/lib/agent-tools.query";
 import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
   prefetchToolResultPolicies,
-  useToolInvocationPolicies,
-  useToolResultPolicies,
 } from "@/lib/policy.query";
-import { formatDate } from "@/lib/utils";
+import { useUnassignedTools } from "@/lib/tool.query";
 import { ErrorBoundary } from "../_parts/error-boundary";
+import { AssignAgentDialog } from "./_parts/assign-agent-dialog";
+import { AssignedToolsList } from "./_parts/assigned-tools-list";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
+import {
+  type UnassignedToolData,
+  UnassignedToolsList,
+} from "./_parts/unassigned-tools-list";
 
 type AgentToolData = GetAllAgentToolsResponses["200"][number];
-type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
 export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   const queryClient = useQueryClient();
@@ -70,358 +45,26 @@ export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   );
 }
 
-// Reusable sort icon component
-function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
-  if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
-  if (isSorted === "desc") return <ChevronDown className="h-3 w-3" />;
-
-  return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
-      <ChevronUp className="h-3 w-3" />
-      <span className="mt-[-4px]">
-        <ChevronDown className="h-3 w-3" />
-      </span>
-    </div>
-  );
-}
-
 function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
-  const { data: agentTools } = useAllAgentTools({ initialData });
-  const agentToolPatchMutation = useAgentToolPatchMutation();
-  const { data: invocationPolicies } = useToolInvocationPolicies();
-  const { data: resultPolicies } = useToolResultPolicies();
+  const [activeTab, setActiveTab] = useState<"with_agents" | "without_agents">(
+    "with_agents",
+  );
 
-  // Dialog state - combined into single state
+  const { data: agentTools } = useAllAgentTools({
+    initialData: activeTab === "with_agents" ? initialData : undefined,
+  });
+  const { data: unassignedTools } = useUnassignedTools({
+    initialData: activeTab === "without_agents" ? undefined : undefined,
+  });
+
   const [selectedToolForDialog, setSelectedToolForDialog] =
     useState<AgentToolData | null>(null);
+  const [selectedToolForAssignment, setSelectedToolForAssignment] =
+    useState<UnassignedToolData | null>(null);
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Table state
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
-
-  // Pagination from URL
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-
-  // Use URL params for pagination
-  const pageFromUrl = searchParams.get("page");
-  const pageSizeFromUrl = searchParams.get("pageSize");
-
-  const pageIndex = Number(pageFromUrl || "1") - 1;
-  const pageSize = Number(pageSizeFromUrl || "50");
-
-  // Filter agent-tools based on search query
-  const filteredAgentTools = useMemo(() => {
-    if (!searchQuery.trim()) return agentTools || [];
-
-    const query = searchQuery.toLowerCase();
-    return agentTools.filter((agentTool) =>
-      agentTool.tool?.name.toLowerCase().includes(query),
-    );
-  }, [agentTools, searchQuery]);
-
-  const handlePaginationChange = useCallback(
-    (newPagination: { pageIndex: number; pageSize: number }) => {
-      // Clear selection when changing pages
-      setRowSelection({});
-      setSelectedTools([]);
-
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", String(newPagination.pageIndex + 1));
-      params.set("pageSize", String(newPagination.pageSize));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
-
-  // Selection change handler - now works with page-relative indices
-  const handleRowSelectionChange = useCallback(
-    (newRowSelection: RowSelectionState) => {
-      setRowSelection(newRowSelection);
-
-      // Calculate the current page's data from filtered tools
-      const startIndex = pageIndex * pageSize;
-      const pageTools = (filteredAgentTools || []).slice(
-        startIndex,
-        startIndex + pageSize,
-      );
-
-      // Map page-relative indices to actual tools
-      const newSelectedTools = Object.keys(newRowSelection)
-        .map((index) => pageTools[Number(index)])
-        .filter(Boolean);
-
-      setSelectedTools(newSelectedTools);
-    },
-    [filteredAgentTools, pageIndex, pageSize],
-  );
-
-  // Bulk action handler - unified for both types
-  const handleBulkAction = useCallback(
-    (
-      field: "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment",
-      value: boolean | "trusted" | "sanitize_with_dual_llm" | "untrusted",
-    ) => {
-      let skippedCount = 0;
-      let appliedCount = 0;
-
-      // Perform all mutations, skipping tools with custom policies
-      selectedTools.forEach((tool) => {
-        // Skip tools with custom policies for the relevant field
-        if (field === "allowUsageWhenUntrustedDataIsPresent") {
-          const hasCustomInvocationPolicy =
-            invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
-          if (hasCustomInvocationPolicy) {
-            skippedCount++;
-            return;
-          }
-        }
-
-        if (field === "toolResultTreatment") {
-          const hasCustomResultPolicy =
-            resultPolicies?.byAgentToolId[tool.id]?.length > 0;
-          if (hasCustomResultPolicy) {
-            skippedCount++;
-            return;
-          }
-        }
-
-        agentToolPatchMutation.mutate({
-          id: tool.id,
-          [field]: value,
-        });
-        appliedCount++;
-      });
-
-      // Show toast notification about the results
-      if (skippedCount > 0 && appliedCount > 0) {
-        toast.info(
-          `Applied to ${appliedCount} tool${appliedCount !== 1 ? "s" : ""}. Skipped ${skippedCount} with custom policies.`,
-        );
-      } else if (skippedCount > 0 && appliedCount === 0) {
-        toast.warning(
-          `All selected tools have custom policies. No changes made.`,
-        );
-      } else if (appliedCount > 0) {
-        toast.success(
-          `Applied to ${appliedCount} tool${appliedCount !== 1 ? "s" : ""}.`,
-        );
-      }
-
-      // Keep selection active after mutations
-      // Users might want to apply multiple actions to the same selection
-    },
-    [selectedTools, agentToolPatchMutation, invocationPolicies, resultPolicies],
-  );
-
-  const clearSelection = useCallback(() => {
-    setRowSelection({});
-    setSelectedTools([]);
-  }, []);
-
-  // Column definitions - moved before early return to fix hook order
-  const columns: ColumnDef<AgentToolData>[] = useMemo(
-    () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.tool.name}`}
-          />
-        ),
-        size: 50,
-      },
-      {
-        accessorKey: "name",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Tool Name
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <div className="font-medium text-foreground truncate">
-            {row.original.tool.name}
-          </div>
-        ),
-        size: 250,
-      },
-      {
-        id: "agent",
-        accessorFn: (row) => row.agent?.name || "",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Agent
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <div className="text-sm text-muted-foreground truncate">
-            {row.original.agent?.name || "-"}
-          </div>
-        ),
-        size: 150,
-      },
-      {
-        id: "allowWithUntrusted",
-        header: "In untrusted context",
-        cell: ({ row }) => {
-          const hasCustomPolicy =
-            invocationPolicies?.byAgentToolId[row.original.id]?.length > 0;
-
-          if (hasCustomPolicy) {
-            return (
-              <span className="text-xs font-medium text-primary">Custom</span>
-            );
-          }
-
-          return (
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={row.original.allowUsageWhenUntrustedDataIsPresent}
-                onCheckedChange={(checked) => {
-                  agentToolPatchMutation.mutate({
-                    id: row.original.id,
-                    allowUsageWhenUntrustedDataIsPresent: checked,
-                  });
-                }}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Allow ${row.original.tool.name} in untrusted context`}
-              />
-              <span className="text-xs text-muted-foreground">
-                {row.original.allowUsageWhenUntrustedDataIsPresent
-                  ? "Allowed"
-                  : "Blocked"}
-              </span>
-            </div>
-          );
-        },
-        size: 120,
-      },
-      {
-        id: "toolResultTreatment",
-        header: "Results are",
-        cell: ({ row }) => {
-          const hasCustomPolicy =
-            resultPolicies?.byAgentToolId[row.original.id]?.length > 0;
-
-          if (hasCustomPolicy) {
-            return (
-              <span className="text-xs font-medium text-primary">Custom</span>
-            );
-          }
-
-          const treatmentLabels: Record<ToolResultTreatment, string> = {
-            trusted: "Trusted",
-            untrusted: "Untrusted",
-            sanitize_with_dual_llm: "Sanitize with Dual LLM",
-          };
-
-          return (
-            <Select
-              value={row.original.toolResultTreatment}
-              onValueChange={(value: ToolResultTreatment) => {
-                agentToolPatchMutation.mutate({
-                  id: row.original.id,
-                  toolResultTreatment: value,
-                });
-              }}
-            >
-              <SelectTrigger
-                className="h-8 w-[180px] text-xs"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <SelectValue>
-                  {treatmentLabels[row.original.toolResultTreatment]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(treatmentLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          );
-        },
-        size: 200,
-      },
-      {
-        accessorKey: "createdAt",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Detected
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
-        ),
-        cell: ({ row }) => (
-          <div className="font-mono text-xs text-muted-foreground">
-            {formatDate({ date: row.original.createdAt })}
-          </div>
-        ),
-        size: 150,
-      },
-      {
-        id: "parameters",
-        header: "Parameters",
-        cell: ({ row }) => {
-          const paramCount = Object.keys(
-            row.original.tool.parameters?.properties || {},
-          ).length;
-          return (
-            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-              {paramCount}
-            </span>
-          );
-        },
-        size: 100,
-      },
-    ],
-    [invocationPolicies, resultPolicies, agentToolPatchMutation],
-  );
-
-  // Calculate the current page's data from filtered tools - moved before component definition
-  const paginatedTools = useMemo(() => {
-    const startIndex = pageIndex * pageSize;
-    const endIndex = startIndex + pageSize;
-    return filteredAgentTools.slice(startIndex, endIndex);
-  }, [filteredAgentTools, pageIndex, pageSize]);
-
-  const hasSelection = selectedTools.length > 0;
 
   return (
     <div className="w-full h-full">
@@ -430,215 +73,59 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
           <p className="text-sm text-muted-foreground">
             Tools displayed here are either detected from requests between
-            agents and LLMs, or sourced from installed MCP servers. Only tools
-            assigned to agents are shown.
-            <br />
-            <br />
-            To assign MCP server tools to an agent, navigate to the Agents page
-            and use the "Assign Tools" action.
+            agents and LLMs or sourced from installed MCP servers.
           </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search tools by name..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                // Reset to first page when searching
-                if (pageIndex !== 0) {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set("page", "1");
-                  router.push(`${pathname}?${params.toString()}`, {
-                    scroll: false,
-                  });
-                }
-                // Clear selection when searching
-                setRowSelection({});
-                setSelectedTools([]);
-              }}
-              className="pl-9"
+      <div className="max-w-7xl mx-auto px-8 py-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            setActiveTab(value as "with_agents" | "without_agents");
+            // Reset to first page when switching tabs
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("page", "1");
+            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+          }}
+        >
+          <TabsList className="mb-4">
+            <TabsTrigger value="with_agents">Agents Assigned</TabsTrigger>
+            <TabsTrigger value="without_agents">Without Agents</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="with_agents" className="mt-0">
+            <AssignedToolsList
+              agentTools={agentTools || []}
+              onToolClick={setSelectedToolForDialog}
             />
-          </div>
-        </div>
+          </TabsContent>
 
-        <div className="mb-6 flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
-          <div className="flex items-center gap-3">
-            {hasSelection ? (
-              <>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-sm font-semibold text-primary">
-                    {selectedTools.length}
-                  </span>
-                </div>
-                <span className="text-sm font-medium">
-                  {selectedTools.length === 1
-                    ? "tool selected"
-                    : `tools selected`}
-                </span>
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">
-                Select tools to apply bulk actions
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                In untrusted context:
-              </span>
-              <ButtonGroup>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction(
-                      "allowUsageWhenUntrustedDataIsPresent",
-                      true,
-                    )
-                  }
-                  disabled={!hasSelection}
-                >
-                  Allow
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    handleBulkAction(
-                      "allowUsageWhenUntrustedDataIsPresent",
-                      false,
-                    )
-                  }
-                  disabled={!hasSelection}
-                >
-                  Block
-                </Button>
-              </ButtonGroup>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Results are:
-              </span>
-              <TooltipProvider>
-                <ButtonGroup>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      handleBulkAction("toolResultTreatment", "trusted")
-                    }
-                    disabled={!hasSelection}
-                  >
-                    Trusted
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      handleBulkAction("toolResultTreatment", "untrusted")
-                    }
-                    disabled={!hasSelection}
-                  >
-                    Untrusted
-                  </Button>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          handleBulkAction(
-                            "toolResultTreatment",
-                            "sanitize_with_dual_llm",
-                          )
-                        }
-                        disabled={!hasSelection}
-                      >
-                        Dual LLM
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Sanitize with Dual LLM</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </ButtonGroup>
-              </TooltipProvider>
-            </div>
-            <div className="ml-2 h-4 w-px bg-border" />
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={clearSelection}
-              disabled={!hasSelection}
-            >
-              Clear selection
-            </Button>
-          </div>
-        </div>
-
-        {(filteredAgentTools?.length || 0) === 0 && searchQuery ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              No tools match "{searchQuery}". Try adjusting your search.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchQuery("");
-                setRowSelection({});
-                setSelectedTools([]);
-              }}
-            >
-              Clear search
-            </Button>
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={paginatedTools}
-            onRowClick={(tool, event) => {
-              // Don't open dialog if clicking on checkbox cell or switch controls
-              const target = event.target as HTMLElement;
-              const isCheckboxClick =
-                target.closest('[data-column-id="select"]') ||
-                target.closest('input[type="checkbox"]') ||
-                target.closest('button[role="checkbox"]') ||
-                target.closest('button[role="switch"]');
-              if (!isCheckboxClick) {
-                setSelectedToolForDialog(tool);
-              }
-            }}
-            sorting={sorting}
-            onSortingChange={setSorting}
-            manualPagination={true}
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: filteredAgentTools?.length || 0,
-            }}
-            onPaginationChange={handlePaginationChange}
-            rowSelection={rowSelection}
-            onRowSelectionChange={handleRowSelectionChange}
-          />
-        )}
+          <TabsContent value="without_agents" className="mt-0">
+            <UnassignedToolsList
+              tools={unassignedTools || []}
+              onAssignClick={setSelectedToolForAssignment}
+            />
+          </TabsContent>
+        </Tabs>
 
         <ToolDetailsDialog
           agentTool={
             selectedToolForDialog
-              ? agentTools.find((t) => t.id === selectedToolForDialog.id) ||
+              ? agentTools?.find((t) => t.id === selectedToolForDialog.id) ||
                 selectedToolForDialog
               : null
           }
           open={!!selectedToolForDialog}
-          onOpenChange={(open) => !open && setSelectedToolForDialog(null)}
+          onOpenChange={(open: boolean) =>
+            !open && setSelectedToolForDialog(null)
+          }
+        />
+
+        <AssignAgentDialog
+          tool={selectedToolForAssignment}
+          open={!!selectedToolForAssignment}
+          onOpenChange={(open) => !open && setSelectedToolForAssignment(null)}
         />
       </div>
     </div>

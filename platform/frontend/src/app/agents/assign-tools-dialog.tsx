@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2, Server } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Loader2, Search, Server } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   useAgentTools,
@@ -46,6 +47,17 @@ export function AssignToolsDialog({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     new Set(),
   );
+
+  // Track search query
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter tools based on search query
+  const filteredTools = useMemo(() => {
+    if (!searchQuery.trim()) return mcpTools;
+
+    const query = searchQuery.toLowerCase();
+    return mcpTools.filter((tool) => tool.name.toLowerCase().includes(query));
+  }, [mcpTools, searchQuery]);
 
   // Initialize selected tools when agent tools load
   useEffect(() => {
@@ -129,6 +141,16 @@ export function AssignToolsDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search tools by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -144,9 +166,20 @@ export function AssignToolsDialog({
                 Install an MCP server to get started.
               </p>
             </div>
+          ) : filteredTools.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
+              <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
+              <p className="mb-4 text-sm text-muted-foreground">
+                No tools match "{searchQuery}". Try adjusting your search.
+              </p>
+              <Button variant="outline" onClick={() => setSearchQuery("")}>
+                Clear search
+              </Button>
+            </div>
           ) : (
             <div className="space-y-4">
-              {mcpTools.map((tool) => (
+              {filteredTools.map((tool) => (
                 <div
                   key={tool.id}
                   className="flex items-start space-x-3 rounded-lg border p-4 hover:bg-muted/50 transition-colors"

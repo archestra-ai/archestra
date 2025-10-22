@@ -107,6 +107,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetUnassignedTools]: {
+    tool: ["read"],
+  },
   [RouteId.AssignToolToAgent]: {
     agent: ["update"],
   },

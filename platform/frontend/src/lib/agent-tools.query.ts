@@ -58,6 +58,8 @@ export function useAssignTool() {
       // Invalidate queries to refetch data
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }
@@ -81,6 +83,8 @@ export function useUnassignTool() {
     onSuccess: (_, { agentId }) => {
       queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }

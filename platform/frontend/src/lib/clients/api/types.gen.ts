@@ -4660,6 +4660,7 @@ export type GetMcpCatalogResponses = {
     200: Array<{
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4678,6 +4679,7 @@ export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogRe
 export type CreateMcpCatalogItemData = {
     body: {
         name: string;
+        version?: string | null;
         description?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
@@ -4713,6 +4715,7 @@ export type CreateMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4810,6 +4813,7 @@ export type GetMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4828,6 +4832,7 @@ export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpC
 export type UpdateMcpCatalogItemData = {
     body?: {
         name?: string;
+        version?: string | null;
         description?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
@@ -4874,6 +4879,7 @@ export type UpdateMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -5489,3 +5495,71 @@ export type GetToolsResponses = {
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
+
+export type GetUnassignedToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tools/unassigned';
+};
+
+export type GetUnassignedToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetUnassignedToolsError = GetUnassignedToolsErrors[keyof GetUnassignedToolsErrors];
+
+export type GetUnassignedToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
+    }>;
+};
+
+export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];

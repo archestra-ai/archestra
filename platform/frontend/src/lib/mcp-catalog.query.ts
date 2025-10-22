@@ -3,6 +3,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   createMcpCatalogItem,
   deleteMcpCatalogItem,
@@ -25,12 +26,17 @@ export function useMcpCatalog(params?: {
 export function useCreateMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { name: string }) => {
+    mutationFn: async (data: { name: string; version?: string }) => {
       const response = await createMcpCatalogItem({ body: data });
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item created successfully");
+    },
+    onError: (error) => {
+      console.error("Create error:", error);
+      toast.error("Failed to create catalog item");
     },
   });
 }
@@ -50,6 +56,11 @@ export function useUpdateMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item updated successfully");
+    },
+    onError: (error) => {
+      console.error("Edit error:", error);
+      toast.error("Failed to update catalog item");
     },
   });
 }
@@ -63,6 +74,11 @@ export function useDeleteMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item deleted successfully");
+    },
+    onError: (error) => {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete catalog item");
     },
   });
 }

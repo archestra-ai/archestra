@@ -9,7 +9,6 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +33,7 @@ import {
   useMcpServerVersions,
 } from "@/lib/mcp-registry-external.query";
 import { DetailsDialog } from "./details-dialog";
+import { TransportBadges } from "./transport-badges";
 
 // Server card component that handles version fetching for a single server
 function ServerCard({
@@ -165,8 +165,11 @@ function ServerCard({
             )}
           </div>
         </div>
+
+        <TransportBadges server={displayedServer} />
+
         {displayedServer.server.title && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-2">
             {displayedServer.server.title}
           </p>
         )}
@@ -222,7 +225,11 @@ function ServerCard({
             size="sm"
             className="w-full"
           >
-            {isInCatalog ? "Enabled" : isAdding ? "Adding..." : "Enable"}
+            {isInCatalog
+              ? "Added"
+              : isAdding
+                ? "Adding..."
+                : "Add to Your Registry"}
           </Button>
         </div>
       </CardContent>
@@ -257,15 +264,10 @@ export default function McpCatalogPage({
   const createMutation = useCreateMcpCatalogItem();
 
   const handleAddToCatalog = async (serverResponse: ServerResponse) => {
-    try {
-      await createMutation.mutateAsync({ name: serverResponse.server.name });
-      toast.success(
-        `Added "${serverResponse.server.name}" to your MCP servers`,
-      );
-    } catch (error) {
-      toast.error(`Failed to add "${serverResponse.server.name}"`);
-      console.error("Add to catalog error:", error);
-    }
+    await createMutation.mutateAsync({
+      name: serverResponse.server.name,
+      version: serverResponse.server.version,
+    });
   };
 
   // Flatten all pages into a single array of servers

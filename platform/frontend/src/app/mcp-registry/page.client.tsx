@@ -1,13 +1,11 @@
 "use client";
 
 import Divider from "@/components/divider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   GetMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
 import ExternalMCPRegistry from "./_parts/ExternalMCPRegistry";
-import { InstalledMCP } from "./_parts/InstalledMCP";
 import { InternalMCPRegistry } from "./_parts/InternalMCPRegistry";
 
 export default function McpRegistryPage({
@@ -33,23 +31,12 @@ export default function McpRegistryPage({
       </div>
 
       <div className="max-w-7xl mx-auto px-8 py-8">
-        <Tabs defaultValue="catalog" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="catalog">Catalog</TabsTrigger>
-            <TabsTrigger value="installed">Installed</TabsTrigger>
-          </TabsList>
-          <TabsContent value="catalog">
-            <InternalMCPRegistry
-              initialData={initialData.catalog}
-              installedServers={initialData.servers}
-            />
-            <Divider className="my-8" />
-            <ExternalMCPRegistry catalogItems={initialData.catalog} />
-          </TabsContent>
-          <TabsContent value="installed">
-            <InstalledMCP initialData={initialData.servers} />
-          </TabsContent>
-        </Tabs>
+        <InternalMCPRegistry
+          initialData={initialData.catalog}
+          installedServers={initialData.servers}
+        />
+        <Divider className="my-8" />
+        <ExternalMCPRegistry catalogItems={initialData.catalog} />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   deleteMcpServer,
   type GetMcpServersResponses,
@@ -28,8 +29,13 @@ export function useInstallMcpServer() {
       const response = await installMcpServer({ body: data });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      toast.success(`Successfully installed ${variables.name}`);
+    },
+    onError: (error, variables) => {
+      console.error("Install error:", error);
+      toast.error(`Failed to install ${variables.name}`);
     },
   });
 }
@@ -37,12 +43,21 @@ export function useInstallMcpServer() {
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const response = await deleteMcpServer({ path: { id } });
+    mutationFn: async (data: { id: string; name: string }) => {
+      const response = await deleteMcpServer({ path: { id: data.id } });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since MCP server deletion cascades to tools
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      toast.success(`Successfully uninstalled ${variables.name}`);
+    },
+    onError: (error, variables) => {
+      console.error("Uninstall error:", error);
+      toast.error(`Failed to uninstall ${variables.name}`);
     },
   });
 }

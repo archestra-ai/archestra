@@ -10,6 +10,7 @@ import {
 const mcpCatalogTable = pgTable("mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  version: text("version"),
   description: text("description"),
   repository: text("repository"),
   installationCommand: text("installation_command"),

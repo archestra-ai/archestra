@@ -54,7 +54,7 @@ export async function seedDatabase(): Promise<void> {
 /**
  * Seeds admin user
  */
-async function seedAdminUserAndDefaultOrg(): Promise<void> {
+export async function seedAdminUserAndDefaultOrg(): Promise<void> {
   const user = await User.createOrGetExistingDefaultAdminUser();
   const org = await OrganizationModel.getOrCreateDefaultOrganization();
   if (!user || !org) {
@@ -667,13 +667,7 @@ async function seedMcpCatalog(): Promise<void> {
   // 1. Get or create default organization
   const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
 
-  // 2. Check if catalog has already been seeded
-  if (defaultOrg.hasSeededMcpCatalog) {
-    console.log("✓ MCP catalog already seeded, skipping");
-    return;
-  }
-
-  // 3. Read and parse catalog seed JSON file
+  // 2. Read and parse catalog seed JSON file
   try {
     // Get the path relative to the backend root directory
     const seedFilePath = path.resolve(
@@ -684,16 +678,21 @@ async function seedMcpCatalog(): Promise<void> {
     const seedData = await fs.readFile(seedFilePath, "utf-8");
     const catalogItems: { name: string }[] = JSON.parse(seedData);
 
-    // 4. Create catalog items
+    // 3. Create catalog items
     for (const item of catalogItems) {
       const catalogData: InsertMcpCatalog = {
         name: item.name,
       };
+      const existingCatalogItem = await McpCatalogModel.findByName(item.name);
+      if (existingCatalogItem) {
+        console.log(`✓ MCP catalog item ${item.name} already exists, skipping`);
+        continue;
+      }
       await McpCatalogModel.create(catalogData);
       console.log(`✓ Seeded MCP catalog item: ${item.name}`);
     }
 
-    // 5. Mark organization as seeded
+    // 4. Mark organization as seeded
     await OrganizationModel.updateSeededMcpCatalogFlag(defaultOrg.id, true);
     console.log("✓ Marked organization as having seeded MCP catalog");
   } catch (error) {

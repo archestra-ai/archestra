@@ -1,23 +1,23 @@
-import { DEFAULT_ADMIN_EMAIL } from '@shared';
-import { verifyPassword } from 'better-auth/crypto';
-import { eq } from 'drizzle-orm';
-import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { z } from 'zod';
-import { auth } from '@/auth/auth';
-import config from '@/config';
-import db, { schema } from '@/database';
-import { RouteId } from '@/types';
+import { DEFAULT_ADMIN_EMAIL } from "@shared";
+import { verifyPassword } from "better-auth/crypto";
+import { eq } from "drizzle-orm";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { auth } from "@/auth/auth";
+import config from "@/config";
+import db, { schema } from "@/database";
+import { RouteId } from "@/types";
 
 // Register authentication endpoints
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Check if default credentials are enabled
   fastify.route({
-    method: 'GET',
-    url: '/api/auth/default-credentials-status',
+    method: "GET",
+    url: "/api/auth/default-credentials-status",
     schema: {
       operationId: RouteId.GetDefaultCredentialsStatus,
-      description: 'Get default credentials status',
-      tags: ['Auth'],
+      description: "Get default credentials status",
+      tags: ["Auth"],
       response: {
         200: z.object({
           enabled: z.boolean(),
@@ -79,8 +79,8 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // Existing auth handler for all other auth routes
   fastify.route({
-    method: ['GET', 'POST'],
-    url: '/api/auth/*',
+    method: ["GET", "POST"],
+    url: "/api/auth/*",
     async handler(request, reply) {
       try {
         const url = new URL(request.url, `http://${request.headers.host}`);
@@ -103,8 +103,8 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch (error) {
         fastify.log.error(error);
         reply.status(500).send({
-          error: 'Internal authentication error',
-          code: 'AUTH_FAILURE',
+          error: "Internal authentication error",
+          code: "AUTH_FAILURE",
         });
       }
     },

@@ -21,8 +21,10 @@ export function WithAuthCheck({
   const isAuthPage =
     pathname?.startsWith("/auth/sign-in") ||
     pathname?.startsWith("/auth/sign-up");
+  const isPublicPage = pathname === "/test-agent"; // "How it works" page is public
   const isAuthPageAndUserLoggedIn = isAuthPage && session?.user;
-  const isNotAuthPageAndUserNotLoggedIn = !isAuthPage && !session?.user;
+  const isNotAuthPageAndUserNotLoggedIn =
+    !isAuthPage && !isPublicPage && !session?.user;
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {

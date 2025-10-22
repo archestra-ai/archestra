@@ -73,17 +73,12 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
           <p className="text-sm text-muted-foreground">
             Tools displayed here are either detected from requests between
-            agents and LLMs, or sourced from installed MCP servers.
-            <br />
-            <br />
-            Use the "Agents Assigned" tab to view and configure tools that are
-            assigned to agents. Use the "Without Agents" tab to assign
-            unassigned tools to agents.
+            agents and LLMs or sourced from installed MCP servers.
           </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-8 py-6">
         <Tabs
           value={activeTab}
           onValueChange={(value) => {
@@ -94,7 +89,7 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
             router.push(`${pathname}?${params.toString()}`, { scroll: false });
           }}
         >
-          <TabsList className="mb-6">
+          <TabsList className="mb-4">
             <TabsTrigger value="with_agents">Agents Assigned</TabsTrigger>
             <TabsTrigger value="without_agents">Without Agents</TabsTrigger>
           </TabsList>

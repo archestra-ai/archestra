@@ -62,7 +62,7 @@ export function WithAuthCheck({
     return null;
   }
 
-  return <div className="animate-in fade-in duration-200">{children}</div>;
+  return <>{children}</>;
 }
 
 const PAGE_WITH_REQUIRED_ROLE: Record<string, Role> = {

@@ -8,6 +8,47 @@ import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
+/**
+ * Inject assigned MCP tools into Anthropic tools array
+ * Assigned tools take priority and override tools with the same name from the request
+ */
+const injectTools = async (
+  requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] | undefined,
+  agentId: string,
+): Promise<z.infer<typeof Anthropic.Tools.ToolSchema>[]> => {
+  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
+
+  // Convert assigned tools to Anthropic format (CustomTool)
+  const assignedAnthropicTools: z.infer<
+    typeof Anthropic.Tools.CustomToolSchema
+  >[] = assignedTools.map((tool) => ({
+    name: tool.name,
+    description: tool.description || undefined,
+    input_schema: tool.parameters || {},
+    type: "custom" as const,
+  }));
+
+  // Create a map of request tools by name
+  const requestToolMap = new Map<
+    string,
+    z.infer<typeof Anthropic.Tools.ToolSchema>
+  >();
+  for (const tool of requestTools || []) {
+    requestToolMap.set(tool.name, tool);
+  }
+
+  // Merge: assigned tools override request tools with same name
+  const mergedToolMap = new Map<
+    string,
+    z.infer<typeof Anthropic.Tools.ToolSchema>
+  >(requestToolMap);
+  for (const assignedTool of assignedAnthropicTools) {
+    mergedToolMap.set(assignedTool.name, assignedTool);
+  }
+
+  return Array.from(mergedToolMap.values());
+};
+
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
@@ -71,7 +112,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     try {
       if (tools) {
-        const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
+        const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
+          [];
 
         for (const tool of tools) {
           // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
@@ -88,8 +130,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        await utils.persistTools(transformedTools, resolvedAgentId);
+        await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
+
+      // Inject assigned MCP tools (assigned tools take priority)
+      const mergedTools = await injectTools(tools, resolvedAgentId);
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -122,6 +167,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
+          tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: false,
         });
 

@@ -10,6 +10,53 @@ import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
 
+/**
+ * Inject assigned MCP tools into OpenAI tools array
+ * Assigned tools take priority and override tools with the same name from the request
+ */
+const injectTools = async (
+  requestTools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
+  agentId: string,
+): Promise<z.infer<typeof OpenAi.Tools.ToolSchema>[]> => {
+  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
+
+  // Convert assigned tools to OpenAI format
+  const assignedOpenAITools: z.infer<typeof OpenAi.Tools.ToolSchema>[] =
+    assignedTools.map((tool) => ({
+      type: "function" as const,
+      function: {
+        name: tool.name,
+        description: tool.description || undefined,
+        parameters: tool.parameters,
+      },
+    }));
+
+  // Create a map of request tools by name for easy lookup
+  const requestToolMap = new Map<
+    string,
+    z.infer<typeof OpenAi.Tools.ToolSchema>
+  >();
+  for (const tool of requestTools || []) {
+    const toolName =
+      tool.type === "function" ? tool.function.name : tool.custom.name;
+    requestToolMap.set(toolName, tool);
+  }
+
+  // Merge: assigned tools override request tools with same name
+  const mergedToolMap = new Map<
+    string,
+    z.infer<typeof OpenAi.Tools.ToolSchema>
+  >(requestToolMap);
+  for (const assignedTool of assignedOpenAITools) {
+    // All assigned tools are function type since we create them that way above
+    if (assignedTool.type === "function") {
+      mergedToolMap.set(assignedTool.function.name, assignedTool);
+    }
+  }
+
+  return Array.from(mergedToolMap.values());
+};
+
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
@@ -90,10 +137,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Inject assigned MCP tools (assigned tools take priority)
-      const mergedTools = await utils.tools.injectOpenAITools(
-        tools,
-        resolvedAgentId,
-      );
+      const mergedTools = await injectTools(tools, resolvedAgentId);
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);

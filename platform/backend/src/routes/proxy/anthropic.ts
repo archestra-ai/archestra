@@ -5,6 +5,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, InteractionModel } from "@/models";
 import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import { trackLLMRequest, trackLLMRequestDuration } from "@/utils/metrics";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
@@ -86,12 +87,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
   ) => {
     const { tools, stream } = body;
+    const startTime = Date.now();
+    const model = body.model;
 
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
+        // Track failed LLM request due to missing agent
+        trackLLMRequest("anthropic", model, "error");
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
@@ -155,6 +160,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
+        // Track failed LLM request due to unsupported streaming
+        trackLLMRequest("anthropic", model, "error");
         return reply.code(400).send({
           error: {
             message: "Streaming is not supported for Anthropic. Coming soon!",
@@ -216,10 +223,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           response: response,
         });
 
+        // Track successful LLM request
+        const duration = (Date.now() - startTime) / 1000;
+        trackLLMRequest("anthropic", model, "success");
+        trackLLMRequestDuration("anthropic", model, duration);
+
         return reply.send(response);
       }
     } catch (error) {
       fastify.log.error(error);
+
+      // Track failed LLM request
+      trackLLMRequest("anthropic", model, "error");
 
       const statusCode =
         error instanceof Error && "status" in error

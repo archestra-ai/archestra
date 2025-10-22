@@ -10,17 +10,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,24 +19,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type {
   GetMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
-import {
-  useCreateMcpCatalogItem,
-  useDeleteMcpCatalogItem,
-  useMcpCatalog,
-  useUpdateMcpCatalogItem,
-} from "@/lib/mcp-catalog.query";
-import {
-  useDeleteMcpServer,
-  useInstallMcpServer,
-  useMcpServers,
-} from "@/lib/mcp-server.query";
+import { useMcpCatalog } from "@/lib/mcp-catalog.query";
+import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { formatDate } from "@/lib/utils";
+import { CreateCatalogDialog } from "./create-catalog-dialog";
+import { DeleteCatalogDialog } from "./delete-catalog-dialog";
+import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
+import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 export function InternalMCPRegistry({
   initialData,
@@ -59,10 +44,6 @@ export function InternalMCPRegistry({
     initialData: initialInstalledServers,
   });
   const installMutation = useInstallMcpServer();
-  const uninstallMutation = useDeleteMcpServer();
-  const createMutation = useCreateMcpCatalogItem();
-  const updateMutation = useUpdateMcpCatalogItem();
-  const deleteMutation = useDeleteMcpCatalogItem();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<
@@ -76,8 +57,6 @@ export function InternalMCPRegistry({
     name: string;
   } | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [newItemName, setNewItemName] = useState("");
-  const [editItemName, setEditItemName] = useState("");
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
@@ -99,18 +78,11 @@ export function InternalMCPRegistry({
 
       // For other servers, install directly
       setInstallingItemId(catalogItem.id);
-      try {
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-        });
-        toast.success(`Successfully installed ${catalogItem.name}`);
-      } catch (error) {
-        toast.error(`Failed to install ${catalogItem.name}`);
-        console.error("Install error:", error);
-      } finally {
-        setInstallingItemId(null);
-      }
+      await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+      });
+      setInstallingItemId(null);
     },
     [installMutation],
   );
@@ -121,64 +93,15 @@ export function InternalMCPRegistry({
       metadata: Record<string, unknown>,
     ) => {
       setInstallingItemId(catalogItem.id);
-      try {
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          metadata,
-        });
-        toast.success(`Successfully installed ${catalogItem.name}`);
-      } catch (error) {
-        toast.error(`Failed to install ${catalogItem.name}`);
-        console.error("Install error:", error);
-        throw error; // Re-throw so the dialog can handle it
-      } finally {
-        setInstallingItemId(null);
-      }
+      await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        metadata,
+      });
+      setInstallingItemId(null);
     },
     [installMutation],
   );
-
-  const handleCreate = useCallback(async () => {
-    try {
-      await createMutation.mutateAsync({ name: newItemName });
-      toast.success("Catalog item created successfully");
-      setIsCreateDialogOpen(false);
-      setNewItemName("");
-    } catch (error) {
-      toast.error("Failed to create catalog item");
-      console.error("Create error:", error);
-    }
-  }, [createMutation, newItemName]);
-
-  const handleEdit = useCallback(async () => {
-    if (!editingItem) return;
-    try {
-      await updateMutation.mutateAsync({
-        id: editingItem.id,
-        data: { name: editItemName },
-      });
-      toast.success("Catalog item updated successfully");
-      setEditingItem(null);
-      setEditItemName("");
-    } catch (error) {
-      toast.error("Failed to update catalog item");
-      console.error("Edit error:", error);
-    }
-  }, [updateMutation, editingItem, editItemName]);
-
-  const handleDelete = useCallback(async () => {
-    if (!deletingItem) return;
-
-    try {
-      await deleteMutation.mutateAsync(deletingItem.id);
-      toast.success("Catalog item deleted successfully");
-      setDeletingItem(null);
-    } catch (error) {
-      toast.error("Failed to delete catalog item");
-      console.error("Delete error:", error);
-    }
-  }, [deleteMutation, deletingItem]);
 
   const getInstallationCount = useCallback(
     (catalogId: string) => {
@@ -203,19 +126,6 @@ export function InternalMCPRegistry({
     },
     [],
   );
-
-  const handleUninstallConfirm = useCallback(async () => {
-    if (!uninstallingServer) return;
-
-    try {
-      await uninstallMutation.mutateAsync(uninstallingServer.id);
-      toast.success(`Successfully uninstalled ${uninstallingServer.name}`);
-      setUninstallingServer(null);
-    } catch (error) {
-      toast.error(`Failed to uninstall ${uninstallingServer.name}`);
-      console.error("Uninstall error:", error);
-    }
-  }, [uninstallMutation, uninstallingServer]);
 
   const filteredCatalogItems = useMemo(() => {
     const items = catalogSearchQuery.trim()
@@ -302,12 +212,7 @@ export function InternalMCPRegistry({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setEditingItem(item);
-                        setEditItemName(item.name);
-                      }}
-                    >
+                    <DropdownMenuItem onClick={() => setEditingItem(item)}>
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
                     </DropdownMenuItem>
@@ -327,13 +232,10 @@ export function InternalMCPRegistry({
                         installedServer.name,
                       )
                     }
-                    disabled={uninstallMutation.isPending}
                     size="sm"
                     className="w-full bg-accent text-accent-foreground hover:bg-accent"
                   >
-                    {uninstallMutation.isPending
-                      ? "Uninstalling..."
-                      : "Uninstall"}
+                    Uninstall
                   </Button>
                 ) : (
                   <Button
@@ -364,119 +266,23 @@ export function InternalMCPRegistry({
         </div>
       )}
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Create New Catalog Item</DialogTitle>
-            <DialogDescription>
-              Add a new MCP server to the catalog.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              placeholder="Enter server name"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsCreateDialogOpen(false);
-                setNewItemName("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!newItemName.trim() || createMutation.isPending}
-            >
-              {createMutation.isPending ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateCatalogDialog
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+      />
 
-      <Dialog
-        open={!!editingItem}
-        onOpenChange={() => {
-          setEditingItem(null);
-          setEditItemName("");
-        }}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Catalog Item</DialogTitle>
-            <DialogDescription>Update the catalog item name.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="edit-name">Name</Label>
-            <Input
-              id="edit-name"
-              value={editItemName}
-              onChange={(e) => setEditItemName(e.target.value)}
-              placeholder="Enter server name"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditingItem(null);
-                setEditItemName("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleEdit}
-              disabled={!editItemName.trim() || updateMutation.isPending}
-            >
-              {updateMutation.isPending ? "Updating..." : "Update"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditCatalogDialog
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+      />
 
-      <Dialog open={!!deletingItem} onOpenChange={() => setDeletingItem(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Catalog Item</DialogTitle>
-            <DialogDescription>
-              {deletingItem &&
-                (() => {
-                  const installCount = getInstallationCount(deletingItem.id);
-                  return installCount > 0 ? (
-                    <span>
-                      Are you sure you want to delete "{deletingItem.name}"?
-                      There are currently <strong>{installCount}</strong>{" "}
-                      installation(s) of this server. Deleting this catalog
-                      entry will also uninstall all associated servers.
-                    </span>
-                  ) : (
-                    `Are you sure you want to delete "${deletingItem.name}"?`
-                  );
-                })()}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingItem(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteCatalogDialog
+        item={deletingItem}
+        onClose={() => setDeletingItem(null)}
+        installationCount={
+          deletingItem ? getInstallationCount(deletingItem.id) : 0
+        }
+      />
 
       <GitHubInstallDialog
         isOpen={isGitHubDialogOpen}
@@ -489,35 +295,10 @@ export function InternalMCPRegistry({
         isInstalling={installMutation.isPending}
       />
 
-      <Dialog
-        open={!!uninstallingServer}
-        onOpenChange={() => setUninstallingServer(null)}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Uninstall MCP Server</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to uninstall "
-              {uninstallingServer?.name || ""}"?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setUninstallingServer(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleUninstallConfirm}
-              disabled={uninstallMutation.isPending}
-            >
-              {uninstallMutation.isPending ? "Uninstalling..." : "Uninstall"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UninstallServerDialog
+        server={uninstallingServer}
+        onClose={() => setUninstallingServer(null)}
+      />
     </div>
   );
 }

@@ -9,7 +9,6 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -265,18 +264,10 @@ export default function McpCatalogPage({
   const createMutation = useCreateMcpCatalogItem();
 
   const handleAddToCatalog = async (serverResponse: ServerResponse) => {
-    try {
-      await createMutation.mutateAsync({
-        name: serverResponse.server.name,
-        version: serverResponse.server.version,
-      });
-      toast.success(
-        `Added "${serverResponse.server.name}" to your MCP servers`,
-      );
-    } catch (error) {
-      toast.error(`Failed to add "${serverResponse.server.name}"`);
-      console.error("Add to catalog error:", error);
-    }
+    await createMutation.mutateAsync({
+      name: serverResponse.server.name,
+      version: serverResponse.server.version,
+    });
   };
 
   // Flatten all pages into a single array of servers

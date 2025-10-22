@@ -2,7 +2,6 @@
 
 import { Search, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { GetMcpServersResponses } from "@/lib/clients/api";
@@ -19,13 +18,10 @@ export function InstalledMCP({
 
   const handleDelete = useCallback(
     async (server: GetMcpServersResponses["200"][number]) => {
-      try {
-        await deleteMutation.mutateAsync(server.id);
-        toast.success(`Successfully uninstalled ${server.name}`);
-      } catch (error) {
-        toast.error(`Failed to uninstall ${server.name}`);
-        console.error("Delete error:", error);
-      }
+      await deleteMutation.mutateAsync({
+        id: server.id,
+        name: server.name,
+      });
     },
     [deleteMutation],
   );

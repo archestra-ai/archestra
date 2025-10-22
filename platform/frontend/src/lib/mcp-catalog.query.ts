@@ -3,6 +3,7 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   createMcpCatalogItem,
   deleteMcpCatalogItem,
@@ -31,6 +32,11 @@ export function useCreateMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item created successfully");
+    },
+    onError: (error) => {
+      console.error("Create error:", error);
+      toast.error("Failed to create catalog item");
     },
   });
 }
@@ -50,6 +56,11 @@ export function useUpdateMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item updated successfully");
+    },
+    onError: (error) => {
+      console.error("Edit error:", error);
+      toast.error("Failed to update catalog item");
     },
   });
 }
@@ -63,6 +74,11 @@ export function useDeleteMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success("Catalog item deleted successfully");
+    },
+    onError: (error) => {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete catalog item");
     },
   });
 }

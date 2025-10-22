@@ -1,6 +1,5 @@
 export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
-export { default as archestraMcpServerRoutes } from "./archestra-mcp-server";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as dualLlmConfigRoutes } from "./dual-llm-config";
@@ -8,6 +7,7 @@ export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
 export { default as interactionRoutes } from "./interaction";
 export { default as mcpCatalogRoutes } from "./mcp-catalog";
+export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";

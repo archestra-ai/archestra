@@ -42,7 +42,7 @@ class AuthMiddleware {
       url === "/openapi.json" ||
       url === "/health" ||
       url === "/api/features" ||
-      url.startsWith(config.archestraMcpServer.endpoint)
+      url.startsWith(config.mcpGateway.endpoint)
     ) {
       return true;
     }

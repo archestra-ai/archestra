@@ -2,7 +2,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
-import { type Tool, UuidIdSchema } from "@/types";
+import mcpClientService from "@/services/mcp-client";
+import { type CommonToolCall, type Tool, UuidIdSchema } from "@/types";
 
 /**
  * JSON-RPC 2.0 request schema
@@ -95,6 +96,71 @@ async function handleToolsList(agentId: string): Promise<{ tools: unknown[] }> {
 }
 
 /**
+ * Handle MCP tools/call request
+ */
+async function handleToolsCall(
+  toolName: string,
+  toolArguments: Record<string, unknown>,
+  agentId: string,
+): Promise<{
+  content: unknown[];
+  structuredContent?: unknown;
+  isError?: boolean;
+}> {
+  try {
+    // Generate a unique ID for this tool call
+    const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // Create CommonToolCall for McpClientService
+    const toolCall: CommonToolCall = {
+      id: toolCallId,
+      name: toolName,
+      arguments: toolArguments,
+    };
+
+    // Execute the tool call via McpClientService (assumes GitHub MCP tools)
+    const results = await mcpClientService.executeToolCalls(
+      [toolCall],
+      agentId,
+    );
+
+    if (results.length === 0) {
+      throw {
+        code: -32603, // Internal error
+        message: `Tool '${toolName}' not found or not assigned to agent`,
+      };
+    }
+
+    const result = results[0];
+
+    if (result.isError) {
+      throw {
+        code: -32603, // Internal error
+        message: result.error || "Tool execution failed",
+      };
+    }
+
+    // Transform CommonToolResult to MCP response format
+    return {
+      content: Array.isArray(result.content)
+        ? result.content
+        : [{ type: "text", text: JSON.stringify(result.content) }],
+      isError: false,
+    };
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error) {
+      throw error; // Re-throw JSON-RPC errors
+    }
+
+    throw {
+      code: -32603, // Internal error
+      message: "Tool execution failed",
+      data: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
  * Process JSON-RPC request for MCP
  */
 async function processJsonRpcRequest(
@@ -114,6 +180,44 @@ async function processJsonRpcRequest(
       case "tools/list":
         response.result = await handleToolsList(agentId);
         break;
+      case "tools/call": {
+        const params = request.params;
+        if (!params || typeof params !== "object") {
+          response.error = {
+            code: -32602, // Invalid params
+            message: "Missing or invalid params for tools/call",
+          };
+          break;
+        }
+
+        const { name: toolName, arguments: toolArguments } = params as {
+          name?: unknown;
+          arguments?: unknown;
+        };
+
+        if (typeof toolName !== "string") {
+          response.error = {
+            code: -32602, // Invalid params
+            message: "Tool name must be a string",
+          };
+          break;
+        }
+
+        if (typeof toolArguments !== "object" || toolArguments === null) {
+          response.error = {
+            code: -32602, // Invalid params
+            message: "Tool arguments must be an object",
+          };
+          break;
+        }
+
+        response.result = await handleToolsCall(
+          toolName,
+          toolArguments as Record<string, unknown>,
+          agentId,
+        );
+        break;
+      }
       default:
         response.error = {
           code: -32601, // Method not found
@@ -135,8 +239,8 @@ async function processJsonRpcRequest(
   return response;
 }
 
-const archestraMcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const { endpoint: endpointPrefix } = config.archestraMcpServer;
+const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const { endpoint: endpointPrefix } = config.mcpGateway;
   const endpoint = `${endpointPrefix}/:agentId`;
   const params = z.object({
     agentId: UuidIdSchema,
@@ -199,4 +303,4 @@ const archestraMcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default archestraMcpServerRoutes;
+export default mcpGatewayRoutes;

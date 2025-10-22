@@ -9,8 +9,19 @@ import {
 async function seedMockData() {
   console.log("\n🌱 Starting mock data seed...\n");
 
+  // Step 0: Clean existing mock data (in correct order due to foreign keys)
+  console.log("Cleaning existing data...");
+  await db.delete(schema.interactionsTable);
+  await db.delete(schema.dualLlmResultsTable);
+  await db.delete(schema.toolInvocationPoliciesTable);
+  await db.delete(schema.trustedDataPoliciesTable);
+  await db.delete(schema.agentToolsTable);
+  await db.delete(schema.toolsTable);
+  await db.delete(schema.agentsTable);
+  console.log("✅ Cleaned existing data");
+
   // Step 1: Create agents
-  console.log("Creating agents...");
+  console.log("\nCreating agents...");
   const agentData = generateMockAgents();
 
   await db.insert(schema.agentsTable).values(agentData);
@@ -26,7 +37,22 @@ async function seedMockData() {
   await db.insert(schema.toolsTable).values(toolData);
   console.log(`✅ Created ${toolData.length} tools`);
 
-  // Step 3: Create 200 mock interactions
+  // Step 3: Create agent-tool relationships
+  console.log("\nCreating agent-tool relationships...");
+  const agentToolData = toolData.map((tool) => ({
+    agentId: tool.agentId,
+    toolId: tool.id,
+    allowUsageWhenUntrustedDataIsPresent:
+      tool.allowUsageWhenUntrustedDataIsPresent || false,
+    toolResultTreatment: (tool.dataIsTrustedByDefault
+      ? "trusted"
+      : "untrusted") as "trusted" | "untrusted" | "sanitize_with_dual_llm",
+  }));
+
+  await db.insert(schema.agentToolsTable).values(agentToolData);
+  console.log(`✅ Created ${agentToolData.length} agent-tool relationships`);
+
+  // Step 4: Create 200 mock interactions
   console.log("\nCreating interactions...");
 
   // Group tools by agent for efficient lookup

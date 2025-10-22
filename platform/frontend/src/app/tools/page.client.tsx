@@ -104,7 +104,6 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           <TabsContent value="without_agents" className="mt-0">
             <UnassignedToolsList
               tools={unassignedTools || []}
-              onToolClick={() => {}}
               onAssignClick={setSelectedToolForAssignment}
             />
           </TabsContent>

@@ -37,7 +37,7 @@ export interface UnassignedToolData {
 
 interface UnassignedToolsListProps {
   tools: ExtendedTool[];
-  onToolClick: (tool: UnassignedToolData) => void;
+  onToolClick?: (tool: UnassignedToolData) => void;
   onAssignClick: (tool: UnassignedToolData) => void;
 }
 
@@ -272,7 +272,6 @@ export function UnassignedToolsList({
         <DataTable
           columns={columns}
           data={paginatedTools}
-          onRowClick={(tool) => onToolClick(tool)}
           sorting={sorting}
           onSortingChange={setSorting}
           manualPagination={true}

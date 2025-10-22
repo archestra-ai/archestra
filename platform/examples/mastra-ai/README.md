@@ -14,7 +14,7 @@ cp .env.example .env
 # Add your OPENAI_API_KEY and GITHUB_TOKEN to .env file
 ```
 
-3. Start the app in development mode
+3. Start the app in development mode:
 ```bash
 npm run dev
 ```

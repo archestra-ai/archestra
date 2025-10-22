@@ -3028,48 +3028,6 @@ export type AnthropicMessagesWithAgentResponses = {
 
 export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
 
-export type DeleteMcpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/mcp';
-};
-
-export type DeleteMcpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetMcpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/mcp';
-};
-
-export type GetMcpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostMcpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/mcp';
-};
-
-export type PostMcpResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
 export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;
@@ -4894,6 +4852,84 @@ export type UpdateMcpCatalogItemResponses = {
 };
 
 export type UpdateMcpCatalogItemResponse = UpdateMcpCatalogItemResponses[keyof UpdateMcpCatalogItemResponses];
+
+export type GetMcpByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/mcp/{agentId}';
+};
+
+export type GetMcpByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+    };
+};
+
+export type GetMcpByAgentIdResponse = GetMcpByAgentIdResponses[keyof GetMcpByAgentIdResponses];
+
+export type PostMcpByAgentIdData = {
+    body: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        method: string;
+        params?: {
+            [key: string]: unknown;
+        };
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/mcp/{agentId}';
+};
+
+export type PostMcpByAgentIdErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        result?: unknown;
+        error?: {
+            code: number;
+            message: string;
+            data?: unknown;
+        };
+    };
+};
+
+export type PostMcpByAgentIdError = PostMcpByAgentIdErrors[keyof PostMcpByAgentIdErrors];
+
+export type PostMcpByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        result?: unknown;
+        error?: {
+            code: number;
+            message: string;
+            data?: unknown;
+        };
+    };
+};
+
+export type PostMcpByAgentIdResponse = PostMcpByAgentIdResponses[keyof PostMcpByAgentIdResponses];
 
 export type GetMcpServersData = {
     body?: never;

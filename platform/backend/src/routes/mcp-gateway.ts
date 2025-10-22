@@ -56,7 +56,7 @@ async function handleInitialize(): Promise<{
     tools?: { listChanged?: boolean };
     prompts?: { listChanged?: boolean };
     resources?: { listChanged?: boolean };
-    logging?: {};
+    logging?: Record<string, never>;
   };
   serverInfo: {
     name: string;

@@ -14,6 +14,7 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
+import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -559,14 +561,14 @@ function CreateAgentDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>How to connect</DialogTitle>
+              <DialogTitle>How to connect to {createdAgent.name}</DialogTitle>
               <DialogDescription>
-                Use this proxy URL to connect {createdAgent.name} to Archestra
-                Platform.
+                Connect your agent via LLM Proxy (for conversations) or MCP
+                Gateway (for tool access).
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              <ProxyConnectionInstructions agentId={createdAgent.id} />
+              <AgentConnectionTabs agentId={createdAgent.id} />
             </div>
             <DialogFooter>
               <Button
@@ -783,6 +785,23 @@ function EditAgentDialog({
   );
 }
 
+function AgentConnectionTabs({ agentId }: { agentId: string }) {
+  return (
+    <Tabs defaultValue="llm-proxy" className="w-full">
+      <TabsList>
+        <TabsTrigger value="llm-proxy">LLM Proxy</TabsTrigger>
+        <TabsTrigger value="mcp-gateway">MCP Gateway</TabsTrigger>
+      </TabsList>
+      <TabsContent value="llm-proxy" className="mt-4">
+        <ProxyConnectionInstructions agentId={agentId} />
+      </TabsContent>
+      <TabsContent value="mcp-gateway" className="mt-4">
+        <McpConnectionInstructions agentId={agentId} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 function ConnectAgentDialog({
   agent,
   open,
@@ -796,14 +815,14 @@ function ConnectAgentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>How to connect</DialogTitle>
+          <DialogTitle>How to connect to {agent.name}</DialogTitle>
           <DialogDescription>
-            Use this proxy URL to connect {agent.name} to the Archestra
-            Platform.
+            Connect your agent via LLM Proxy (for conversations) or MCP Gateway
+            (for tool access).
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <ProxyConnectionInstructions agentId={agent.id} />
+          <AgentConnectionTabs agentId={agent.id} />
         </div>
         <DialogFooter>
           <Button type="button" onClick={() => onOpenChange(false)}>

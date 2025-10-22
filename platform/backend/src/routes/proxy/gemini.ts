@@ -77,7 +77,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     try {
       // TODO: Persist tools if present
-      // await utils.persistTools(commonRequest.tools, resolvedAgentId);
+      // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
+
+      // TODO: Inject assigned MCP tools (assigned tools take priority)
+      // const _mergedTools = await utils.tools.injectGeminiTools(
+      //   body.tools,
+      //   resolvedAgentId,
+      // );
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.gemini.toCommonFormat(
@@ -227,6 +233,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await genAI.models.generateContent({
           model: modelName,
           ...processedBody,
+          // tools: mergedTools,
         });
 
         // Convert to common format for policy evaluation

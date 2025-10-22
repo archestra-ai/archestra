@@ -71,7 +71,8 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     try {
       if (tools) {
-        const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
+        const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
+          [];
 
         for (const tool of tools) {
           // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
@@ -88,8 +89,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        await utils.persistTools(transformedTools, resolvedAgentId);
+        await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
+
+      // Inject assigned MCP tools (assigned tools take priority)
+      const mergedTools = await utils.tools.injectAnthropicTools(
+        tools,
+        resolvedAgentId,
+      );
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -122,6 +129,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
+          tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: false,
         });
 

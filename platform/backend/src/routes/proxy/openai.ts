@@ -70,7 +70,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({ apiKey: openAiApiKey });
 
     try {
-      await utils.persistTools(
+      await utils.tools.persistTools(
         (tools || []).map((tool) => {
           if (tool.type === "function") {
             return {
@@ -86,6 +86,12 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
           }
         }),
+        resolvedAgentId,
+      );
+
+      // Inject assigned MCP tools (assigned tools take priority)
+      const mergedTools = await utils.tools.injectOpenAITools(
+        tools,
         resolvedAgentId,
       );
 
@@ -166,6 +172,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const stream = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
+          tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: true,
         });
 
@@ -336,6 +343,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const response = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
+          tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: false,
         });
 

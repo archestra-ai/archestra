@@ -41,9 +41,6 @@ importers:
       '@shared':
         specifier: workspace:*
         version: link:../shared
-      '@socotra/modelcontextprotocol-sdk':
-        specifier: ^1.20.1
-        version: 1.20.1(zod@4.1.11)
       ai:
         specifier: ^5.0.57
         version: 5.0.60(zod@4.1.11)
@@ -2023,12 +2020,6 @@ packages:
   '@simplewebauthn/server@13.2.2':
     resolution: {integrity: sha512-HcWLW28yTMGXpwE9VLx9J+N2KEUaELadLrkPEEI9tpI5la70xNEVEsu/C+m3u7uoq4FulLqZQhgBCzR9IZhFpA==}
     engines: {node: '>=20.0.0'}
-
-  '@socotra/modelcontextprotocol-sdk@1.20.1':
-    resolution: {integrity: sha512-vSA4KJlWrFkL0k6aknIRuqjxWY3YoZDeGxUGLARwLEzlGERqDbgqPfL6nRimFV2s7N4JnT9+y2jUA++Z0HHvVQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: '>=3.25.76 || ^4.0.0'
 
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
@@ -7054,22 +7045,6 @@ snapshots:
       '@peculiar/asn1-schema': 2.5.0
       '@peculiar/asn1-x509': 2.5.0
       '@peculiar/x509': 1.14.0
-
-  '@socotra/modelcontextprotocol-sdk@1.20.1(zod@4.1.11)':
-    dependencies:
-      ajv: 6.12.6
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.1.0
-      express-rate-limit: 7.5.1(express@5.1.0)
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.1
-      zod: 4.1.11
-    transitivePeerDependencies:
-      - supports-color
 
   '@standard-schema/spec@1.0.0': {}
 

@@ -3,7 +3,7 @@ import { verifyPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { auth } from "@/auth/auth";
+import { auth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { RouteId } from "@/types";

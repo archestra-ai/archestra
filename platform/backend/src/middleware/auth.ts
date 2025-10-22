@@ -1,6 +1,6 @@
 import type { Action, Resource } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { auth } from "@/auth/auth";
+import { auth } from "@/auth";
 import config from "@/config";
 import { RouteId } from "@/types";
 import { prepareErrorResponse } from "@/utils";

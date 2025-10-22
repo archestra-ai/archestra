@@ -1,12 +1,12 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getUserFromRequest } from "@/auth/utils";
 import { ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
   ExtendedSelectToolSchema,
   RouteId,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

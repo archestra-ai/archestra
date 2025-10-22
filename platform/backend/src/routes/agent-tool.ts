@@ -1,6 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getUserFromRequest } from "@/auth/utils";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
@@ -10,6 +9,7 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

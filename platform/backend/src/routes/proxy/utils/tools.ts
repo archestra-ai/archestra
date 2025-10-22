@@ -20,6 +20,7 @@ export const persistTools = async (
       name: toolName,
       parameters: toolParameters,
       description: toolDescription,
+      agentId,
     });
 
     // Create the agent-tool relationship

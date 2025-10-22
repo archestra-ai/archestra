@@ -1,4 +1,4 @@
-import { desc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
@@ -17,12 +17,32 @@ class ToolModel {
     return createdTool;
   }
 
-  static async createToolIfNotExists(tool: InsertTool) {
+  static async createToolIfNotExists(tool: InsertTool): Promise<Tool> {
     const [createdTool] = await db
       .insert(schema.toolsTable)
       .values(tool)
       .onConflictDoNothing()
       .returning();
+
+    // If tool already exists (conflict), fetch it
+    if (!createdTool) {
+      const [existingTool] = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          tool.agentId
+            ? and(
+                eq(schema.toolsTable.agentId, tool.agentId),
+                eq(schema.toolsTable.name, tool.name),
+              )
+            : and(
+                isNull(schema.toolsTable.agentId),
+                eq(schema.toolsTable.name, tool.name),
+              ),
+        );
+      return existingTool;
+    }
+
     return createdTool;
   }
 

@@ -14,7 +14,7 @@ import * as utils from "./utils";
  * Inject assigned MCP tools into OpenAI tools array
  * Assigned tools take priority and override tools with the same name from the request
  */
-const injectTools = async (
+export const injectTools = async (
   requestTools: z.infer<typeof OpenAi.Tools.ToolSchema>[] | undefined,
   agentId: string,
 ): Promise<z.infer<typeof OpenAi.Tools.ToolSchema>[]> => {

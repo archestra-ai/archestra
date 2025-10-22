@@ -389,6 +389,11 @@ The backend integrates advanced security guardrails:
     - Tool execution results are automatically returned to the LLM for continued processing
     - Persistent MCP client connections for better performance
     - Non-streaming execution only (streaming support coming soon)
+    - **Implementation Details**:
+      - When MCP tool calls are detected, the proxy executes them via `executeToolCalls`
+      - Tool results are converted back to provider-specific formats and included in a follow-up LLM call
+      - Error handling ensures failed tool executions return proper error responses
+      - Currently assumes all MCP tools use the same GitHub server (limitation to be addressed)
   - Supports OpenAI and Anthropic providers (Gemini support prepared)
   - Tools are linked to agents via the agent_tools junction table
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection

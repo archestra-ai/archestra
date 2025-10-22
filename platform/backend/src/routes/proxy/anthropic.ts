@@ -154,11 +154,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (stream) {
         // Handle streaming response
-        const stream = await anthropicClient.messages.create({
+        const messageStream = anthropicClient.messages.stream({
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
-          stream: true,
         });
 
         // Accumulate tool calls and track content for persistence
@@ -167,7 +166,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const events: AnthropicProvider.Messages.MessageStreamEvent[] = [];
 
-        for await (const event of stream) {
+        for await (const event of messageStream) {
           events.push(event);
 
           // Stream text content immediately
@@ -253,7 +252,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (accumulatedToolCalls.length > 0) {
             responseContent = [
               ...(accumulatedText
-                ? [{ type: "text" as const, text: accumulatedText }]
+                ? [
+                    {
+                      type: "text" as const,
+                      text: accumulatedText,
+                      citations: null,
+                    },
+                  ]
                 : []),
               ...accumulatedToolCalls,
             ];

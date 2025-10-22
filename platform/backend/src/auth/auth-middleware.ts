@@ -1,6 +1,7 @@
 import type { Action, Resource } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "@/auth/auth";
+import config from "@/config";
 import { RouteId } from "@/types";
 import { prepareErrorResponse } from "@/utils";
 
@@ -31,6 +32,7 @@ class AuthMiddleware {
     if (method === "OPTIONS" || method === "HEAD") {
       return true;
     }
+
     if (
       url.startsWith("/api/auth") ||
       url.startsWith("/v1/openai") ||
@@ -39,7 +41,8 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
-      url === "/api/features"
+      url === "/api/features" ||
+      url === config.archestraMcpServer.endpoint
     ) {
       return true;
     }
@@ -96,11 +99,26 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteAgent]: {
     agent: ["delete"],
   },
-  [RouteId.GetTools]: {
+  [RouteId.GetAgentTools]: {
+    agent: ["read"],
     tool: ["read"],
   },
-  [RouteId.UpdateTool]: {
+  [RouteId.GetAllAgentTools]: {
+    agent: ["read"],
+    tool: ["read"],
+  },
+  [RouteId.AssignToolToAgent]: {
+    agent: ["update"],
+  },
+  [RouteId.UnassignToolFromAgent]: {
+    agent: ["update"],
+  },
+  [RouteId.UpdateAgentTool]: {
+    agent: ["update"],
     tool: ["update"],
+  },
+  [RouteId.GetTools]: {
+    tool: ["read"],
   },
   [RouteId.GetInteractions]: {
     interaction: ["read"],

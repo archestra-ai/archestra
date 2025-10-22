@@ -1,5 +1,6 @@
 export { default as agentsTable } from "./agent";
 export { default as agentAccessControlTable } from "./agent-access-control";
+export { default as agentToolsTable } from "./agent-tool";
 export {
   account,
   apikey,
@@ -12,7 +13,7 @@ export { default as dualLlmConfigTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";
 export { default as mcpCatalogTable } from "./mcp-catalog";
-export { default as mcpServerTable } from "./mcp-server";
+export { default as mcpServersTable } from "./mcp-server";
 export { default as organizationsTable } from "./organization";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";

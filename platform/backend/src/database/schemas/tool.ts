@@ -1,5 +1,4 @@
 import {
-  boolean,
   jsonb,
   pgTable,
   text,
@@ -7,31 +6,28 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ToolParametersContent, ToolResultTreatment } from "@/types";
+import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
+import mcpServerTable from "./mcp-server";
 
 const toolsTable = pgTable(
   "tools",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    agentId: uuid("agent_id")
-      .notNull()
-      .references(() => agentsTable.id, { onDelete: "cascade" }),
+    // agentId is nullable - null for MCP tools, set for proxy-sniffed tools
+    agentId: uuid("agent_id").references(() => agentsTable.id, {
+      onDelete: "cascade",
+    }),
+    // mcpServerId is set for MCP tools, null for proxy-sniffed tools
+    mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     parameters: jsonb("parameters")
       .$type<ToolParametersContent>()
       .notNull()
       .default({}),
     description: text("description"),
-    allowUsageWhenUntrustedDataIsPresent: boolean(
-      "allow_usage_when_untrusted_data_is_present",
-    )
-      .notNull()
-      .default(false),
-    toolResultTreatment: text("tool_result_treatment")
-      .$type<ToolResultTreatment>()
-      .notNull()
-      .default("untrusted"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

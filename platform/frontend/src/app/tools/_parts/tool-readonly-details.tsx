@@ -1,10 +1,12 @@
-import type { GetToolsResponses } from "@/lib/clients/api";
+import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 
 export function ToolReadonlyDetails({
-  tool,
+  agentTool,
 }: {
-  tool: GetToolsResponses["200"][number];
+  agentTool: GetAllAgentToolsResponses["200"][number];
 }) {
+  const tool = agentTool.tool;
+
   return (
     <div className="border border-border rounded-lg p-6 bg-card">
       <div className="text-xs font-medium text-muted-foreground mb-4">

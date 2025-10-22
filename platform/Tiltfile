@@ -159,8 +159,8 @@ local_resource(
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
   serve_cmd='cd backend && pnpm db:studio',
-  labels=['dev'],
-  resource_deps=['db-migrate']
+  labels=['database'],
+  resource_deps=['postgresql']
 )
 
 local_resource(

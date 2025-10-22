@@ -1,4 +1,5 @@
 export * from "./agent";
+export * from "./agent-tool";
 export * from "./api";
 export * from "./autonomy-policies";
 export * from "./dual-llm-config";

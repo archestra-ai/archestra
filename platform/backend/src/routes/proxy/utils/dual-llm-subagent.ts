@@ -60,9 +60,16 @@ export class DualLlmSubagent {
    * Main entry point for the quarantine pattern.
    * Runs a Q&A session between main agent and quarantined agent.
    *
+   * @param onProgress - Optional callback for streaming Q&A progress
    * @returns A safe summary of the information extracted
    */
-  async processWithMainAgent(): Promise<string> {
+  async processWithMainAgent(
+    onProgress?: (progress: {
+      question: string;
+      options: string[];
+      answer: string;
+    }) => void,
+  ): Promise<string> {
     // Load prompt from database configuration and replace template variable
     const mainAgentPrompt = this.config.mainAgentPrompt.replace(
       "{{originalUserRequest}}",
@@ -121,6 +128,15 @@ export class DualLlmSubagent {
       const selectedOption = options[answerIndex];
 
       console.log(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
+
+      // Stream progress if callback provided
+      if (onProgress) {
+        onProgress({
+          question,
+          options,
+          answer: `${answerIndex}`,
+        });
+      }
 
       // Step 4: Feed the answer back to the main agent
       conversation.push({

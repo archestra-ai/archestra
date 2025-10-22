@@ -239,8 +239,8 @@ platform/
 │               ├── types/       # TypeScript types for proxy routes
 │               └── utils/       # Proxy utilities (modular structure)
 │                   ├── index.ts              # Core agent management, message persistence
-│                   ├── streaming.ts          # SSE streaming handler for chat completions
 │                   ├── tool-invocation.ts    # Tool invocation policy evaluation
+│                   ├── tools.ts              # MCP tool persistence and injection
 │                   ├── trusted-data.ts       # Trusted data policy evaluation and taint tracking
 │                   ├── dual-llm-client.ts     # Provider-agnostic LLM client interface for dual LLM pattern
 │                   └── dual-llm-subagent.ts  # Dual LLM pattern implementation for quarantining untrusted data
@@ -355,8 +355,11 @@ The production backend provides:
     - `PUT /api/trusted-data-policies/:id` - Update policy
     - `DELETE /api/trusted-data-policies/:id` - Delete policy
 - **Tool Management**:
-  - `GET /api/tools` - List all tools with trust settings
-  - `PATCH /api/tools/:id` - Update tool configuration including trust policies
+  - `GET /api/tools` - List all tools (no longer contains security configurations)
+  - `GET /api/agent-tools` - List agent-tool relationships with security configurations
+  - `POST /api/agent-tools` - Create agent-tool relationship with security settings
+  - `PATCH /api/agent-tools/:agentId/:toolId` - Update agent-tool security configuration
+  - `DELETE /api/agent-tools/:agentId/:toolId` - Remove agent-tool relationship
 - **Dual LLM Configuration**:
   - `GET /api/dual-llm-config/default` - Get default configuration
   - `GET /api/dual-llm-config` - List all configurations
@@ -377,6 +380,12 @@ The production backend provides:
 
 The backend integrates advanced security guardrails:
 
+- **MCP Tool Injection**: Automatic injection of Model Context Protocol (MCP) tools at the proxy level
+  - Tools from incoming requests are persisted to the database
+  - Agent-assigned MCP tools are automatically injected into LLM requests
+  - Assigned tools take priority over request tools with the same name
+  - Supports OpenAI and Anthropic providers (Gemini support prepared)
+  - Tools are linked to agents via the agent_tools junction table
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection
   - Main Agent: Formulates questions without access to untrusted data
   - Quarantined Agent: Accesses untrusted data but can only respond via structured multiple choice
@@ -395,9 +404,9 @@ The backend integrates advanced security guardrails:
   - Control when tools can be invoked based on argument values
   - Support for multiple operators (equal, notEqual, contains, startsWith, endsWith, regex)
   - Actions: allow_when_context_is_untrusted or block_always with custom reason text
-  - Tools can be configured with:
-    - `allow_usage_when_untrusted_data_is_present`: Allow tool to run with untrusted data
-    - `data_is_trusted_by_default`: Mark tool outputs as trusted by default
+  - Agent-tool relationships can be configured with:
+    - `allowUsageWhenUntrustedDataIsPresent`: Allow tool to run with untrusted data
+    - `toolResultTreatment`: How tool outputs are handled ("trusted", "untrusted", or "sanitize_with_dual_llm")
 - **Trusted Data Policies**: Mark specific data patterns as trusted, blocked, or for sanitization
   - Uses attribute paths to identify data fields
   - Same operator support as invocation policies
@@ -417,18 +426,21 @@ The backend integrates advanced security guardrails:
   - `request`: JSONB field storing the full LLM API request (provider-specific format)
   - `response`: JSONB field storing the full LLM API response (provider-specific format)
   - Removed fields: `trusted`, `blocked`, `reason` (trust tracking now handled via policies)
-- **Tool**: Stores available tools with metadata and trust configuration
+- **Tool**: Stores available tools with metadata
+  - Links to agents (for proxy-sniffed tools) or MCP servers (for MCP tools)
+  - Security configuration fields removed (moved to AgentTool junction table)
+- **AgentTool**: Junction table linking agents to tools with security configuration
+  - `allowUsageWhenUntrustedDataIsPresent`: Allow tool to run with untrusted data
   - `toolResultTreatment`: How tool outputs are handled (default: "untrusted"):
     - `"trusted"`: Tool outputs are automatically marked as trusted
     - `"sanitize_with_dual_llm"`: Tool outputs go through dual LLM sanitization before use
     - `"untrusted"`: Tool outputs are marked as untrusted data
-  - This field replaces the deprecated `data_is_trusted_by_default` field
 - **ToolInvocationPolicy**: Policies for controlling tool usage
-  - Links to tools and agents
+  - Links to agent-tool relationships via `agent_tool_id` (not tools directly)
   - Stores argument path, operator, value, action, and reason
 - **TrustedDataPolicy**: Policies for marking data as trusted, blocked, or for sanitization
+  - Links to agent-tool relationships via `agent_tool_id` (not tools directly)
   - Stores attribute path, operator, value, and action ("mark_as_trusted", "block_always", or "sanitize_with_dual_llm")
-- **AgentToolInvocationPolicy**: Junction table linking agents to their policies
 - **DualLlmConfig**: Configuration for dual LLM quarantine pattern
   - Stores prompts for main agent, quarantined agent, and summary generation
   - Configures maximum Q&A rounds between agents

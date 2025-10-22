@@ -31,15 +31,6 @@ class TrustedDataPolicyModel {
     return policy || null;
   }
 
-  static async findByToolId(
-    toolId: string,
-  ): Promise<TrustedData.TrustedDataPolicy[]> {
-    return db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId));
-  }
-
   static async update(
     id: string,
     policy: Partial<TrustedData.InsertTrustedDataPolicy>,
@@ -135,21 +126,28 @@ class TrustedDataPolicyModel {
   }> {
     /**
      * Get policies for the agent's tools that match the tool name,
-     * along with the tool's configuration
+     * along with the tool's configuration.
      */
     const applicablePoliciesForAgent = await db
       .select({
         ...getTableColumns(schema.trustedDataPoliciesTable),
-        toolResultTreatment: schema.toolsTable.toolResultTreatment,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.toolsTable)
       .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+      )
+      .innerJoin(
         schema.trustedDataPoliciesTable,
-        eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+        eq(
+          schema.agentToolsTable.id,
+          schema.trustedDataPoliciesTable.agentToolId,
+        ),
       )
       .where(
         and(
-          eq(schema.toolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
         ),
       );
@@ -162,18 +160,34 @@ class TrustedDataPolicyModel {
 
     // If no policies exist for this tool, check the tool's result treatment configuration
     if (toolResultTreatment === null) {
-      // Fetch the tool scoped to the specific agent
-      const [tool] = await db
-        .select()
+      // Fetch the agent-tool relationship configuration
+      const [agentTool] = await db
+        .select({
+          toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+        })
         .from(schema.toolsTable)
+        .innerJoin(
+          schema.agentToolsTable,
+          eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+        )
         .where(
           and(
-            eq(schema.toolsTable.agentId, agentId),
+            eq(schema.agentToolsTable.agentId, agentId),
             eq(schema.toolsTable.name, toolName),
           ),
         );
 
-      if (tool?.toolResultTreatment === "trusted") {
+      // If no agent-tool relationship exists, default to untrusted
+      if (!agentTool) {
+        return {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: `Tool ${toolName} is not registered for this agent`,
+        };
+      }
+
+      if (agentTool.toolResultTreatment === "trusted") {
         return {
           isTrusted: true,
           isBlocked: false,
@@ -182,7 +196,7 @@ class TrustedDataPolicyModel {
         };
       }
 
-      if (tool?.toolResultTreatment === "sanitize_with_dual_llm") {
+      if (agentTool.toolResultTreatment === "sanitize_with_dual_llm") {
         return {
           isTrusted: false,
           isBlocked: false,

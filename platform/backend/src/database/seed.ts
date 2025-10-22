@@ -10,6 +10,7 @@ import {
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
 import McpCatalogModel from "@/models/mcp-catalog";
@@ -144,10 +145,14 @@ async function seedTools(): Promise<void> {
         },
       },
       description: "Send an email via Gmail",
+    };
+    const tool = await ToolModel.create(toolData);
+
+    // Create agent-tool relationship with security settings
+    await AgentToolModel.create(DEMO_AGENT_ID, tool.id, {
       allowUsageWhenUntrustedDataIsPresent: true,
       toolResultTreatment: "trusted",
-    };
-    await ToolModel.create(toolData);
+    });
     console.log("✓ Seeded gmail__sendEmail tool");
   } else {
     console.log("✓ gmail__sendEmail tool already exists, skipping");
@@ -167,10 +172,14 @@ async function seedTools(): Promise<void> {
         properties: {},
       },
       description: "Get emails from the user's Gmail inbox",
+    };
+    const tool = await ToolModel.create(toolData);
+
+    // Create agent-tool relationship with security settings
+    await AgentToolModel.create(DEMO_AGENT_ID, tool.id, {
       allowUsageWhenUntrustedDataIsPresent: true,
       toolResultTreatment: "untrusted",
-    };
-    await ToolModel.create(toolData);
+    });
     console.log("✓ Seeded gmail__getEmails tool");
   } else {
     console.log("✓ gmail__getEmails tool already exists, skipping");

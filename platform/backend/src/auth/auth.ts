@@ -1,4 +1,4 @@
-import { ac, adminRole, memberRole } from "@shared";
+import { ac, adminRole, allAvailableActions, memberRole } from "@shared";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
@@ -9,6 +9,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 
 const {
+  api: { authHeaderName },
   baseURL,
   production,
   auth: { secret, cookieDomain, trustedOrigins },
@@ -30,8 +31,21 @@ export const auth = betterAuth({
     }),
     admin(),
     apiKey({
-      enableSessionForAPIKeys: true,
-      apiKeyHeaders: ["X-Archestra-API-Key"],
+      // enableSessionForAPIKeys: true,
+      apiKeyHeaders: [authHeaderName],
+      defaultPrefix: "archestra_",
+      rateLimit: {
+        enabled: false,
+      },
+      permissions: {
+        /**
+         * NOTE: for now we will just grant all permissions to all API keys
+         *
+         * If we'd like to allow granting "scopes" to API keys, we will need to implement a more complex API-key
+         * permissions system/UI
+         */
+        defaultPermissions: allAvailableActions,
+      },
     }),
   ],
 

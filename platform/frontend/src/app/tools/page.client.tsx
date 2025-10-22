@@ -6,7 +6,7 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, MoreHorizontal, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -15,12 +15,6 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,7 +24,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import type { GetToolsResponses } from "@/lib/clients/api";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  useAgentToolPatchMutation,
+  useAllAgentTools,
+} from "@/lib/agent-tools.query";
+import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -38,16 +42,14 @@ import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
-import { useToolPatchMutation, useTools } from "@/lib/tool.query";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 import { ToolDetailsDialog } from "./_parts/tool-details-dialog";
 
-export function ToolsPage({
-  initialData,
-}: {
-  initialData?: GetToolsResponses["200"];
-}) {
+type AgentToolData = GetAllAgentToolsResponses["200"][number];
+type ToolResultTreatment = AgentToolData["toolResultTreatment"];
+
+export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   const queryClient = useQueryClient();
 
   // Prefetch policy data on mount
@@ -68,8 +70,6 @@ export function ToolsPage({
   );
 }
 
-type ToolData = GetToolsResponses["200"][number];
-
 // Reusable sort icon component
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   if (isSorted === "asc") return <ChevronUp className="h-3 w-3" />;
@@ -85,19 +85,15 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-function ToolsList({
-  initialData,
-}: {
-  initialData?: GetToolsResponses["200"];
-}) {
-  const { data: tools } = useTools({ initialData });
-  const toolPatchMutation = useToolPatchMutation();
+function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
+  const { data: agentTools } = useAllAgentTools({ initialData });
+  const agentToolPatchMutation = useAgentToolPatchMutation();
   const { data: invocationPolicies } = useToolInvocationPolicies();
   const { data: resultPolicies } = useToolResultPolicies();
 
   // Dialog state - combined into single state
   const [selectedToolForDialog, setSelectedToolForDialog] =
-    useState<ToolData | null>(null);
+    useState<AgentToolData | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,7 +103,7 @@ function ToolsList({
     { id: "createdAt", desc: true },
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTools, setSelectedTools] = useState<ToolData[]>([]);
+  const [selectedTools, setSelectedTools] = useState<AgentToolData[]>([]);
 
   // Pagination from URL
   const searchParams = useSearchParams();
@@ -121,15 +117,15 @@ function ToolsList({
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || "50");
 
-  // Filter tools based on search query
-  const filteredTools = useMemo(() => {
-    if (!searchQuery.trim()) return tools || [];
+  // Filter agent-tools based on search query
+  const filteredAgentTools = useMemo(() => {
+    if (!searchQuery.trim()) return agentTools || [];
 
     const query = searchQuery.toLowerCase();
-    return (tools || []).filter((tool) =>
-      tool.name.toLowerCase().includes(query),
+    return agentTools.filter((agentTool) =>
+      agentTool.tool?.name.toLowerCase().includes(query),
     );
-  }, [tools, searchQuery]);
+  }, [agentTools, searchQuery]);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -152,7 +148,7 @@ function ToolsList({
 
       // Calculate the current page's data from filtered tools
       const startIndex = pageIndex * pageSize;
-      const pageTools = (filteredTools || []).slice(
+      const pageTools = (filteredAgentTools || []).slice(
         startIndex,
         startIndex + pageSize,
       );
@@ -164,7 +160,7 @@ function ToolsList({
 
       setSelectedTools(newSelectedTools);
     },
-    [filteredTools, pageIndex, pageSize],
+    [filteredAgentTools, pageIndex, pageSize],
   );
 
   // Bulk action handler - unified for both types
@@ -181,7 +177,7 @@ function ToolsList({
         // Skip tools with custom policies for the relevant field
         if (field === "allowUsageWhenUntrustedDataIsPresent") {
           const hasCustomInvocationPolicy =
-            invocationPolicies?.byToolId[tool.id]?.length > 0;
+            invocationPolicies?.byAgentToolId[tool.id]?.length > 0;
           if (hasCustomInvocationPolicy) {
             skippedCount++;
             return;
@@ -190,14 +186,14 @@ function ToolsList({
 
         if (field === "toolResultTreatment") {
           const hasCustomResultPolicy =
-            resultPolicies?.byToolId[tool.id]?.length > 0;
+            resultPolicies?.byAgentToolId[tool.id]?.length > 0;
           if (hasCustomResultPolicy) {
             skippedCount++;
             return;
           }
         }
 
-        toolPatchMutation.mutate({
+        agentToolPatchMutation.mutate({
           id: tool.id,
           [field]: value,
         });
@@ -222,7 +218,7 @@ function ToolsList({
       // Keep selection active after mutations
       // Users might want to apply multiple actions to the same selection
     },
-    [selectedTools, toolPatchMutation, invocationPolicies, resultPolicies],
+    [selectedTools, agentToolPatchMutation, invocationPolicies, resultPolicies],
   );
 
   const clearSelection = useCallback(() => {
@@ -231,7 +227,7 @@ function ToolsList({
   }, []);
 
   // Column definitions - moved before early return to fix hook order
-  const columns: ColumnDef<ToolData>[] = useMemo(
+  const columns: ColumnDef<AgentToolData>[] = useMemo(
     () => [
       {
         id: "select",
@@ -251,7 +247,7 @@ function ToolsList({
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.name}`}
+            aria-label={`Select ${row.original.tool.name}`}
           />
         ),
         size: 50,
@@ -270,7 +266,7 @@ function ToolsList({
         ),
         cell: ({ row }) => (
           <div className="font-medium text-foreground truncate">
-            {row.original.name}
+            {row.original.tool.name}
           </div>
         ),
         size: 250,
@@ -300,7 +296,7 @@ function ToolsList({
         header: "In untrusted context",
         cell: ({ row }) => {
           const hasCustomPolicy =
-            invocationPolicies?.byToolId[row.original.id]?.length > 0;
+            invocationPolicies?.byAgentToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -313,13 +309,13 @@ function ToolsList({
               <Switch
                 checked={row.original.allowUsageWhenUntrustedDataIsPresent}
                 onCheckedChange={(checked) => {
-                  toolPatchMutation.mutate({
+                  agentToolPatchMutation.mutate({
                     id: row.original.id,
                     allowUsageWhenUntrustedDataIsPresent: checked,
                   });
                 }}
                 onClick={(e) => e.stopPropagation()}
-                aria-label={`Allow ${row.original.name} in untrusted context`}
+                aria-label={`Allow ${row.original.tool.name} in untrusted context`}
               />
               <span className="text-xs text-muted-foreground">
                 {row.original.allowUsageWhenUntrustedDataIsPresent
@@ -336,7 +332,7 @@ function ToolsList({
         header: "Results are",
         cell: ({ row }) => {
           const hasCustomPolicy =
-            resultPolicies?.byToolId[row.original.id]?.length > 0;
+            resultPolicies?.byAgentToolId[row.original.id]?.length > 0;
 
           if (hasCustomPolicy) {
             return (
@@ -344,7 +340,7 @@ function ToolsList({
             );
           }
 
-          const treatmentLabels = {
+          const treatmentLabels: Record<ToolResultTreatment, string> = {
             trusted: "Trusted",
             untrusted: "Untrusted",
             sanitize_with_dual_llm: "Sanitize with Dual LLM",
@@ -353,13 +349,10 @@ function ToolsList({
           return (
             <Select
               value={row.original.toolResultTreatment}
-              onValueChange={(value) => {
-                toolPatchMutation.mutate({
+              onValueChange={(value: ToolResultTreatment) => {
+                agentToolPatchMutation.mutate({
                   id: row.original.id,
-                  toolResultTreatment: value as
-                    | "trusted"
-                    | "sanitize_with_dual_llm"
-                    | "untrusted",
+                  toolResultTreatment: value,
                 });
               }}
             >
@@ -372,11 +365,11 @@ function ToolsList({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="trusted">Trusted</SelectItem>
-                <SelectItem value="untrusted">Untrusted</SelectItem>
-                <SelectItem value="sanitize_with_dual_llm">
-                  Sanitize with Dual LLM
-                </SelectItem>
+                {Object.entries(treatmentLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           );
@@ -407,7 +400,7 @@ function ToolsList({
         header: "Parameters",
         cell: ({ row }) => {
           const paramCount = Object.keys(
-            row.original.parameters?.properties || {},
+            row.original.tool.parameters?.properties || {},
           ).length;
           return (
             <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
@@ -418,154 +411,17 @@ function ToolsList({
         size: 100,
       },
     ],
-    [invocationPolicies, resultPolicies, toolPatchMutation],
+    [invocationPolicies, resultPolicies, agentToolPatchMutation],
   );
 
   // Calculate the current page's data from filtered tools - moved before component definition
   const paginatedTools = useMemo(() => {
     const startIndex = pageIndex * pageSize;
     const endIndex = startIndex + pageSize;
-    return (filteredTools || []).slice(startIndex, endIndex);
-  }, [filteredTools, pageIndex, pageSize]);
+    return filteredAgentTools.slice(startIndex, endIndex);
+  }, [filteredAgentTools, pageIndex, pageSize]);
 
-  // Early return if no tools
-  if (!tools?.length) {
-    return (
-      <div className="w-full h-full">
-        <div className="border-b border-border bg-card/30">
-          <div className="max-w-7xl mx-auto px-8 py-8">
-            <h1 className="text-2xl font-semibold tracking-tight mb-2">
-              Tools
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Here you can find the tools parsed from the interactions between
-              your agents and LLMs. If you don't see the tools you expect,
-              please ensure that your agents are properly configured to use
-              Archestra as an LLM proxy, and trigger some interactions.
-            </p>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto px-8 py-8">
-          <p className="text-muted-foreground">No tools found</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Bulk actions component
-  const BulkActions = () => {
-    const hasSelection = selectedTools.length > 0;
-
-    return (
-      <div className="mb-6 flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
-        <div className="flex items-center gap-3">
-          {hasSelection ? (
-            <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-semibold text-primary">
-                  {selectedTools.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium">
-                {selectedTools.length === 1
-                  ? "tool selected"
-                  : `tools selected`}
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              In untrusted context:
-            </span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("allowUsageWhenUntrustedDataIsPresent", true)
-                }
-                disabled={!hasSelection}
-              >
-                Allow
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction(
-                    "allowUsageWhenUntrustedDataIsPresent",
-                    false,
-                  )
-                }
-                disabled={!hasSelection}
-              >
-                Block
-              </Button>
-            </ButtonGroup>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Results are:</span>
-            <ButtonGroup>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "trusted")
-                }
-                disabled={!hasSelection}
-              >
-                Trusted
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  handleBulkAction("toolResultTreatment", "untrusted")
-                }
-                disabled={!hasSelection}
-              >
-                Untrusted
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={!hasSelection}>
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() =>
-                      handleBulkAction(
-                        "toolResultTreatment",
-                        "sanitize_with_dual_llm",
-                      )
-                    }
-                  >
-                    Sanitize with Dual LLM
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ButtonGroup>
-          </div>
-          <div className="ml-2 h-4 w-px bg-border" />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={clearSelection}
-            disabled={!hasSelection}
-          >
-            Clear selection
-          </Button>
-        </div>
-      </div>
-    );
-  };
+  const hasSelection = selectedTools.length > 0;
 
   return (
     <div className="w-full h-full">
@@ -573,10 +429,13 @@ function ToolsList({
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Tools</h1>
           <p className="text-sm text-muted-foreground">
-            Here you can find the tools parsed from the interactions between
-            your agents and LLMs. If you don't see the tools you expect, please
-            ensure that your agents are properly configured to use Archestra as
-            an LLM proxy, and trigger some interactions.
+            Tools displayed here are either detected from requests between
+            agents and LLMs, or sourced from installed MCP servers. Only tools
+            assigned to agents are shown.
+            <br />
+            <br />
+            To assign MCP server tools to an agent, navigate to the Agents page
+            and use the "Assign Tools" action.
           </p>
         </div>
       </div>
@@ -607,9 +466,123 @@ function ToolsList({
           </div>
         </div>
 
-        <BulkActions />
+        <div className="mb-6 flex items-center justify-between p-4 bg-muted/50 border border-border rounded-lg">
+          <div className="flex items-center gap-3">
+            {hasSelection ? (
+              <>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-sm font-semibold text-primary">
+                    {selectedTools.length}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">
+                  {selectedTools.length === 1
+                    ? "tool selected"
+                    : `tools selected`}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Select tools to apply bulk actions
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                In untrusted context:
+              </span>
+              <ButtonGroup>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction(
+                      "allowUsageWhenUntrustedDataIsPresent",
+                      true,
+                    )
+                  }
+                  disabled={!hasSelection}
+                >
+                  Allow
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleBulkAction(
+                      "allowUsageWhenUntrustedDataIsPresent",
+                      false,
+                    )
+                  }
+                  disabled={!hasSelection}
+                >
+                  Block
+                </Button>
+              </ButtonGroup>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Results are:
+              </span>
+              <TooltipProvider>
+                <ButtonGroup>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleBulkAction("toolResultTreatment", "trusted")
+                    }
+                    disabled={!hasSelection}
+                  >
+                    Trusted
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleBulkAction("toolResultTreatment", "untrusted")
+                    }
+                    disabled={!hasSelection}
+                  >
+                    Untrusted
+                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          handleBulkAction(
+                            "toolResultTreatment",
+                            "sanitize_with_dual_llm",
+                          )
+                        }
+                        disabled={!hasSelection}
+                      >
+                        Dual LLM
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Sanitize with Dual LLM</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </ButtonGroup>
+              </TooltipProvider>
+            </div>
+            <div className="ml-2 h-4 w-px bg-border" />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              disabled={!hasSelection}
+            >
+              Clear selection
+            </Button>
+          </div>
+        </div>
 
-        {(filteredTools?.length || 0) === 0 && searchQuery ? (
+        {(filteredAgentTools?.length || 0) === 0 && searchQuery ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="mb-2 text-lg font-semibold">No tools found</h3>
@@ -649,7 +622,7 @@ function ToolsList({
             pagination={{
               pageIndex,
               pageSize,
-              total: filteredTools?.length || 0,
+              total: filteredAgentTools?.length || 0,
             }}
             onPaginationChange={handlePaginationChange}
             rowSelection={rowSelection}
@@ -658,9 +631,9 @@ function ToolsList({
         )}
 
         <ToolDetailsDialog
-          tool={
+          agentTool={
             selectedToolForDialog
-              ? tools.find((t) => t.id === selectedToolForDialog.id) ||
+              ? agentTools.find((t) => t.id === selectedToolForDialog.id) ||
                 selectedToolForDialog
               : null
           }

@@ -10,9 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 import type {
+  GetAllAgentToolsResponses,
   GetToolInvocationPoliciesResponse,
-  GetToolsResponses,
 } from "@/lib/clients/api";
 import {
   useOperators,
@@ -21,18 +22,17 @@ import {
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
-import { useToolPatchMutation } from "@/lib/tool.query";
 import { PolicyCard } from "./policy-card";
 
 export function ToolCallPolicies({
-  tool,
+  agentTool,
 }: {
-  tool: GetToolsResponses["200"][number];
+  agentTool: GetAllAgentToolsResponses["200"][number];
 }) {
   const {
-    data: { byToolId },
+    data: { byAgentToolId },
   } = useToolInvocationPolicies();
-  const toolPatchMutation = useToolPatchMutation();
+  const agentToolPatchMutation = useAgentToolPatchMutation();
   const toolInvocationPolicyCreateMutation =
     useToolInvocationPolicyCreateMutation();
   const toolInvocationPolicyDeleteMutation =
@@ -41,9 +41,11 @@ export function ToolCallPolicies({
     useToolInvocationPolicyUpdateMutation();
   const { data: operators } = useOperators();
 
-  const policies = byToolId[tool.id] || [];
+  const policies = byAgentToolId[agentTool.id] || [];
 
-  const argumentNames = Object.keys(tool.parameters?.properties || []);
+  const argumentNames = Object.keys(
+    agentTool.tool.parameters?.properties || [],
+  );
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -63,12 +65,12 @@ export function ToolCallPolicies({
           </span>
         </div>
         <Switch
-          checked={tool.allowUsageWhenUntrustedDataIsPresent}
+          checked={agentTool.allowUsageWhenUntrustedDataIsPresent}
           onCheckedChange={() =>
-            toolPatchMutation.mutate({
-              id: tool.id,
+            agentToolPatchMutation.mutate({
+              id: agentTool.id,
               allowUsageWhenUntrustedDataIsPresent:
-                !tool.allowUsageWhenUntrustedDataIsPresent,
+                !agentTool.allowUsageWhenUntrustedDataIsPresent,
             })
           }
         />
@@ -193,9 +195,13 @@ export function ToolCallPolicies({
         variant="outline"
         className="w-full"
         onClick={() =>
-          toolInvocationPolicyCreateMutation.mutate({ toolId: tool.id })
+          toolInvocationPolicyCreateMutation.mutate({
+            agentToolId: agentTool.id,
+          })
         }
-        disabled={Object.keys(tool.parameters?.properties || {}).length === 0}
+        disabled={
+          Object.keys(agentTool.tool.parameters?.properties || {}).length === 0
+        }
         disabledText="This tool has no parameters"
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy For Tool Parameters

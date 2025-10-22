@@ -16,8 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
 import type {
-  GetToolsResponses,
+  GetAllAgentToolsResponses,
   GetTrustedDataPoliciesResponse,
 } from "@/lib/clients/api";
 import {
@@ -27,7 +28,6 @@ import {
   useToolResultPoliciesDeleteMutation,
   useToolResultPoliciesUpdateMutation,
 } from "@/lib/policy.query";
-import { useToolPatchMutation } from "@/lib/tool.query";
 import { PolicyCard } from "./policy-card";
 
 function AttributePathExamples() {
@@ -149,22 +149,22 @@ function AttributePathExamples() {
 }
 
 export function ToolResultPolicies({
-  tool,
+  agentTool,
 }: {
-  tool: GetToolsResponses["200"][number];
+  agentTool: GetAllAgentToolsResponses["200"][number];
 }) {
   const toolResultPoliciesCreateMutation =
     useToolResultPoliciesCreateMutation();
   const {
-    data: { byToolId },
+    data: { byAgentToolId },
   } = useToolResultPolicies();
   const { data: operators } = useOperators();
-  const policies = byToolId[tool.id] || [];
+  const policies = byAgentToolId[agentTool.id] || [];
   const toolResultPoliciesUpdateMutation =
     useToolResultPoliciesUpdateMutation();
   const toolResultPoliciesDeleteMutation =
     useToolResultPoliciesDeleteMutation();
-  const toolPatchMutation = useToolPatchMutation();
+  const agentToolPatchMutation = useAgentToolPatchMutation();
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
@@ -193,12 +193,12 @@ export function ToolResultPolicies({
             DEFAULT
           </div>
           <Select
-            value={tool.toolResultTreatment}
+            value={agentTool.toolResultTreatment}
             onValueChange={(
               value: "trusted" | "sanitize_with_dual_llm" | "untrusted",
             ) => {
-              toolPatchMutation.mutate({
-                id: tool.id,
+              agentToolPatchMutation.mutate({
+                id: agentTool.id,
                 toolResultTreatment: value,
               });
             }}
@@ -321,7 +321,7 @@ export function ToolResultPolicies({
         variant="outline"
         className="w-full"
         onClick={() =>
-          toolResultPoliciesCreateMutation.mutate({ toolId: tool.id })
+          toolResultPoliciesCreateMutation.mutate({ agentToolId: agentTool.id })
         }
       >
         <Plus className="w-3.5 h-3.5 mr-1" /> Add Tool Result Policy

@@ -34,3 +34,8 @@ export const EMAIL_PLACEHOLDER = "admin@example.com";
 export const PASSWORD_PLACEHOLDER = "password";
 
 export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";
+
+/**
+ * NOTE: THIS IS ABSOLUTELY TEMPORARY.. remove this once we have full/generic support for MCP servers.
+ */
+export const GITHUB_MCP_SERVER_NAME = "GitHub MCP Server";

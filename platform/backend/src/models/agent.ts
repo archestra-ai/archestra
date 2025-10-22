@@ -42,8 +42,12 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
         schema.toolsTable,
-        eq(schema.agentsTable.id, schema.toolsTable.agentId),
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .$dynamic();
 

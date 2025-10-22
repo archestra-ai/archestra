@@ -30,7 +30,7 @@ export type Permission = `${Resource}:${Action}`;
 
 export type Role = "admin" | "member";
 
-const allAvailableActions: Record<Resource, Action[]> = {
+export const allAvailableActions: Record<Resource, Action[]> = {
   agent: ["create", "read", "update", "delete"],
   tool: ["create", "read", "update", "delete"],
   policy: ["create", "read", "update", "delete"],

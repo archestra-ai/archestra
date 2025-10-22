@@ -2,7 +2,7 @@ import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "@/database";
 import type { ToolInvocation } from "@/types";
-import ToolModel from "./tool";
+import AgentToolModel from "./agent-tool";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -35,15 +35,6 @@ class ToolInvocationPolicyModel {
       .from(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.id, id));
     return policy || null;
-  }
-
-  static async findByToolId(
-    toolId: string,
-  ): Promise<ToolInvocation.ToolInvocationPolicy[]> {
-    return db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
   }
 
   static async update(
@@ -83,17 +74,24 @@ class ToolInvocationPolicyModel {
       .select({
         ...getTableColumns(schema.toolInvocationPoliciesTable),
         allowUsageWhenUntrustedDataIsPresent:
-          schema.toolsTable.allowUsageWhenUntrustedDataIsPresent,
+          schema.agentToolsTable.allowUsageWhenUntrustedDataIsPresent,
       })
-      .from(schema.toolsTable)
+      .from(schema.agentToolsTable)
       .innerJoin(
         schema.toolInvocationPoliciesTable,
-        eq(schema.toolsTable.id, schema.toolInvocationPoliciesTable.toolId),
+        eq(
+          schema.agentToolsTable.id,
+          schema.toolInvocationPoliciesTable.agentToolId,
+        ),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
       .where(
         // Filter to policies that match the agent and tool
         and(
-          eq(schema.toolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
         ),
       );
@@ -105,12 +103,15 @@ class ToolInvocationPolicyModel {
         ? applicablePoliciesForAgent[0].allowUsageWhenUntrustedDataIsPresent
         : null;
 
-    // If we don't have the tool config from policies, fetch it directly
+    // If we don't have the tool config from policies, fetch it from agent-tool relationship
     if (allowUsageWhenUntrustedDataIsPresent === null) {
-      const tool = await ToolModel.findByName(toolName);
-      if (tool) {
+      const securityConfig = await AgentToolModel.getSecurityConfig(
+        agentId,
+        toolName,
+      );
+      if (securityConfig) {
         allowUsageWhenUntrustedDataIsPresent =
-          tool.allowUsageWhenUntrustedDataIsPresent;
+          securityConfig.allowUsageWhenUntrustedDataIsPresent;
       }
     }
 

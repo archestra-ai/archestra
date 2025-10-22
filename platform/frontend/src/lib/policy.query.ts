@@ -25,16 +25,19 @@ export function useToolInvocationPolicies() {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byAgentToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          acc[policy.agentToolId] = [
+            ...(acc[policy.agentToolId] || []),
+            policy,
+          ];
           return acc;
         },
         {} as Record<string, GetToolInvocationPoliciesResponse["200"][]>,
       );
       return {
         all,
-        byToolId,
+        byAgentToolId,
       };
     },
   });
@@ -61,10 +64,10 @@ export function useToolInvocationPolicyDeleteMutation() {
 export function useToolInvocationPolicyCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ toolId }: { toolId: string }) =>
+    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
       await createToolInvocationPolicy({
         body: {
-          toolId,
+          agentToolId,
           argumentName: "",
           operator: "equal",
           value: "",
@@ -100,16 +103,19 @@ export function useToolResultPolicies() {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byAgentToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          acc[policy.agentToolId] = [
+            ...(acc[policy.agentToolId] || []),
+            policy,
+          ];
           return acc;
         },
         {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
       );
       return {
         all,
-        byToolId,
+        byAgentToolId,
       };
     },
   });
@@ -118,10 +124,10 @@ export function useToolResultPolicies() {
 export function useToolResultPoliciesCreateMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ toolId }: { toolId: string }) =>
+    mutationFn: async ({ agentToolId }: { agentToolId: string }) =>
       await createTrustedDataPolicy({
         body: {
-          toolId,
+          agentToolId,
           description: "",
           attributePath: "",
           operator: "equal",
@@ -176,16 +182,19 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byAgentToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          acc[policy.agentToolId] = [
+            ...(acc[policy.agentToolId] || []),
+            policy,
+          ];
           return acc;
         },
         {} as Record<string, GetToolInvocationPoliciesResponse["200"][]>,
       );
       return {
         all,
-        byToolId,
+        byAgentToolId,
       };
     },
   });
@@ -196,16 +205,19 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byToolId = all.reduce(
+      const byAgentToolId = all.reduce(
         (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
+          acc[policy.agentToolId] = [
+            ...(acc[policy.agentToolId] || []),
+            policy,
+          ];
           return acc;
         },
         {} as Record<string, GetTrustedDataPoliciesResponse["200"][]>,
       );
       return {
         all,
-        byToolId,
+        byAgentToolId,
       };
     },
   });

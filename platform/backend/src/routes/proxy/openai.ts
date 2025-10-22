@@ -6,6 +6,7 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
+import { trackLLMRequest, trackLLMRequestDuration } from "@/utils/metrics";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
@@ -90,12 +91,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
   ) => {
     const { messages, tools, stream } = body;
+    const startTime = Date.now();
+    const model = body.model;
 
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
       if (!agent) {
+        // Track failed LLM request due to missing agent
+        trackLLMRequest("openai", body.model, "error");
         return reply.status(404).send({
           error: {
             message: `Agent with ID ${agentId} not found`,
@@ -438,10 +443,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           response,
         });
 
+        // Track successful LLM request
+        const duration = (Date.now() - startTime) / 1000;
+        trackLLMRequest("openai", model, "success");
+        trackLLMRequestDuration("openai", model, duration);
+
         return reply.send(response);
       }
     } catch (error) {
       fastify.log.error(error);
+
+      // Track failed LLM request
+      trackLLMRequest("openai", model, "error");
 
       const statusCode =
         error instanceof Error && "status" in error

@@ -123,7 +123,8 @@ export function UnassignedToolsList({
   const columns: ColumnDef<UnassignedToolData>[] = useMemo(
     () => [
       {
-        accessorKey: "name",
+        id: "name",
+        accessorFn: (row) => row.tool.name,
         header: ({ column }) => (
           <Button
             variant="ghost"

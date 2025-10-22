@@ -198,7 +198,8 @@ export function AssignedToolsList({
         size: 50,
       },
       {
-        accessorKey: "name",
+        id: "name",
+        accessorFn: (row) => row.tool.name,
         header: ({ column }) => (
           <Button
             variant="ghost"

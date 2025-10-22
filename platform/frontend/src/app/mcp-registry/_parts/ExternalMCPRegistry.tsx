@@ -34,6 +34,7 @@ import {
   useMcpServerVersions,
 } from "@/lib/mcp-registry-external.query";
 import { DetailsDialog } from "./details-dialog";
+import { TransportBadges } from "./transport-badges";
 
 // Server card component that handles version fetching for a single server
 function ServerCard({
@@ -165,8 +166,11 @@ function ServerCard({
             )}
           </div>
         </div>
+
+        <TransportBadges server={displayedServer} />
+
         {displayedServer.server.title && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-2">
             {displayedServer.server.title}
           </p>
         )}
@@ -262,7 +266,10 @@ export default function McpCatalogPage({
 
   const handleAddToCatalog = async (serverResponse: ServerResponse) => {
     try {
-      await createMutation.mutateAsync({ name: serverResponse.server.name });
+      await createMutation.mutateAsync({
+        name: serverResponse.server.name,
+        version: serverResponse.server.version,
+      });
       toast.success(
         `Added "${serverResponse.server.name}" to your MCP servers`,
       );

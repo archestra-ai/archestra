@@ -25,7 +25,7 @@ export function useMcpCatalog(params?: {
 export function useCreateMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { name: string }) => {
+    mutationFn: async (data: { name: string; version?: string }) => {
       const response = await createMcpCatalogItem({ body: data });
       return response.data;
     },

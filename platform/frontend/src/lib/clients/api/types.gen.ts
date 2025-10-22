@@ -4660,6 +4660,7 @@ export type GetMcpCatalogResponses = {
     200: Array<{
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4678,6 +4679,7 @@ export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogRe
 export type CreateMcpCatalogItemData = {
     body: {
         name: string;
+        version?: string | null;
         description?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
@@ -4713,6 +4715,7 @@ export type CreateMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4810,6 +4813,7 @@ export type GetMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;
@@ -4828,6 +4832,7 @@ export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpC
 export type UpdateMcpCatalogItemData = {
     body?: {
         name?: string;
+        version?: string | null;
         description?: string | null;
         repository?: string | null;
         installationCommand?: string | null;
@@ -4874,6 +4879,7 @@ export type UpdateMcpCatalogItemResponses = {
     200: {
         id: string;
         name: string;
+        version: string | null;
         description: string | null;
         repository: string | null;
         installationCommand: string | null;

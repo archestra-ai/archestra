@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -269,7 +270,14 @@ export function InternalMCPRegistry({
             <div key={item.id} className="rounded-lg border p-4 flex flex-col">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-h-[3rem]">
-                  <h3 className="font-medium">{item.name}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-medium">{item.name}</h3>
+                    {item.version && (
+                      <Badge variant="secondary" className="text-xs">
+                        v{item.version}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Created:{" "}
                     {formatDate({

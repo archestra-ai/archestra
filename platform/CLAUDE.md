@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Dual LLM Config**: http://localhost:3000/dual-llm
 - **Tilt UI**: http://localhost:10350/
 - **Drizzle Studio**: https://local.drizzle.studio/
+- **MCP Gateway**: http://localhost:9000/mcp/{agentId}
 
 ## Common Commands
 

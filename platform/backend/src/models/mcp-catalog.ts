@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertMcpCatalog, McpCatalog, UpdateMcpCatalog } from "@/types";
+import McpServerModel from "./mcp-server";
 
 class McpCatalogModel {
   static async create(catalogItem: InsertMcpCatalog): Promise<McpCatalog> {
@@ -48,6 +49,15 @@ class McpCatalogModel {
   }
 
   static async delete(id: string): Promise<boolean> {
+    // First, find all servers associated with this catalog item
+    const servers = await McpServerModel.findByCatalogId(id);
+
+    // Delete each server (which will cascade to tools)
+    for (const server of servers) {
+      await McpServerModel.delete(server.id);
+    }
+
+    // Then delete the catalog entry itself
     const result = await db
       .delete(schema.mcpCatalogTable)
       .where(eq(schema.mcpCatalogTable.id, id));

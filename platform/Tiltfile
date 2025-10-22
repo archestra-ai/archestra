@@ -101,39 +101,6 @@ local_resource(
   labels=['database']
 )
 
-local_resource(
-  'db-migrate-and-seed',
-  # NOTE: we need to cd into the backend directory to run the migrate command
-  # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
-  # propogate the required environment variables (ie. DATABASE_URL)
-  # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
-  cmd='''
-    cd backend
-    for i in {1..30}; do
-      if pnpm db:migrate 2>/dev/null; then
-        echo "✅ Migration completed successfully"
-        echo "🌱 Running database seed..."
-        if pnpm db:seed; then
-          echo "✅ Seed completed successfully"
-          exit 0
-        else
-          echo "❌ Seed failed"
-          exit 1
-        fi
-      fi
-      echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
-      sleep 2
-    done
-    echo "❌ Migration failed after 30 attempts"
-    exit 1
-  ''',
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-  deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
-  resource_deps=['pnpm-install', 'postgresql'],
-  labels=['database']
-)
-
 # prod bundle
 if is_prod:
   local_resource(

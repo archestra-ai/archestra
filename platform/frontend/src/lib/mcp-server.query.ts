@@ -43,6 +43,10 @@ export function useDeleteMcpServer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since MCP server deletion cascades to tools
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
     },
   });
 }

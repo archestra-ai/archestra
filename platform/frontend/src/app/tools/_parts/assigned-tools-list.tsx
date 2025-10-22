@@ -98,11 +98,49 @@ export function AssignedToolsList({
     );
   }, [agentTools, searchQuery]);
 
+  const sortedAndFilteredTools = useMemo(() => {
+    if (sorting.length === 0) return filteredAgentTools;
+
+    const sorted = [...filteredAgentTools].sort((a, b) => {
+      for (const sort of sorting) {
+        let aValue: string | number;
+        let bValue: string | number;
+
+        switch (sort.id) {
+          case "name":
+            aValue = a.tool.name;
+            bValue = b.tool.name;
+            break;
+          case "agent":
+            aValue = a.agent?.name || "";
+            bValue = b.agent?.name || "";
+            break;
+          case "origin":
+            aValue = a.tool.mcpServerName ? "1-mcp" : "2-intercepted";
+            bValue = b.tool.mcpServerName ? "1-mcp" : "2-intercepted";
+            break;
+          case "createdAt":
+            aValue = a.createdAt;
+            bValue = b.createdAt;
+            break;
+          default:
+            continue;
+        }
+
+        if (aValue < bValue) return sort.desc ? 1 : -1;
+        if (aValue > bValue) return sort.desc ? -1 : 1;
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [filteredAgentTools, sorting]);
+
   const paginatedTools = useMemo(() => {
     const startIndex = pageIndex * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredAgentTools.slice(startIndex, endIndex);
-  }, [filteredAgentTools, pageIndex, pageSize]);
+    return sortedAndFilteredTools.slice(startIndex, endIndex);
+  }, [sortedAndFilteredTools, pageIndex, pageSize]);
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -122,7 +160,7 @@ export function AssignedToolsList({
       setRowSelection(newRowSelection);
 
       const startIndex = pageIndex * pageSize;
-      const pageTools = filteredAgentTools.slice(
+      const pageTools = sortedAndFilteredTools.slice(
         startIndex,
         startIndex + pageSize,
       );
@@ -133,7 +171,7 @@ export function AssignedToolsList({
 
       setSelectedTools(newSelectedTools);
     },
-    [filteredAgentTools, pageIndex, pageSize],
+    [sortedAndFilteredTools, pageIndex, pageSize],
   );
 
   const handleBulkAction = useCallback(
@@ -280,7 +318,8 @@ export function AssignedToolsList({
       },
       {
         id: "origin",
-        accessorFn: (row) => (row.tool.mcpServerName ? "mcp" : "intercepted"),
+        accessorFn: (row) =>
+          row.tool.mcpServerName ? "1-mcp" : "2-intercepted",
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -669,11 +708,12 @@ export function AssignedToolsList({
           }}
           sorting={sorting}
           onSortingChange={setSorting}
+          manualSorting={true}
           manualPagination={true}
           pagination={{
             pageIndex,
             pageSize,
-            total: filteredAgentTools.length,
+            total: sortedAndFilteredTools.length,
           }}
           onPaginationChange={handlePaginationChange}
           rowSelection={rowSelection}

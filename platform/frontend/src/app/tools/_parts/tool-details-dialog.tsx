@@ -1,11 +1,18 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
 import { ToolCallPolicies } from "./tool-call-policies";
@@ -47,6 +54,40 @@ export function ToolDetailsDialog({
                 </div>
                 <div className="text-sm text-foreground mt-0.5">
                   {agentTool.agent.name || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Origin
+                </div>
+                <div className="mt-0.5">
+                  {agentTool.tool.mcpServerName ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="default" className="bg-indigo-500">
+                            MCP Server
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{agentTool.tool.mcpServerName}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="secondary" className="bg-orange-800">
+                            Intercepted
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Tool discovered via agent-LLM communication</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
               </div>
               <div>

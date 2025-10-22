@@ -11,6 +11,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/loading";
+import { TruncatedText } from "@/components/truncated-text";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -285,11 +287,59 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="text-sm text-muted-foreground truncate">
-            {row.original.agent?.name || "-"}
-          </div>
+          <TruncatedText message={row.original.agent?.name || "-"} />
         ),
         size: 150,
+      },
+      {
+        id: "origin",
+        accessorFn: (row) => (row.tool.mcpServerName ? "mcp" : "intercepted"),
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Origin
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        ),
+        cell: ({ row }) => {
+          const mcpServerName = row.original.tool.mcpServerName;
+
+          if (mcpServerName) {
+            return (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="default" className="bg-indigo-500">
+                      MCP Server
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{mcpServerName}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          }
+
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-orange-800">
+                    Intercepted
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Tool discovered via agent-LLM communication</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
+        size: 120,
       },
       {
         id: "allowWithUntrusted",
@@ -420,6 +470,8 @@ function ToolsList({ initialData }: { initialData?: AgentToolData[] }) {
     const endIndex = startIndex + pageSize;
     return filteredAgentTools.slice(startIndex, endIndex);
   }, [filteredAgentTools, pageIndex, pageSize]);
+
+  console.log({ paginatedTools });
 
   const hasSelection = selectedTools.length > 0;
 

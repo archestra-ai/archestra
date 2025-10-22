@@ -25,6 +25,15 @@ class McpCatalogModel {
     return catalogItem || null;
   }
 
+  static async findByName(name: string): Promise<McpCatalog | null> {
+    const [catalogItem] = await db
+      .select()
+      .from(schema.mcpCatalogTable)
+      .where(eq(schema.mcpCatalogTable.name, name));
+
+    return catalogItem || null;
+  }
+
   static async update(
     id: string,
     catalogItem: Partial<UpdateMcpCatalog>,

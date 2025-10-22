@@ -222,7 +222,11 @@ function ServerCard({
             size="sm"
             className="w-full"
           >
-            {isInCatalog ? "Enabled" : isAdding ? "Adding..." : "Enable"}
+            {isInCatalog
+              ? "Added"
+              : isAdding
+                ? "Adding..."
+                : "Add to Your Registry"}
           </Button>
         </div>
       </CardContent>

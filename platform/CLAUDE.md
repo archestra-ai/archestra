@@ -380,10 +380,15 @@ The production backend provides:
 
 The backend integrates advanced security guardrails:
 
-- **MCP Tool Injection**: Automatic injection of Model Context Protocol (MCP) tools at the proxy level
+- **MCP Tool Injection and Execution**: Automatic injection and remote execution of Model Context Protocol (MCP) tools at the proxy level
   - Tools from incoming requests are persisted to the database
   - Agent-assigned MCP tools are automatically injected into LLM requests
   - Assigned tools take priority over request tools with the same name
+  - **Remote Tool Execution**: MCP tools can be executed remotely through integrated MCP servers
+    - Currently supports GitHub MCP server for remote execution
+    - Tool execution results are automatically returned to the LLM for continued processing
+    - Persistent MCP client connections for better performance
+    - Non-streaming execution only (streaming support coming soon)
   - Supports OpenAI and Anthropic providers (Gemini support prepared)
   - Tools are linked to agents via the agent_tools junction table
 - **Dual LLM Pattern**: Quarantined + privileged LLMs for prompt injection detection

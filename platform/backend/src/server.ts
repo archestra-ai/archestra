@@ -19,6 +19,8 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import { seedDatabase } from "./database/seed";
+import { getMetrics } from "./metrics";
+import { registerMetricsMiddleware } from "./middleware/metrics-middleware";
 import * as routes from "./routes";
 
 const {
@@ -115,10 +117,23 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
+
+    // Register metrics middleware
+    registerMetricsMiddleware(fastify);
+
+    // Health check endpoints (no auth required)
     fastify.get("/health", async () => ({
       status: name,
       version,
     }));
+
+    // Prometheus metrics endpoint (no auth required)
+    fastify.get("/metrics", async () => {
+      return await getMetrics();
+    });
+
+    // Register health routes (no auth required for health checks)
+    fastify.register(routes.healthRoutes);
 
     fastify.addHook("preHandler", authMiddleware.handle);
 

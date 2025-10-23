@@ -16,9 +16,9 @@ import {
   FRAMEWORK_LABELS,
   PROVIDER_INFO,
 } from "../../../../shared";
-import CopyButton from "../ui/copy-button";
-import OnboardingStep from "../ui/onboarding-step";
-import OptionButton from "../ui/option-button";
+import CopyButton from "../copy-button";
+import OnboardingStep from "../onboarding-step";
+import OptionButton from "../option-button";
 
 export type OnboardingWizardHandle = {
   next: () => void;

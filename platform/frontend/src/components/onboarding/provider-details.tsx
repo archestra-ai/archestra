@@ -1,8 +1,8 @@
 "use client";
 
 import { PROVIDER_INFO, type ProviderInfo } from "../../../../shared";
+import CopyButton from "../copy-button";
 import { Button } from "../ui/button";
-import CopyButton from "../ui/copy-button";
 
 export default function ProviderDetails({
   provider,

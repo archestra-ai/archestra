@@ -2074,37 +2074,617 @@ export type GetHealthResponses = {
     200: unknown;
 };
 
-export type GetApiAuthBy__Data = {
+export type GetAgentsData = {
     body?: never;
-    path: {
-        '*': string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/auth/{*}';
+    url: '/api/agents';
 };
 
-export type GetApiAuthBy__Responses = {
+export type GetAgentsErrors = {
     /**
      * Default Response
      */
-    200: unknown;
-};
-
-export type PostApiAuthBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
     };
-    query?: never;
-    url: '/api/auth/{*}';
-};
-
-export type PostApiAuthBy__Responses = {
     /**
      * Default Response
      */
-    200: unknown;
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
+
+export type GetAgentsError = GetAgentsErrors[keyof GetAgentsErrors];
+
+export type GetAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
+    }>;
+};
+
+export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
+
+export type CreateAgentData = {
+    body: {
+        name: string;
+        isDemo?: boolean;
+        usersWithAccess: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agents';
+};
+
+export type CreateAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateAgentError = CreateAgentErrors[keyof CreateAgentErrors];
+
+export type CreateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
+    };
+};
+
+export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type DeleteAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type DeleteAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
+
+export type DeleteAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
+
+export type GetAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type GetAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
+
+export type GetAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
+    };
+};
+
+export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
+
+export type UpdateAgentData = {
+    body?: {
+        name?: string;
+        isDemo?: boolean;
+        usersWithAccess?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}';
+};
+
+export type UpdateAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateAgentError = UpdateAgentErrors[keyof UpdateAgentErrors];
+
+export type UpdateAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
+    };
+};
+
+export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetAllAgentToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent-tools';
+};
+
+export type GetAllAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAllAgentToolsError = GetAllAgentToolsErrors[keyof GetAllAgentToolsErrors];
+
+export type GetAllAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        allowUsageWhenUntrustedDataIsPresent: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt: string;
+        updatedAt: string;
+        agent: {
+            id: string;
+            name: string;
+        };
+        tool: {
+            id: string;
+            name: string;
+            description: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            createdAt: string;
+            updatedAt: string;
+            mcpServerId: string | null;
+            mcpServerName: string | null;
+        };
+    }>;
+};
+
+export type GetAllAgentToolsResponse = GetAllAgentToolsResponses[keyof GetAllAgentToolsResponses];
+
+export type UnassignToolFromAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/{toolId}';
+};
+
+export type UnassignToolFromAgentErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UnassignToolFromAgentError = UnassignToolFromAgentErrors[keyof UnassignToolFromAgentErrors];
+
+export type UnassignToolFromAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
+
+export type AssignToolToAgentData = {
+    body?: never;
+    path: {
+        agentId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/{toolId}';
+};
+
+export type AssignToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AssignToolToAgentError = AssignToolToAgentErrors[keyof AssignToolToAgentErrors];
+
+export type AssignToolToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
+
+export type GetAgentToolsData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools';
+};
+
+export type GetAgentToolsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentToolsError = GetAgentToolsErrors[keyof GetAgentToolsErrors];
+
+export type GetAgentToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string | null;
+        mcpServerId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAgentToolsResponse = GetAgentToolsResponses[keyof GetAgentToolsResponses];
+
+export type UpdateAgentToolData = {
+    body?: {
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agent-tools/{id}';
+};
+
+export type UpdateAgentToolErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateAgentToolError = UpdateAgentToolErrors[keyof UpdateAgentToolErrors];
+
+export type UpdateAgentToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id?: string;
+        agentId?: string;
+        toolId?: string;
+        allowUsageWhenUntrustedDataIsPresent?: boolean;
+        toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        createdAt?: string;
+        updatedAt?: string;
+    };
+};
+
+export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
 export type DeleteV1AnthropicData = {
     body?: never;
@@ -2448,252 +3028,183 @@ export type AnthropicMessagesWithAgentResponses = {
 
 export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
 
-export type DeleteV1OpenaiData = {
+export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/v1/openai/';
+    url: '/api/auth/default-credentials-status';
 };
 
-export type DeleteV1OpenaiResponses = {
+export type GetDefaultCredentialsStatusErrors = {
     /**
      * Default Response
      */
-    200: unknown;
+    500: {
+        enabled: boolean;
+    };
 };
 
-export type GetV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
+export type GetDefaultCredentialsStatusError = GetDefaultCredentialsStatusErrors[keyof GetDefaultCredentialsStatusErrors];
 
-export type GetV1OpenaiResponses = {
+export type GetDefaultCredentialsStatusResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    200: {
+        enabled: boolean;
+    };
 };
 
-export type HeadV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
+export type GetDefaultCredentialsStatusResponse = GetDefaultCredentialsStatusResponses[keyof GetDefaultCredentialsStatusResponses];
 
-export type HeadV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type OptionsV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PatchV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PostV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PutV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1OpenaiBy__Data = {
+export type GetApiAuthBy__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/v1/openai/{*}';
+    url: '/api/auth/{*}';
 };
 
-export type DeleteV1OpenaiBy__Responses = {
+export type GetApiAuthBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type GetV1OpenaiBy__Data = {
+export type PostApiAuthBy__Data = {
     body?: never;
     path: {
         '*': string;
     };
     query?: never;
-    url: '/v1/openai/{*}';
+    url: '/api/auth/{*}';
 };
 
-export type GetV1OpenaiBy__Responses = {
+export type PostApiAuthBy__Responses = {
     /**
      * Default Response
      */
     200: unknown;
 };
 
-export type HeadV1OpenaiBy__Data = {
+export type GetOperatorsData = {
     body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type HeadV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type OptionsV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PatchV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PostV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PutV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OpenAiChatCompletionsWithDefaultAgentData = {
-    body?: OpenAiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for OpenAI
-         */
-        authorization: string;
-    };
     path?: never;
     query?: never;
-    url: '/v1/openai/chat/completions';
+    url: '/api/autonomy-policies/operators';
 };
 
-export type OpenAiChatCompletionsWithDefaultAgentErrors = {
+export type GetOperatorsResponses = {
     /**
      * Default Response
      */
-    400: {
+    200: Array<{
+        value: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        label: string;
+    }>;
+};
+
+export type GetOperatorsResponse = GetOperatorsResponses[keyof GetOperatorsResponses];
+
+export type GetToolInvocationPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation';
+};
+
+export type GetToolInvocationPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
         };
     };
+};
+
+export type GetToolInvocationPoliciesError = GetToolInvocationPoliciesErrors[keyof GetToolInvocationPoliciesErrors];
+
+export type GetToolInvocationPoliciesResponses = {
     /**
      * Default Response
      */
-    403: {
+    200: Array<{
+        id: string;
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+        reason: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesResponses[keyof GetToolInvocationPoliciesResponses];
+
+export type CreateToolInvocationPolicyData = {
+    body: {
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+        reason?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation';
+};
+
+export type CreateToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    500: {
         error: string | {
             message: string;
             type: string;
         };
     };
+};
+
+export type CreateToolInvocationPolicyError = CreateToolInvocationPolicyErrors[keyof CreateToolInvocationPolicyErrors];
+
+export type CreateToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+        reason: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateToolInvocationPolicyResponse = CreateToolInvocationPolicyResponses[keyof CreateToolInvocationPolicyResponses];
+
+export type DeleteToolInvocationPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type DeleteToolInvocationPolicyErrors = {
     /**
      * Default Response
      */
@@ -2714,50 +3225,694 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
     };
 };
 
-export type OpenAiChatCompletionsWithDefaultAgentError = OpenAiChatCompletionsWithDefaultAgentErrors[keyof OpenAiChatCompletionsWithDefaultAgentErrors];
+export type DeleteToolInvocationPolicyError = DeleteToolInvocationPolicyErrors[keyof DeleteToolInvocationPolicyErrors];
 
-export type OpenAiChatCompletionsWithDefaultAgentResponses = {
+export type DeleteToolInvocationPolicyResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponse;
+    200: {
+        success: boolean;
+    };
 };
 
-export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
+export type DeleteToolInvocationPolicyResponse = DeleteToolInvocationPolicyResponses[keyof DeleteToolInvocationPolicyResponses];
 
-export type OpenAiChatCompletionsWithAgentData = {
-    body?: OpenAiChatCompletionRequestInput;
-    headers: {
-        /**
-         * The user agent of the client
-         */
-        'user-agent'?: string;
-        /**
-         * Bearer token for OpenAI
-         */
-        authorization: string;
+export type GetToolInvocationPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type GetToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetToolInvocationPolicyError = GetToolInvocationPolicyErrors[keyof GetToolInvocationPolicyErrors];
+
+export type GetToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+        reason: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[keyof GetToolInvocationPolicyResponses];
+
+export type UpdateToolInvocationPolicyData = {
+    body?: {
+        agentToolId?: string;
+        argumentName?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+        action?: 'allow_when_context_is_untrusted' | 'block_always';
+        reason?: string | null;
     };
     path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/autonomy-policies/tool-invocation/{id}';
+};
+
+export type UpdateToolInvocationPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateToolInvocationPolicyError = UpdateToolInvocationPolicyErrors[keyof UpdateToolInvocationPolicyErrors];
+
+export type UpdateToolInvocationPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        argumentName: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'allow_when_context_is_untrusted' | 'block_always';
+        reason: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateToolInvocationPolicyResponse = UpdateToolInvocationPolicyResponses[keyof UpdateToolInvocationPolicyResponses];
+
+export type GetTrustedDataPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies';
+};
+
+export type GetTrustedDataPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTrustedDataPoliciesError = GetTrustedDataPoliciesErrors[keyof GetTrustedDataPoliciesErrors];
+
+export type GetTrustedDataPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[keyof GetTrustedDataPoliciesResponses];
+
+export type CreateTrustedDataPolicyData = {
+    body: {
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/trusted-data-policies';
+};
+
+export type CreateTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTrustedDataPolicyError = CreateTrustedDataPolicyErrors[keyof CreateTrustedDataPolicyErrors];
+
+export type CreateTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateTrustedDataPolicyResponse = CreateTrustedDataPolicyResponses[keyof CreateTrustedDataPolicyResponses];
+
+export type DeleteTrustedDataPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type DeleteTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTrustedDataPolicyError = DeleteTrustedDataPolicyErrors[keyof DeleteTrustedDataPolicyErrors];
+
+export type DeleteTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTrustedDataPolicyResponse = DeleteTrustedDataPolicyResponses[keyof DeleteTrustedDataPolicyResponses];
+
+export type GetTrustedDataPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type GetTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTrustedDataPolicyError = GetTrustedDataPolicyErrors[keyof GetTrustedDataPolicyErrors];
+
+export type GetTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof GetTrustedDataPolicyResponses];
+
+export type UpdateTrustedDataPolicyData = {
+    body?: {
+        agentToolId?: string;
+        description?: string;
+        attributePath?: string;
+        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value?: string;
+        action?: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/trusted-data-policies/{id}';
+};
+
+export type UpdateTrustedDataPolicyErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTrustedDataPolicyError = UpdateTrustedDataPolicyErrors[keyof UpdateTrustedDataPolicyErrors];
+
+export type UpdateTrustedDataPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentToolId: string;
+        description: string;
+        attributePath: string;
+        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
+        value: string;
+        action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
+
+export type GetDefaultDualLlmConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config/default';
+};
+
+export type GetDefaultDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDefaultDualLlmConfigError = GetDefaultDualLlmConfigErrors[keyof GetDefaultDualLlmConfigErrors];
+
+export type GetDefaultDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        enabled: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetDefaultDualLlmConfigResponse = GetDefaultDualLlmConfigResponses[keyof GetDefaultDualLlmConfigResponses];
+
+export type GetDualLlmConfigsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config';
+};
+
+export type GetDualLlmConfigsErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmConfigsError = GetDualLlmConfigsErrors[keyof GetDualLlmConfigsErrors];
+
+export type GetDualLlmConfigsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        enabled: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDualLlmConfigsResponses];
+
+export type CreateDualLlmConfigData = {
+    body: {
+        enabled?: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/dual-llm-config';
+};
+
+export type CreateDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateDualLlmConfigError = CreateDualLlmConfigErrors[keyof CreateDualLlmConfigErrors];
+
+export type CreateDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        enabled: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateDualLlmConfigResponse = CreateDualLlmConfigResponses[keyof CreateDualLlmConfigResponses];
+
+export type DeleteDualLlmConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type DeleteDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteDualLlmConfigError = DeleteDualLlmConfigErrors[keyof DeleteDualLlmConfigErrors];
+
+export type DeleteDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteDualLlmConfigResponse = DeleteDualLlmConfigResponses[keyof DeleteDualLlmConfigResponses];
+
+export type GetDualLlmConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type GetDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmConfigError = GetDualLlmConfigErrors[keyof GetDualLlmConfigErrors];
+
+export type GetDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        enabled: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
+
+export type UpdateDualLlmConfigData = {
+    body?: {
+        enabled?: boolean;
+        mainAgentPrompt?: string;
+        quarantinedAgentPrompt?: string;
+        summaryPrompt?: string;
+        maxRounds?: number;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-config/{id}';
+};
+
+export type UpdateDualLlmConfigErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateDualLlmConfigError = UpdateDualLlmConfigErrors[keyof UpdateDualLlmConfigErrors];
+
+export type UpdateDualLlmConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        enabled: boolean;
+        mainAgentPrompt: string;
+        quarantinedAgentPrompt: string;
+        summaryPrompt: string;
+        maxRounds: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];
+
+export type GetDualLlmResultByToolCallIdData = {
+    body?: never;
+    path: {
+        toolCallId: string;
+    };
+    query?: never;
+    url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}';
+};
+
+export type GetDualLlmResultByToolCallIdErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDualLlmResultByToolCallIdError = GetDualLlmResultByToolCallIdErrors[keyof GetDualLlmResultByToolCallIdErrors];
+
+export type GetDualLlmResultByToolCallIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
         agentId: string;
-    };
-    query?: never;
-    url: '/v1/openai/{agentId}/chat/completions';
+        toolCallId: string;
+        conversations: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        result: string;
+        createdAt: string;
+    } | null;
 };
 
-export type OpenAiChatCompletionsWithAgentErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: string | {
-            message: string;
-            type: string;
-        };
+export type GetDualLlmResultByToolCallIdResponse = GetDualLlmResultByToolCallIdResponses[keyof GetDualLlmResultByToolCallIdResponses];
+
+export type GetDualLlmResultsByInteractionData = {
+    body?: never;
+    path: {
+        interactionId: string;
     };
+    query?: never;
+    url: '/api/dual-llm-results/by-interaction/{interactionId}';
+};
+
+export type GetDualLlmResultsByInteractionErrors = {
     /**
      * Default Response
      */
-    403: {
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -2783,16 +3938,43 @@ export type OpenAiChatCompletionsWithAgentErrors = {
     };
 };
 
-export type OpenAiChatCompletionsWithAgentError = OpenAiChatCompletionsWithAgentErrors[keyof OpenAiChatCompletionsWithAgentErrors];
+export type GetDualLlmResultsByInteractionError = GetDualLlmResultsByInteractionErrors[keyof GetDualLlmResultsByInteractionErrors];
 
-export type OpenAiChatCompletionsWithAgentResponses = {
+export type GetDualLlmResultsByInteractionResponses = {
     /**
      * Default Response
      */
-    200: OpenAiChatCompletionResponse;
+    200: Array<{
+        id: string;
+        agentId: string;
+        toolCallId: string;
+        conversations: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        result: string;
+        createdAt: string;
+    }>;
 };
 
-export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
+
+export type GetFeaturesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/features';
+};
+
+export type GetFeaturesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mcp_registry: boolean;
+    };
+};
+
+export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
 export type DeleteV1GeminiData = {
     body?: never;
@@ -3276,354 +4458,6 @@ export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors = {
 
 export type PostV1GeminiByAgentIdModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors];
 
-export type GetAgentsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/agents';
-};
-
-export type GetAgentsErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetAgentsError = GetAgentsErrors[keyof GetAgentsErrors];
-
-export type GetAgentsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        usersWithAccess: Array<string>;
-    }>;
-};
-
-export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
-
-export type CreateAgentData = {
-    body: {
-        name: string;
-        isDemo?: boolean;
-        usersWithAccess: Array<string>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/agents';
-};
-
-export type CreateAgentErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateAgentError = CreateAgentErrors[keyof CreateAgentErrors];
-
-export type CreateAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        usersWithAccess: Array<string>;
-    };
-};
-
-export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
-
-export type DeleteAgentData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type DeleteAgentErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteAgentError = DeleteAgentErrors[keyof DeleteAgentErrors];
-
-export type DeleteAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteAgentResponse = DeleteAgentResponses[keyof DeleteAgentResponses];
-
-export type GetAgentData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type GetAgentErrors = {
-    /**
-     * Default Response
-     */
-    401: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetAgentError = GetAgentErrors[keyof GetAgentErrors];
-
-export type GetAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        usersWithAccess: Array<string>;
-    };
-};
-
-export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
-
-export type UpdateAgentData = {
-    body?: {
-        name?: string;
-        isDemo?: boolean;
-        usersWithAccess?: Array<string>;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}';
-};
-
-export type UpdateAgentErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateAgentError = UpdateAgentErrors[keyof UpdateAgentErrors];
-
-export type UpdateAgentResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        isDemo: boolean;
-        createdAt: string;
-        updatedAt: string;
-        tools: Array<{
-            id: string;
-            agentId: string;
-            name: string;
-            /**
-             *
-             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-             *
-             * The parameters the functions accepts, described as a JSON Schema object. See the
-             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-             * documentation about the format.
-             *
-             * Omitting parameters defines a function with an empty parameter list.
-             *
-             */
-            parameters?: {
-                [key: string]: unknown;
-            };
-            description: string | null;
-            allowUsageWhenUntrustedDataIsPresent: boolean;
-            dataIsTrustedByDefault: boolean;
-            createdAt: string;
-            updatedAt: string;
-        }>;
-        usersWithAccess: Array<string>;
-    };
-};
-
-export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
-
 export type GetInteractionsData = {
     body?: never;
     path?: never;
@@ -3756,6 +4590,880 @@ export type GetInteractionResponses = {
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
+export type GetInternalMcpCatalogData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog';
+};
+
+export type GetInternalMcpCatalogErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogError = GetInternalMcpCatalogErrors[keyof GetInternalMcpCatalogErrors];
+
+export type GetInternalMcpCatalogResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof GetInternalMcpCatalogResponses];
+
+export type CreateInternalMcpCatalogItemData = {
+    body: {
+        name: string;
+        version?: string | null;
+        description?: string | null;
+        repository?: string | null;
+        installationCommand?: string | null;
+        requiresAuth?: boolean;
+        authDescription?: string | null;
+        authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog';
+};
+
+export type CreateInternalMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateInternalMcpCatalogItemError = CreateInternalMcpCatalogItemErrors[keyof CreateInternalMcpCatalogItemErrors];
+
+export type CreateInternalMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
+
+export type DeleteInternalMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}';
+};
+
+export type DeleteInternalMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteInternalMcpCatalogItemError = DeleteInternalMcpCatalogItemErrors[keyof DeleteInternalMcpCatalogItemErrors];
+
+export type DeleteInternalMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteInternalMcpCatalogItemResponse = DeleteInternalMcpCatalogItemResponses[keyof DeleteInternalMcpCatalogItemResponses];
+
+export type GetInternalMcpCatalogItemData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}';
+};
+
+export type GetInternalMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogItemError = GetInternalMcpCatalogItemErrors[keyof GetInternalMcpCatalogItemErrors];
+
+export type GetInternalMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemResponses[keyof GetInternalMcpCatalogItemResponses];
+
+export type UpdateInternalMcpCatalogItemData = {
+    body?: {
+        name?: string;
+        version?: string | null;
+        description?: string | null;
+        repository?: string | null;
+        installationCommand?: string | null;
+        requiresAuth?: boolean;
+        authDescription?: string | null;
+        authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}';
+};
+
+export type UpdateInternalMcpCatalogItemErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateInternalMcpCatalogItemError = UpdateInternalMcpCatalogItemErrors[keyof UpdateInternalMcpCatalogItemErrors];
+
+export type UpdateInternalMcpCatalogItemResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        version: string | null;
+        description: string | null;
+        repository: string | null;
+        installationCommand: string | null;
+        requiresAuth: boolean;
+        authDescription: string | null;
+        authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetMcpByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/mcp/{agentId}';
+};
+
+export type GetMcpByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        version: string;
+        agentId: string;
+        transport: string;
+        capabilities: {
+            tools: boolean;
+        };
+    };
+};
+
+export type GetMcpByAgentIdResponse = GetMcpByAgentIdResponses[keyof GetMcpByAgentIdResponses];
+
+export type PostMcpByAgentIdData = {
+    body: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        method: string;
+        params?: {
+            [key: string]: unknown;
+        };
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/mcp/{agentId}';
+};
+
+export type PostMcpByAgentIdErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        result?: unknown;
+        error?: {
+            code: number;
+            message: string;
+            data?: unknown;
+        };
+    };
+};
+
+export type PostMcpByAgentIdError = PostMcpByAgentIdErrors[keyof PostMcpByAgentIdErrors];
+
+export type PostMcpByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        jsonrpc: '2.0';
+        id?: string | number | null;
+        result?: unknown;
+        error?: {
+            code: number;
+            message: string;
+            data?: unknown;
+        };
+    };
+};
+
+export type PostMcpByAgentIdResponse = PostMcpByAgentIdResponses[keyof PostMcpByAgentIdResponses];
+
+export type GetMcpServersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type GetMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServersError = GetMcpServersErrors[keyof GetMcpServersErrors];
+
+export type GetMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersResponses];
+
+export type InstallMcpServerData = {
+    body: {
+        name: string;
+        catalogId?: string | null;
+        metadata?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown>;
+        agentIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server';
+};
+
+export type InstallMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type InstallMcpServerError = InstallMcpServerErrors[keyof InstallMcpServerErrors];
+
+export type InstallMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type InstallMcpServerResponse = InstallMcpServerResponses[keyof InstallMcpServerResponses];
+
+export type DeleteMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type DeleteMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpServerError = DeleteMcpServerErrors[keyof DeleteMcpServerErrors];
+
+export type DeleteMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpServerResponse = DeleteMcpServerResponses[keyof DeleteMcpServerResponses];
+
+export type GetMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}';
+};
+
+export type GetMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerError = GetMcpServerErrors[keyof GetMcpServerErrors];
+
+export type GetMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        catalogId: string | null;
+        metadata: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type DeleteV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type DeleteV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type GetV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type HeadV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type OptionsV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PatchV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PostV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/openai/';
+};
+
+export type PutV1OpenaiResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type DeleteV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type GetV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type HeadV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type OptionsV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PatchV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PostV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiBy__Data = {
+    body?: never;
+    path: {
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{*}';
+};
+
+export type PutV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentData = {
+    body?: OpenAiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/chat/completions';
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentError = OpenAiChatCompletionsWithDefaultAgentErrors[keyof OpenAiChatCompletionsWithDefaultAgentErrors];
+
+export type OpenAiChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type OpenAiChatCompletionsWithDefaultAgentResponse = OpenAiChatCompletionsWithDefaultAgentResponses[keyof OpenAiChatCompletionsWithDefaultAgentResponses];
+
+export type OpenAiChatCompletionsWithAgentData = {
+    body?: OpenAiChatCompletionRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/chat/completions';
+};
+
+export type OpenAiChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type OpenAiChatCompletionsWithAgentError = OpenAiChatCompletionsWithAgentErrors[keyof OpenAiChatCompletionsWithAgentErrors];
+
+export type OpenAiChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: OpenAiChatCompletionResponse;
+};
+
+export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
 export type GetToolsData = {
     body?: never;
     path?: never;
@@ -3809,57 +5517,33 @@ export type GetToolsResponses = {
             [key: string]: unknown;
         };
         description: string | null;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
         createdAt: string;
         updatedAt: string;
         agent: {
             id: string;
             name: string;
-        };
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
     }>;
 };
 
 export type GetToolsResponse = GetToolsResponses[keyof GetToolsResponses];
 
-export type UpdateToolData = {
-    body?: {
-        id?: string;
-        agentId?: string;
-        name?: string;
-        /**
-         *
-         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-         *
-         * The parameters the functions accepts, described as a JSON Schema object. See the
-         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-         * documentation about the format.
-         *
-         * Omitting parameters defines a function with an empty parameter list.
-         *
-         */
-        parameters?: {
-            [key: string]: unknown;
-        };
-        description?: string | null;
-        allowUsageWhenUntrustedDataIsPresent?: boolean;
-        dataIsTrustedByDefault?: boolean;
-        createdAt?: unknown;
-        updatedAt?: unknown;
-    };
-    path: {
-        id: string;
-    };
+export type GetUnassignedToolsData = {
+    body?: never;
+    path?: never;
     query?: never;
-    url: '/api/tools/{id}';
+    url: '/api/tools/unassigned';
 };
 
-export type UpdateToolErrors = {
+export type GetUnassignedToolsErrors = {
     /**
      * Default Response
      */
-    404: {
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -3876,15 +5560,14 @@ export type UpdateToolErrors = {
     };
 };
 
-export type UpdateToolError = UpdateToolErrors[keyof UpdateToolErrors];
+export type GetUnassignedToolsError = GetUnassignedToolsErrors[keyof GetUnassignedToolsErrors];
 
-export type UpdateToolResponses = {
+export type GetUnassignedToolsResponses = {
     /**
      * Default Response
      */
-    200: {
+    200: Array<{
         id: string;
-        agentId: string;
         name: string;
         /**
          *
@@ -3902,871 +5585,17 @@ export type UpdateToolResponses = {
             [key: string]: unknown;
         };
         description: string | null;
-        allowUsageWhenUntrustedDataIsPresent: boolean;
-        dataIsTrustedByDefault: boolean;
         createdAt: string;
         updatedAt: string;
-    };
-};
-
-export type UpdateToolResponse = UpdateToolResponses[keyof UpdateToolResponses];
-
-export type GetOperatorsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/autonomy-policies/operators';
-};
-
-export type GetOperatorsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        value: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        label: string;
+        agent: {
+            id: string;
+            name: string;
+        } | null;
+        mcpServer: {
+            id: string;
+            name: string;
+        } | null;
     }>;
 };
 
-export type GetOperatorsResponse = GetOperatorsResponses[keyof GetOperatorsResponses];
-
-export type GetToolInvocationPoliciesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/autonomy-policies/tool-invocation';
-};
-
-export type GetToolInvocationPoliciesErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetToolInvocationPoliciesError = GetToolInvocationPoliciesErrors[keyof GetToolInvocationPoliciesErrors];
-
-export type GetToolInvocationPoliciesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        toolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
-        reason: string | null;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetToolInvocationPoliciesResponse = GetToolInvocationPoliciesResponses[keyof GetToolInvocationPoliciesResponses];
-
-export type CreateToolInvocationPolicyData = {
-    body: {
-        toolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
-        reason?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/autonomy-policies/tool-invocation';
-};
-
-export type CreateToolInvocationPolicyErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateToolInvocationPolicyError = CreateToolInvocationPolicyErrors[keyof CreateToolInvocationPolicyErrors];
-
-export type CreateToolInvocationPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
-        reason: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateToolInvocationPolicyResponse = CreateToolInvocationPolicyResponses[keyof CreateToolInvocationPolicyResponses];
-
-export type DeleteToolInvocationPolicyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/autonomy-policies/tool-invocation/{id}';
-};
-
-export type DeleteToolInvocationPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteToolInvocationPolicyError = DeleteToolInvocationPolicyErrors[keyof DeleteToolInvocationPolicyErrors];
-
-export type DeleteToolInvocationPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteToolInvocationPolicyResponse = DeleteToolInvocationPolicyResponses[keyof DeleteToolInvocationPolicyResponses];
-
-export type GetToolInvocationPolicyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/autonomy-policies/tool-invocation/{id}';
-};
-
-export type GetToolInvocationPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetToolInvocationPolicyError = GetToolInvocationPolicyErrors[keyof GetToolInvocationPolicyErrors];
-
-export type GetToolInvocationPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
-        reason: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetToolInvocationPolicyResponse = GetToolInvocationPolicyResponses[keyof GetToolInvocationPolicyResponses];
-
-export type UpdateToolInvocationPolicyData = {
-    body?: {
-        toolId?: string;
-        argumentName?: string;
-        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value?: string;
-        action?: 'allow_when_context_is_untrusted' | 'block_always';
-        reason?: string | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/autonomy-policies/tool-invocation/{id}';
-};
-
-export type UpdateToolInvocationPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateToolInvocationPolicyError = UpdateToolInvocationPolicyErrors[keyof UpdateToolInvocationPolicyErrors];
-
-export type UpdateToolInvocationPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        argumentName: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'allow_when_context_is_untrusted' | 'block_always';
-        reason: string | null;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateToolInvocationPolicyResponse = UpdateToolInvocationPolicyResponses[keyof UpdateToolInvocationPolicyResponses];
-
-export type GetTrustedDataPoliciesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/trusted-data-policies';
-};
-
-export type GetTrustedDataPoliciesErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetTrustedDataPoliciesError = GetTrustedDataPoliciesErrors[keyof GetTrustedDataPoliciesErrors];
-
-export type GetTrustedDataPoliciesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        toolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted';
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetTrustedDataPoliciesResponse = GetTrustedDataPoliciesResponses[keyof GetTrustedDataPoliciesResponses];
-
-export type CreateTrustedDataPolicyData = {
-    body: {
-        toolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/trusted-data-policies';
-};
-
-export type CreateTrustedDataPolicyErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateTrustedDataPolicyError = CreateTrustedDataPolicyErrors[keyof CreateTrustedDataPolicyErrors];
-
-export type CreateTrustedDataPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted';
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateTrustedDataPolicyResponse = CreateTrustedDataPolicyResponses[keyof CreateTrustedDataPolicyResponses];
-
-export type DeleteTrustedDataPolicyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/trusted-data-policies/{id}';
-};
-
-export type DeleteTrustedDataPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteTrustedDataPolicyError = DeleteTrustedDataPolicyErrors[keyof DeleteTrustedDataPolicyErrors];
-
-export type DeleteTrustedDataPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteTrustedDataPolicyResponse = DeleteTrustedDataPolicyResponses[keyof DeleteTrustedDataPolicyResponses];
-
-export type GetTrustedDataPolicyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/trusted-data-policies/{id}';
-};
-
-export type GetTrustedDataPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetTrustedDataPolicyError = GetTrustedDataPolicyErrors[keyof GetTrustedDataPolicyErrors];
-
-export type GetTrustedDataPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted';
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetTrustedDataPolicyResponse = GetTrustedDataPolicyResponses[keyof GetTrustedDataPolicyResponses];
-
-export type UpdateTrustedDataPolicyData = {
-    body?: {
-        toolId?: string;
-        description?: string;
-        attributePath?: string;
-        operator?: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value?: string;
-        action?: 'block_always' | 'mark_as_trusted';
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/trusted-data-policies/{id}';
-};
-
-export type UpdateTrustedDataPolicyErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateTrustedDataPolicyError = UpdateTrustedDataPolicyErrors[keyof UpdateTrustedDataPolicyErrors];
-
-export type UpdateTrustedDataPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        toolId: string;
-        description: string;
-        attributePath: string;
-        operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
-        value: string;
-        action: 'block_always' | 'mark_as_trusted';
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateTrustedDataPolicyResponse = UpdateTrustedDataPolicyResponses[keyof UpdateTrustedDataPolicyResponses];
-
-export type GetDefaultDualLlmConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config/default';
-};
-
-export type GetDefaultDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetDefaultDualLlmConfigError = GetDefaultDualLlmConfigErrors[keyof GetDefaultDualLlmConfigErrors];
-
-export type GetDefaultDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDefaultDualLlmConfigResponse = GetDefaultDualLlmConfigResponses[keyof GetDefaultDualLlmConfigResponses];
-
-export type GetDualLlmConfigsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type GetDualLlmConfigsErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetDualLlmConfigsError = GetDualLlmConfigsErrors[keyof GetDualLlmConfigsErrors];
-
-export type GetDualLlmConfigsResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-};
-
-export type GetDualLlmConfigsResponse = GetDualLlmConfigsResponses[keyof GetDualLlmConfigsResponses];
-
-export type CreateDualLlmConfigData = {
-    body: {
-        enabled?: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds?: number;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/dual-llm-config';
-};
-
-export type CreateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type CreateDualLlmConfigError = CreateDualLlmConfigErrors[keyof CreateDualLlmConfigErrors];
-
-export type CreateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateDualLlmConfigResponse = CreateDualLlmConfigResponses[keyof CreateDualLlmConfigResponses];
-
-export type DeleteDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type DeleteDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type DeleteDualLlmConfigError = DeleteDualLlmConfigErrors[keyof DeleteDualLlmConfigErrors];
-
-export type DeleteDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteDualLlmConfigResponse = DeleteDualLlmConfigResponses[keyof DeleteDualLlmConfigResponses];
-
-export type GetDualLlmConfigData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type GetDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetDualLlmConfigError = GetDualLlmConfigErrors[keyof GetDualLlmConfigErrors];
-
-export type GetDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type GetDualLlmConfigResponse = GetDualLlmConfigResponses[keyof GetDualLlmConfigResponses];
-
-export type UpdateDualLlmConfigData = {
-    body?: {
-        enabled?: boolean;
-        mainAgentPrompt?: string;
-        quarantinedAgentPrompt?: string;
-        summaryPrompt?: string;
-        maxRounds?: number;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-config/{id}';
-};
-
-export type UpdateDualLlmConfigErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type UpdateDualLlmConfigError = UpdateDualLlmConfigErrors[keyof UpdateDualLlmConfigErrors];
-
-export type UpdateDualLlmConfigResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        enabled: boolean;
-        mainAgentPrompt: string;
-        quarantinedAgentPrompt: string;
-        summaryPrompt: string;
-        maxRounds: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateDualLlmConfigResponse = UpdateDualLlmConfigResponses[keyof UpdateDualLlmConfigResponses];
-
-export type GetDualLlmResultByToolCallIdData = {
-    body?: never;
-    path: {
-        toolCallId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-tool-call-id/{toolCallId}';
-};
-
-export type GetDualLlmResultByToolCallIdErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetDualLlmResultByToolCallIdError = GetDualLlmResultByToolCallIdErrors[keyof GetDualLlmResultByToolCallIdErrors];
-
-export type GetDualLlmResultByToolCallIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    } | null;
-};
-
-export type GetDualLlmResultByToolCallIdResponse = GetDualLlmResultByToolCallIdResponses[keyof GetDualLlmResultByToolCallIdResponses];
-
-export type GetDualLlmResultsByInteractionData = {
-    body?: never;
-    path: {
-        interactionId: string;
-    };
-    query?: never;
-    url: '/api/dual-llm-results/by-interaction/{interactionId}';
-};
-
-export type GetDualLlmResultsByInteractionErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetDualLlmResultsByInteractionError = GetDualLlmResultsByInteractionErrors[keyof GetDualLlmResultsByInteractionErrors];
-
-export type GetDualLlmResultsByInteractionResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        agentId: string;
-        toolCallId: string;
-        conversations: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
-        result: string;
-        createdAt: string;
-    }>;
-};
-
-export type GetDualLlmResultsByInteractionResponse = GetDualLlmResultsByInteractionResponses[keyof GetDualLlmResultsByInteractionResponses];
+export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];

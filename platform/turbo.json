@@ -40,7 +40,8 @@
       "cache": false
     },
     "db:generate": {
-      "cache": false
+      "cache": false,
+      "persistent": true
     },
     "db:migrate": {
       "inputs": ["backend/src/database/**/*.ts"]

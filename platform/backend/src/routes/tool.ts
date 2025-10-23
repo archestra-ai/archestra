@@ -1,15 +1,12 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getUserFromRequest } from "@/auth/utils";
 import { ToolModel } from "@/models";
 import {
   ErrorResponseSchema,
+  ExtendedSelectToolSchema,
   RouteId,
-  SelectToolSchema,
-  SelectToolWithAgentSchema,
-  UpdateToolSchema,
-  UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -20,7 +17,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get all tools",
         tags: ["Tools"],
         response: {
-          200: z.array(SelectToolWithAgentSchema),
+          200: z.array(ExtendedSelectToolSchema),
           401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -54,38 +51,35 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.patch(
-    "/api/tools/:id",
+  fastify.get(
+    "/api/tools/unassigned",
     {
       schema: {
-        operationId: RouteId.UpdateTool,
-        description: "Update a tool",
+        operationId: RouteId.GetUnassignedTools,
+        description: "Get all tools that have no agent relationships",
         tags: ["Tools"],
-        params: z.object({
-          id: UuidIdSchema,
-        }),
-        body: UpdateToolSchema,
         response: {
-          200: SelectToolSchema,
-          404: ErrorResponseSchema,
+          200: z.array(ExtendedSelectToolSchema),
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async (request, reply) => {
       try {
-        const tool = await ToolModel.update(id, body);
+        const user = await getUserFromRequest(request);
 
-        if (!tool) {
-          return reply.status(404).send({
+        if (!user) {
+          return reply.status(401).send({
             error: {
-              message: "Tool not found",
-              type: "not_found",
+              message: "Unauthorized",
+              type: "unauthorized",
             },
           });
         }
 
-        return reply.send(tool);
+        const tools = await ToolModel.findUnassigned();
+        return reply.send(tools);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

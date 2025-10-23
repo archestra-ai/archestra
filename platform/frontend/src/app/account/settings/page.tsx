@@ -1,13 +1,14 @@
 "use client";
 
 import {
+  ApiKeysCard,
   DeleteAccountCard,
   OrganizationMembersCard,
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleUser, Users } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
@@ -38,6 +39,17 @@ function SettingsContent() {
   const { data: activeMemberRole } = useActiveMemberRole(activeOrg?.id);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Periodically check credentials status while on settings page
+  useEffect(() => {
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({
+        queryKey: ["auth", "defaultCredentialsEnabled"],
+      });
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [queryClient]);
 
   const showMembersTab =
     activeMemberRole &&
@@ -124,6 +136,7 @@ function SettingsContent() {
           <TabsContent value="account">
             <div className="space-y-6">
               <SecuritySettingsCards />
+              <ApiKeysCard />
               <DeleteAccountCard />
             </div>
           </TabsContent>

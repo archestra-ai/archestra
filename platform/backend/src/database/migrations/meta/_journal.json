@@ -127,6 +127,69 @@
       "when": 1760718088911,
       "tag": "0017_talented_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1760736474351,
+      "tag": "0018_wet_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1760985331673,
+      "tag": "0019_curvy_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1760992046940,
+      "tag": "0020_ancient_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1761045400180,
+      "tag": "0021_fresh_daredevil",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1761065472052,
+      "tag": "0022_complete_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1761065690824,
+      "tag": "0023_misty_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1761076030798,
+      "tag": "0024_strange_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1761139055189,
+      "tag": "0025_violet_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1761208068907,
+      "tag": "0026_perpetual_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

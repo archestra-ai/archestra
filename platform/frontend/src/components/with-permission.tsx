@@ -1,5 +1,6 @@
 import type { Permission, Role } from "@shared";
-import { useHasPermissions, useRole } from "@/lib/auth.hook";
+import { useRole } from "@/lib/auth.hook";
+import { useHasPermissions } from "@/lib/auth.query";
 
 export function WithPermission({
   children,
@@ -9,7 +10,7 @@ export function WithPermission({
   permissions: Permission[];
 }) {
   const hasPermissions = useHasPermissions(permissions);
-  if (!hasPermissions) {
+  if (!hasPermissions.data) {
     return null;
   }
   return children;

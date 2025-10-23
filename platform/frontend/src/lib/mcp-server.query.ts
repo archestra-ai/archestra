@@ -1,0 +1,63 @@
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  deleteMcpServer,
+  type GetMcpServersResponses,
+  getMcpServers,
+  type InstallMcpServerData,
+  installMcpServer,
+} from "@/lib/clients/api";
+
+export function useMcpServers(params?: {
+  initialData?: GetMcpServersResponses["200"];
+}) {
+  return useSuspenseQuery({
+    queryKey: ["mcp-servers"],
+    queryFn: async () => (await getMcpServers()).data ?? [],
+    initialData: params?.initialData,
+  });
+}
+
+export function useInstallMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: InstallMcpServerData["body"]) => {
+      const response = await installMcpServer({ body: data });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      toast.success(`Successfully installed ${variables.name}`);
+    },
+    onError: (error, variables) => {
+      console.error("Install error:", error);
+      toast.error(`Failed to install ${variables.name}`);
+    },
+  });
+}
+
+export function useDeleteMcpServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { id: string; name: string }) => {
+      const response = await deleteMcpServer({ path: { id: data.id } });
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since MCP server deletion cascades to tools
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      toast.success(`Successfully uninstalled ${variables.name}`);
+    },
+    onError: (error, variables) => {
+      console.error("Uninstall error:", error);
+      toast.error(`Failed to uninstall ${variables.name}`);
+    },
+  });
+}

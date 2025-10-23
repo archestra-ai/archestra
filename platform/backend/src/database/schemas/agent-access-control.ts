@@ -6,7 +6,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
-import { user } from "./auth";
+import usersTable from "./user";
 
 const agentAccessControlTable = pgTable(
   "agent_access_control",
@@ -16,7 +16,7 @@ const agentAccessControlTable = pgTable(
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => usersTable.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

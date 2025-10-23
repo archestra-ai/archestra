@@ -2,7 +2,6 @@ import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import _ from "lodash";
 import db, { schema } from "@/database";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
-import ToolModel from "./tool";
 
 class TrustedDataPolicyModel {
   static async create(
@@ -30,15 +29,6 @@ class TrustedDataPolicyModel {
       .from(schema.trustedDataPoliciesTable)
       .where(eq(schema.trustedDataPoliciesTable.id, id));
     return policy || null;
-  }
-
-  static async findByToolId(
-    toolId: string,
-  ): Promise<TrustedData.TrustedDataPolicy[]> {
-    return db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, toolId));
   }
 
   static async update(
@@ -131,52 +121,95 @@ class TrustedDataPolicyModel {
   ): Promise<{
     isTrusted: boolean;
     isBlocked: boolean;
+    shouldSanitizeWithDualLlm: boolean;
     reason: string;
   }> {
     /**
      * Get policies for the agent's tools that match the tool name,
-     * along with the tool's configuration
+     * along with the tool's configuration.
      */
     const applicablePoliciesForAgent = await db
       .select({
         ...getTableColumns(schema.trustedDataPoliciesTable),
-        dataIsTrustedByDefault: schema.toolsTable.dataIsTrustedByDefault,
+        toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
       })
       .from(schema.toolsTable)
       .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+      )
+      .innerJoin(
         schema.trustedDataPoliciesTable,
-        eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
+        eq(
+          schema.agentToolsTable.id,
+          schema.trustedDataPoliciesTable.agentToolId,
+        ),
       )
       .where(
         and(
-          eq(schema.toolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, toolName),
         ),
       );
 
     // Extract tool configuration (will be the same for all policies since they're for the same tool)
-    const dataIsTrustedByDefault =
+    const toolResultTreatment =
       applicablePoliciesForAgent.length > 0
-        ? applicablePoliciesForAgent[0].dataIsTrustedByDefault
+        ? applicablePoliciesForAgent[0].toolResultTreatment
         : null;
 
-    // If no policies exist for this tool, check if data is trusted by default
-    if (dataIsTrustedByDefault === null) {
-      // Fetch the tool directly to check dataIsTrustedByDefault
-      const tool = await ToolModel.findByName(toolName);
+    // If no policies exist for this tool, check the tool's result treatment configuration
+    if (toolResultTreatment === null) {
+      // Fetch the agent-tool relationship configuration
+      const [agentTool] = await db
+        .select({
+          toolResultTreatment: schema.agentToolsTable.toolResultTreatment,
+        })
+        .from(schema.toolsTable)
+        .innerJoin(
+          schema.agentToolsTable,
+          eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+        )
+        .where(
+          and(
+            eq(schema.agentToolsTable.agentId, agentId),
+            eq(schema.toolsTable.name, toolName),
+          ),
+        );
 
-      if (tool?.dataIsTrustedByDefault) {
+      // If no agent-tool relationship exists, default to untrusted
+      if (!agentTool) {
+        return {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: `Tool ${toolName} is not registered for this agent`,
+        };
+      }
+
+      if (agentTool.toolResultTreatment === "trusted") {
         return {
           isTrusted: true,
           isBlocked: false,
-          reason: `Tool ${toolName} is configured to trust data by default`,
+          shouldSanitizeWithDualLlm: false,
+          reason: `Tool ${toolName} is configured as trusted`,
+        };
+      }
+
+      if (agentTool.toolResultTreatment === "sanitize_with_dual_llm") {
+        return {
+          isTrusted: false,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: true,
+          reason: `Tool ${toolName} is configured for dual LLM sanitization`,
         };
       }
 
       return {
         isTrusted: false,
         isBlocked: false,
-        reason: `No trust policy defined for tool ${toolName} - data is untrusted by default`,
+        shouldSanitizeWithDualLlm: false,
+        reason: `Tool ${toolName} is configured as untrusted`,
       };
     }
 
@@ -208,6 +241,7 @@ class TrustedDataPolicyModel {
             return {
               isTrusted: false,
               isBlocked: true,
+              shouldSanitizeWithDualLlm: false,
               reason: `Data blocked by policy: ${description}`,
             };
           }
@@ -215,7 +249,7 @@ class TrustedDataPolicyModel {
       }
     }
 
-    // Check if ANY policy marks this data as trusted (only if not blocked)
+    // Check if ANY policy marks this data as trusted or for dual LLM sanitization (only if not blocked)
     for (const {
       attributePath,
       operator,
@@ -251,24 +285,70 @@ class TrustedDataPolicyModel {
           return {
             isTrusted: true,
             isBlocked: false,
+            shouldSanitizeWithDualLlm: false,
             reason: `Data trusted by policy: ${description}`,
+          };
+        }
+      }
+
+      if (action === "sanitize_with_dual_llm") {
+        // Extract values from the tool output using the attribute path
+        const outputValue = toolOutput?.value || toolOutput;
+        const values = TrustedDataPolicyModel.extractValuesFromPath(
+          outputValue,
+          attributePath,
+        );
+
+        // For sanitize policies, ALL extracted values must meet the condition
+        let allValuesMatch = values.length > 0;
+        for (const value of values) {
+          if (
+            !TrustedDataPolicyModel.evaluateCondition(
+              value,
+              operator,
+              policyValue,
+            )
+          ) {
+            allValuesMatch = false;
+            break;
+          }
+        }
+
+        if (allValuesMatch) {
+          // At least one policy requires dual LLM sanitization
+          return {
+            isTrusted: false,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: true,
+            reason: `Data requires dual LLM sanitization by policy: ${description}`,
           };
         }
       }
     }
 
-    // No policies trust this data, check if the tool trusts data by default
-    if (dataIsTrustedByDefault) {
+    // No policies matched, use the tool's default treatment
+    if (toolResultTreatment === "trusted") {
       return {
         isTrusted: true,
         isBlocked: false,
-        reason: `Tool ${toolName} is configured to trust data by default`,
+        shouldSanitizeWithDualLlm: false,
+        reason: `Tool ${toolName} is configured as trusted`,
+      };
+    }
+
+    if (toolResultTreatment === "sanitize_with_dual_llm") {
+      return {
+        isTrusted: false,
+        isBlocked: false,
+        shouldSanitizeWithDualLlm: true,
+        reason: `Tool ${toolName} is configured for dual LLM sanitization`,
       };
     }
 
     return {
       isTrusted: false,
       isBlocked: false,
+      shouldSanitizeWithDualLlm: false,
       reason: "Data does not match any trust policies - considered untrusted",
     };
   }

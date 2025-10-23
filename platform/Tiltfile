@@ -8,6 +8,14 @@ is_prod = os.getenv('PROD') == 'true'
 # Disable analytics in local development
 os.putenv('NEXT_PUBLIC_ARCHESTRA_ANALYTICS', "disabled")
 
+# set NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to the same value as ARCHESTRA_API_BASE_URL
+# so it's accessible by the frontend
+api_base_url = os.getenv("ARCHESTRA_API_BASE_URL")
+next_pubic_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
+if not next_pubic_api_base_url and api_base_url and api_base_url != "":
+  os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
+
+
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -70,7 +78,7 @@ local_resource(
 )
 
 local_resource(
-  'db-migrate-and-seed',
+  'db-migrate',
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
@@ -80,14 +88,7 @@ local_resource(
     for i in {1..30}; do
       if pnpm db:migrate 2>/dev/null; then
         echo "✅ Migration completed successfully"
-        echo "🌱 Running database seed..."
-        if pnpm db:seed; then
-          echo "✅ Seed completed successfully"
-          exit 0
-        else
-          echo "❌ Seed failed"
-          exit 1
-        fi
+        exit 0
       fi
       echo "⏳ Waiting for PostgreSQL... (attempt $i/30)"
       sleep 2
@@ -95,7 +96,7 @@ local_resource(
     echo "❌ Migration failed after 30 attempts"
     exit 1
   ''',
-  deps=['./backend/src/database/migrations', './backend/src/standalone-scripts/seed-db.ts'],
+  deps=['./backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['database']
 )
@@ -104,10 +105,10 @@ local_resource(
 if is_prod:
   local_resource(
     'pnpm-prod',
-    cmd='pnpm build',
+    cmd='rm -rf frontend/.next && pnpm build',
     serve_cmd='pnpm start',
     labels=['prod'],
-    resource_deps=['db-migrate-and-seed']
+    resource_deps=['db-migrate']
   )
 
 # dev
@@ -116,7 +117,7 @@ if not is_prod:
     'pnpm-dev',
     serve_cmd='pnpm dev',
     labels=['dev'],
-    resource_deps=['db-migrate-and-seed']
+    resource_deps=['db-migrate']
   )
 
 local_resource(
@@ -125,8 +126,8 @@ local_resource(
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
   serve_cmd='cd backend && pnpm db:studio',
-  labels=['dev'],
-  resource_deps=['db-migrate-and-seed']
+  labels=['database'],
+  resource_deps=['postgresql']
 )
 
 local_resource(

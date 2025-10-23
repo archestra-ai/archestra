@@ -11,7 +11,7 @@ import { OpenAi } from "./llm-providers";
 /**
  * As we support more llm provider types, this type will expand and should be updated
  */
-const ToolParametersContentSchema = z.union([
+export const ToolParametersContentSchema = z.union([
   OpenAi.Tools.FunctionDefinitionParametersSchema,
 ]);
 
@@ -19,24 +19,35 @@ export const SelectToolSchema = createSelectSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
 
-export const SelectToolWithAgentSchema = SelectToolSchema.omit({
+export const ExtendedSelectToolSchema = SelectToolSchema.omit({
   agentId: true,
+  mcpServerId: true,
 }).extend({
-  agent: z.object({
-    id: z.string(),
-    name: z.string(),
-  }),
+  // Nullable for MCP tools
+  agent: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
+  // Nullable for tools "sniffed" from LLM proxy requests
+  mcpServer: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+    })
+    .nullable(),
 });
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
 });
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
-  parameters: ToolParametersContentSchema,
+  parameters: ToolParametersContentSchema.optional(),
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;
-export type ToolWithAgent = z.infer<typeof SelectToolWithAgentSchema>;
+export type ExtendedTool = z.infer<typeof ExtendedSelectToolSchema>;
 export type InsertTool = z.infer<typeof InsertToolSchema>;
 export type UpdateTool = z.infer<typeof UpdateToolSchema>;
 

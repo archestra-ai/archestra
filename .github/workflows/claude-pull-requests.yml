@@ -55,4 +55,7 @@ jobs:
             Tasks:
             1. Add PR description if the description is currently blank (actually add it, don't just say "add PR description")
             2. Update platform/CLAUDE.md if needed (only if the bulk of the changes are related to the platform sub-directory). If this is the case, push a commit to the branch with the changes you are proposing.
+
+               **IMPORTANT for CLAUDE.md updates**: Keep the file concise and under 500 lines. DO NOT add verbose explanations, legacy references, or unnecessary details. Only update essential information like new commands, changed architecture, or critical conventions. Follow the existing minimal style - be direct and factual without fluff.
+
             3. Quick review: bugs, security, performance (skip if none found)

@@ -99,9 +99,35 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 
+  // Agent Tool Routes
+  AssignToolToAgent: "assignToolToAgent",
+  UnassignToolFromAgent: "unassignToolFromAgent",
+  GetAgentTools: "getAgentTools",
+  GetAllAgentTools: "getAllAgentTools",
+  UpdateAgentTool: "updateAgentTool",
+
+  // Features Routes
+  GetFeatures: "getFeatures",
+
+  // Auth Routes
+  GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+
+  // MCP Catalog Routes
+  GetInternalMcpCatalog: "getInternalMcpCatalog",
+  CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
+  GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
+
+  // MCP Server Routes
+  GetMcpServers: "getMcpServers",
+  GetMcpServer: "getMcpServer",
+  InstallMcpServer: "installMcpServer",
+  DeleteMcpServer: "deleteMcpServer",
+
   // Tool Routes
   GetTools: "getTools",
-  UpdateTool: "updateTool",
+  GetUnassignedTools: "getUnassignedTools",
 
   // Interaction Routes
   GetInteractions: "getInteractions",

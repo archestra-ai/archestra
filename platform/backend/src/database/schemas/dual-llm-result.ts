@@ -6,8 +6,16 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import agentsTable from "./agent";
+
+/**
+ * Simple message format used in dual LLM Q&A conversation
+ * Provider-agnostic format for storing conversations
+ */
+export type DualLlmMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 /**
  * Stores results from the Dual LLM Quarantine Pattern
@@ -21,9 +29,7 @@ const dualLlmResultsTable = pgTable(
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     toolCallId: text("tool_call_id").notNull(),
-    conversations: jsonb("conversations")
-      .$type<ChatCompletionMessageParam[]>()
-      .notNull(),
+    conversations: jsonb("conversations").$type<DualLlmMessage[]>().notNull(),
     result: text("result").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },

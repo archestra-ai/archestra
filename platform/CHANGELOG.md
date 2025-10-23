@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.0.12](https://github.com/archestra-ai/archestra/compare/platform-v0.0.11...platform-v0.0.12) (2025-10-20)
+
+
+### Features
+
+* add dual llm per tool ([#745](https://github.com/archestra-ai/archestra/issues/745)) ([ed25e1a](https://github.com/archestra-ai/archestra/commit/ed25e1ac34e801baf85ce68cb6b90265255d846e))
+* add dual llm support for anthropic provider ([#748](https://github.com/archestra-ai/archestra/issues/748)) ([0507ec8](https://github.com/archestra-ai/archestra/commit/0507ec8c5e3cde001e0eaca428c481f7cefac970))
+* add ui for anthropic ([#750](https://github.com/archestra-ai/archestra/issues/750)) ([7531d2b](https://github.com/archestra-ai/archestra/commit/7531d2bd35aab30d83e8eeae2cddccec76ff1c96))
+* anthropic support ([#731](https://github.com/archestra-ai/archestra/issues/731)) ([fb8d007](https://github.com/archestra-ai/archestra/commit/fb8d007b26b55dee5dea4504aa129a73fbf35c82))
+* assign members to agent ([#747](https://github.com/archestra-ai/archestra/issues/747)) ([aa6d1e9](https://github.com/archestra-ai/archestra/commit/aa6d1e9bb288080528a01151eca71619fa11df7a))
+* better auth integration ([#729](https://github.com/archestra-ai/archestra/issues/729)) ([fb6a1bd](https://github.com/archestra-ai/archestra/commit/fb6a1bdafe2cc299327903456cf87953f8a19ba1))
+* implement rbac on backend ([#737](https://github.com/archestra-ai/archestra/issues/737)) ([f4d5f1b](https://github.com/archestra-ai/archestra/commit/f4d5f1b454d1f343ccc7c28a4a82a97c3bb40b8c))
+* New tools UI ([#734](https://github.com/archestra-ai/archestra/issues/734)) ([7b1f355](https://github.com/archestra-ai/archestra/commit/7b1f355a77e093b9cc426d3d6ddebd7e3a3ef331))
+* update agents + settings pages ([#739](https://github.com/archestra-ai/archestra/issues/739)) ([5f8fad1](https://github.com/archestra-ai/archestra/commit/5f8fad1ca81a4519cd8e759b8f940ea9b2dd94b1))
+* warning about password ([#740](https://github.com/archestra-ai/archestra/issues/740)) ([40d2e9b](https://github.com/archestra-ai/archestra/commit/40d2e9b05e8339e328f0089d8cc5df1cb6c3af50))
+
+
+### Bug Fixes
+
+* Add ALLOWED_FRONTEND_ORIGINS variable to fix cors issue ([#732](https://github.com/archestra-ai/archestra/issues/732)) ([83efcba](https://github.com/archestra-ai/archestra/commit/83efcba5a593c3cdc7d8c36127f55add9bc989f3))
+* add ARCHESTRA_ to ALLOWED_FRONTEND_ORIGINS ([#733](https://github.com/archestra-ai/archestra/issues/733)) ([b5d7277](https://github.com/archestra-ai/archestra/commit/b5d72770f357e315c7765446c4ea3db4a412aada))
+* change default login/password to admin@example.com/password ([#744](https://github.com/archestra-ai/archestra/issues/744)) ([93f9ff1](https://github.com/archestra-ai/archestra/commit/93f9ff118ab433abcfb327497bd012563a3c98df))
+* fix benchmarks ([#725](https://github.com/archestra-ai/archestra/issues/725)) ([04d73a7](https://github.com/archestra-ai/archestra/commit/04d73a7b9ff1e0070e1f2b5ce6bdc1c3ee6318cb))
+* mark trusted when processed by Dual LLM ([#746](https://github.com/archestra-ai/archestra/issues/746)) ([fcb31c9](https://github.com/archestra-ai/archestra/commit/fcb31c94f783908f06ae38f03674e1774a2bf637))
+* minor bug in accept invite link flow ([#735](https://github.com/archestra-ai/archestra/issues/735)) ([e416193](https://github.com/archestra-ai/archestra/commit/e41619323916ee06ba0d0b319ab72fdbfcd9206a))
+* remove * cors ([#738](https://github.com/archestra-ai/archestra/issues/738)) ([6e4269d](https://github.com/archestra-ai/archestra/commit/6e4269dfe0055fd7f262e302c1ac5334861d32cd))
+* use buttongroups in tools bulk update ([52c7b73](https://github.com/archestra-ai/archestra/commit/52c7b739582ceaa7431c1bed4baa6482207a40f2))
+* warning about password on the login page ([#742](https://github.com/archestra-ai/archestra/issues/742)) ([c5d86ef](https://github.com/archestra-ai/archestra/commit/c5d86ef0ed46740c17a56fd85cae58c860856d44))
+
 ## [0.0.11](https://github.com/archestra-ai/archestra/compare/platform-v0.0.10...platform-v0.0.11) (2025-10-15)
 
 

@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   ALLOWED_DEMO_INTERACTION_ID,
   ALLOWED_DEMO_TOOL_IDS,
@@ -5,19 +7,26 @@ import {
   BLOCKED_DEMO_INTERACTION_ID,
   DEMO_AGENT_ID,
 } from "@shared";
+import { eq } from "drizzle-orm";
+import config from "@/config";
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import User from "@/models/user";
 import type {
   InsertAgent,
   InsertDualLlmConfig,
   InsertInteraction,
+  InsertInternalMcpCatalog,
   InsertTool,
   InteractionRequest,
   InteractionResponse,
 } from "@/types";
+import db, { schema } from ".";
 
 /**
  * Main seed function
@@ -28,11 +37,12 @@ export async function seedDatabase(): Promise<void> {
 
   try {
     // Seed in correct order (respecting foreign keys)
-    await seedAdminUser();
+    await seedAdminUserAndDefaultOrg();
     await seedAgents();
     await seedTools();
     await seedInteractions();
     await seedDualLlmConfig();
+    await seedInternalMcpCatalog();
 
     console.log("\n✅ Database seed completed successfully!\n");
   } catch (error) {
@@ -44,9 +54,28 @@ export async function seedDatabase(): Promise<void> {
 /**
  * Seeds admin user
  */
-async function seedAdminUser(): Promise<void> {
-  await User.createAdminUser();
-  console.log("✓ Seeded admin user");
+export async function seedAdminUserAndDefaultOrg(): Promise<void> {
+  const user = await User.createOrGetExistingDefaultAdminUser();
+  const org = await OrganizationModel.getOrCreateDefaultOrganization();
+  if (!user || !org) {
+    throw new Error("Failed to seed admin user and default organization");
+  }
+  const existingMember = await db
+    .select()
+    .from(schema.member)
+    .where(eq(schema.member.userId, user.id))
+    .limit(1);
+  if (!existingMember[0]) {
+    await db.insert(schema.member).values({
+      id: crypto.randomUUID(),
+      organizationId: org.id,
+      userId: user.id,
+      role: "admin",
+      createdAt: new Date(),
+    });
+  }
+
+  console.log("✓ Seeded admin user and default organization");
 }
 
 /**
@@ -116,10 +145,14 @@ async function seedTools(): Promise<void> {
         },
       },
       description: "Send an email via Gmail",
-      allowUsageWhenUntrustedDataIsPresent: true,
-      dataIsTrustedByDefault: true,
     };
-    await ToolModel.create(toolData);
+    const tool = await ToolModel.create(toolData);
+
+    // Create agent-tool relationship with security settings
+    await AgentToolModel.create(DEMO_AGENT_ID, tool.id, {
+      allowUsageWhenUntrustedDataIsPresent: true,
+      toolResultTreatment: "trusted",
+    });
     console.log("✓ Seeded gmail__sendEmail tool");
   } else {
     console.log("✓ gmail__sendEmail tool already exists, skipping");
@@ -139,10 +172,14 @@ async function seedTools(): Promise<void> {
         properties: {},
       },
       description: "Get emails from the user's Gmail inbox",
-      allowUsageWhenUntrustedDataIsPresent: true,
-      dataIsTrustedByDefault: false,
     };
-    await ToolModel.create(toolData);
+    const tool = await ToolModel.create(toolData);
+
+    // Create agent-tool relationship with security settings
+    await AgentToolModel.create(DEMO_AGENT_ID, tool.id, {
+      allowUsageWhenUntrustedDataIsPresent: true,
+      toolResultTreatment: "untrusted",
+    });
     console.log("✓ Seeded gmail__getEmails tool");
   } else {
     console.log("✓ gmail__getEmails tool already exists, skipping");
@@ -615,5 +652,53 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
     console.log("✓ Seeded default dual LLM configuration");
   } else {
     console.log("✓ Dual LLM configuration already exists, skipping");
+  }
+}
+
+/**
+ * Seeds MCP catalog from JSON file
+ */
+async function seedInternalMcpCatalog(): Promise<void> {
+  if (!config.features.mcp_registry) {
+    console.log("✓ MCP registry feature is disabled, skipping");
+    return;
+  }
+
+  // 1. Get or create default organization
+  const defaultOrg = await OrganizationModel.getOrCreateDefaultOrganization();
+
+  // 2. Read and parse catalog seed JSON file
+  try {
+    // Get the path relative to the backend root directory
+    const seedFilePath = path.resolve(
+      process.cwd(),
+      "src/database/internal-mcp-catalog-seed.json",
+    );
+
+    const seedData = await fs.readFile(seedFilePath, "utf-8");
+    const catalogItems: { name: string }[] = JSON.parse(seedData);
+
+    // 3. Create catalog items
+    for (const item of catalogItems) {
+      const catalogData: InsertInternalMcpCatalog = {
+        name: item.name,
+      };
+      const existingCatalogItem = await InternalMcpCatalogModel.findByName(
+        item.name,
+      );
+      if (existingCatalogItem) {
+        console.log(`✓ MCP catalog item ${item.name} already exists, skipping`);
+        continue;
+      }
+      await InternalMcpCatalogModel.create(catalogData);
+      console.log(`✓ Seeded Internal MCP catalog item: ${item.name}`);
+    }
+
+    // 4. Mark organization as seeded
+    await OrganizationModel.updateSeededMcpCatalogFlag(defaultOrg.id, true);
+    console.log("✓ Marked organization as having seeded MCP catalog");
+  } catch (error) {
+    console.error("❌ Error seeding MCP catalog:", error);
+    // Don't throw here - we want seeding to continue even if this fails
   }
 }

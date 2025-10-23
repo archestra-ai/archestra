@@ -1,7 +1,11 @@
-import OpenAIProvider from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
-import type { DualLlmConfig, OpenAi } from "@/types";
+import type { DualLlmConfig } from "@/types";
+import {
+  createDualLlmClient,
+  type DualLlmClient,
+  type DualLlmMessage,
+} from "./dual-llm-client";
+import type { CommonDualLlmParams, SupportedProviders } from "./types";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely
@@ -13,109 +17,66 @@ import type { DualLlmConfig, OpenAi } from "@/types";
  * - Information flows through structured Q&A, preventing prompt injection
  */
 export class DualLlmSubagent {
-  messages: OpenAi.Types.ChatCompletionsRequest["messages"]; // Full conversation history
-  currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number]; // Current tool message being analyzed
   config: DualLlmConfig; // Configuration loaded from database
   agentId: string; // The agent ID for tracking
   toolCallId: string; // The tool call ID for tracking
-  openai: OpenAIProvider; // OpenAI client instance
+  llmClient: DualLlmClient; // LLM client instance
+  originalUserRequest: string; // Extracted user request
+  toolResult: unknown; // Extracted tool result
 
-  constructor(
-    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
-    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
+  private constructor(
     config: DualLlmConfig,
     agentId: string,
-    apiKey: string,
+    toolCallId: string,
+    llmClient: DualLlmClient,
+    originalUserRequest: string,
+    toolResult: unknown,
   ) {
-    this.messages = messages;
-    this.currentMessage = currentMessage;
     this.config = config;
     this.agentId = agentId;
-    this.openai = new OpenAIProvider({ apiKey });
-
-    // Extract tool_call_id from current message
-    if (currentMessage.role !== "tool") {
-      throw new Error("currentMessage must be a tool message");
-    }
-    this.toolCallId = currentMessage.tool_call_id;
+    this.toolCallId = toolCallId;
+    this.llmClient = llmClient;
+    this.originalUserRequest = originalUserRequest;
+    this.toolResult = toolResult;
   }
 
-  /**
-   * Create a DualLlmSubagent instance with configuration loaded from database
-   */
   static async create(
-    messages: OpenAi.Types.ChatCompletionsRequest["messages"],
-    currentMessage: OpenAi.Types.ChatCompletionsRequest["messages"][number],
+    params: CommonDualLlmParams,
     agentId: string,
     apiKey: string,
+    provider: SupportedProviders,
   ): Promise<DualLlmSubagent> {
-    const config = await DualLlmConfigModel.getDefault();
     return new DualLlmSubagent(
-      messages,
-      currentMessage,
-      config,
+      await DualLlmConfigModel.getDefault(),
       agentId,
-      apiKey,
+      params.toolCallId,
+      createDualLlmClient(provider, apiKey),
+      params.userRequest,
+      params.toolResult,
     );
-  }
-
-  /**
-   * Extract the user's original request from the conversation.
-   * Currently gets the last user message.
-   * In the future, this could use smarter intent extraction.
-   */
-  private extractUserRequest(): string {
-    const userContent =
-      this.messages.filter((m) => m.role === "user").slice(-1)[0]?.content ||
-      "process this data";
-
-    // Convert to string if it's an array (multimodal content)
-    return typeof userContent === "string"
-      ? userContent
-      : JSON.stringify(userContent);
-  }
-
-  /**
-   * Extract the tool result data from the current message.
-   * Parses JSON if possible, otherwise returns as-is.
-   */
-  private extractToolResult(): unknown {
-    if (this.currentMessage.role !== "tool") {
-      throw new Error("Current message is not a tool message");
-    }
-
-    const content = this.currentMessage.content;
-
-    if (typeof content === "string") {
-      try {
-        return JSON.parse(content);
-      } catch {
-        // If content is not valid JSON, use it as-is
-        return content;
-      }
-    }
-
-    return content;
   }
 
   /**
    * Main entry point for the quarantine pattern.
    * Runs a Q&A session between main agent and quarantined agent.
    *
+   * @param onProgress - Optional callback for streaming Q&A progress
    * @returns A safe summary of the information extracted
    */
-  async processWithMainAgent(): Promise<string> {
-    // Extract data from messages
-    const originalUserRequest = this.extractUserRequest();
-    const toolResult = this.extractToolResult();
-
+  async processWithMainAgent(
+    onProgress?: (progress: {
+      question: string;
+      options: string[];
+      answer: string;
+    }) => void,
+  ): Promise<string> {
     // Load prompt from database configuration and replace template variable
     const mainAgentPrompt = this.config.mainAgentPrompt.replace(
       "{{originalUserRequest}}",
-      originalUserRequest,
+      this.originalUserRequest,
     );
 
-    const conversation: ChatCompletionMessageParam[] = [
+    const conversation: DualLlmMessage[] = [
       {
         role: "user",
         content: mainAgentPrompt,
@@ -131,14 +92,7 @@ export class DualLlmSubagent {
       console.log(`\n--- Round ${round + 1}/${this.config.maxRounds} ---`);
 
       // Step 1: Main agent formulates a multiple choice question
-      const mainAgentResponse = await this.openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: conversation,
-        temperature: 0,
-      });
-
-      const response =
-        mainAgentResponse.choices[0].message.content?.trim() || "";
+      const response = await this.llmClient.chat(conversation, 0);
       conversation.push({ role: "assistant", content: response });
 
       // Check if main agent is done questioning
@@ -170,14 +124,19 @@ export class DualLlmSubagent {
       }
 
       // Step 3: Quarantined agent answers the question (can see untrusted data)
-      const answerIndex = await this.answerQuestion(
-        question,
-        options,
-        toolResult,
-      );
+      const answerIndex = await this.answerQuestion(question, options);
       const selectedOption = options[answerIndex];
 
       console.log(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
+
+      // Stream progress if callback provided
+      if (onProgress) {
+        onProgress({
+          question,
+          options,
+          answer: `${answerIndex}`,
+        });
+      }
 
       // Step 4: Feed the answer back to the main agent
       conversation.push({
@@ -213,48 +172,39 @@ export class DualLlmSubagent {
    *
    * @param question - The question to answer
    * @param options - Array of possible answers
-   * @param toolResult - The untrusted tool result data
    * @returns Index of the selected option (0-based)
    */
   private async answerQuestion(
     question: string,
     options: string[],
-    toolResult: unknown,
   ): Promise<number> {
     const optionsText = options.map((opt, idx) => `${idx}: ${opt}`).join("\n");
 
     // Load quarantined agent prompt from database configuration and replace template variables
     const quarantinedPrompt = this.config.quarantinedAgentPrompt
-      .replace("{{toolResultData}}", JSON.stringify(toolResult, null, 2))
+      .replace("{{toolResultData}}", JSON.stringify(this.toolResult, null, 2))
       .replace("{{question}}", question)
       .replace("{{options}}", optionsText)
       .replace("{{maxIndex}}", String(options.length - 1));
 
-    const response = await this.openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: quarantinedPrompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "multiple_choice_response",
-          schema: {
-            type: "object",
-            properties: {
-              answer: {
-                type: "integer",
-                description: "The index of the selected option (0-based)",
-              },
+    const parsed = await this.llmClient.chatWithSchema<{ answer: number }>(
+      [{ role: "user", content: quarantinedPrompt }],
+      {
+        name: "multiple_choice_response",
+        schema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "integer",
+              description: "The index of the selected option (0-based)",
             },
-            required: ["answer"],
-            additionalProperties: false,
           },
+          required: ["answer"],
+          additionalProperties: false,
         },
       },
-      temperature: 0,
-    });
-
-    const content = response.choices[0].message.content || "";
-    const parsed = JSON.parse(content);
+      0,
+    );
 
     // Code-level validation: Check if response has correct structure
     if (!parsed || typeof parsed.answer !== "number") {
@@ -279,13 +229,11 @@ export class DualLlmSubagent {
    * @returns A concise summary (2-3 sentences)
    */
   private async generateSummary(
-    conversation: ChatCompletionMessageParam[],
+    conversation: DualLlmMessage[],
   ): Promise<string> {
     // Extract just the Q&A pairs and summarize
     const qaText = conversation
-      .map((msg) =>
-        "content" in msg && typeof msg.content === "string" ? msg.content : "",
-      )
+      .map((msg) => msg.content)
       .filter((content) => content.length > 0)
       .join("\n");
 
@@ -295,12 +243,11 @@ export class DualLlmSubagent {
       qaText,
     );
 
-    const summaryResponse = await this.openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: summaryPrompt }],
-      temperature: 0,
-    });
+    const summary = await this.llmClient.chat(
+      [{ role: "user", content: summaryPrompt }],
+      0,
+    );
 
-    return summaryResponse.choices[0].message.content?.trim() || "";
+    return summary;
   }
 }

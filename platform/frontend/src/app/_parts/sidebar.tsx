@@ -16,14 +16,15 @@ import {
   LogIn,
   type LucideIcon,
   MessagesSquare,
+  Router,
   Settings,
   ShieldCheck,
   Slack,
   Star,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
 import {
@@ -43,6 +44,8 @@ import {
 } from "@/components/ui/sidebar";
 import { WithRole } from "@/components/with-permission";
 import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
+import { useFeatureFlag } from "@/lib/features.hook";
+import { useGithubStars } from "@/lib/github.query";
 
 interface MenuItem {
   title: string;
@@ -54,6 +57,7 @@ interface MenuItem {
 const getNavigationItems = (
   isAuthenticated: boolean,
   role: Role,
+  mcpRegistryEnabled: boolean,
 ): MenuItem[] => {
   return [
     {
@@ -78,6 +82,15 @@ const getNavigationItems = (
             url: "/tools",
             icon: FileJson2,
           },
+          ...(mcpRegistryEnabled
+            ? [
+                {
+                  title: "MCP Catalog",
+                  url: "/mcp-catalog",
+                  icon: Router,
+                },
+              ]
+            : []),
           ...(role === "admin"
             ? [
                 {
@@ -111,20 +124,10 @@ const userItems: MenuItem[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [starCount, setStarCount] = useState<number | null>(null);
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
-
-  useEffect(() => {
-    fetch("https://api.github.com/repos/archestra-ai/archestra")
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.stargazers_count) {
-          setStarCount(data.stargazers_count);
-        }
-      })
-      .catch((error) => console.error("Error fetching GitHub stars:", error));
-  }, []);
+  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
+  const { data: starCount } = useGithubStars();
 
   return (
     <Sidebar>
@@ -139,13 +142,17 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated, role).map((item) => (
+              {getNavigationItems(
+                isAuthenticated,
+                role,
+                mcpRegistryEnabled,
+              ).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                   {item.subItems && (
                     <SidebarMenuSub>
@@ -155,10 +162,10 @@ export function AppSidebar() {
                             asChild
                             isActive={subItem.url === pathname}
                           >
-                            <a href={subItem.url}>
+                            <Link href={subItem.url}>
                               {subItem.icon && <subItem.icon />}
                               <span>{subItem.title}</span>
-                            </a>
+                            </Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
@@ -182,10 +189,10 @@ export function AppSidebar() {
                         asChild
                         isActive={item.url === pathname}
                       >
-                        <a href={item.url}>
+                        <Link href={item.url}>
                           <item.icon />
                           <span>{item.title}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -211,9 +218,7 @@ export function AppSidebar() {
                       Star us on GitHub
                       <span className="flex items-center gap-1 text-xs">
                         <Star className="h-3 w-3" />
-                        {starCount !== null
-                          ? starCount.toLocaleString()
-                          : "..."}
+                        {starCount}
                       </span>
                     </span>
                   </a>
@@ -273,16 +278,16 @@ export function AppSidebar() {
           </SidebarGroup>
         </SignedIn>
         <SignedOut>
-          <SidebarGroupContent className="mt-4">
+          <SidebarGroupContent className="mb-4">
             <SidebarGroupLabel>User</SidebarGroupLabel>
             <SidebarMenu>
               {userItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

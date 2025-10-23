@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "scripts": {
@@ -16,7 +16,7 @@
     "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
     "codegen:api-client": "turbo codegen:api-client",
-    "db:generate": "turbo db:generate",
+    "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",
     "db:studio": "turbo db:studio",

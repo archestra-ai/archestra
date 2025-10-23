@@ -8,6 +8,47 @@ import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
+/**
+ * Inject assigned MCP tools into Anthropic tools array
+ * Assigned tools take priority and override tools with the same name from the request
+ */
+export const injectTools = async (
+  requestTools: z.infer<typeof Anthropic.Tools.ToolSchema>[] | undefined,
+  agentId: string,
+): Promise<z.infer<typeof Anthropic.Tools.ToolSchema>[]> => {
+  const assignedTools = await utils.tools.getAssignedMCPTools(agentId);
+
+  // Convert assigned tools to Anthropic format (CustomTool)
+  const assignedAnthropicTools: z.infer<
+    typeof Anthropic.Tools.CustomToolSchema
+  >[] = assignedTools.map((tool) => ({
+    name: tool.name,
+    description: tool.description || undefined,
+    input_schema: tool.parameters || {},
+    type: "custom" as const,
+  }));
+
+  // Create a map of request tools by name
+  const requestToolMap = new Map<
+    string,
+    z.infer<typeof Anthropic.Tools.ToolSchema>
+  >();
+  for (const tool of requestTools || []) {
+    requestToolMap.set(tool.name, tool);
+  }
+
+  // Merge: assigned tools override request tools with same name
+  const mergedToolMap = new Map<
+    string,
+    z.infer<typeof Anthropic.Tools.ToolSchema>
+  >(requestToolMap);
+  for (const assignedTool of assignedAnthropicTools) {
+    mergedToolMap.set(assignedTool.name, assignedTool);
+  }
+
+  return Array.from(mergedToolMap.values());
+};
+
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
@@ -44,7 +85,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    const { stream } = body;
+    const { tools, stream } = body;
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -70,10 +111,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({ apiKey: anthropicApiKey });
 
     try {
-      if (body.tools) {
-        const transformedTools: Parameters<typeof utils.persistTools>[0] = [];
+      if (tools) {
+        const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
+          [];
 
-        for (const tool of body.tools) {
+        for (const tool of tools) {
           // null/undefine/type === custom essentially all mean the same thing for Anthropic tools...
           if (
             tool.type === undefined ||
@@ -88,33 +130,261 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        await utils.persistTools(transformedTools, resolvedAgentId);
+        await utils.tools.persistTools(transformedTools, resolvedAgentId);
       }
 
-      // Process messages with trusted data policies dynamically
-      const { filteredMessages, contextIsTrusted } =
+      // Inject assigned MCP tools (assigned tools take priority)
+      const mergedTools = await injectTools(tools, resolvedAgentId);
+
+      // Convert to common format and evaluate trusted data policies
+      const commonMessages = utils.adapters.anthropic.toCommonFormat(
+        body.messages,
+      );
+
+      // For streaming requests, set headers first
+      if (stream) {
+        reply.header("Content-Type", "text/event-stream");
+        reply.header("Cache-Control", "no-cache");
+        reply.header("Connection", "keep-alive");
+      }
+
+      const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
-          {
-            provider: "anthropic",
-            messages: body.messages,
-          },
+          commonMessages,
           resolvedAgentId,
           anthropicApiKey,
+          "anthropic",
+          stream
+            ? () => {
+                // Send initial indicator when dual LLM starts (streaming only)
+                const startEvent = {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: {
+                    type: "text_delta",
+                    text: "Analyzing with Dual LLM:\n\n",
+                  },
+                };
+                reply.raw.write(
+                  `event: content_block_delta\ndata: ${JSON.stringify(startEvent)}\n\n`,
+                );
+              }
+            : undefined,
+          stream
+            ? (progress) => {
+                // Stream Q&A progress with options
+                const optionsText = progress.options
+                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .join("\n");
+                const progressEvent = {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: {
+                    type: "text_delta",
+                    text: `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                  },
+                };
+                reply.raw.write(
+                  `event: content_block_delta\ndata: ${JSON.stringify(progressEvent)}\n\n`,
+                );
+              }
+            : undefined,
         );
 
+      // Apply updates back to Anthropic messages
+      const filteredMessages = utils.adapters.anthropic.applyUpdates(
+        body.messages,
+        toolResultUpdates,
+      );
+
       if (stream) {
-        return reply.code(400).send({
-          error: {
-            message: "Streaming is not supported for Anthropic. Coming soon!",
-            type: "not_supported",
-          },
-        });
-      } else {
-        // Non-streaming response
-        const response = await anthropicClient.messages.create({
+        // Handle streaming response
+        const messageStream = anthropicClient.messages.stream({
           // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
           ...(body as any),
           messages: filteredMessages,
+        });
+
+        // Accumulate tool calls and track content for persistence
+        let accumulatedText = "";
+        const accumulatedToolCalls: AnthropicProvider.Messages.ToolUseBlock[] =
+          [];
+        const events: AnthropicProvider.Messages.MessageStreamEvent[] = [];
+
+        for await (const event of messageStream) {
+          events.push(event);
+
+          // Stream text content immediately
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            reply.raw.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
+            accumulatedText += event.delta.text;
+          }
+
+          // Accumulate tool calls (don't stream yet - need to evaluate policies first)
+          if (
+            event.type === "content_block_start" &&
+            event.content_block.type === "tool_use"
+          ) {
+            accumulatedToolCalls.push(event.content_block);
+          } else if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "input_json_delta"
+          ) {
+            // Accumulate tool input JSON
+            const lastToolCall =
+              accumulatedToolCalls[accumulatedToolCalls.length - 1];
+            if (lastToolCall) {
+              lastToolCall.input =
+                (lastToolCall.input || "") + event.delta.partial_json;
+            }
+          }
+        }
+
+        // Parse accumulated tool inputs
+        for (const toolCall of accumulatedToolCalls) {
+          try {
+            toolCall.input = JSON.parse(toolCall.input as string);
+          } catch {
+            // If parsing fails, leave as string
+          }
+        }
+
+        // Evaluate tool invocation policies dynamically
+        let toolInvocationRefusal: [string, string] | null = null;
+        if (accumulatedToolCalls.length > 0) {
+          toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+            accumulatedToolCalls.map((toolCall) => ({
+              toolCallName: toolCall.name,
+              toolCallArgs: JSON.stringify(toolCall.input),
+            })),
+            resolvedAgentId,
+            contextIsTrusted,
+          );
+        }
+
+        // Build the final response for persistence
+        let responseContent: AnthropicProvider.Messages.ContentBlock[];
+
+        if (toolInvocationRefusal) {
+          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+          responseContent = [
+            {
+              type: "text",
+              text: contentMessage,
+              citations: null,
+            },
+          ];
+
+          // Stream the refusal
+          const refusalEvent = {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "text_delta",
+              text: contentMessage,
+            },
+          };
+          reply.raw.write(
+            `event: content_block_delta\ndata: ${JSON.stringify(refusalEvent)}\n\n`,
+          );
+        } else {
+          // Tool calls are allowed - stream them now
+          if (accumulatedToolCalls.length > 0) {
+            responseContent = [
+              ...(accumulatedText
+                ? [
+                    {
+                      type: "text" as const,
+                      text: accumulatedText,
+                      citations: null,
+                    },
+                  ]
+                : []),
+              ...accumulatedToolCalls,
+            ];
+
+            for (const event of events) {
+              if (
+                event.type === "content_block_start" &&
+                event.content_block.type === "tool_use"
+              ) {
+                reply.raw.write(
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                );
+              } else if (
+                event.type === "content_block_delta" &&
+                event.delta.type === "input_json_delta"
+              ) {
+                reply.raw.write(
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                );
+              }
+            }
+          } else {
+            responseContent = [
+              {
+                type: "text",
+                text: accumulatedText,
+                citations: null,
+              },
+            ];
+          }
+        }
+
+        // Get the message ID and other metadata from the stream
+        const messageStartEvent = events.find(
+          (e) => e.type === "message_start",
+        ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
+
+        // Store the complete interaction
+        await InteractionModel.create({
+          agentId: resolvedAgentId,
+          type: "anthropic:messages",
+          request: body,
+          response: {
+            id: messageStartEvent?.message.id || "msg-unknown",
+            type: "message",
+            role: "assistant",
+            content: responseContent,
+            model: body.model,
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: messageStartEvent?.message.usage || {
+              input_tokens: 0,
+              output_tokens: 0,
+            },
+          },
+        });
+
+        // Send message_delta with stop_reason
+        const messageDeltaEvent = {
+          type: "message_delta",
+          delta: {
+            stop_reason: "end_turn",
+            stop_sequence: null,
+          },
+        };
+        reply.raw.write(
+          `event: message_delta\ndata: ${JSON.stringify(messageDeltaEvent)}\n\n`,
+        );
+
+        // Send message_stop event
+        reply.raw.write(`event: message_stop\ndata: {}\n\n`);
+
+        reply.raw.end();
+        return reply;
+      } else {
+        // Non-streaming response
+        let response = await anthropicClient.messages.create({
+          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+          ...(body as any),
+          messages: filteredMessages,
+          tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: false,
         });
 
@@ -152,6 +422,47 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return reply.send(response);
+          } else if (toolCalls.length > 0) {
+            // Tool calls are allowed - execute MCP tools
+            const commonToolCalls = utils.adapters.anthropic.toolCallsToCommon(
+              toolCalls as Array<{
+                id: string;
+                name: string;
+                input: Record<string, unknown>;
+              }>,
+            );
+            const mcpResults = await utils.tools.executeMcpToolCalls(
+              commonToolCalls,
+              resolvedAgentId,
+            );
+
+            if (mcpResults.length > 0) {
+              // Convert MCP results to Anthropic tool result messages
+              const toolResultMessages =
+                utils.adapters.anthropic.toolResultsToMessages(mcpResults);
+
+              // Make another call with the tool results
+              const updatedMessages = [
+                ...filteredMessages,
+                {
+                  role: "assistant" as const,
+                  content: response.content,
+                },
+                ...toolResultMessages,
+              ];
+
+              // Make final call with tool results
+              const finalResponse = await anthropicClient.messages.create({
+                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                ...(body as any),
+                messages: updatedMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                stream: false,
+              });
+
+              // Update the response with the final LLM response
+              response = finalResponse;
+            }
           }
         }
 

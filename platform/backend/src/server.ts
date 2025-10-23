@@ -9,8 +9,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { authMiddleware } from "@/auth/auth-middleware";
 import config from "@/config";
+import { authMiddleware } from "@/middleware/auth";
 import {
   Anthropic,
   Gemini,
@@ -22,7 +22,7 @@ import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host, corsOrigins },
+  api: { port, name, version, host, corsOrigins, authHeaderName },
 } = config;
 
 const fastify = Fastify({
@@ -77,7 +77,14 @@ const start = async () => {
     await fastify.register(fastifyCors, {
       origin: corsOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Cookie",
+        authHeaderName,
+      ],
+      exposedHeaders: ["Set-Cookie"],
       credentials: true,
     });
 
@@ -115,17 +122,9 @@ const start = async () => {
 
     fastify.addHook("preHandler", authMiddleware.handle);
 
-    fastify.register(routes.authRoutes);
-    fastify.register(routes.anthropicProxyRoutes);
-    fastify.register(routes.openAiProxyRoutes);
-    fastify.register(routes.geminiProxyRoutes);
-
-    fastify.register(routes.agentRoutes);
-    fastify.register(routes.interactionRoutes);
-    fastify.register(routes.toolRoutes);
-    fastify.register(routes.autonomyPolicyRoutes);
-    fastify.register(routes.dualLlmConfigRoutes);
-    fastify.register(routes.dualLlmResultRoutes);
+    for (const route of Object.values(routes)) {
+      fastify.register(route);
+    }
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);

@@ -1,5 +1,55 @@
 import { randomUUID } from "node:crypto";
-import { randomBool } from "./utils";
+import { randomBool, randomElement } from "./utils";
+
+const PARAMETER_TYPES = ["string", "number", "boolean", "object", "array"];
+
+const COMMON_PARAMETERS = {
+  file: ["path", "filename", "encoding", "mode"],
+  data: ["data", "format", "schema", "validation"],
+  api: ["url", "method", "headers", "body", "timeout"],
+  query: ["query", "params", "filters", "limit", "offset"],
+  config: ["config", "options", "settings", "preferences"],
+};
+
+/**
+ * Generate random parameters for a tool based on its name
+ */
+function generateRandomParameters(toolName: string): Record<string, unknown> {
+  const paramCount = Math.floor(Math.random() * 4) + 1; // 1-4 parameters
+  const properties: Record<string, { type: string; description?: string }> = {};
+  const required: string[] = [];
+
+  // Determine parameter category based on tool name
+  let paramCategory = "config";
+  if (toolName.includes("file")) paramCategory = "file";
+  else if (toolName.includes("data")) paramCategory = "data";
+  else if (toolName.includes("api")) paramCategory = "api";
+  else if (toolName.includes("query")) paramCategory = "query";
+
+  const availableParams =
+    COMMON_PARAMETERS[paramCategory as keyof typeof COMMON_PARAMETERS];
+
+  for (let i = 0; i < paramCount; i++) {
+    const paramName = availableParams[i] || `param_${i + 1}`;
+    const paramType = randomElement(PARAMETER_TYPES);
+
+    properties[paramName] = {
+      type: paramType,
+      description: `${paramName} parameter for ${toolName}`,
+    };
+
+    // 70% chance to be required
+    if (Math.random() < 0.7) {
+      required.push(paramName);
+    }
+  }
+
+  return {
+    type: "object",
+    properties,
+    required,
+  };
+}
 
 export const TOOL_NAMES = [
   // File operations
@@ -93,7 +143,7 @@ export function generateMockTools(
       agentId,
       name,
       description: `${name.replace(/_/g, " ")} tool for ${agentName}`,
-      parameters: {},
+      parameters: generateRandomParameters(name),
       allowUsageWhenUntrustedDataIsPresent: randomBool(),
       dataIsTrustedByDefault: randomBool(0.3), // 30% chance
       createdAt: new Date(),

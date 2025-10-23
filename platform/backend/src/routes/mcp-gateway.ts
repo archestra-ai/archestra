@@ -1,3 +1,7 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -6,239 +10,221 @@ import mcpClientService from "@/services/mcp-client";
 import { type CommonToolCall, type Tool, UuidIdSchema } from "@/types";
 
 /**
- * JSON-RPC 2.0 request schema
+ * Cache of MCP server factories by agent ID
+ * We cache tools to avoid database queries
  */
-const JsonRpcRequestSchema = z.object({
-  jsonrpc: z.literal("2.0"),
-  id: z.union([z.string(), z.number(), z.null()]).optional(),
-  method: z.string(),
-  params: z.record(z.string(), z.unknown()).optional(),
-});
+const agentServerFactories = new Map<
+  string,
+  {
+    tools: Tool[];
+    lastFetch: number;
+  }
+>();
 
 /**
- * JSON-RPC 2.0 response schema
+ * Cache TTL for tools (5 minutes)
  */
-const JsonRpcResponseSchema = z.object({
-  jsonrpc: z.literal("2.0"),
-  id: z.union([z.string(), z.number(), z.null()]).optional(),
-  result: z.unknown().optional(),
-  error: z
-    .object({
-      code: z.number(),
-      message: z.string(),
-      data: z.unknown().optional(),
-    })
-    .optional(),
-});
-
-type JsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>;
-type JsonRpcResponse = z.infer<typeof JsonRpcResponseSchema>;
+const TOOLS_CACHE_TTL = 5 * 60 * 1000;
 
 /**
- * Transform database tool record to MCP tool format
+ * Active transports by session ID
+ * Transports must persist across requests within the same session
  */
-const transformToolToMcpFormat = (tool: Tool) => ({
-  name: tool.name,
-  description: tool.description || `Tool: ${tool.name}`,
-  inputSchema: tool.parameters || {
-    type: "object",
-    properties: {},
-    required: [],
-  },
-});
+const activeTransports = new Map<string, StreamableHTTPServerTransport>();
 
 /**
- * Handle MCP initialize request
+ * Active servers by session ID
+ * Servers must persist across requests within the same session
  */
-async function handleInitialize(): Promise<{
-  protocolVersion: string;
-  capabilities: {
-    tools?: { listChanged?: boolean };
-    prompts?: { listChanged?: boolean };
-    resources?: { listChanged?: boolean };
-    logging?: Record<string, never>;
-  };
-  serverInfo: {
-    name: string;
-    version: string;
-  };
-}> {
-  return {
-    protocolVersion: "2025-06-18",
-    capabilities: {
-      tools: { listChanged: false },
-    },
-    serverInfo: {
-      name: "archestra-mcp-server",
+const activeServers = new Map<string, McpServer>();
+
+/**
+ * Get cached tools for an agent or fetch them
+ */
+async function getToolsForAgent(
+  agentId: string,
+  logger: { info: (obj: unknown, msg: string) => void },
+): Promise<Tool[]> {
+  const cached = agentServerFactories.get(agentId);
+  const now = Date.now();
+
+  if (cached && now - cached.lastFetch < TOOLS_CACHE_TTL) {
+    logger.info(
+      { agentId, toolCount: cached.tools.length },
+      "Using cached tools",
+    );
+    return cached.tools;
+  }
+
+  logger.info({ agentId }, "Fetching tools from database");
+  const tools = await ToolModel.getToolsByAgent(agentId);
+  logger.info({ agentId, toolCount: tools.length }, "Fetched tools for agent");
+
+  agentServerFactories.set(agentId, { tools, lastFetch: now });
+  return tools;
+}
+
+/**
+ * Create a fresh MCP server for a request
+ * In stateless mode, we need to create new server instances per request
+ */
+async function createAgentServer(
+  agentId: string,
+  logger: { info: (obj: unknown, msg: string) => void },
+): Promise<McpServer> {
+  logger.info({ agentId }, "Creating new MCP server instance");
+
+  // Create new MCP server instance for this agent
+  const server = new McpServer(
+    {
+      name: `archestra-agent-${agentId}`,
       version: config.api.version,
     },
-  };
-}
+    {
+      capabilities: {
+        tools: { listChanged: false },
+      },
+    },
+  );
 
-/**
- * Handle MCP tools/list request
- */
-async function handleToolsList(agentId: string): Promise<{ tools: unknown[] }> {
-  try {
-    const tools = await ToolModel.getToolsByAgent(agentId);
-    const mcpTools = tools.map(transformToolToMcpFormat);
+  // Get tools for this agent (from cache or database)
+  const tools = await getToolsForAgent(agentId, logger);
 
-    return {
-      tools: mcpTools,
-    };
-  } catch (error) {
-    throw {
-      code: -32603, // Internal error
-      message: "Failed to fetch agent tools",
-      data: error instanceof Error ? error.message : "Unknown error",
-    };
+  // Register all tool handlers
+  for (const tool of tools) {
+    await registerToolHandler(server, tool, agentId, logger);
   }
+
+  logger.info({ agentId }, "MCP server instance created");
+  return server;
 }
 
 /**
- * Handle MCP tools/call request
+ * Register a tool handler on the MCP server
  */
-async function handleToolsCall(
-  toolName: string,
-  toolArguments: Record<string, unknown>,
+async function registerToolHandler(
+  server: McpServer,
+  tool: Tool,
   agentId: string,
-): Promise<{
-  content: unknown[];
-  structuredContent?: unknown;
-  isError?: boolean;
-}> {
-  try {
-    // Generate a unique ID for this tool call
-    const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // Create CommonToolCall for McpClientService
-    const toolCall: CommonToolCall = {
-      id: toolCallId,
-      name: toolName,
-      arguments: toolArguments,
-    };
-
-    // Execute the tool call via McpClientService (assumes GitHub MCP tools)
-    const results = await mcpClientService.executeToolCalls(
-      [toolCall],
-      agentId,
-    );
-
-    if (results.length === 0) {
-      throw {
-        code: -32603, // Internal error
-        message: `Tool '${toolName}' not found or not assigned to agent`,
-      };
-    }
-
-    const result = results[0];
-
-    if (result.isError) {
-      throw {
-        code: -32603, // Internal error
-        message: result.error || "Tool execution failed",
-      };
-    }
-
-    // Transform CommonToolResult to MCP response format
-    return {
-      content: Array.isArray(result.content)
-        ? result.content
-        : [{ type: "text", text: JSON.stringify(result.content) }],
-      isError: false,
-    };
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error) {
-      throw error; // Re-throw JSON-RPC errors
-    }
-
-    throw {
-      code: -32603, // Internal error
-      message: "Tool execution failed",
-      data: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
-}
-
-/**
- * Process JSON-RPC request for MCP
- */
-async function processJsonRpcRequest(
-  request: JsonRpcRequest,
-  agentId: string,
-): Promise<JsonRpcResponse> {
-  const response: JsonRpcResponse = {
-    jsonrpc: "2.0",
-    id: request.id,
+  logger: { info: (obj: unknown, msg: string) => void },
+): Promise<void> {
+  const toolName = tool.name;
+  const toolDescription = tool.description || `Tool: ${toolName}`;
+  const _inputSchema = (tool.parameters as Record<string, unknown>) || {
+    type: "object",
+    properties: {},
   };
 
-  try {
-    switch (request.method) {
-      case "initialize":
-        response.result = await handleInitialize();
-        break;
-      case "tools/list":
-        response.result = await handleToolsList(agentId);
-        break;
-      case "tools/call": {
-        const params = request.params;
-        if (!params || typeof params !== "object") {
-          response.error = {
-            code: -32602, // Invalid params
-            message: "Missing or invalid params for tools/call",
-          };
-          break;
-        }
+  logger.info({ toolName, agentId }, "Registering tool handler");
 
-        const { name: toolName, arguments: toolArguments } = params as {
-          name?: unknown;
-          arguments?: unknown;
+  // Extract properties from JSON schema for Zod validation
+  // The MCP SDK expects Zod schemas, but we store JSON schemas in DB
+  // For now, we'll pass a simple object schema that accepts any properties
+  server.tool(
+    toolName,
+    toolDescription,
+    {},
+    async (args, _extra): Promise<CallToolResult> => {
+      logger.info({ toolName, args, agentId }, "Tool handler called");
+      try {
+        // Create a CommonToolCall for McpClientService
+        const toolCall: CommonToolCall = {
+          id: `tool-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          name: toolName,
+          arguments: args as Record<string, unknown>,
         };
 
-        if (typeof toolName !== "string") {
-          response.error = {
-            code: -32602, // Invalid params
-            message: "Tool name must be a string",
-          };
-          break;
-        }
-
-        if (typeof toolArguments !== "object" || toolArguments === null) {
-          response.error = {
-            code: -32602, // Invalid params
-            message: "Tool arguments must be an object",
-          };
-          break;
-        }
-
-        response.result = await handleToolsCall(
-          toolName,
-          toolArguments as Record<string, unknown>,
+        // Execute the tool call via McpClientService
+        const results = await mcpClientService.executeToolCalls(
+          [toolCall],
           agentId,
         );
-        break;
-      }
-      default:
-        response.error = {
-          code: -32601, // Method not found
-          message: `Method '${request.method}' not found`,
-        };
-    }
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error) {
-      response.error = error as JsonRpcResponse["error"];
-    } else {
-      response.error = {
-        code: -32603, // Internal error
-        message: "Internal error",
-        data: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
 
-  return response;
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Tool '${toolName}' not found or not assigned to agent`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = results[0];
+
+        if (result.isError) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: result.error || "Tool execution failed",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Transform CommonToolResult to MCP CallToolResult format
+        return {
+          content: Array.isArray(result.content)
+            ? result.content
+            : [{ type: "text", text: JSON.stringify(result.content) }],
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error occurred",
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
 }
 
+/**
+ * Create a fresh transport for a request
+ * We use session-based mode as required by the SDK for JSON responses
+ */
+function createTransport(
+  agentId: string,
+  clientSessionId: string | undefined,
+  logger: { info: (obj: unknown, msg: string) => void },
+): StreamableHTTPServerTransport {
+  logger.info({ agentId, clientSessionId }, "Creating new transport instance");
+
+  // Create transport with session management
+  // If client provides a session ID, we'll use it; otherwise generate one
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => {
+      const sessionId =
+        clientSessionId ||
+        `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      logger.info(
+        { agentId, sessionId, wasClientProvided: !!clientSessionId },
+        "Using session ID",
+      );
+      return sessionId;
+    },
+    enableJsonResponse: true, // Use JSON responses instead of SSE
+  });
+
+  logger.info({ agentId }, "Transport instance created");
+  return transport;
+}
+
+/**
+ * Fastify route plugin for MCP gateway
+ */
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint: endpointPrefix } = config.mcpGateway;
   const endpoint = `${endpointPrefix}/:agentId`;
@@ -246,7 +232,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId: UuidIdSchema,
   });
 
-  // GET endpoint for SSE transport discovery/server info
+  // GET endpoint for server discovery
   fastify.get(
     endpoint,
     {
@@ -279,26 +265,157 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // POST endpoint for JSON-RPC requests
+  // POST endpoint for JSON-RPC requests (handled by MCP SDK)
   fastify.post(
     endpoint,
     {
       schema: {
         params,
-        body: JsonRpcRequestSchema,
-        response: {
-          200: JsonRpcResponseSchema,
-          500: JsonRpcResponseSchema,
-        },
+        // Accept any JSON body - will be validated by MCP SDK
+        body: z.record(z.string(), z.unknown()),
       },
     },
     async (request, reply) => {
-      const response = await processJsonRpcRequest(
-        request.body,
-        request.params.agentId,
+      const { agentId } = request.params;
+      const sessionId = request.headers["mcp-session-id"] as string | undefined;
+      const isInitialize = request.body?.method === "initialize";
+
+      fastify.log.info(
+        {
+          agentId,
+          sessionId,
+          method: request.body?.method,
+          isInitialize,
+          bodyKeys: Object.keys(request.body || {}),
+          allHeaders: request.headers,
+        },
+        "MCP gateway POST request received",
       );
-      reply.type("application/json");
-      return response;
+
+      try {
+        let server: McpServer;
+        let transport: StreamableHTTPServerTransport;
+
+        // Check if we have an existing session
+        if (sessionId && activeTransports.has(sessionId)) {
+          fastify.log.info({ agentId, sessionId }, "Reusing existing session");
+          transport = activeTransports.get(sessionId)!;
+          server = activeServers.get(sessionId)!;
+        } else if (isInitialize) {
+          // Initialize request - create new session
+          // Use client-provided session ID if available
+          fastify.log.info(
+            { agentId, clientProvidedSessionId: sessionId },
+            "Initialize request - creating new session",
+          );
+          server = await createAgentServer(agentId, fastify.log);
+          transport = createTransport(agentId, sessionId, fastify.log);
+
+          // Connect server to transport (this also starts the transport)
+          fastify.log.info({ agentId }, "Connecting server to transport");
+          await server.connect(transport);
+          fastify.log.info({ agentId }, "Server connected to transport");
+
+          // Store session using client-provided ID if available
+          // If no client ID, we'll need to get it from transport after the request
+          if (sessionId) {
+            activeTransports.set(sessionId, transport);
+            activeServers.set(sessionId, server);
+            fastify.log.info(
+              {
+                agentId,
+                storedSessionId: sessionId,
+              },
+              "Session stored with client-provided ID",
+            );
+          } else {
+            // No client ID - will need to store after transport generates one
+            // We'll do this after handleRequest completes
+            fastify.log.info(
+              { agentId },
+              "No client session ID - will store after transport initializes",
+            );
+          }
+        } else {
+          // Non-initialize request without a valid session
+          fastify.log.error(
+            { agentId, sessionId, method: request.body?.method },
+            "Request received without valid session",
+          );
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Bad Request: Invalid or expired session",
+            },
+            id: null,
+          };
+        }
+
+        // Let the MCP SDK handle the request/response
+        // Cast Fastify request/reply to Node.js types expected by SDK
+        fastify.log.info(
+          { agentId, sessionId },
+          "Calling transport.handleRequest",
+        );
+
+        // We need to hijack Fastify's reply to let the SDK handle the raw response
+        reply.hijack();
+
+        await transport.handleRequest(
+          request.raw as IncomingMessage,
+          reply.raw as ServerResponse,
+          request.body,
+        );
+        fastify.log.info(
+          { agentId, sessionId },
+          "Transport.handleRequest completed",
+        );
+
+        // If this was an initialize request without a client session ID,
+        // store the transport's generated session ID now
+        if (isInitialize && !sessionId) {
+          const generatedSessionId = transport.sessionId;
+          if (generatedSessionId) {
+            activeTransports.set(generatedSessionId, transport);
+            activeServers.set(generatedSessionId, server);
+            fastify.log.info(
+              { agentId, generatedSessionId },
+              "Session stored with server-generated ID",
+            );
+          }
+        }
+
+        fastify.log.info(
+          { agentId, sessionId },
+          "Request handled successfully",
+        );
+      } catch (error) {
+        fastify.log.error(
+          {
+            error,
+            errorMessage: error instanceof Error ? error.message : "Unknown",
+            errorStack: error instanceof Error ? error.stack : undefined,
+            agentId,
+          },
+          "Error handling MCP request",
+        );
+
+        // Only send error response if headers not already sent
+        if (!reply.sent) {
+          reply.status(500);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32603,
+              message: "Internal server error",
+              data: error instanceof Error ? error.message : "Unknown error",
+            },
+            id: null,
+          };
+        }
+      }
     },
   );
 };

@@ -236,6 +236,47 @@ class McpClientService {
   });
 
   /**
+   * Create configuration for a generic remote MCP server
+   */
+  createRemoteServerConfig = (params: {
+    name: string;
+    url: string;
+    metadata: Record<string, unknown>;
+  }): McpServerConfig => {
+    const { name, url, metadata } = params;
+
+    // Build headers from metadata
+    // Common patterns: Authorization header, API keys, etc.
+    const headers: Record<string, string> = {};
+
+    // Check for common authentication patterns in metadata
+    if (metadata.accessToken) {
+      // OAuth access token (from OAuth flow)
+      headers.Authorization = `Bearer ${metadata.accessToken}`;
+    } else if (metadata.apiKey) {
+      headers.Authorization = `Bearer ${metadata.apiKey}`;
+    } else if (metadata.token) {
+      headers.Authorization = `Bearer ${metadata.token}`;
+    } else if (metadata.authToken) {
+      headers.Authorization = `Bearer ${metadata.authToken}`;
+    } else if (metadata.authorization) {
+      headers.Authorization = metadata.authorization as string;
+    }
+
+    // Add any custom headers from metadata
+    if (metadata.headers && typeof metadata.headers === "object") {
+      Object.assign(headers, metadata.headers);
+    }
+
+    return {
+      id: name,
+      name,
+      url,
+      headers,
+    };
+  };
+
+  /**
    * Validate that a GitHub token can connect to the GitHub MCP server
    *
    * https://github.com/github/github-mcp-server?tab=readme-ov-file#install-in-vs-code

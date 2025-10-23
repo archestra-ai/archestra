@@ -62,6 +62,11 @@ function ServerCard({
                 {server.category}
               </Badge>
             )}
+            {server.oauth_config && (
+              <Badge variant="secondary" className="text-xs">
+                OAuth
+              </Badge>
+            )}
             {server.quality_score !== null && (
               <Badge variant="secondary" className="text-xs">
                 Quality: {Math.round(server.quality_score)}
@@ -175,6 +180,15 @@ export function ExternalMCPCatalog({
     await createMutation.mutateAsync({
       name: server.name,
       version: undefined, // No version in archestra catalog
+      serverType: server.server.type,
+      serverUrl:
+        server.server.type === "remote" ? server.server.url : undefined,
+      docsUrl:
+        server.server.type === "remote"
+          ? (server.server.docs_url ?? undefined)
+          : undefined,
+      userConfig: server.user_config,
+      oauthConfig: server.oauth_config,
     });
   };
 

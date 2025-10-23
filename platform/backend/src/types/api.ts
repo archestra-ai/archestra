@@ -125,6 +125,10 @@ export const RouteId = {
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
 
+  // OAuth Routes
+  InitiateOAuth: "initiateOAuth",
+  HandleOAuthCallback: "handleOAuthCallback",
+
   // Tool Routes
   GetTools: "getTools",
   GetUnassignedTools: "getUnassignedTools",

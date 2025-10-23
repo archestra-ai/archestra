@@ -109,13 +109,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const { agentIds, ...serverData } = request.body;
 
         // Validate metadata if provided (for servers that require authentication)
+        // Skip validation for OAuth servers - tokens are fresh from OAuth exchange
+        const hasOAuthTokens =
+          serverData.metadata?.accessToken || serverData.metadata?.oauthTokens;
         if (
           serverData.metadata &&
-          Object.keys(serverData.metadata).length > 0
+          Object.keys(serverData.metadata).length > 0 &&
+          !hasOAuthTokens
         ) {
           const isValid = await McpServerModel.validateConnection(
             serverData.name,
             serverData.metadata,
+            serverData.catalogId ?? undefined,
           );
 
           if (!isValid) {

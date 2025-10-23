@@ -859,7 +859,7 @@ const cliChatWithAnthropic = async (options: {
           } else if (chunk.type === "message_stop") {
             // Message complete
             assistantMessage = {
-              id: "msg_" + Date.now(),
+              id: `msg_${Date.now()}`,
               type: "message",
               role: "assistant",
               content: accumulatedContent,

@@ -4627,6 +4627,15 @@ export type GetInternalMcpCatalogResponses = {
         authFields: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -4644,6 +4653,15 @@ export type CreateInternalMcpCatalogItemData = {
         requiresAuth?: boolean;
         authDescription?: string | null;
         authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        serverType?: 'local' | 'remote';
+        serverUrl?: string | null;
+        docsUrl?: string | null;
+        userConfig?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
     };
@@ -4680,6 +4698,15 @@ export type CreateInternalMcpCatalogItemResponses = {
         requiresAuth: boolean;
         authDescription: string | null;
         authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         createdAt: string;
@@ -4780,6 +4807,15 @@ export type GetInternalMcpCatalogItemResponses = {
         authFields: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -4797,6 +4833,15 @@ export type UpdateInternalMcpCatalogItemData = {
         requiresAuth?: boolean;
         authDescription?: string | null;
         authFields?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        serverType?: 'local' | 'remote';
+        serverUrl?: string | null;
+        docsUrl?: string | null;
+        userConfig?: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
     };
@@ -4844,6 +4889,15 @@ export type UpdateInternalMcpCatalogItemResponses = {
         requiresAuth: boolean;
         authDescription: string | null;
         authFields: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        oauthConfig: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
         createdAt: string;
@@ -5117,6 +5171,109 @@ export type GetMcpServerResponses = {
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type InitiateOAuthData = {
+    body: {
+        catalogId: string;
+        serverId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/oauth/initiate';
+};
+
+export type InitiateOAuthErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type InitiateOAuthError = InitiateOAuthErrors[keyof InitiateOAuthErrors];
+
+export type InitiateOAuthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        authorizationUrl: string;
+        state: string;
+    };
+};
+
+export type InitiateOAuthResponse = InitiateOAuthResponses[keyof InitiateOAuthResponses];
+
+export type HandleOAuthCallbackData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/oauth/callback';
+};
+
+export type HandleOAuthCallbackErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type HandleOAuthCallbackError = HandleOAuthCallbackErrors[keyof HandleOAuthCallbackErrors];
+
+export type HandleOAuthCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        catalogId: string;
+        name: string;
+        accessToken: string;
+        refreshToken?: string;
+        expiresIn?: number;
+    };
+};
+
+export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
 
 export type DeleteV1OpenaiData = {
     body?: never;

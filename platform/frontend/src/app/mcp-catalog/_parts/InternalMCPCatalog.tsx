@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
+import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 export function InternalMCPCatalog({
@@ -59,9 +61,12 @@ export function InternalMCPCatalog({
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
+  const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
+    useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
     GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
+  const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
 
   const handleInstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
@@ -76,7 +81,25 @@ export function InternalMCPCatalog({
         return;
       }
 
-      // For other servers, install directly
+      // Check if this server requires OAuth authentication
+      if (catalogItem.oauthConfig) {
+        setSelectedCatalogItem(catalogItem);
+        setIsOAuthDialogOpen(true);
+        return;
+      }
+
+      // Check if this is a remote server with user configuration
+      if (
+        catalogItem.serverType === "remote" &&
+        catalogItem.userConfig &&
+        Object.keys(catalogItem.userConfig).length > 0
+      ) {
+        setSelectedCatalogItem(catalogItem);
+        setIsRemoteServerDialogOpen(true);
+        return;
+      }
+
+      // For servers without configuration, install directly
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
@@ -102,6 +125,55 @@ export function InternalMCPCatalog({
     },
     [installMutation],
   );
+
+  const handleRemoteServerInstall = useCallback(
+    async (
+      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      metadata: Record<string, unknown>,
+    ) => {
+      setInstallingItemId(catalogItem.id);
+      await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        metadata,
+      });
+      setInstallingItemId(null);
+    },
+    [installMutation],
+  );
+
+  const handleOAuthConfirm = useCallback(async () => {
+    if (!selectedCatalogItem) return;
+
+    try {
+      // Call backend to initiate OAuth flow
+      const response = await fetch("/api/oauth/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          catalogId: selectedCatalogItem.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to initiate OAuth flow");
+      }
+
+      const { authorizationUrl, state } = await response.json();
+
+      // Store state in session storage for the callback
+      sessionStorage.setItem("oauth_state", state);
+      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+
+      // Redirect to OAuth provider
+      window.location.href = authorizationUrl;
+    } catch (error) {
+      console.error("OAuth initiation error:", error);
+      // TODO: Show error toast
+    }
+  }, [selectedCatalogItem]);
 
   const getInstallationCount = useCallback(
     (catalogId: string) => {
@@ -149,6 +221,16 @@ export function InternalMCPCatalog({
     });
   }, [catalogItems, catalogSearchQuery, installedServers]);
 
+  // Find installed servers that don't have matching catalog items
+  const orphanedServers = useMemo(() => {
+    if (!installedServers) return [];
+
+    const catalogIds = new Set(catalogItems?.map((item) => item.id) || []);
+    return installedServers.filter(
+      (server) => server.catalogId && !catalogIds.has(server.catalogId),
+    );
+  }, [installedServers, catalogItems]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -185,6 +267,11 @@ export function InternalMCPCatalog({
                     {item.version && (
                       <Badge variant="secondary" className="text-xs">
                         v{item.version}
+                      </Badge>
+                    )}
+                    {item.oauthConfig && (
+                      <Badge variant="secondary" className="text-xs">
+                        OAuth
                       </Badge>
                     )}
                   </div>
@@ -266,6 +353,56 @@ export function InternalMCPCatalog({
         </div>
       )}
 
+      {/* Show orphaned servers (servers without matching catalog items) */}
+      {orphanedServers.length > 0 && (
+        <div className="space-y-4 pt-8 border-t">
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Installed Servers Without Catalog Entry
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              These servers are installed but their catalog entry is missing
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {orphanedServers.map((server) => (
+              <div
+                key={server.id}
+                className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 flex flex-col"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-h-[3rem]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-medium">{server.name}</h3>
+                      <Badge variant="outline" className="text-xs">
+                        Orphaned
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Installed:{" "}
+                      {formatDate({
+                        date: server.createdAt,
+                        dateFormat: "MM/dd/yyyy",
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-auto">
+                  <Button
+                    onClick={() => handleUninstallClick(server.id, server.name)}
+                    size="sm"
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    Uninstall
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
@@ -293,6 +430,28 @@ export function InternalMCPCatalog({
         onInstall={handleGitHubInstall}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
+      />
+
+      <RemoteServerInstallDialog
+        isOpen={isRemoteServerDialogOpen}
+        onClose={() => {
+          setIsRemoteServerDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
+        onInstall={handleRemoteServerInstall}
+        catalogItem={selectedCatalogItem}
+        isInstalling={installMutation.isPending}
+      />
+
+      <OAuthConfirmationDialog
+        open={isOAuthDialogOpen}
+        onOpenChange={setIsOAuthDialogOpen}
+        serverName={selectedCatalogItem?.name || ""}
+        onConfirm={handleOAuthConfirm}
+        onCancel={() => {
+          setIsOAuthDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
       />
 
       <UninstallServerDialog

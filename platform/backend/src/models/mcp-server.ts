@@ -78,6 +78,15 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
     }>
   > {
+    // Get catalog information if this server was installed from a catalog
+    let catalogItem = null;
+    if (mcpServer.catalogId) {
+      const { default: InternalMcpCatalogModel } = await import(
+        "./internal-mcp-catalog"
+      );
+      catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
+    }
+
     /**
      * NOTE: this is just for demo purposes for right now.. should be removed once we have full support here..
      *
@@ -100,6 +109,32 @@ class McpServerModel {
         } catch (error) {
           console.error(`Failed to get tools from GitHub MCP server:`, error);
         }
+      }
+    }
+
+    /**
+     * For remote servers, connect using the server URL and metadata
+     */
+    if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+      try {
+        const config = mcpClientService.createRemoteServerConfig({
+          name: mcpServer.name,
+          url: catalogItem.serverUrl,
+          metadata: mcpServer.metadata || {},
+        });
+        const tools = await mcpClientService.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to get tools from remote MCP server ${mcpServer.name}:`,
+          error,
+        );
+        throw error;
       }
     }
 
@@ -165,11 +200,38 @@ class McpServerModel {
   static async validateConnection(
     serverName: string,
     metadata: McpServerMetadata,
+    catalogId?: string,
   ): Promise<boolean> {
-    if (serverName === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = metadata.githubToken as string;
-      if (githubToken) {
-        return await mcpClientService.validateGitHubConnection(githubToken);
+    // if (serverName === GITHUB_MCP_SERVER_NAME) {
+    //   const githubToken = metadata.githubToken as string;
+    //   if (githubToken) {
+    //     return await mcpClientService.validateGitHubConnection(githubToken);
+    //   }
+    // }
+
+    // For other remote servers, check if we can connect using catalog info
+    if (catalogId) {
+      try {
+        const { default: InternalMcpCatalogModel } = await import(
+          "./internal-mcp-catalog"
+        );
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+
+        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+          const config = mcpClientService.createRemoteServerConfig({
+            name: serverName,
+            url: catalogItem.serverUrl,
+            metadata,
+          });
+          const tools = await mcpClientService.connectAndGetTools(config);
+          return tools.length > 0;
+        }
+      } catch (error) {
+        console.error(
+          `Validation failed for remote MCP server ${serverName}:`,
+          error,
+        );
+        return false;
       }
     }
 

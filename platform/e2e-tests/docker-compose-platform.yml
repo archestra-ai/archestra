@@ -36,6 +36,8 @@ services:
   wiremock:
     image: "wiremock/wiremock:3.13.1"
     container_name: archestra-platform-test-wiremock
+    ports:
+      - "8080:8080"
     volumes:
       - ./wiremock-mappings:/home/wiremock/mappings
     entrypoint:

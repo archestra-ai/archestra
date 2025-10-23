@@ -32,6 +32,7 @@ pnpm dev             # Start all workspaces
 pnpm lint            # Lint and auto-fix
 pnpm type-check      # Check TypeScript types
 pnpm test            # Run tests
+pnpm test:e2e        # Run e2e tests with Playwright
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -77,4 +78,4 @@ ANTHROPIC_API_KEY=your-api-key-here
 - Flat file structure, avoid barrel files
 - Only export public APIs
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing
+**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

@@ -85,7 +85,7 @@ const getNavigationItems = (
           ...(mcpRegistryEnabled
             ? [
                 {
-                  title: "MCP Catalog",
+                  title: "MCP Registry",
                   url: "/mcp-catalog",
                   icon: Router,
                 },

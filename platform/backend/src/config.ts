@@ -106,7 +106,7 @@ export default {
     authHeaderName: "X-Archestra-API-Key",
   },
   mcpGateway: {
-    endpoint: "/mcp",
+    endpoint: "/v1/mcp",
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,

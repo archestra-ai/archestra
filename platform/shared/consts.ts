@@ -18,7 +18,6 @@ export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
-  AgentActionsDropdownTrigger: "agent-actions-dropdown-trigger",
   DeleteAgentButton: "delete-agent-button",
 } as const;
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

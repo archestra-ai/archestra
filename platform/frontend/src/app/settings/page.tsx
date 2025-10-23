@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function SettingsPage() {
   const [particles, setParticles] = useState<
@@ -323,18 +322,26 @@ export default function SettingsPage() {
           <div className="mt-12 space-y-6">
             <div className="border-t pt-6">
               <h3 className="font-medium mb-4">Connection Options</h3>
-              <Tabs defaultValue="llm-proxy" className="w-full">
-                <TabsList>
-                  <TabsTrigger value="llm-proxy">LLM Proxy</TabsTrigger>
-                  <TabsTrigger value="mcp-gateway">MCP Gateway</TabsTrigger>
-                </TabsList>
-                <TabsContent value="llm-proxy" className="mt-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <h3 className="font-medium">LLM Proxy</h3>
+                    <h4 className="text-sm text-muted-foreground">
+                      For security, observibility and enabling tools
+                    </h4>
+                  </div>
                   <ProxyConnectionInstructions />
-                </TabsContent>
-                <TabsContent value="mcp-gateway" className="mt-4">
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <h3 className="font-medium">MCP Gateway</h3>
+                    <h4 className="text-sm text-muted-foreground">
+                      To enable tools for the agent
+                    </h4>
+                  </div>
                   <McpConnectionInstructions />
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             </div>
 
             <div className="border-t pt-6">

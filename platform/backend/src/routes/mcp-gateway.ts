@@ -144,13 +144,27 @@ async function registerToolHandler(
           arguments: args as Record<string, unknown>,
         };
 
+        logger.info(
+          { toolName, toolCallId: toolCall.id, agentId },
+          "Executing tool via McpClientService",
+        );
+
         // Execute the tool call via McpClientService
         const results = await mcpClientService.executeToolCalls(
           [toolCall],
           agentId,
         );
 
+        logger.info(
+          { toolName, resultsCount: results.length, agentId },
+          "McpClientService returned results",
+        );
+
         if (results.length === 0) {
+          logger.info(
+            { toolName, agentId },
+            "No results returned - tool not found or not assigned",
+          );
           return {
             content: [
               {
@@ -164,19 +178,51 @@ async function registerToolHandler(
 
         const result = results[0];
 
+        logger.info(
+          {
+            toolName,
+            resultIsError: result.isError,
+            resultError: result.error,
+            resultContent: result.content,
+            agentId,
+          },
+          "Received result from McpClientService",
+        );
+
         if (result.isError) {
+          logger.info(
+            { toolName, error: result.error, content: result.content, agentId },
+            "Tool execution returned error",
+          );
+          // The error message might be in result.error OR in result.content
+          // Return the content as-is if it exists, otherwise use error or fallback
           return {
-            content: [
-              {
-                type: "text",
-                text: result.error || "Tool execution failed",
-              },
-            ],
+            content: result.content
+              ? Array.isArray(result.content)
+                ? result.content
+                : [{ type: "text", text: JSON.stringify(result.content) }]
+              : [
+                  {
+                    type: "text",
+                    text: result.error || "Tool execution failed",
+                  },
+                ],
             isError: true,
           };
         }
 
         // Transform CommonToolResult to MCP CallToolResult format
+        logger.info(
+          {
+            toolName,
+            contentType: Array.isArray(result.content)
+              ? "array"
+              : typeof result.content,
+            agentId,
+          },
+          "Tool execution successful - returning result",
+        );
+
         return {
           content: Array.isArray(result.content)
             ? result.content
@@ -184,6 +230,15 @@ async function registerToolHandler(
           isError: false,
         };
       } catch (error) {
+        logger.info(
+          {
+            toolName,
+            error: error instanceof Error ? error.message : "Unknown",
+            stack: error instanceof Error ? error.stack : undefined,
+            agentId,
+          },
+          "Tool handler caught exception",
+        );
         return {
           content: [
             {

@@ -242,64 +242,145 @@ async function processJsonRpcRequest(
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint: endpointPrefix } = config.mcpGateway;
   const endpoint = `${endpointPrefix}/:agentId`;
+  const sseEndpoint = `${endpointPrefix}/:agentId/sse`;
   const params = z.object({
     agentId: UuidIdSchema,
   });
 
-  // GET endpoint for SSE transport discovery/server info
-  fastify.get(
-    endpoint,
-    {
-      schema: {
-        params,
-        response: {
-          200: z.object({
-            name: z.string(),
-            version: z.string(),
-            agentId: z.string(),
-            transport: z.string(),
-            capabilities: z.object({
-              tools: z.boolean(),
-            }),
-          }),
-        },
-      },
-    },
-    async (request, reply) => {
-      reply.type("application/json");
-      return {
-        name: `archestra-agent-${request.params.agentId}`,
-        version: config.api.version,
-        agentId: request.params.agentId,
-        transport: "http",
-        capabilities: {
-          tools: true,
-        },
-      };
-    },
-  );
+  // Session storage (in-memory for now, could be moved to Redis/DB)
+  const sessions = new Map<string, { agentId: string; createdAt: number }>();
 
-  // POST endpoint for JSON-RPC requests
+  // Helper to generate session ID
+  const generateSessionId = () => {
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  };
+
+  // Helper to send SSE event
+  const formatSSEEvent = (data: unknown, eventId?: string): string => {
+    let message = "";
+    if (eventId) {
+      message += `id: ${eventId}\n`;
+    }
+    message += `data: ${JSON.stringify(data)}\n\n`;
+    return message;
+  };
+
+  // GET endpoint for SSE stream (MCP Streamable HTTP transport)
+  const handleGet = async (request: any, reply: any) => {
+    const { agentId } = request.params;
+    const acceptHeader = request.headers.accept || "";
+    const sessionId = request.headers["mcp-session-id"];
+
+    console.log("GET request", { agentId, acceptHeader, sessionId });
+
+    // Check if client wants SSE stream
+    if (acceptHeader.includes("text/event-stream")) {
+      // Return SSE stream
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      // Keep connection alive with periodic comments
+      const keepAlive = setInterval(() => {
+        reply.raw.write(": keepalive\n\n");
+      }, 15000);
+
+      // Clean up on close
+      request.raw.on("close", () => {
+        clearInterval(keepAlive);
+      });
+
+      return reply.raw;
+    }
+
+    // Fallback: return server info as JSON
+    reply.type("application/json");
+    return {
+      name: `archestra-agent-${agentId}`,
+      version: config.api.version,
+      agentId,
+      transport: "streamable-http",
+      capabilities: {
+        tools: true,
+      },
+    };
+  };
+
+  // POST endpoint for JSON-RPC requests (MCP Streamable HTTP transport)
+  const handlePost = async (request: any, reply: any) => {
+    const { agentId } = request.params;
+    const acceptHeader = request.headers.accept || "";
+    let sessionId = request.headers["mcp-session-id"] as string | undefined;
+
+    console.log("POST request", {
+      agentId,
+      method: request.body.method,
+      sessionId,
+    });
+
+    const response = await processJsonRpcRequest(request.body, agentId);
+    console.log("response", response);
+
+    // Handle session management for initialize request
+    if (request.body.method === "initialize" && !sessionId) {
+      sessionId = generateSessionId();
+      sessions.set(sessionId, { agentId, createdAt: Date.now() });
+      console.log("Created session", sessionId);
+    }
+
+    // Check if client accepts SSE format
+    const acceptsSSE = acceptHeader.includes("text/event-stream");
+    const acceptsJSON = acceptHeader.includes("application/json");
+
+    if (acceptsSSE && request.body.method !== "initialized") {
+      // Return SSE format for HTTP Streamable transport
+      const eventId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        ...(sessionId && { "Mcp-Session-Id": sessionId }),
+      });
+
+      // Send the response as SSE event
+      reply.raw.write(formatSSEEvent(response, eventId));
+
+      // Close the stream after sending the response
+      reply.raw.end();
+
+      return reply.raw;
+    }
+
+    // Default JSON response
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (sessionId) {
+      headers["Mcp-Session-Id"] = sessionId;
+    }
+
+    reply.headers(headers);
+    return response;
+  };
+
+  // Register routes for both /mcp/{agentId} and /mcp/{agentId}/sse
+  fastify.get(endpoint, { schema: { params } }, handleGet);
   fastify.post(
     endpoint,
-    {
-      schema: {
-        params,
-        body: JsonRpcRequestSchema,
-        response: {
-          200: JsonRpcResponseSchema,
-          500: JsonRpcResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const response = await processJsonRpcRequest(
-        request.body,
-        request.params.agentId,
-      );
-      reply.type("application/json");
-      return response;
-    },
+    { schema: { params, body: JsonRpcRequestSchema } },
+    handlePost,
+  );
+
+  // Also register /sse variant for n8n compatibility
+  fastify.get(sseEndpoint, { schema: { params } }, handleGet);
+  fastify.post(
+    sseEndpoint,
+    { schema: { params, body: JsonRpcRequestSchema } },
+    handlePost,
   );
 };
 

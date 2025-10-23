@@ -90,8 +90,18 @@ async function createAgentServer(
   // Get tools for this agent (from cache or database)
   const tools = await getToolsForAgent(agentId, logger);
 
-  // Register all tool handlers
+  // Deduplicate tools by name (in case there are duplicates in the database)
+  const uniqueTools = new Map<string, Tool>();
   for (const tool of tools) {
+    if (!uniqueTools.has(tool.name)) {
+      uniqueTools.set(tool.name, tool);
+    } else {
+      logger.info({ agentId, toolName: tool.name }, "Skipping duplicate tool");
+    }
+  }
+
+  // Register all unique tool handlers
+  for (const tool of uniqueTools.values()) {
     await registerToolHandler(server, tool, agentId, logger);
   }
 
@@ -298,15 +308,40 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Check if we have an existing session
         if (sessionId && activeTransports.has(sessionId)) {
-          fastify.log.info({ agentId, sessionId }, "Reusing existing session");
+          fastify.log.info(
+            {
+              agentId,
+              sessionId,
+              hasTransport: !!activeTransports.get(sessionId),
+              hasServer: !!activeServers.get(sessionId),
+            },
+            "Reusing existing session",
+          );
           transport = activeTransports.get(sessionId)!;
           server = activeServers.get(sessionId)!;
+
+          // If this is a re-initialize request on an existing session,
+          // we can just reuse the existing server/transport
+          if (isInitialize) {
+            fastify.log.info(
+              { agentId, sessionId },
+              "Re-initialize on existing session - will reuse existing server",
+            );
+          }
         } else if (isInitialize) {
           // Initialize request - create new session
           // Use client-provided session ID if available
           fastify.log.info(
-            { agentId, clientProvidedSessionId: sessionId },
-            "Initialize request - creating new session",
+            {
+              agentId,
+              clientProvidedSessionId: sessionId,
+              hasSessionId: !!sessionId,
+              sessionExists: sessionId
+                ? activeTransports.has(sessionId)
+                : false,
+              activeSessions: Array.from(activeTransports.keys()),
+            },
+            "Initialize request - creating NEW session",
           );
           server = await createAgentServer(agentId, fastify.log);
           transport = createTransport(agentId, sessionId, fastify.log);

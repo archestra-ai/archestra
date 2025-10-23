@@ -13,6 +13,8 @@ import {
   updateAgent,
 } from "@/lib/clients/api";
 
+const a: number = '1';
+
 export function useAgents(params?: {
   initialData?: GetAgentsResponses["200"];
 }) {

@@ -35,8 +35,6 @@ import {
 import { DetailsDialog } from "./details-dialog";
 import { TransportBadges } from "./transport-badges";
 
-const a: number = "aaa";
-
 // Server card component that handles version fetching for a single server
 function ServerCard({
   serverResponse,

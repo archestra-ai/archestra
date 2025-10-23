@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "./ui/button";
 
 export default function CopyButton({
   text,
@@ -22,13 +23,14 @@ export default function CopyButton({
   }
 
   return (
-    <button
+    <Button
       type="button"
       onClick={onCopy}
-      className={`inline-flex items-center gap-2 rounded px-3 py-1 text-sm font-medium transition ${className}`}
+      className={`transition ${className}`}
       aria-label="Copy to clipboard"
+      variant="ghost"
     >
       {copied ? "Copied" : "Copy"}
-    </button>
+    </Button>
   );
 }

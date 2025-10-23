@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button } from "./ui/button";
 
 interface OnboardingStepProps {
   /** The step title */
@@ -60,14 +61,14 @@ export default function OnboardingStep({
       {isActive && children && <div className="space-y-4">{children}</div>}
 
       {isActive && primaryAction && (
-        <button
+        <Button
           type="button"
           onClick={primaryAction.onClick}
           disabled={primaryAction.disabled}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 px-4 rounded font-medium transition-colors mt-6"
         >
           {primaryAction.label}
-        </button>
+        </Button>
       )}
     </div>
   );

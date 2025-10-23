@@ -1,65 +1,71 @@
 "use client";
 
-import { PROVIDER_INFO, type ProviderInfo } from "../../../../shared";
+import { FRAMEWORK_DOCS, type Framework } from "@shared";
+import { useEffect, useState } from "react";
+import { PROVIDER_INFO, type Provider } from "@/lib/constant";
 import CopyButton from "../copy-button";
-import { Button } from "../ui/button";
+import OptionButton from "../option-button";
+import { Input } from "../ui/input";
 
 export default function ProviderDetails({
-  provider,
-  proxyUrl,
-  onProxyChange,
+  framework,
 }: {
-  provider: "openai" | "anthropic";
-  proxyUrl: string;
-  onProxyChange: (v: string) => void;
+  framework: Framework;
 }) {
-  const info: ProviderInfo = PROVIDER_INFO[provider];
+  const [provider, setProvider] = useState<Provider>(
+    Object.keys(PROVIDER_INFO)[0] as Provider,
+  );
 
+  const [proxyUrl, setProxyUrl] = useState(PROVIDER_INFO[provider].baseUrl);
+
+  useEffect(() => {
+    setProxyUrl(PROVIDER_INFO[provider].baseUrl);
+  }, [provider]);
   return (
     <div className="space-y-4">
-      <div>
-        <p className="block text-sm text-slate-300">API Base URL</p>
-        <div className="mt-2 flex gap-2">
-          <input
-            readOnly
-            value={info.baseUrl}
-            className="flex-1 rounded border border-slate-700 bg-slate-950/20 px-3 py-2 text-sm text-slate-200"
-          />
-          <CopyButton text={info.baseUrl} />
-        </div>
-      </div>
-
-      <div>
-        <p className="block text-sm text-slate-300">SDK initialization</p>
-        <pre className="mt-2 overflow-auto rounded bg-black/60 p-3 text-sm text-slate-100">
-          {PROVIDER_INFO[provider].snippet}
-        </pre>
-        <div className="mt-2 flex gap-2">
-          <CopyButton text={PROVIDER_INFO[provider].snippet} />
-          <Button
-            onClick={() =>
-              window.open(info.docs, "_blank", "noopener,noreferrer")
-            }
-            className="rounded border px-3 py-1 text-sm text-slate-200"
+      <div className="mb-4">
+        <div className="block text-sm text-slate-300 mb-2">Provider</div>
+        <div className="flex gap-3">
+          <OptionButton
+            active={provider === "openai"}
+            onClick={() => setProvider("openai")}
           >
-            Open provider docs
-          </Button>
+            OpenAI
+          </OptionButton>
+          <OptionButton
+            active={provider === "anthropic"}
+            onClick={() => setProvider("anthropic")}
+          >
+            Anthropic
+          </OptionButton>
         </div>
       </div>
-
       <div>
-        <p className="block text-sm text-slate-300">Proxy URL (agent)</p>
+        <p className="block text-sm text-slate-300">Proxy URL</p>
         <div className="mt-2 flex gap-2">
-          <input
+          <Input
             value={proxyUrl}
-            onChange={(e) => onProxyChange(e.target.value)}
             className="flex-1 rounded border border-slate-700 bg-slate-950/20 px-3 py-2 text-sm text-slate-200"
           />
           <CopyButton text={proxyUrl} />
         </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Use this URL in your agent as the Archestra proxy endpoint.
-        </p>
+        {framework && (
+          <a
+            href={FRAMEWORK_DOCS[framework]}
+            className="text-sm text-blue-500 hover:underline"
+          >
+            Learn where to set it up
+          </a>
+        )}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="block text-sm text-slate-300">Code Snippet</div>
+            <CopyButton text={PROVIDER_INFO[provider].snippet} />
+          </div>
+          <pre className="rounded bg-slate-950 border border-slate-700 p-4 text-xs text-slate-200 overflow-x-auto">
+            <code>{PROVIDER_INFO[provider].snippet}</code>
+          </pre>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth.query";
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
+import { Button } from "../ui/button";
 import OnboardingWizard, {
   type OnboardingWizardHandle,
 } from "./onboarding-wizard";
@@ -57,17 +58,17 @@ export default function OnboardingModal() {
                   />
                 </div>
                 <div className="flex items-center justify-center mt-6">
-                  <button
+                  <Button
+                    variant="link"
                     type="button"
                     onClick={() =>
                       step < 3
                         ? wizardRef.current?.next()
                         : completeOnboarding()
                     }
-                    className="text-sm text-slate-400 hover:text-slate-300 transition-colors"
                   >
                     Skip this step for now
-                  </button>
+                  </Button>
                 </div>
               </Dialog.Content>
             </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { FRAMEWORK_DOCS, FRAMEWORK_LABELS, type Framework } from "@shared";
 import {
   forwardRef,
   useCallback,
@@ -11,14 +12,9 @@ import {
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { useDetectedTools } from "@/lib/tool.query";
-import {
-  FRAMEWORK_DOCS,
-  FRAMEWORK_LABELS,
-  PROVIDER_INFO,
-} from "../../../../shared";
-import CopyButton from "../copy-button";
 import OnboardingStep from "../onboarding-step";
 import OptionButton from "../option-button";
+import ProviderDetails from "./provider-details";
 
 export type OnboardingWizardHandle = {
   next: () => void;
@@ -39,14 +35,11 @@ export default forwardRef(function OnboardingWizard(
 ) {
   const [step, setStep] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [framework, setFramework] = useState<"n8n" | "langchain" | "openwebui">(
-    "n8n",
+  const [framework, setFramework] = useState<Framework>(
+    Object.keys(FRAMEWORK_DOCS)[0] as Framework,
   );
-  const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
 
-  const [proxyUrl, setProxyUrl] = useState(PROVIDER_INFO["openai"].baseUrl);
-
-  const frameworks: Array<typeof framework> = ["n8n", "langchain", "openwebui"];
+  const frameworks = Object.keys(FRAMEWORK_DOCS) as Array<Framework>;
 
   const toolsDetectedRef = useRef(false);
 
@@ -88,10 +81,6 @@ export default forwardRef(function OnboardingWizard(
     }),
     [step, next, prev, goto],
   );
-
-  useEffect(() => {
-    setProxyUrl(PROVIDER_INFO[provider].baseUrl);
-  }, [provider]);
 
   const { data: firstUserInteraction } = useHasFirstUserInteraction({
     refetchInterval: step === 2 ? 3_000 : null,
@@ -173,69 +162,7 @@ export default forwardRef(function OnboardingWizard(
             ))}
           </div>
 
-          <div className="mb-4">
-            <div className="block text-sm text-slate-300 mb-2">Provider</div>
-            <div className="flex gap-3">
-              <OptionButton
-                active={provider === "openai"}
-                onClick={() => isActive && setProvider("openai")}
-              >
-                OpenAI
-              </OptionButton>
-              <OptionButton
-                active={provider === "anthropic"}
-                onClick={() => isActive && setProvider("anthropic")}
-              >
-                Anthropic
-              </OptionButton>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <label
-              htmlFor="proxy-url"
-              className="block text-sm text-slate-300 mb-2"
-            >
-              Proxy URL
-            </label>
-            <div className="relative">
-              <input
-                id="proxy-url"
-                type="text"
-                value={proxyUrl}
-                onChange={(e) => isActive && setProxyUrl(e.target.value)}
-                className="w-full rounded border border-slate-700 bg-slate-950/20 px-3 py-2 pr-20 text-sm text-slate-200"
-                disabled={!isActive}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                <CopyButton
-                  text={proxyUrl}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200"
-                />
-              </div>
-            </div>
-            {framework && (
-              <a
-                href={FRAMEWORK_DOCS[framework]}
-                className="text-sm text-blue-500 hover:underline"
-              >
-                Learn where to set it up
-              </a>
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="block text-sm text-slate-300">Code Snippet</div>
-              <CopyButton
-                text={PROVIDER_INFO[provider].snippet}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-200"
-              />
-            </div>
-            <pre className="rounded bg-slate-950 border border-slate-700 p-4 text-xs text-slate-200 overflow-x-auto">
-              <code>{PROVIDER_INFO[provider].snippet}</code>
-            </pre>
-          </div>
+          <ProviderDetails framework={framework}></ProviderDetails>
         </OnboardingStep>
       );
     }

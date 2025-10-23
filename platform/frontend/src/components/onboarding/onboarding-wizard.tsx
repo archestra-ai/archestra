@@ -40,7 +40,7 @@ export default forwardRef(function OnboardingWizard(
   );
   const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
 
-  const [proxyUrl, setProxyUrl] = useState("https://localhost:9000/v1/openai");
+  const [proxyUrl, setProxyUrl] = useState(PROVIDER_INFO["openai"].baseUrl);
 
   const frameworks: Array<typeof framework> = ["n8n", "langchain", "openwebui"];
 

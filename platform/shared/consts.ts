@@ -48,23 +48,23 @@ export type ProviderInfo = {
 export const PROVIDER_INFO = {
   openai: {
     label: "OpenAI",
-    baseUrl: "http://localhost:9000/v1/openai",
+    baseUrl: `${process.env.ARCHESTRA_API_BASE_URL}/v1/openai`,
     docs: "https://platform.openai.com/docs",
     snippet: `import OpenAI from 'openai';
 
 const client = new OpenAI({
-  baseURL: 'http://localhost:9000/v1/openai',
+  baseURL: '${process.env.ARCHESTRA_API_BASE_URL}/v1/openai',
   apiKey: process.env.OPENAI_API_KEY,
 });`,
   },
   anthropic: {
     label: "Anthropic",
-    baseUrl: "http://localhost:9000/v1/anthropic",
+    baseUrl: `${process.env.ARCHESTRA_API_BASE_URL}/v1/anthropic`,
     docs: "https://docs.anthropic.com/",
     snippet: `import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic({
-  baseURL: 'http://localhost:9000/v1/anthropic',
+  baseURL: '${process.env.ARCHESTRA_API_BASE_URL}/v1/anthropic',
   apiKey: process.env.ANTHROPIC_API_KEY,
 });`,
   },

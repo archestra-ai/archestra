@@ -9,8 +9,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { authMiddleware } from "@/auth/auth-middleware";
 import config from "@/config";
+import { authMiddleware } from "@/middleware/auth-middleware";
 import {
   Anthropic,
   Gemini,
@@ -120,12 +120,6 @@ const start = async () => {
 
     // Register metrics middleware
     registerMetricsMiddleware(fastify);
-
-    // Health check endpoints (no auth required)
-    fastify.get("/health", async () => ({
-      status: name,
-      version,
-    }));
 
     // Prometheus metrics endpoint (no auth required)
     fastify.get("/metrics", async () => {

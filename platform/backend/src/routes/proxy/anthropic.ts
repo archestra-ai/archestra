@@ -79,6 +79,31 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  /**
+   * Register HTTP proxy for agent-specific routes EXCEPT messages routes
+   * This allows using /v1/anthropic/v1/:agentId/ as a base URL for Anthropic API calls
+   * Example: /v1/anthropic/v1/:agentId/models -> https://api.anthropic.com/v1/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://api.anthropic.com",
+    prefix: `${API_PREFIX}/v1/:agentId`,
+    rewritePrefix: "/v1",
+    // Exclude messages route since we handle it specially below
+    preHandler: (request, _reply, next) => {
+      // Support Anthropic SDK standard format with agent ID
+      const isMessagesRoute =
+        request.method === "POST" &&
+        request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/);
+
+      if (isMessagesRoute) {
+        // Skip proxy for this route - we handle it below
+        next(new Error("skip"));
+      } else {
+        next();
+      }
+    },
+  });
+
   const handleMessages = async (
     body: Anthropic.Types.MessagesRequest,
     headers: Anthropic.Types.MessagesHeaders,

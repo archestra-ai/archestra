@@ -83,6 +83,29 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  /**
+   * Register HTTP proxy for agent-specific routes /v1/openai/:agentId/* EXCEPT chat/completions
+   * This allows using /v1/openai/:agentId/ as a base URL for OpenAI API calls
+   * Example: /v1/openai/:agentId/models -> https://api.openai.com/v1/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://api.openai.com",
+    prefix: `${API_PREFIX}/:agentId`,
+    rewritePrefix: "/v1",
+    // Exclude chat/completions route since we handle it specially below
+    preHandler: (request, _reply, next) => {
+      if (
+        request.method === "POST" &&
+        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
+      ) {
+        // Skip proxy for this route - we handle it below
+        next(new Error("skip"));
+      } else {
+        next();
+      }
+    },
+  });
+
   const handleChatCompletion = async (
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,

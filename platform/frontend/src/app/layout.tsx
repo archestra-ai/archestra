@@ -7,6 +7,7 @@ import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
+import { SignedIn } from "@daveyplate/better-auth-ui";
 import OnboardingModal from "@/components/onboarding/onboarding-modal";
 import { Toaster } from "@/components/ui/sonner";
 import { WithAuthCheck } from "./_parts/with-auth-check";
@@ -53,7 +54,9 @@ export default function RootLayout({
                       <div className="flex-1 min-w-0">{children}</div>
                     </main>
                     <Toaster />
-                    <OnboardingModal />
+                    <SignedIn>
+                      <OnboardingModal />
+                    </SignedIn>
                   </SidebarProvider>
                 </WithAuthCheck>
               </ArchestraQueryClientProvider>

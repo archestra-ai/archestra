@@ -72,7 +72,6 @@ import {
 } from "@/lib/agent.query";
 import { useCurrentOrgMembers } from "@/lib/auth.query";
 import type { GetAgentsResponses } from "@/lib/clients/api";
-import { useFeatureFlag } from "@/lib/features.hook";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
@@ -152,7 +151,6 @@ function AgentMembersBadges({
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
   const { data: orgMembers } = useCurrentOrgMembers();
-  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -272,14 +270,12 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                                 <Plug className="h-4 w-4" />
                                 Connect
                               </DropdownMenuItem>
-                              {mcpRegistryEnabled && (
-                                <DropdownMenuItem
-                                  onClick={() => setAssigningToolsAgent(agent)}
-                                >
-                                  <Wrench className="h-4 w-4" />
-                                  Assign Tools
-                                </DropdownMenuItem>
-                              )}
+                              <DropdownMenuItem
+                                onClick={() => setAssigningToolsAgent(agent)}
+                              >
+                                <Wrench className="h-4 w-4" />
+                                Assign Tools
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() =>
                                   setEditingAgent({

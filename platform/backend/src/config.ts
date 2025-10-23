@@ -122,7 +122,10 @@ export default {
     url: process.env.DATABASE_URL,
   },
   features: {
-    mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+    /**
+     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
+     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+     */
   },
   debug: isDevelopment,
   production: isProduction,

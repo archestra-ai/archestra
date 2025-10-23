@@ -1,215 +1,115 @@
 "use client";
 
-import {
-  BookOpen,
-  ChevronDown,
-  Github,
-  Info,
-  Loader2,
-  Search,
-} from "lucide-react";
+import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
-import type { ServerResponse } from "@/lib/clients/mcp-registry";
+import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
+import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
 import {
-  useMcpRegistryServersInfinite,
-  useMcpServerVersion,
-  useMcpServerVersions,
-} from "@/lib/mcp-registry-external.query";
+  CatalogFilters,
+  type SelectedCategory,
+  type ServerType,
+} from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import { TransportBadges } from "./transport-badges";
 
-// Server card component that handles version fetching for a single server
+// Server card component for a single server
 function ServerCard({
-  serverResponse,
+  server,
   onAddToCatalog,
   isAdding,
   onOpenReadme,
   isInCatalog,
 }: {
-  serverResponse: ServerResponse;
-  onAddToCatalog: (server: ServerResponse) => void;
+  server: ArchestraMcpServerManifest;
+  onAddToCatalog: (server: ArchestraMcpServerManifest) => void;
   isAdding: boolean;
-  onOpenReadme: (server: ServerResponse) => void;
+  onOpenReadme: (server: ArchestraMcpServerManifest) => void;
   isInCatalog: boolean;
 }) {
-  const server = serverResponse.server;
-  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
-  const [versionsDropdownOpen, setVersionsDropdownOpen] = useState(false);
-
-  // Fetch all versions when dropdown is open
-  const { data: versionsData } = useMcpServerVersions(
-    versionsDropdownOpen ? server.name : null,
-  );
-  const availableVersions = useMemo(
-    () => versionsData?.servers || [],
-    [versionsData],
-  );
-
-  // Fetch specific version when selected
-  const { data: selectedVersionData } = useMcpServerVersion(
-    server.name,
-    selectedVersion,
-  );
-
-  // Determine which server data to display
-  const displayedServer = selectedVersionData || serverResponse;
-
-  // Get the first icon if available
-  const serverIcon = displayedServer.server.icons?.[0];
-
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start">
           <div className="flex items-start gap-2 flex-1 min-w-0">
-            {serverIcon && (
+            {server.icon && (
               <img
-                src={serverIcon.src}
+                src={server.icon}
                 alt={`${server.name} icon`}
                 className="w-8 h-8 rounded flex-shrink-0 mt-0.5"
               />
             )}
             <CardTitle className="text-lg">
-              <TruncatedText message={server.name} maxLength={60} />
+              <TruncatedText
+                message={server.display_name || server.name}
+                maxLength={60}
+              />
             </CardTitle>
           </div>
-          <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
-            {/* Version badge with dropdown */}
-            {displayedServer.server.version && (
-              <DropdownMenu
-                open={versionsDropdownOpen}
-                onOpenChange={setVersionsDropdownOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs cursor-pointer hover:bg-secondary/80"
-                  >
-                    v{displayedServer.server.version}
-                    <ChevronDown className="ml-1 h-3 w-3" />
-                  </Badge>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {availableVersions.length === 0 && (
-                    <div className="px-2 py-1 text-xs text-muted-foreground">
-                      Loading versions...
-                    </div>
-                  )}
-                  {availableVersions.map((versionServer) => (
-                    <DropdownMenuItem
-                      key={versionServer.server.version}
-                      onClick={() => {
-                        // Only update if selecting a different version
-                        if (
-                          versionServer.server.version !==
-                          displayedServer.server.version
-                        ) {
-                          setSelectedVersion(
-                            versionServer.server.version || "",
-                          );
-                        }
-                      }}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span>v{versionServer.server.version}</span>
-                      {versionServer._meta[
-                        "io.modelcontextprotocol.registry/official"
-                      ]?.isLatest && (
-                        <Badge
-                          variant="default"
-                          className="text-xs bg-green-600 hover:bg-green-700"
-                        >
-                          Latest
-                        </Badge>
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {/* Status badges */}
-            {displayedServer._meta["io.modelcontextprotocol.registry/official"]
-              ?.status === "deprecated" && (
-              <Badge
-                variant="outline"
-                className="text-xs border-orange-500 text-orange-600"
-              >
-                Deprecated
+          <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
+            {server.category && (
+              <Badge variant="outline" className="text-xs">
+                {server.category}
               </Badge>
             )}
-            {displayedServer._meta["io.modelcontextprotocol.registry/official"]
-              ?.status === "deleted" && (
-              <Badge
-                variant="outline"
-                className="text-xs border-red-500 text-red-600"
-              >
-                Deleted
+            {server.quality_score !== null && (
+              <Badge variant="secondary" className="text-xs">
+                Quality: {Math.round(server.quality_score)}
               </Badge>
             )}
           </div>
         </div>
-
-        <TransportBadges server={displayedServer} />
-
-        {displayedServer.server.title && (
-          <p className="text-sm text-muted-foreground mt-2">
-            {displayedServer.server.title}
+        {server.display_name && server.display_name !== server.name && (
+          <p className="text-xs text-muted-foreground font-mono">
+            {server.name}
           </p>
         )}
+        <TransportBadges server={server} className="mt-1" />
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-3">
-        {displayedServer.server.description && (
+        {server.description && (
           <p className="text-sm text-muted-foreground line-clamp-3">
-            {displayedServer.server.description}
+            {server.description}
           </p>
         )}
 
         <div className="flex flex-col gap-2 mt-auto pt-3">
           <div className="flex flex-wrap gap-2">
-            {displayedServer.server.repository?.url && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onOpenReadme(displayedServer)}
-                  className="flex-1"
-                >
-                  <Info className="h-4 w-4 mr-1" />
-                  Details
-                </Button>
-                <Button variant="outline" size="sm" asChild className="flex-1">
-                  <a
-                    href={displayedServer.server.repository.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Github className="h-4 w-4 mr-1" />
-                    Code
-                  </a>
-                </Button>
-              </>
-            )}
-            {displayedServer.server.websiteUrl && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenReadme(server)}
+              className="flex-1"
+            >
+              <Info className="h-4 w-4 mr-1" />
+              Details
+            </Button>
+            {server.github_info?.url && (
               <Button variant="outline" size="sm" asChild className="flex-1">
                 <a
-                  href={displayedServer.server.websiteUrl}
+                  href={server.github_info.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Github className="h-4 w-4 mr-1" />
+                  Code
+                </a>
+              </Button>
+            )}
+            {(server.homepage || server.documentation) && (
+              <Button variant="outline" size="sm" asChild className="flex-1">
+                <a
+                  href={server.homepage || server.documentation}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -220,7 +120,7 @@ function ServerCard({
             )}
           </div>
           <Button
-            onClick={() => onAddToCatalog(displayedServer)}
+            onClick={() => onAddToCatalog(server)}
             disabled={isAdding || isInCatalog}
             size="sm"
             className="w-full"
@@ -243,14 +143,22 @@ export function ExternalMCPCatalog({
   catalogItems?: GetInternalMcpCatalogResponses["200"];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [readmeServer, setReadmeServer] = useState<ServerResponse | null>(null);
+  const [readmeServer, setReadmeServer] =
+    useState<ArchestraMcpServerManifest | null>(null);
+  const [filters, setFilters] = useState<{
+    type: ServerType;
+    category: SelectedCategory;
+  }>({
+    type: "remote",
+    category: "all",
+  });
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
 
-  // Use server-side search
+  // Use server-side search and category filtering
   const {
     data,
     isLoading,
@@ -258,23 +166,37 @@ export function ExternalMCPCatalog({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useMcpRegistryServersInfinite(searchQuery);
+  } = useMcpRegistryServersInfinite(searchQuery, filters.category);
 
   // Mutation for adding servers to catalog
   const createMutation = useCreateInternalMcpCatalogItem();
 
-  const handleAddToCatalog = async (serverResponse: ServerResponse) => {
+  const handleAddToCatalog = async (server: ArchestraMcpServerManifest) => {
     await createMutation.mutateAsync({
-      name: serverResponse.server.name,
-      version: serverResponse.server.version,
+      name: server.name,
+      version: undefined, // No version in archestra catalog
     });
   };
 
   // Flatten all pages into a single array of servers
   const servers = useMemo(() => {
     if (!data) return [];
-    return data.pages.flatMap((page) => page.servers || []);
+    return data.pages.flatMap((page) => page.servers);
   }, [data]);
+
+  // Apply client-side type filter only (categories are filtered backend-side)
+  const filteredServers = useMemo(() => {
+    let filtered = servers;
+
+    // Filter by type (client-side since API doesn't support this)
+    if (filters.type !== "all") {
+      filtered = filtered.filter(
+        (server) => server.server.type === filters.type,
+      );
+    }
+
+    return filtered;
+  }, [servers, filters.type]);
 
   // Create a Set of catalog item names for efficient lookup
   const catalogServerNames = useMemo(
@@ -282,8 +204,8 @@ export function ExternalMCPCatalog({
     [catalogItems],
   );
 
-  // Use all servers (don't filter out those already in catalog)
-  const displayedServers = servers || [];
+  // Use filtered servers
+  const displayedServers = filteredServers;
 
   return (
     <div className="w-full h-full">
@@ -307,6 +229,9 @@ export function ExternalMCPCatalog({
             className="pl-9"
           />
         </div>
+
+        {/* Filters */}
+        <CatalogFilters onFiltersChange={setFilters} />
 
         {/* Loading State */}
         {isLoading && (
@@ -360,16 +285,14 @@ export function ExternalMCPCatalog({
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {displayedServers.map((serverResponse, index) => (
+                  {displayedServers.map((server, index) => (
                     <ServerCard
-                      key={`${serverResponse.server.name}-${index}`}
-                      serverResponse={serverResponse}
+                      key={`${server.name}-${index}`}
+                      server={server}
                       onAddToCatalog={handleAddToCatalog}
                       isAdding={createMutation.isPending}
                       onOpenReadme={setReadmeServer}
-                      isInCatalog={catalogServerNames.has(
-                        serverResponse.server.name,
-                      )}
+                      isInCatalog={catalogServerNames.has(server.name)}
                     />
                   ))}
                 </div>

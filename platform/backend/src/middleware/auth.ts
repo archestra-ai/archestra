@@ -186,20 +186,20 @@ const routePermissionsConfig: Partial<
   [RouteId.GetDualLlmResultByToolCallId]: {
     dualLlmResult: ["read"],
   },
-  [RouteId.GetMcpCatalog]: {
-    mcpCatalog: ["read"],
+  [RouteId.GetInternalMcpCatalog]: {
+    internalMcpCatalog: ["read"],
   },
-  [RouteId.CreateMcpCatalogItem]: {
-    mcpCatalog: ["create"],
+  [RouteId.CreateInternalMcpCatalogItem]: {
+    internalMcpCatalog: ["create"],
   },
-  [RouteId.GetMcpCatalogItem]: {
-    mcpCatalog: ["read"],
+  [RouteId.GetInternalMcpCatalogItem]: {
+    internalMcpCatalog: ["read"],
   },
-  [RouteId.UpdateMcpCatalogItem]: {
-    mcpCatalog: ["update"],
+  [RouteId.UpdateInternalMcpCatalogItem]: {
+    internalMcpCatalog: ["update"],
   },
-  [RouteId.DeleteMcpCatalogItem]: {
-    mcpCatalog: ["delete"],
+  [RouteId.DeleteInternalMcpCatalogItem]: {
+    internalMcpCatalog: ["delete"],
   },
   [RouteId.GetMcpServers]: {
     mcpServer: ["read"],

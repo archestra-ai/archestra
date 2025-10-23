@@ -13,7 +13,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import DualLlmConfigModel from "@/models/dual-llm-config";
 import InteractionModel from "@/models/interaction";
-import McpCatalogModel from "@/models/mcp-catalog";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import User from "@/models/user";
@@ -21,7 +21,7 @@ import type {
   InsertAgent,
   InsertDualLlmConfig,
   InsertInteraction,
-  InsertMcpCatalog,
+  InsertInternalMcpCatalog,
   InsertTool,
   InteractionRequest,
   InteractionResponse,
@@ -42,7 +42,7 @@ export async function seedDatabase(): Promise<void> {
     await seedTools();
     await seedInteractions();
     await seedDualLlmConfig();
-    await seedMcpCatalog();
+    await seedInternalMcpCatalog();
 
     console.log("\n✅ Database seed completed successfully!\n");
   } catch (error) {
@@ -658,7 +658,7 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
 /**
  * Seeds MCP catalog from JSON file
  */
-async function seedMcpCatalog(): Promise<void> {
+async function seedInternalMcpCatalog(): Promise<void> {
   if (!config.features.mcp_registry) {
     console.log("✓ MCP registry feature is disabled, skipping");
     return;
@@ -672,7 +672,7 @@ async function seedMcpCatalog(): Promise<void> {
     // Get the path relative to the backend root directory
     const seedFilePath = path.resolve(
       process.cwd(),
-      "src/database/mcp-catalog-seed.json",
+      "src/database/internal-mcp-catalog-seed.json",
     );
 
     const seedData = await fs.readFile(seedFilePath, "utf-8");
@@ -680,16 +680,18 @@ async function seedMcpCatalog(): Promise<void> {
 
     // 3. Create catalog items
     for (const item of catalogItems) {
-      const catalogData: InsertMcpCatalog = {
+      const catalogData: InsertInternalMcpCatalog = {
         name: item.name,
       };
-      const existingCatalogItem = await McpCatalogModel.findByName(item.name);
+      const existingCatalogItem = await InternalMcpCatalogModel.findByName(
+        item.name,
+      );
       if (existingCatalogItem) {
         console.log(`✓ MCP catalog item ${item.name} already exists, skipping`);
         continue;
       }
-      await McpCatalogModel.create(catalogData);
-      console.log(`✓ Seeded MCP catalog item: ${item.name}`);
+      await InternalMcpCatalogModel.create(catalogData);
+      console.log(`✓ Seeded Internal MCP catalog item: ${item.name}`);
     }
 
     // 4. Mark organization as seeded

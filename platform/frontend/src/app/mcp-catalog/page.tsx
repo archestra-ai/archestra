@@ -1,9 +1,9 @@
 import type { ErrorExtended } from "@shared";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
-  type GetMcpCatalogResponses,
+  type GetInternalMcpCatalogResponses,
   type GetMcpServersResponses,
-  getMcpCatalog,
+  getInternalMcpCatalog,
   getMcpServers,
 } from "@/lib/clients/api";
 import { getServerApiHeaders } from "@/lib/server-utils";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function McpRegistryPageServer() {
   let initialData: {
-    catalog: GetMcpCatalogResponses["200"];
+    catalog: GetInternalMcpCatalogResponses["200"];
     servers: GetMcpServersResponses["200"];
   } = {
     catalog: [],
@@ -23,7 +23,7 @@ export default async function McpRegistryPageServer() {
   try {
     const headers = await getServerApiHeaders();
     initialData = {
-      catalog: (await getMcpCatalog({ headers })).data || [],
+      catalog: (await getInternalMcpCatalog({ headers })).data || [],
       servers: (await getMcpServers({ headers })).data || [],
     };
   } catch (error) {

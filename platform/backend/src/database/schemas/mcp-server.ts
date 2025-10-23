@@ -1,6 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { McpServerMetadata } from "@/types/mcp-server";
-import mcpCatalogTable from "./mcp-catalog";
+import mcpCatalogTable from "./internal-mcp-catalog";
 
 const mcpServerTable = pgTable("mcp_server", {
   id: uuid("id").primaryKey().defaultRandom(),

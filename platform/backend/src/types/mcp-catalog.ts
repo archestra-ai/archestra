@@ -6,16 +6,20 @@ import {
 import type { z } from "zod";
 import { schema } from "@/database";
 
-export const SelectMcpCatalogSchema = createSelectSchema(
-  schema.mcpCatalogTable,
+export const SelectInternalMcpCatalogSchema = createSelectSchema(
+  schema.internalMcpCatalogTable,
 );
-export const InsertMcpCatalogSchema = createInsertSchema(
-  schema.mcpCatalogTable,
+export const InsertInternalMcpCatalogSchema = createInsertSchema(
+  schema.internalMcpCatalogTable,
 );
-export const UpdateMcpCatalogSchema = createUpdateSchema(
-  schema.mcpCatalogTable,
+export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
+  schema.internalMcpCatalogTable,
 );
 
-export type McpCatalog = z.infer<typeof SelectMcpCatalogSchema>;
-export type InsertMcpCatalog = z.infer<typeof InsertMcpCatalogSchema>;
-export type UpdateMcpCatalog = z.infer<typeof UpdateMcpCatalogSchema>;
+export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
+export type InsertInternalMcpCatalog = z.infer<
+  typeof InsertInternalMcpCatalogSchema
+>;
+export type UpdateInternalMcpCatalog = z.infer<
+  typeof UpdateInternalMcpCatalogSchema
+>;

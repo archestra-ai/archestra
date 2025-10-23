@@ -4590,14 +4590,14 @@ export type GetInteractionResponses = {
 
 export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractionResponses];
 
-export type GetMcpCatalogData = {
+export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/mcp_catalog';
+    url: '/api/internal_mcp_catalog';
 };
 
-export type GetMcpCatalogErrors = {
+export type GetInternalMcpCatalogErrors = {
     /**
      * Default Response
      */
@@ -4609,9 +4609,9 @@ export type GetMcpCatalogErrors = {
     };
 };
 
-export type GetMcpCatalogError = GetMcpCatalogErrors[keyof GetMcpCatalogErrors];
+export type GetInternalMcpCatalogError = GetInternalMcpCatalogErrors[keyof GetInternalMcpCatalogErrors];
 
-export type GetMcpCatalogResponses = {
+export type GetInternalMcpCatalogResponses = {
     /**
      * Default Response
      */
@@ -4632,9 +4632,9 @@ export type GetMcpCatalogResponses = {
     }>;
 };
 
-export type GetMcpCatalogResponse = GetMcpCatalogResponses[keyof GetMcpCatalogResponses];
+export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof GetInternalMcpCatalogResponses];
 
-export type CreateMcpCatalogItemData = {
+export type CreateInternalMcpCatalogItemData = {
     body: {
         name: string;
         version?: string | null;
@@ -4649,10 +4649,10 @@ export type CreateMcpCatalogItemData = {
     };
     path?: never;
     query?: never;
-    url: '/api/mcp_catalog';
+    url: '/api/internal_mcp_catalog';
 };
 
-export type CreateMcpCatalogItemErrors = {
+export type CreateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
@@ -4664,9 +4664,9 @@ export type CreateMcpCatalogItemErrors = {
     };
 };
 
-export type CreateMcpCatalogItemError = CreateMcpCatalogItemErrors[keyof CreateMcpCatalogItemErrors];
+export type CreateInternalMcpCatalogItemError = CreateInternalMcpCatalogItemErrors[keyof CreateInternalMcpCatalogItemErrors];
 
-export type CreateMcpCatalogItemResponses = {
+export type CreateInternalMcpCatalogItemResponses = {
     /**
      * Default Response
      */
@@ -4687,18 +4687,18 @@ export type CreateMcpCatalogItemResponses = {
     };
 };
 
-export type CreateMcpCatalogItemResponse = CreateMcpCatalogItemResponses[keyof CreateMcpCatalogItemResponses];
+export type CreateInternalMcpCatalogItemResponse = CreateInternalMcpCatalogItemResponses[keyof CreateInternalMcpCatalogItemResponses];
 
-export type DeleteMcpCatalogItemData = {
+export type DeleteInternalMcpCatalogItemData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/mcp_catalog/{id}';
+    url: '/api/internal_mcp_catalog/{id}';
 };
 
-export type DeleteMcpCatalogItemErrors = {
+export type DeleteInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
@@ -4719,9 +4719,9 @@ export type DeleteMcpCatalogItemErrors = {
     };
 };
 
-export type DeleteMcpCatalogItemError = DeleteMcpCatalogItemErrors[keyof DeleteMcpCatalogItemErrors];
+export type DeleteInternalMcpCatalogItemError = DeleteInternalMcpCatalogItemErrors[keyof DeleteInternalMcpCatalogItemErrors];
 
-export type DeleteMcpCatalogItemResponses = {
+export type DeleteInternalMcpCatalogItemResponses = {
     /**
      * Default Response
      */
@@ -4730,18 +4730,18 @@ export type DeleteMcpCatalogItemResponses = {
     };
 };
 
-export type DeleteMcpCatalogItemResponse = DeleteMcpCatalogItemResponses[keyof DeleteMcpCatalogItemResponses];
+export type DeleteInternalMcpCatalogItemResponse = DeleteInternalMcpCatalogItemResponses[keyof DeleteInternalMcpCatalogItemResponses];
 
-export type GetMcpCatalogItemData = {
+export type GetInternalMcpCatalogItemData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/mcp_catalog/{id}';
+    url: '/api/internal_mcp_catalog/{id}';
 };
 
-export type GetMcpCatalogItemErrors = {
+export type GetInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
@@ -4762,9 +4762,9 @@ export type GetMcpCatalogItemErrors = {
     };
 };
 
-export type GetMcpCatalogItemError = GetMcpCatalogItemErrors[keyof GetMcpCatalogItemErrors];
+export type GetInternalMcpCatalogItemError = GetInternalMcpCatalogItemErrors[keyof GetInternalMcpCatalogItemErrors];
 
-export type GetMcpCatalogItemResponses = {
+export type GetInternalMcpCatalogItemResponses = {
     /**
      * Default Response
      */
@@ -4785,9 +4785,9 @@ export type GetMcpCatalogItemResponses = {
     };
 };
 
-export type GetMcpCatalogItemResponse = GetMcpCatalogItemResponses[keyof GetMcpCatalogItemResponses];
+export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemResponses[keyof GetInternalMcpCatalogItemResponses];
 
-export type UpdateMcpCatalogItemData = {
+export type UpdateInternalMcpCatalogItemData = {
     body?: {
         name?: string;
         version?: string | null;
@@ -4804,10 +4804,10 @@ export type UpdateMcpCatalogItemData = {
         id: string;
     };
     query?: never;
-    url: '/api/mcp_catalog/{id}';
+    url: '/api/internal_mcp_catalog/{id}';
 };
 
-export type UpdateMcpCatalogItemErrors = {
+export type UpdateInternalMcpCatalogItemErrors = {
     /**
      * Default Response
      */
@@ -4828,9 +4828,9 @@ export type UpdateMcpCatalogItemErrors = {
     };
 };
 
-export type UpdateMcpCatalogItemError = UpdateMcpCatalogItemErrors[keyof UpdateMcpCatalogItemErrors];
+export type UpdateInternalMcpCatalogItemError = UpdateInternalMcpCatalogItemErrors[keyof UpdateInternalMcpCatalogItemErrors];
 
-export type UpdateMcpCatalogItemResponses = {
+export type UpdateInternalMcpCatalogItemResponses = {
     /**
      * Default Response
      */
@@ -4851,7 +4851,7 @@ export type UpdateMcpCatalogItemResponses = {
     };
 };
 
-export type UpdateMcpCatalogItemResponse = UpdateMcpCatalogItemResponses[keyof UpdateMcpCatalogItemResponses];
+export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
 export type GetMcpByAgentIdData = {
     body?: never;

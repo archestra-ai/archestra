@@ -5,20 +5,20 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  createMcpCatalogItem,
-  deleteMcpCatalogItem,
-  type GetMcpCatalogResponses,
-  getMcpCatalog,
-  type UpdateMcpCatalogItemData,
-  updateMcpCatalogItem,
+  createInternalMcpCatalogItem,
+  deleteInternalMcpCatalogItem,
+  type GetInternalMcpCatalogResponses,
+  getInternalMcpCatalog,
+  type UpdateInternalMcpCatalogItemData,
+  updateInternalMcpCatalogItem,
 } from "@/lib/clients/api";
 
 export function useInternalMcpCatalog(params?: {
-  initialData?: GetMcpCatalogResponses["200"];
+  initialData?: GetInternalMcpCatalogResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["mcp-catalog"],
-    queryFn: async () => (await getMcpCatalog()).data ?? [],
+    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
   });
 }
@@ -27,7 +27,7 @@ export function useCreateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: { name: string; version?: string }) => {
-      const response = await createMcpCatalogItem({ body: data });
+      const response = await createInternalMcpCatalogItem({ body: data });
       return response.data;
     },
     onSuccess: () => {
@@ -49,9 +49,12 @@ export function useUpdateInternalMcpCatalogItem() {
       data,
     }: {
       id: string;
-      data: UpdateMcpCatalogItemData["body"];
+      data: UpdateInternalMcpCatalogItemData["body"];
     }) => {
-      const response = await updateMcpCatalogItem({ path: { id }, body: data });
+      const response = await updateInternalMcpCatalogItem({
+        path: { id },
+        body: data,
+      });
       return response.data;
     },
     onSuccess: () => {
@@ -69,7 +72,7 @@ export function useDeleteInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await deleteMcpCatalogItem({ path: { id } });
+      const response = await deleteInternalMcpCatalogItem({ path: { id } });
       return response.data;
     },
     onSuccess: () => {

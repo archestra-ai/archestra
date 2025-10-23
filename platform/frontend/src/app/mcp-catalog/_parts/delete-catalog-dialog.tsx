@@ -7,11 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GetMcpCatalogResponses } from "@/lib/clients/api";
-import { useDeleteInternalMcpCatalogItem } from "@/lib/mcp-internal-catalog.query";
+import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
+import { useDeleteInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface DeleteCatalogDialogProps {
-  item: GetMcpCatalogResponses["200"][number] | null;
+  item: GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
   installationCount: number;
 }

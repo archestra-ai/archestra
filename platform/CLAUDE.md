@@ -49,6 +49,10 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 OPENAI_API_KEY=your-api-key-here
 GEMINI_API_KEY=your-api-key-here
 ANTHROPIC_API_KEY=your-api-key-here
+
+# Provider Base URLs (optional - for testing)
+OPENAI_BASE_URL=https://api.openai.com/v1
+ANTHROPIC_BASE_URL=https://api.anthropic.com/v1
 ```
 
 ## Architecture

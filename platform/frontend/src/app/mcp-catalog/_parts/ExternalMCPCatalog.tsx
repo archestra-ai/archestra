@@ -10,19 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
-import {
-  useMcpRegistryServersInfinite,
-  useMcpServerCategories,
-} from "@/lib/external-mcp-catalog.query";
+import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
-import { CatalogFilters } from "./CatalogFilters";
+import {
+  CatalogFilters,
+  type SelectedCategory,
+  type ServerType,
+} from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import { TransportBadges } from "./transport-badges";
-
-type ServerType = "all" | "remote" | "local";
 
 // Server card component for a single server
 function ServerCard({
@@ -146,16 +145,18 @@ export function ExternalMCPCatalog({
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
     useState<ArchestraMcpServerManifest | null>(null);
-  const [selectedType, setSelectedType] = useState<ServerType>("remote");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [filters, setFilters] = useState<{
+    type: ServerType;
+    category: SelectedCategory;
+  }>({
+    type: "remote",
+    category: "all",
+  });
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
-
-  // Fetch available categories
-  const { data: availableCategories = [] } = useMcpServerCategories();
 
   // Use server-side search and category filtering
   const {
@@ -165,7 +166,7 @@ export function ExternalMCPCatalog({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useMcpRegistryServersInfinite(searchQuery, selectedCategory);
+  } = useMcpRegistryServersInfinite(searchQuery, filters.category);
 
   // Mutation for adding servers to catalog
   const createMutation = useCreateInternalMcpCatalogItem();
@@ -188,14 +189,14 @@ export function ExternalMCPCatalog({
     let filtered = servers;
 
     // Filter by type (client-side since API doesn't support this)
-    if (selectedType !== "all") {
+    if (filters.type !== "all") {
       filtered = filtered.filter(
-        (server) => server.server.type === selectedType,
+        (server) => server.server.type === filters.type,
       );
     }
 
     return filtered;
-  }, [servers, selectedType]);
+  }, [servers, filters.type]);
 
   // Create a Set of catalog item names for efficient lookup
   const catalogServerNames = useMemo(
@@ -230,13 +231,7 @@ export function ExternalMCPCatalog({
         </div>
 
         {/* Filters */}
-        <CatalogFilters
-          selectedType={selectedType}
-          onTypeChange={setSelectedType}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          availableCategories={availableCategories}
-        />
+        <CatalogFilters onFiltersChange={setFilters} />
 
         {/* Loading State */}
         {isLoading && (

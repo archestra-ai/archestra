@@ -1,33 +1,43 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import type { GetMcpServerCategoriesResponse } from "@/lib/clients/archestra-catalog";
+import { useMcpServerCategories } from "@/lib/external-mcp-catalog.query";
 
-type ServerType = "all" | "remote" | "local";
+export type ServerType = "all" | "remote" | "local";
+
+export type SelectedCategory =
+  | "all"
+  | GetMcpServerCategoriesResponse["categories"][number];
 
 interface CatalogFiltersProps {
-  selectedType: ServerType;
-  onTypeChange: (type: ServerType) => void;
-  selectedCategory: string | null;
-  onCategoryChange: (category: string | null) => void;
-  availableCategories: string[];
+  onFiltersChange: (filters: {
+    type: ServerType;
+    category: SelectedCategory;
+  }) => void;
 }
 
-export function CatalogFilters({
-  selectedType,
-  onTypeChange,
-  selectedCategory,
-  onCategoryChange,
-  availableCategories,
-}: CatalogFiltersProps) {
-  const handleCategoryToggle = (category: string) => {
-    if (category === "all") {
-      onCategoryChange(null);
-    } else {
-      onCategoryChange(category);
-    }
+export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
+  const [selectedType, setSelectedType] = useState<ServerType>("remote");
+  const [selectedCategory, setSelectedCategory] =
+    useState<SelectedCategory>("all");
+
+  // Fetch available categories
+  const { data: availableCategories = [] } = useMcpServerCategories();
+
+  const handleTypeChange = (type: ServerType) => {
+    setSelectedType(type);
+    onFiltersChange({ type, category: selectedCategory });
   };
 
-  const isAllCategoriesSelected = selectedCategory === null;
+  const handleCategoryToggle = (category: SelectedCategory) => {
+    const newCategory = category === "all" ? "all" : category;
+    setSelectedCategory(newCategory);
+    onFiltersChange({ type: selectedType, category: newCategory });
+  };
+
+  const isAllCategoriesSelected = selectedCategory === "all";
 
   return (
     <div className="space-y-3">
@@ -37,21 +47,21 @@ export function CatalogFilters({
         <Badge
           variant={selectedType === "all" ? "default" : "outline"}
           className="cursor-pointer hover:bg-secondary"
-          onClick={() => onTypeChange("all")}
+          onClick={() => handleTypeChange("all")}
         >
           All
         </Badge>
         <Badge
           variant={selectedType === "remote" ? "default" : "outline"}
           className="cursor-pointer hover:bg-secondary"
-          onClick={() => onTypeChange("remote")}
+          onClick={() => handleTypeChange("remote")}
         >
           Remote
         </Badge>
         <Badge
           variant={selectedType === "local" ? "default" : "outline"}
           className="cursor-pointer hover:bg-secondary"
-          onClick={() => onTypeChange("local")}
+          onClick={() => handleTypeChange("local")}
         >
           Local
         </Badge>

@@ -1,5 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { SelectedCategory } from "@/app/mcp-catalog/_parts/CatalogFilters";
 import {
+  type GetMcpServerCategoriesResponse,
   getMcpServerCategories,
   type SearchMcpServerCatalogData,
   type SearchMcpServerCatalogResponses,
@@ -14,13 +16,11 @@ type CategoryType = NonNullable<
 // Fetch servers with infinite scroll pagination support
 export function useMcpRegistryServersInfinite(
   search?: string,
-  category?: string | null,
+  category?: SelectedCategory,
   limit = 50,
 ) {
   // Convert category to the correct type for API
-  const categoryParam: CategoryType = category
-    ? (category as CategoryType)
-    : undefined;
+  const categoryParam: CategoryType = category === "all" ? undefined : category;
 
   return useInfiniteQuery({
     queryKey: [
@@ -56,7 +56,9 @@ export function useMcpRegistryServersInfinite(
 export function useMcpServerCategories() {
   return useQuery({
     queryKey: ["archestra-catalog", "categories"],
-    queryFn: async () => {
+    queryFn: async (): Promise<
+      GetMcpServerCategoriesResponse["categories"]
+    > => {
       const response = await getMcpServerCategories();
       if (!response.data) {
         throw new Error("No categories returned from Archestra catalog");

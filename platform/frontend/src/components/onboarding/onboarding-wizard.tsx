@@ -159,11 +159,10 @@ export default forwardRef(function OnboardingWizard(
               <OptionButton
                 key={f}
                 active={framework === f}
-                onClick={() =>
-                  window.open(FRAMEWORK_DOCS[f], "_blank") &&
-                  isActive &&
-                  setFramework(f)
-                }
+                onClick={() => {
+                  window.open(FRAMEWORK_DOCS[f], "_blank");
+                  if (isActive) setFramework(f);
+                }}
               >
                 {f === "n8n"
                   ? "N8N"
@@ -247,7 +246,7 @@ export default forwardRef(function OnboardingWizard(
       return (
         <OnboardingStep
           title="Waiting for your first chat"
-          description="We're waiting for your first conversation to analyse, proxy and protect...."
+          description="We're waiting for your first conversation to analyze, proxy and protect...."
           isActive={isActive}
           isTransitioning={isTransitioning}
         >
@@ -306,7 +305,7 @@ export default forwardRef(function OnboardingWizard(
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <div className="h-2 w-2 rounded-full bg-blue-500 animate-spin" />
               <span className="animate-pulse">
-                Identifying involved tools.....
+                Identifying involved tools...
               </span>
             </div>
           ) : (

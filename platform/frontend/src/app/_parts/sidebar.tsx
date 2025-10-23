@@ -23,6 +23,7 @@ import {
   Star,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ColorModeToggle } from "@/components/color-mode-toggle";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
@@ -148,10 +149,10 @@ export function AppSidebar() {
               ).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                   {item.subItems && (
                     <SidebarMenuSub>
@@ -161,10 +162,10 @@ export function AppSidebar() {
                             asChild
                             isActive={subItem.url === pathname}
                           >
-                            <a href={subItem.url}>
+                            <Link href={subItem.url}>
                               {subItem.icon && <subItem.icon />}
                               <span>{subItem.title}</span>
-                            </a>
+                            </Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
@@ -188,10 +189,10 @@ export function AppSidebar() {
                         asChild
                         isActive={item.url === pathname}
                       >
-                        <a href={item.url}>
+                        <Link href={item.url}>
                           <item.icon />
                           <span>{item.title}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -277,16 +278,16 @@ export function AppSidebar() {
           </SidebarGroup>
         </SignedIn>
         <SignedOut>
-          <SidebarGroupContent className="mt-4">
+          <SidebarGroupContent className="mb-4">
             <SidebarGroupLabel>User</SidebarGroupLabel>
             <SidebarMenu>
               {userItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

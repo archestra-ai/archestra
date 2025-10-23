@@ -4,7 +4,9 @@ import { DEFAULT_AGENT_NAME } from "@shared";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function SettingsPage() {
   const [particles, setParticles] = useState<
@@ -150,8 +152,9 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm text-muted-foreground">
-            Archestra is a proxy between your agent and your LLM provider. It
-            will collect information about your agent, tools, and data from the
+            Archestra provides two ways to connect your agent: via LLM Proxy
+            (for AI conversations) or MCP Gateway (for tool access). It will
+            collect information about your agent, tools, and data from the
             traffic.
             <br />
             <br />
@@ -319,8 +322,19 @@ export default function SettingsPage() {
 
           <div className="mt-12 space-y-6">
             <div className="border-t pt-6">
-              <h3 className="font-medium mb-4">Proxy Endpoint</h3>
-              <ProxyConnectionInstructions />
+              <h3 className="font-medium mb-4">Connection Options</h3>
+              <Tabs defaultValue="llm-proxy" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="llm-proxy">LLM Proxy</TabsTrigger>
+                  <TabsTrigger value="mcp-gateway">MCP Gateway</TabsTrigger>
+                </TabsList>
+                <TabsContent value="llm-proxy" className="mt-4">
+                  <ProxyConnectionInstructions />
+                </TabsContent>
+                <TabsContent value="mcp-gateway" className="mt-4">
+                  <McpConnectionInstructions />
+                </TabsContent>
+              </Tabs>
             </div>
 
             <div className="border-t pt-6">

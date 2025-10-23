@@ -14,9 +14,26 @@ import type { ExtendedTool, InsertTool, Tool } from "@/types";
 import AgentAccessControlModel from "./agent-access-control";
 import AgentToolModel from "./agent-tool";
 
+const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
+
 class ToolModel {
+  /**
+   * Slugify a tool name to get a unique name for the MCP server's tool
+   */
   static slugifyName(mcpServerName: string, toolName: string): string {
-    return `${mcpServerName}__${toolName}`.toLowerCase().replace(/ /g, "_");
+    return `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`
+      .toLowerCase()
+      .replace(/ /g, "_");
+  }
+
+  /**
+   * Unslugify a tool name to get the original tool name
+   */
+  static unslugifyName(slugifiedName: string): string {
+    const parts = slugifiedName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    return parts.length > 1
+      ? parts.slice(1).join(MCP_SERVER_TOOL_NAME_SEPARATOR)
+      : slugifiedName;
   }
 
   static async create(tool: InsertTool): Promise<Tool> {
@@ -256,6 +273,47 @@ class ToolModel {
     }
 
     return query;
+  }
+
+  /**
+   * Get MCP tools assigned to an agent
+   */
+  static async getMcpToolsAssignedToAgent(
+    toolNames: string[],
+    agentId: string,
+  ): Promise<
+    Array<{
+      toolName: string;
+      mcpServerInstallationMetadata: Record<string, unknown>;
+    }>
+  > {
+    if (toolNames.length === 0) {
+      return [];
+    }
+
+    const mcpTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+        ),
+      );
+
+    return mcpTools;
   }
 }
 

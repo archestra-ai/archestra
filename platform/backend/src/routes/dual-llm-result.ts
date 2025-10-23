@@ -1,6 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getUserFromRequest } from "@/auth/utils";
 import { DualLlmResultModel, InteractionModel } from "@/models";
 import {
   ErrorResponseSchema,
@@ -8,6 +7,7 @@ import {
   SelectDualLlmResultSchema,
   UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const dualLlmResultRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get dual LLM result by tool call ID

@@ -78,7 +78,7 @@ Options:
   } else if (isGoogle) {
     model = "gemini-2.5-flash";
   } else if (provider === "anthropic") {
-    model = "claude-3-5-sonnet-20241022";
+    model = "claude-sonnet-4-5-20250929";
   } else {
     model = "gpt-4o";
   }
@@ -729,8 +729,8 @@ const cliChatWithAnthropic = async (options: {
   }
 
   const baseURL = options.agentId
-    ? `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/v1/${options.agentId}`
-    : `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/v1`;
+    ? `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic/${options.agentId}`
+    : `${ARCHESTRA_API_BASE_PROXY_URL}/anthropic`;
 
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,

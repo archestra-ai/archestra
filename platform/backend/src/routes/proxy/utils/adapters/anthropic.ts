@@ -1,4 +1,4 @@
-import type { Anthropic } from "@/types";
+import type { Anthropic, CommonToolCall, CommonToolResult } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
 type AnthropicMessages = Anthropic.Types.MessagesRequest["messages"];
@@ -153,4 +153,52 @@ export function extractUserRequest(messages: AnthropicMessages): string {
     }
   }
   return "process this data";
+}
+
+/**
+ * Convert Anthropic tool use blocks to common format for MCP execution
+ */
+export function toolCallsToCommon(
+  toolUseBlocks: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+  }>,
+): CommonToolCall[] {
+  return toolUseBlocks.map((toolUse) => ({
+    id: toolUse.id,
+    name: toolUse.name,
+    arguments: toolUse.input,
+  }));
+}
+
+/**
+ * Convert common tool results to Anthropic user message with tool_result blocks
+ */
+export function toolResultsToMessages(results: CommonToolResult[]): Array<{
+  role: "user";
+  content: Array<{
+    type: "tool_result";
+    tool_use_id: string;
+    content: string;
+    is_error?: boolean;
+  }>;
+}> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      role: "user" as const,
+      content: results.map((result) => ({
+        type: "tool_result" as const,
+        tool_use_id: result.id,
+        content: result.isError
+          ? `Error: ${result.error || "Tool execution failed"}`
+          : JSON.stringify(result.content),
+        is_error: result.isError,
+      })),
+    },
+  ];
 }

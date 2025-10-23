@@ -99,9 +99,18 @@ export function UnassignedToolsList({
     if (!searchQuery.trim()) return unassignedTools;
 
     const query = searchQuery.toLowerCase();
-    return unassignedTools.filter((tool) =>
-      tool.tool.name.toLowerCase().includes(query),
-    );
+    return unassignedTools.filter((tool) => {
+      // Create a comprehensive search string from tool name, description, and parameter keys
+      const searchableText = [
+        tool.tool.name,
+        tool.tool.description || "",
+        Object.keys(tool.tool.parameters?.properties || {}).join(" "),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    });
   }, [unassignedTools, searchQuery]);
 
   const paginatedTools = useMemo(() => {
@@ -135,11 +144,32 @@ export function UnassignedToolsList({
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
-        cell: ({ row }) => (
-          <div className="font-medium text-foreground truncate">
-            {row.original.tool.name}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const tool = row.original.tool;
+
+          if (!tool.description) {
+            return (
+              <div className="font-medium text-foreground truncate">
+                {tool.name}
+              </div>
+            );
+          }
+
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="font-medium text-foreground truncate cursor-help">
+                    {tool.name}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md">
+                  <p className="text-sm">{tool.description}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
         size: 250,
       },
       {
@@ -241,7 +271,7 @@ export function UnassignedToolsList({
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search tools by name..."
+          placeholder="Search tools by name, description, or parameter names..."
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);

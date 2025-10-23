@@ -105,7 +105,7 @@ export default {
     corsOrigins: getCorsOrigins(),
     authHeaderName: "X-Archestra-API-Key",
   },
-  archestraMcpServer: {
+  mcpGateway: {
     endpoint: "/mcp",
   },
   auth: {

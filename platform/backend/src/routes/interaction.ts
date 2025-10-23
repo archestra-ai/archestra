@@ -1,6 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getUserFromRequest } from "@/auth/utils";
 import { InteractionModel } from "@/models";
 import {
   createPaginatedResponseSchema,
@@ -11,6 +10,7 @@ import {
   SelectInteractionSchema,
   UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(

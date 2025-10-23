@@ -1,7 +1,8 @@
 import { inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
-import type { Tool } from "@/types";
+import mcpClientService from "@/services/mcp-client";
+import type { CommonToolCall, CommonToolResult, Tool } from "@/types";
 
 /**
  * Persist tools if present in the request
@@ -46,3 +47,9 @@ export const getAssignedMCPTools = async (agentId: string): Promise<Tool[]> => {
 
   return tools;
 };
+
+export const executeMcpToolCalls = async (
+  toolCalls: CommonToolCall[],
+  agentId: string,
+): Promise<CommonToolResult[]> =>
+  mcpClientService.executeToolCalls(toolCalls, agentId);

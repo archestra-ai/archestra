@@ -46,21 +46,21 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
         <span className="text-sm font-medium text-muted-foreground">Type:</span>
         <Badge
           variant={selectedType === "all" ? "default" : "outline"}
-          className="cursor-pointer hover:bg-secondary"
+          className="cursor-pointer"
           onClick={() => handleTypeChange("all")}
         >
           All
         </Badge>
         <Badge
           variant={selectedType === "remote" ? "default" : "outline"}
-          className="cursor-pointer hover:bg-secondary"
+          className="cursor-pointer"
           onClick={() => handleTypeChange("remote")}
         >
           Remote
         </Badge>
         <Badge
           variant={selectedType === "local" ? "default" : "outline"}
-          className="cursor-pointer hover:bg-secondary"
+          className="cursor-pointer"
           onClick={() => handleTypeChange("local")}
         >
           Local
@@ -75,7 +75,7 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
         <div className="flex flex-wrap gap-2">
           <Badge
             variant={isAllCategoriesSelected ? "default" : "outline"}
-            className="cursor-pointer hover:bg-secondary"
+            className="cursor-pointer"
             onClick={() => handleCategoryToggle("all")}
           >
             All
@@ -84,7 +84,7 @@ export function CatalogFilters({ onFiltersChange }: CatalogFiltersProps) {
             <Badge
               key={category}
               variant={selectedCategory === category ? "default" : "outline"}
-              className="cursor-pointer hover:bg-secondary"
+              className="cursor-pointer"
               onClick={() => handleCategoryToggle(category)}
             >
               {category}

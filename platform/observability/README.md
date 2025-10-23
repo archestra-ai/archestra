@@ -133,27 +133,31 @@ archestra_system_health_status{component="anthropic"}
 
 ### Environment Variables
 
-Configure observability through environment variables:
+The observability features use the existing Archestra configuration. No additional environment variables are required for basic observability functionality.
+
+The following environment variables are used by Archestra (not specific to observability):
 
 ```bash
-# Prometheus metrics
-PROMETHEUS_ENABLED=true
+# Database connection
+DATABASE_URL=postgresql://...
 
-# Health check intervals
-HEALTH_CHECK_INTERVAL=30000
+# API configuration
+ARCHESTRA_API_BASE_URL=http://localhost:9000
+ARCHESTRA_FRONTEND_URL=http://localhost:3000
 
-# External service timeouts
-LLM_PROVIDER_TIMEOUT=10000
-DATABASE_TIMEOUT=5000
+# Authentication
+ARCHESTRA_AUTH_SECRET=your-secret-key
+
+# Features
+FEATURES_MCP_REGISTRY_ENABLED=true
 ```
 
 ### Docker Configuration
 
-For Docker deployments, expose the metrics port:
+For Docker deployments, expose the API port (metrics are served on the same port):
 
 ```dockerfile
-EXPOSE 9000  # API port
-EXPOSE 9464  # Metrics port (optional, can use same port)
+EXPOSE 9000  # API port (includes metrics endpoint)
 ```
 
 ### Kubernetes Configuration

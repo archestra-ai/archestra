@@ -58,7 +58,7 @@
     "tsc-alias": "^1.8.10",
     "tsup": "^8.5.0",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^5.9.2",
     "vitest": "^4.0.1"
   }
 }

@@ -24,14 +24,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import type { ServerResponse } from "@/lib/clients/mcp-registry";
 import {
-  useCreateInternalMcpCatalogItem,
-  useInternalMcpCatalog,
-} from "@/lib/internal-mcp-catalog.query";
-import {
   useMcpRegistryServersInfinite,
   useMcpServerVersion,
   useMcpServerVersions,
-} from "@/lib/mcp-registry-external.query";
+} from "@/lib/external-mcp-catalog.query";
+import {
+  useCreateInternalMcpCatalogItem,
+  useInternalMcpCatalog,
+} from "@/lib/internal-mcp-catalog.query";
 import { DetailsDialog } from "./details-dialog";
 import { TransportBadges } from "./transport-badges";
 

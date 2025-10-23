@@ -30,7 +30,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { ServerResponse } from "@/lib/clients/mcp-registry";
-import { useMcpServerVersions } from "@/lib/mcp-registry-external.query";
+import { useMcpServerVersions } from "@/lib/external-mcp-catalog.query";
 
 interface DetailsDialogProps {
   server: ServerResponse | null;

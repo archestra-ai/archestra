@@ -4,23 +4,23 @@ import { getDisplayProxyUrl } from "./config";
 export const PROVIDER_INFO = {
   openai: {
     label: "OpenAI",
-    baseUrl: `${getDisplayProxyUrl()}/v1/openai`,
+    baseUrl: `${getDisplayProxyUrl()}/openai`,
     docs: "https://platform.openai.com/docs",
     snippet: `import OpenAI from 'openai';
 
 const client = new OpenAI({
-baseURL: '${getDisplayProxyUrl()}/v1/openai',
+baseURL: '${getDisplayProxyUrl()}/openai',
 apiKey: process.env.OPENAI_API_KEY,
 });`,
   },
   anthropic: {
     label: "Anthropic",
-    baseUrl: `${getDisplayProxyUrl()}/v1/anthropic`,
+    baseUrl: `${getDisplayProxyUrl()}/anthropic`,
     docs: "https://docs.anthropic.com/",
     snippet: `import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic({
-  baseURL: '${getDisplayProxyUrl()}/v1/anthropic',
+  baseURL: '${getDisplayProxyUrl()}/anthropic',
   apiKey: process.env.ANTHROPIC_API_KEY,
 });`,
   },

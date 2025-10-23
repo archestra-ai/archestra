@@ -11,10 +11,10 @@ import {
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { useDetectedTools } from "@/lib/tool.query";
+import { FRAMEWORK_DOCS, PROVIDER_INFO } from "../../../../shared";
 import CopyButton from "../ui/copy-button";
 import OnboardingStep from "../ui/onboarding-step";
 import OptionButton from "../ui/option-button";
-import { FRAMEWORK_DOCS, PROVIDER_INFO } from "./constants";
 
 export type OnboardingWizardHandle = {
   next: () => void;

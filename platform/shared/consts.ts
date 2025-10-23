@@ -39,3 +39,40 @@ export const DEFAULT_AGENT_NAME = "Default Agent with Archestra";
  * NOTE: THIS IS ABSOLUTELY TEMPORARY.. remove this once we have full/generic support for MCP servers.
  */
 export const GITHUB_MCP_SERVER_NAME = "GitHub MCP Server";
+export type ProviderInfo = {
+  label: string;
+  baseUrl: string;
+  docs: string;
+  snippet: string;
+};
+export const PROVIDER_INFO = {
+  openai: {
+    label: "OpenAI",
+    baseUrl: "http://localhost:9000/v1/openai",
+    docs: "https://platform.openai.com/docs",
+    snippet: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'http://localhost:9000/v1/openai',
+  apiKey: process.env.OPENAI_API_KEY,
+});`,
+  },
+  anthropic: {
+    label: "Anthropic",
+    baseUrl: "http://localhost:9000/v1/anthropic",
+    docs: "https://docs.anthropic.com/",
+    snippet: `import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  baseURL: 'http://localhost:9000/v1/anthropic',
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});`,
+  },
+} as {openai: ProviderInfo; anthropic: ProviderInfo};
+
+export const FRAMEWORK_DOCS = {
+  n8n: "https://archestra.ai/docs/platform-n8n-example",
+  langchain: "https://archestra.ai/docs/platform-langchain-example",
+  openwebui: "https://archestra.ai/docs/platform-openwebui-example",
+} as const;
+export type Framework = keyof typeof FRAMEWORK_DOCS;

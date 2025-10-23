@@ -1,8 +1,8 @@
 "use client";
 
+import { PROVIDER_INFO, type ProviderInfo } from "../../../../shared";
 import { Button } from "../ui/button";
 import CopyButton from "../ui/copy-button";
-import { PROVIDER_INFO } from "./constants";
 
 export default function ProviderDetails({
   provider,
@@ -13,7 +13,7 @@ export default function ProviderDetails({
   proxyUrl: string;
   onProxyChange: (v: string) => void;
 }) {
-  const info = PROVIDER_INFO[provider];
+  const info: ProviderInfo = PROVIDER_INFO[provider];
 
   return (
     <div className="space-y-4">

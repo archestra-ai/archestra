@@ -6,7 +6,7 @@ export { default as dualLlmConfigRoutes } from "./dual-llm-config";
 export { default as dualLlmResultRoutes } from "./dual-llm-result";
 export { default as featuresRoutes } from "./features";
 export { default as interactionRoutes } from "./interaction";
-export { default as mcpCatalogRoutes } from "./mcp-catalog";
+export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";

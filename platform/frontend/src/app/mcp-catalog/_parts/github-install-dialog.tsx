@@ -12,16 +12,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { GetMcpCatalogResponses } from "@/lib/clients/api";
+import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 
 interface GitHubInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInstall: (
-    catalogItem: GetMcpCatalogResponses["200"][number],
+    catalogItem: GetInternalMcpCatalogResponses["200"][number],
     metadata: Record<string, unknown>,
   ) => Promise<void>;
-  catalogItem: GetMcpCatalogResponses["200"][number] | null;
+  catalogItem: GetInternalMcpCatalogResponses["200"][number] | null;
   isInstalling: boolean;
 }
 

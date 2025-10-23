@@ -7,7 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-const mcpCatalogTable = pgTable("mcp_catalog", {
+const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   version: text("version"),
@@ -34,4 +34,4 @@ const mcpCatalogTable = pgTable("mcp_catalog", {
     .$onUpdate(() => new Date()),
 });
 
-export default mcpCatalogTable;
+export default internalMcpCatalogTable;

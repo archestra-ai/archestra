@@ -21,12 +21,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { GetMcpCatalogResponses } from "@/lib/clients/api";
+import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import type { ServerResponse } from "@/lib/clients/mcp-registry";
 import {
-  useCreateMcpCatalogItem,
-  useMcpCatalog,
-} from "@/lib/mcp-catalog.query";
+  useCreateInternalMcpCatalogItem,
+  useInternalMcpCatalog,
+} from "@/lib/internal-mcp-catalog.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerVersion,
@@ -237,16 +237,16 @@ function ServerCard({
   );
 }
 
-export default function McpCatalogPage({
+export function ExternalMCPCatalog({
   catalogItems: initialCatalogItems,
 }: {
-  catalogItems?: GetMcpCatalogResponses["200"];
+  catalogItems?: GetInternalMcpCatalogResponses["200"];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] = useState<ServerResponse | null>(null);
 
   // Get catalog items for filtering (with live updates)
-  const { data: catalogItems } = useMcpCatalog({
+  const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
 
@@ -261,7 +261,7 @@ export default function McpCatalogPage({
   } = useMcpRegistryServersInfinite(searchQuery);
 
   // Mutation for adding servers to catalog
-  const createMutation = useCreateMcpCatalogItem();
+  const createMutation = useCreateInternalMcpCatalogItem();
 
   const handleAddToCatalog = async (serverResponse: ServerResponse) => {
     await createMutation.mutateAsync({
@@ -289,11 +289,11 @@ export default function McpCatalogPage({
     <div className="w-full h-full">
       <div className="">
         <h1 className="text-lg font-semibold tracking-tight mb-2">
-          External MCP Registry
+          External MCP Catalog
         </h1>
         <p className="text-sm text-muted-foreground">
           Browse and discover Model Context Protocol (MCP) servers from the
-          official registry.
+          external catalog
         </p>
       </div>
       <div className="mx-auto py-4 space-y-6">
@@ -333,7 +333,7 @@ export default function McpCatalogPage({
         {error && (
           <div className="text-center py-12">
             <p className="text-destructive mb-2">
-              Failed to load servers from the MCP Registry
+              Failed to load servers from the external catalog
             </p>
             <p className="text-sm text-muted-foreground">
               {error instanceof Error ? error.message : "Unknown error"}

@@ -113,11 +113,11 @@ export const RouteId = {
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
 
   // MCP Catalog Routes
-  GetMcpCatalog: "getMcpCatalog",
-  CreateMcpCatalogItem: "createMcpCatalogItem",
-  GetMcpCatalogItem: "getMcpCatalogItem",
-  UpdateMcpCatalogItem: "updateMcpCatalogItem",
-  DeleteMcpCatalogItem: "deleteMcpCatalogItem",
+  GetInternalMcpCatalog: "getInternalMcpCatalog",
+  CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
+  GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
+  DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",

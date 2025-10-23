@@ -1,32 +1,32 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { McpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel } from "@/models";
 import {
   ErrorResponseSchema,
-  InsertMcpCatalogSchema,
+  InsertInternalMcpCatalogSchema,
   RouteId,
-  SelectMcpCatalogSchema,
-  UpdateMcpCatalogSchema,
+  SelectInternalMcpCatalogSchema,
+  UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
 
-const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/mcp_catalog",
+    "/api/internal_mcp_catalog",
     {
       schema: {
-        operationId: RouteId.GetMcpCatalog,
-        description: "Get all MCP catalog items",
+        operationId: RouteId.GetInternalMcpCatalog,
+        description: "Get all Internal MCP catalog items",
         tags: ["MCP Catalog"],
         response: {
-          200: z.array(SelectMcpCatalogSchema),
+          200: z.array(SelectInternalMcpCatalogSchema),
           500: ErrorResponseSchema,
         },
       },
     },
     async (_request, reply) => {
       try {
-        return reply.send(await McpCatalogModel.findAll());
+        return reply.send(await InternalMcpCatalogModel.findAll());
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -41,26 +41,26 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/mcp_catalog",
+    "/api/internal_mcp_catalog",
     {
       schema: {
-        operationId: RouteId.CreateMcpCatalogItem,
-        description: "Create a new MCP catalog item",
+        operationId: RouteId.CreateInternalMcpCatalogItem,
+        description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertMcpCatalogSchema.omit({
+        body: InsertInternalMcpCatalogSchema.omit({
           id: true,
           createdAt: true,
           updatedAt: true,
         }),
         response: {
-          200: SelectMcpCatalogSchema,
+          200: SelectInternalMcpCatalogSchema,
           500: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       try {
-        return reply.send(await McpCatalogModel.create(request.body));
+        return reply.send(await InternalMcpCatalogModel.create(request.body));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -75,17 +75,17 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/mcp_catalog/:id",
+    "/api/internal_mcp_catalog/:id",
     {
       schema: {
-        operationId: RouteId.GetMcpCatalogItem,
-        description: "Get MCP catalog item by ID",
+        operationId: RouteId.GetInternalMcpCatalogItem,
+        description: "Get Internal MCP catalog item by ID",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
         }),
         response: {
-          200: SelectMcpCatalogSchema,
+          200: SelectInternalMcpCatalogSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -93,7 +93,9 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const catalogItem = await McpCatalogModel.findById(request.params.id);
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          request.params.id,
+        );
 
         if (!catalogItem) {
           return reply.status(404).send({
@@ -119,22 +121,22 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.put(
-    "/api/mcp_catalog/:id",
+    "/api/internal_mcp_catalog/:id",
     {
       schema: {
-        operationId: RouteId.UpdateMcpCatalogItem,
-        description: "Update an MCP catalog item",
+        operationId: RouteId.UpdateInternalMcpCatalogItem,
+        description: "Update an Internal MCP catalog item",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
         }),
-        body: UpdateMcpCatalogSchema.omit({
+        body: UpdateInternalMcpCatalogSchema.omit({
           id: true,
           createdAt: true,
           updatedAt: true,
         }).partial(),
         response: {
-          200: SelectMcpCatalogSchema,
+          200: SelectInternalMcpCatalogSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -142,7 +144,7 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const catalogItem = await McpCatalogModel.update(
+        const catalogItem = await InternalMcpCatalogModel.update(
           request.params.id,
           request.body,
         );
@@ -171,11 +173,11 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/mcp_catalog/:id",
+    "/api/internal_mcp_catalog/:id",
     {
       schema: {
-        operationId: RouteId.DeleteMcpCatalogItem,
-        description: "Delete an MCP catalog item",
+        operationId: RouteId.DeleteInternalMcpCatalogItem,
+        description: "Delete an Internal MCP catalog item",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -190,7 +192,7 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         return reply.send({
-          success: await McpCatalogModel.delete(request.params.id),
+          success: await InternalMcpCatalogModel.delete(request.params.id),
         });
       } catch (error) {
         fastify.log.error(error);
@@ -206,4 +208,4 @@ const mcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default mcpCatalogRoutes;
+export default internalMcpCatalogRoutes;

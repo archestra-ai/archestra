@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
     const backendUrl = process.env.ARCHESTRA_API_BASE_URL || 'http://localhost:9000';
     return [
       {
+        source: '/api/archestra-catalog/:path*',
+        destination: 'https://www.archestra.ai/mcp-catalog/api/:path*',
+      },
+      {
         source: '/api/mcp-registry-proxy/:path*',
         destination: 'https://registry.modelcontextprotocol.io/:path*',
       },

@@ -20,10 +20,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type {
-  GetMcpCatalogResponses,
+  GetInternalMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
-import { useMcpCatalog } from "@/lib/mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { formatDate } from "@/lib/utils";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -32,14 +32,14 @@ import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
-export function InternalMCPRegistry({
+export function InternalMCPCatalog({
   initialData,
   installedServers: initialInstalledServers,
 }: {
-  initialData?: GetMcpCatalogResponses["200"];
+  initialData?: GetInternalMcpCatalogResponses["200"];
   installedServers?: GetMcpServersResponses["200"];
 }) {
-  const { data: catalogItems } = useMcpCatalog({ initialData });
+  const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
@@ -47,10 +47,10 @@ export function InternalMCPRegistry({
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<
-    GetMcpCatalogResponses["200"][number] | null
+    GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [deletingItem, setDeletingItem] = useState<
-    GetMcpCatalogResponses["200"][number] | null
+    GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
@@ -60,11 +60,11 @@ export function InternalMCPRegistry({
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
-    GetMcpCatalogResponses["200"][number] | null
+    GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
 
   const handleInstall = useCallback(
-    async (catalogItem: GetMcpCatalogResponses["200"][number]) => {
+    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
       /**
        * NOTE: THIS IS ABSOLUTELY TEMPORARY..
        *
@@ -89,7 +89,7 @@ export function InternalMCPRegistry({
 
   const handleGitHubInstall = useCallback(
     async (
-      catalogItem: GetMcpCatalogResponses["200"][number],
+      catalogItem: GetInternalMcpCatalogResponses["200"][number],
       metadata: Record<string, unknown>,
     ) => {
       setInstallingItemId(catalogItem.id);
@@ -153,7 +153,7 @@ export function InternalMCPRegistry({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Your MCP Registry</h2>
+          <h2 className="text-lg font-semibold">Your MCP Servers</h2>
           <p className="text-sm text-muted-foreground">
             MCP Servers added to your internal registry
           </p>
@@ -166,7 +166,7 @@ export function InternalMCPRegistry({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search catalog items..."
+          placeholder="Search servers by name..."
           value={catalogSearchQuery}
           onChange={(e) => setCatalogSearchQuery(e.target.value)}
           className="pl-9"

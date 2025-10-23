@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateMcpCatalogItem } from "@/lib/mcp-catalog.query";
+import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface CreateCatalogDialogProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ export function CreateCatalogDialog({
   onClose,
 }: CreateCatalogDialogProps) {
   const [itemName, setItemName] = useState("");
-  const createMutation = useCreateMcpCatalogItem();
+  const createMutation = useCreateInternalMcpCatalogItem();
 
   const handleClose = () => {
     onClose();

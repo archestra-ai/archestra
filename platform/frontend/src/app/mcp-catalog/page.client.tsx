@@ -2,17 +2,17 @@
 
 import Divider from "@/components/divider";
 import type {
-  GetMcpCatalogResponses,
+  GetInternalMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
-import ExternalMCPRegistry from "./_parts/ExternalMCPRegistry";
-import { InternalMCPRegistry } from "./_parts/InternalMCPRegistry";
+import { ExternalMCPCatalog } from "./_parts/ExternalMCPCatalog";
+import { InternalMCPCatalog } from "./_parts/InternalMCPCatalog";
 
 export default function McpRegistryPage({
   initialData,
 }: {
   initialData: {
-    catalog: GetMcpCatalogResponses["200"];
+    catalog: GetInternalMcpCatalogResponses["200"];
     servers: GetMcpServersResponses["200"];
   };
 }) {
@@ -21,22 +21,21 @@ export default function McpRegistryPage({
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">
-            MCP Registry
+            MCP Catalog
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage your Model Context Protocol (MCP) server catalog and
-            installed server registry.
+            Manage your internal Model Context Protocol (MCP) server catalog
           </p>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-8 py-8">
-        <InternalMCPRegistry
+        <InternalMCPCatalog
           initialData={initialData.catalog}
           installedServers={initialData.servers}
         />
         <Divider className="my-8" />
-        <ExternalMCPRegistry catalogItems={initialData.catalog} />
+        <ExternalMCPCatalog catalogItems={initialData.catalog} />
       </div>
     </div>
   );

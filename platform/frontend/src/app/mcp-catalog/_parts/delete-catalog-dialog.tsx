@@ -7,11 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GetMcpCatalogResponses } from "@/lib/clients/api";
-import { useDeleteMcpCatalogItem } from "@/lib/mcp-catalog.query";
+import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
+import { useDeleteInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface DeleteCatalogDialogProps {
-  item: GetMcpCatalogResponses["200"][number] | null;
+  item: GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
   installationCount: number;
 }
@@ -21,7 +21,7 @@ export function DeleteCatalogDialog({
   onClose,
   installationCount,
 }: DeleteCatalogDialogProps) {
-  const deleteMutation = useDeleteMcpCatalogItem();
+  const deleteMutation = useDeleteInternalMcpCatalogItem();
 
   const handleConfirm = async () => {
     if (!item) return;

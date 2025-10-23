@@ -1,7 +1,7 @@
 import { defineConfig, createClient } from '@hey-api/openapi-ts';
 import { pathToFileURL } from 'node:url';
 
-const archestraConfig =  await defineConfig({
+const archestraApiConfig =  await defineConfig({
   input: 'http://localhost:9000/openapi.json',
   output: {
     path: './src/lib/clients/api',
@@ -21,10 +21,10 @@ const archestraConfig =  await defineConfig({
   ],
 });
 
-const mcpRegistryConfig =  await defineConfig({
-  input: 'https://registry.modelcontextprotocol.io/openapi.yaml',
+const archestraCatalogConfig =  await defineConfig({
+  input: 'https://www.archestra.ai/mcp-catalog/api/docs',
   output: {
-    path: './src/lib/clients/mcp-registry',
+    path: './src/lib/clients/archestra-catalog',
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',
@@ -39,6 +39,6 @@ const mcpRegistryConfig =  await defineConfig({
 
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await createClient(archestraConfig);
-  await createClient(mcpRegistryConfig)
+  await createClient(archestraApiConfig);
+  await createClient(archestraCatalogConfig);
 }

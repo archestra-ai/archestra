@@ -183,6 +183,13 @@
       "when": 1761139055189,
       "tag": "0025_violet_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1761208068907,
+      "tag": "0026_perpetual_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

@@ -31,6 +31,10 @@ export function useInstallMcpServer() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      // Invalidate tools queries since MCP server installation creates new tools
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       toast.success(`Successfully installed ${variables.name}`);
     },
     onError: (error, variables) => {

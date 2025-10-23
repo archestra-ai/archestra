@@ -199,3 +199,19 @@ button, div[role="menuitem"] {
 button:disabled {
   cursor: not-allowed;
 }
+
+
+/** Onboarding **/
+.onboarding-image,
+.onboarding-illustration,
+.onboarding-preview img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+/* keep the dialog content scrollable on small screens */
+[data-slot="dialog-content"] > [data-slot="dialog-body"] {
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}

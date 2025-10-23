@@ -30,3 +30,33 @@ export function useUnassignedTools({
     initialData,
   });
 }
+
+/**
+ * Hook to detect when tools are identified.
+ * The first 2 tools are seed/mock data, so we wait for the 3rd one.
+ */
+export function useDetectedTools({
+  refetchInterval = 3_000,
+}: {
+  refetchInterval?: number | null;
+} = {}) {
+  return useSuspenseQuery({
+    queryKey: ["tools", "detection"],
+    queryFn: async () => {
+      const response = await getTools();
+      const tools = response.data ?? [];
+
+      // First 2 are seed data, count beyond that
+      const detectedCount = Math.max(0, tools.length - 2);
+      const totalTools = tools.length;
+
+      return {
+        hasDetectedTools: detectedCount > 0,
+        detectedCount,
+        totalTools,
+        tools,
+      };
+    },
+    ...(refetchInterval !== null ? { refetchInterval } : {}),
+  });
+}

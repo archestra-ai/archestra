@@ -70,3 +70,33 @@ export function useInteraction({
     ...(refetchInterval ? { refetchInterval } : {}), // later we might want to switch to websockets or sse, polling for now
   });
 }
+
+/**
+ * Hook to get the first real user interaction (skipping first 2 seed interactions).
+ * Returns null if no interaction exists yet, or the interaction data if found.
+ */
+export function useHasFirstUserInteraction({
+  agentId,
+  refetchInterval = 3_000,
+}: {
+  agentId?: string;
+  refetchInterval?: number | null;
+} = {}) {
+  return useSuspenseQuery({
+    queryKey: ["interactions", "first-user-check", agentId],
+    queryFn: async () => {
+      const response = await getInteractions({
+        query: {
+          ...(agentId ? { agentId } : {}),
+          limit: 1,
+          offset: 2, // skip first 2 interactions (seed)
+          sortBy: "createdAt",
+          sortDirection: "asc",
+        },
+      });
+      // Return the first interaction or null if none found
+      return response.data?.data?.[0] ?? null;
+    },
+    ...(refetchInterval !== null ? { refetchInterval } : {}),
+  });
+}

@@ -16,8 +16,7 @@ test('can create and delete an agent', async ({ page }) => {
   // Check if the agent is created
   await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).toBeVisible();
 
-  // Delete created agent - first open the dropdown which contains the action buttons
-  await page.getByTestId(`${E2eTestId.AgentActionsDropdownTrigger}-${AGENT_NAME}`).click();
+  // Delete created agent - click the delete button directly
   await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`).click();
   await page.getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByTestId(E2eTestId.AgentsTable).getByText(AGENT_NAME)).not.toBeVisible();

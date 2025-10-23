@@ -21,16 +21,6 @@ export const httpRequestDuration = new Histogram({
   buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10],
 });
 
-export const dbConnectionsActive = new Gauge({
-  name: "archestra_db_connections_active",
-  help: "Number of active database connections",
-});
-
-export const dbConnectionsIdle = new Gauge({
-  name: "archestra_db_connections_idle",
-  help: "Number of idle database connections",
-});
-
 export const llmRequestsTotal = new Counter({
   name: "archestra_llm_requests_total",
   help: "Total number of LLM API requests",
@@ -102,8 +92,4 @@ export const systemHealthStatus = new Gauge({
 
 export async function getMetrics(): Promise<string> {
   return await register.metrics();
-}
-
-export function resetMetrics(): void {
-  register.resetMetrics();
 }

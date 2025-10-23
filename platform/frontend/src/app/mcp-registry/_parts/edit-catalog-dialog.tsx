@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { GetMcpCatalogResponses } from "@/lib/clients/api";
-import { useUpdateMcpCatalogItem } from "@/lib/mcp-catalog.query";
+import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp-internal-catalog.query";
 
 interface EditCatalogDialogProps {
   item: GetMcpCatalogResponses["200"][number] | null;
@@ -20,7 +20,7 @@ interface EditCatalogDialogProps {
 
 export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
   const [itemName, setItemName] = useState("");
-  const updateMutation = useUpdateMcpCatalogItem();
+  const updateMutation = useUpdateInternalMcpCatalogItem();
 
   // Sync item name when item changes
   useEffect(() => {

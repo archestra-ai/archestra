@@ -24,9 +24,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { GetMcpCatalogResponses } from "@/lib/clients/api";
 import type { ServerResponse } from "@/lib/clients/mcp-registry";
 import {
-  useCreateMcpCatalogItem,
-  useMcpCatalog,
-} from "@/lib/mcp-catalog.query";
+  useCreateInternalMcpCatalogItem,
+  useInternalMcpCatalog,
+} from "@/lib/mcp-internal-catalog.query";
 import {
   useMcpRegistryServersInfinite,
   useMcpServerVersion,
@@ -246,7 +246,7 @@ export default function McpCatalogPage({
   const [readmeServer, setReadmeServer] = useState<ServerResponse | null>(null);
 
   // Get catalog items for filtering (with live updates)
-  const { data: catalogItems } = useMcpCatalog({
+  const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
 
@@ -261,7 +261,7 @@ export default function McpCatalogPage({
   } = useMcpRegistryServersInfinite(searchQuery);
 
   // Mutation for adding servers to catalog
-  const createMutation = useCreateMcpCatalogItem();
+  const createMutation = useCreateInternalMcpCatalogItem();
 
   const handleAddToCatalog = async (serverResponse: ServerResponse) => {
     await createMutation.mutateAsync({

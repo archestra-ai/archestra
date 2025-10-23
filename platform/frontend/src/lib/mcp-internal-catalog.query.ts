@@ -13,7 +13,7 @@ import {
   updateMcpCatalogItem,
 } from "@/lib/clients/api";
 
-export function useMcpCatalog(params?: {
+export function useInternalMcpCatalog(params?: {
   initialData?: GetMcpCatalogResponses["200"];
 }) {
   return useSuspenseQuery({
@@ -23,7 +23,7 @@ export function useMcpCatalog(params?: {
   });
 }
 
-export function useCreateMcpCatalogItem() {
+export function useCreateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: { name: string; version?: string }) => {
@@ -41,7 +41,7 @@ export function useCreateMcpCatalogItem() {
   });
 }
 
-export function useUpdateMcpCatalogItem() {
+export function useUpdateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -65,7 +65,7 @@ export function useUpdateMcpCatalogItem() {
   });
 }
 
-export function useDeleteMcpCatalogItem() {
+export function useDeleteInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {

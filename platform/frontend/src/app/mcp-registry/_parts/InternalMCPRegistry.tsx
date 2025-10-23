@@ -23,7 +23,7 @@ import type {
   GetMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
-import { useMcpCatalog } from "@/lib/mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/mcp-internal-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { formatDate } from "@/lib/utils";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -39,7 +39,7 @@ export function InternalMCPRegistry({
   initialData?: GetMcpCatalogResponses["200"];
   installedServers?: GetMcpServersResponses["200"];
 }) {
-  const { data: catalogItems } = useMcpCatalog({ initialData });
+  const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });

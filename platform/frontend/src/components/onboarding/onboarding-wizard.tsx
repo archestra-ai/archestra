@@ -11,7 +11,11 @@ import {
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { useDetectedTools } from "@/lib/tool.query";
-import { FRAMEWORK_DOCS, PROVIDER_INFO } from "../../../../shared";
+import {
+  FRAMEWORK_DOCS,
+  FRAMEWORK_LABELS,
+  PROVIDER_INFO,
+} from "../../../../shared";
 import CopyButton from "../ui/copy-button";
 import OnboardingStep from "../ui/onboarding-step";
 import OptionButton from "../ui/option-button";
@@ -164,13 +168,7 @@ export default forwardRef(function OnboardingWizard(
                   if (isActive) setFramework(f);
                 }}
               >
-                {f === "n8n"
-                  ? "N8N"
-                  : f === "langchain"
-                    ? "LangChain"
-                    : f === "openwebui"
-                      ? "OpenWebUI"
-                      : "Custom"}
+                {FRAMEWORK_LABELS[f]}
               </OptionButton>
             ))}
           </div>

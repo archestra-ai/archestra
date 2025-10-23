@@ -76,3 +76,9 @@ export const FRAMEWORK_DOCS = {
   openwebui: "https://archestra.ai/docs/platform-openwebui-example",
 } as const;
 export type Framework = keyof typeof FRAMEWORK_DOCS;
+
+export const FRAMEWORK_LABELS = {
+  n8n: "N8N",
+  langchain: "LangChain",
+  openwebui: "OpenWebUI",
+} as const;

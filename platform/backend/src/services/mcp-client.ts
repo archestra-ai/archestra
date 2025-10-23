@@ -68,9 +68,20 @@ class McpClientService {
           // Strip the server prefix from tool name for MCP server call
           const mcpToolName = ToolModel.unslugifyName(toolCall.name);
 
+          console.log("MCP tool call:", {
+            originalName: toolCall.name,
+            mcpToolName,
+            arguments: toolCall.arguments,
+          });
+
           const result = await client.callTool({
             name: mcpToolName,
             arguments: toolCall.arguments,
+          });
+
+          console.log("MCP tool result:", {
+            mcpToolName,
+            result,
           });
 
           results.push({

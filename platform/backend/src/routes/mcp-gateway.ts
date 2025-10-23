@@ -1,13 +1,38 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  type CallToolResult,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import type { ZodRawShape } from "zod";
 import { z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import mcpClientService from "@/services/mcp-client";
 import { type CommonToolCall, type Tool, UuidIdSchema } from "@/types";
+
+/**
+ * Convert JSON Schema properties to a Zod schema that accepts all properties
+ * We use a passthrough schema to allow any properties from the JSON schema
+ */
+function createPermissiveZodSchema(
+  jsonSchema: Record<string, unknown>,
+): z.ZodObject<z.ZodRawShape> {
+  const properties = (jsonSchema.properties as Record<string, unknown>) || {};
+  const zodShape: Record<string, z.ZodTypeAny> = {};
+
+  // Create a Zod schema that accepts each property as an unknown type
+  // This allows the SDK to extract the arguments while being permissive
+  for (const key of Object.keys(properties)) {
+    zodShape[key] = z.unknown().optional();
+  }
+
+  // Wrap in z.object() and use passthrough to allow any additional properties
+  return z.object(zodShape).passthrough();
+}
 
 /**
  * Cache of MCP server factories by agent ID
@@ -105,6 +130,117 @@ async function createAgentServer(
     await registerToolHandler(server, tool, agentId, logger);
   }
 
+  // Override both tools/list and tools/call handlers
+  // This gives us full control over argument passing without Zod schema issues
+
+  // First, remove the SDK's default handlers that were registered when we added tools
+  server.server.removeRequestHandler("tools/list");
+  server.server.removeRequestHandler("tools/call");
+
+  // Override tools/list to return our JSON schemas
+  server.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // @ts-expect-error - Accessing private property
+    const registeredTools = server._registeredTools as Record<
+      string,
+      {
+        enabled: boolean;
+        title?: string;
+        description?: string;
+        _jsonSchema?: unknown;
+        annotations?: unknown;
+        _meta?: unknown;
+      }
+    >;
+
+    const tools = Object.entries(registeredTools)
+      .filter(([, tool]) => tool.enabled)
+      .map(([name, tool]) => ({
+        name,
+        title: tool.title,
+        description: tool.description,
+        // Use our stored JSON schema instead of converting from Zod
+        inputSchema: tool._jsonSchema || {
+          type: "object",
+          properties: {},
+        },
+        annotations: tool.annotations,
+        _meta: tool._meta,
+      }));
+
+    logger.info(
+      { agentId, toolCount: tools.length },
+      "Responding to tools/list with JSON schemas",
+    );
+
+    return { tools };
+  });
+
+  // Override tools/call to pass arguments directly without Zod validation
+  server.server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request: { params: { name: string; arguments?: unknown } }) => {
+      const toolName = request.params.name;
+      const args = (request.params.arguments as Record<string, unknown>) || {};
+
+      logger.info(
+        { agentId, toolName, args },
+        "Custom tools/call handler - calling tool",
+      );
+
+      // @ts-expect-error - Accessing private property
+      const registeredTools = server._registeredTools as Record<
+        string,
+        {
+          enabled: boolean;
+          callback: (
+            args: Record<string, unknown>,
+            extra: unknown,
+          ) => Promise<CallToolResult> | CallToolResult;
+        }
+      >;
+
+      const tool = registeredTools[toolName];
+      if (!tool || !tool.enabled) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Tool '${toolName}' not found or not enabled`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Call the tool handler with the raw arguments
+      try {
+        const result = await tool.callback(args, {});
+        return result;
+      } catch (error) {
+        logger.info(
+          {
+            agentId,
+            toolName,
+            error: error instanceof Error ? error.message : "Unknown",
+          },
+          "Custom tools/call handler - error",
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error occurred",
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   logger.info({ agentId }, "MCP server instance created");
   return server;
 }
@@ -120,21 +256,28 @@ async function registerToolHandler(
 ): Promise<void> {
   const toolName = tool.name;
   const toolDescription = tool.description || `Tool: ${toolName}`;
-  const _inputSchema = (tool.parameters as Record<string, unknown>) || {
+
+  // We store JSON schemas in the database, but the SDK converts Zod schemas to JSON schemas
+  // To bypass this, we'll register the tool with a permissive Zod schema that accepts
+  // all the properties from our JSON schema, then patch the internal registry to use
+  // our JSON schema for the tools/list response
+  const inputSchema = (tool.parameters as Record<string, unknown>) || {
     type: "object",
     properties: {},
   };
 
-  logger.info({ toolName, agentId }, "Registering tool handler");
+  logger.info({ toolName, agentId, inputSchema }, "Registering tool handler");
 
-  // Extract properties from JSON schema for Zod validation
-  // The MCP SDK expects Zod schemas, but we store JSON schemas in DB
-  // For now, we'll pass a simple object schema that accepts any properties
-  server.tool(
+  // Register the tool with an empty schema
+  // We'll handle argument extraction in our custom tools/call handler
+  const registeredTool = server.tool(
     toolName,
     toolDescription,
     {},
-    async (args, _extra): Promise<CallToolResult> => {
+    async (
+      args: Record<string, unknown>,
+      _extra: unknown,
+    ): Promise<CallToolResult> => {
       logger.info({ toolName, args, agentId }, "Tool handler called");
       try {
         // Create a CommonToolCall for McpClientService
@@ -254,6 +397,18 @@ async function registerToolHandler(
       }
     },
   );
+
+  // Store the JSON schema in the registered tool's metadata
+  // We'll use this when responding to tools/list requests
+  // @ts-expect-error - Accessing private property to store JSON schema
+  const internalTools = server._registeredTools as Record<
+    string,
+    { _jsonSchema: unknown }
+  >;
+  if (internalTools[toolName]) {
+    internalTools[toolName]._jsonSchema = inputSchema;
+    logger.info({ toolName, agentId }, "Stored JSON schema in tool metadata");
+  }
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -47,21 +48,57 @@ const agentServerFactories = new Map<
 >();
 
 /**
- * Cache TTL for tools (5 minutes)
+ * Cache configuration
  */
-const TOOLS_CACHE_TTL = 5 * 60 * 1000;
+const TOOLS_CACHE_MINUTES = 5;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+// 5 minutes * 60 seconds/minute * 1000 milliseconds/second
+const TOOLS_CACHE_TTL = TOOLS_CACHE_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
 /**
- * Active transports by session ID
- * Transports must persist across requests within the same session
+ * Session management types
  */
-const activeTransports = new Map<string, StreamableHTTPServerTransport>();
+interface SessionData {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+  lastAccess: number;
+}
 
 /**
- * Active servers by session ID
- * Servers must persist across requests within the same session
+ * Active sessions with last access time for cleanup
+ * Sessions must persist across requests within the same session
  */
-const activeServers = new Map<string, McpServer>();
+const activeSessions = new Map<string, SessionData>();
+
+/**
+ * Session timeout (30 minutes)
+ */
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Clean up expired sessions periodically
+ */
+function cleanupExpiredSessions(logger: { info: (obj: unknown, msg: string) => void }): void {
+  const now = Date.now();
+  const expiredSessionIds: string[] = [];
+
+  for (const [sessionId, sessionData] of activeSessions.entries()) {
+    if (now - sessionData.lastAccess > SESSION_TIMEOUT_MS) {
+      expiredSessionIds.push(sessionId);
+    }
+  }
+
+  for (const sessionId of expiredSessionIds) {
+    logger.info({ sessionId }, "Cleaning up expired session");
+    activeSessions.delete(sessionId);
+  }
+}
+
+// Run cleanup every 5 minutes
+setInterval(() => {
+  cleanupExpiredSessions({ info: console.log });
+}, 5 * 60 * 1000);
 
 /**
  * Get cached tools for an agent or fetch them
@@ -280,7 +317,7 @@ async function registerToolHandler(
   const registeredTool = server.tool(
     toolName,
     toolDescription,
-    {},
+    {}, // Intentionally permissive: validation omitted because JSON schemas are stored in DB (see above)
     async (
       args: Record<string, unknown>,
       _extra: unknown,
@@ -289,7 +326,7 @@ async function registerToolHandler(
       try {
         // Create a CommonToolCall for McpClientService
         const toolCall: CommonToolCall = {
-          id: `tool-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          id: `tool-${Date.now()}-${randomUUID()}`,
           name: toolName,
           arguments: args as Record<string, unknown>,
         };
@@ -435,7 +472,7 @@ function createTransport(
     sessionIdGenerator: () => {
       const sessionId =
         clientSessionId ||
-        `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        `session-${Date.now()}-${randomUUID()}`;
       logger.info(
         { agentId, sessionId, wasClientProvided: !!clientSessionId },
         "Using session ID",
@@ -505,7 +542,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { agentId } = request.params;
       const sessionId = request.headers["mcp-session-id"] as string | undefined;
-      const isInitialize = request.body?.method === "initialize";
+      const isInitialize = typeof request.body?.method === "string" && request.body.method === "initialize";
 
       fastify.log.info(
         {
@@ -524,18 +561,19 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let transport: StreamableHTTPServerTransport;
 
         // Check if we have an existing session
-        if (sessionId && activeTransports.has(sessionId)) {
+        if (sessionId && activeSessions.has(sessionId)) {
           fastify.log.info(
             {
               agentId,
               sessionId,
-              hasTransport: !!activeTransports.get(sessionId),
-              hasServer: !!activeServers.get(sessionId),
             },
             "Reusing existing session",
           );
-          transport = activeTransports.get(sessionId)!;
-          server = activeServers.get(sessionId)!;
+          const sessionData = activeSessions.get(sessionId)!;
+          transport = sessionData.transport;
+          server = sessionData.server;
+          // Update last access time
+          sessionData.lastAccess = Date.now();
 
           // If this is a re-initialize request on an existing session,
           // we can just reuse the existing server/transport
@@ -554,9 +592,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               clientProvidedSessionId: sessionId,
               hasSessionId: !!sessionId,
               sessionExists: sessionId
-                ? activeTransports.has(sessionId)
+                ? activeSessions.has(sessionId)
                 : false,
-              activeSessions: Array.from(activeTransports.keys()),
+              activeSessions: Array.from(activeSessions.keys()),
             },
             "Initialize request - creating NEW session",
           );
@@ -571,8 +609,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Store session using client-provided ID if available
           // If no client ID, we'll need to get it from transport after the request
           if (sessionId) {
-            activeTransports.set(sessionId, transport);
-            activeServers.set(sessionId, server);
+            activeSessions.set(sessionId, {
+              server,
+              transport,
+              lastAccess: Date.now(),
+            });
             fastify.log.info(
               {
                 agentId,
@@ -630,8 +671,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (isInitialize && !sessionId) {
           const generatedSessionId = transport.sessionId;
           if (generatedSessionId) {
-            activeTransports.set(generatedSessionId, transport);
-            activeServers.set(generatedSessionId, server);
+            activeSessions.set(generatedSessionId, {
+              server,
+              transport,
+              lastAccess: Date.now(),
+            });
             fastify.log.info(
               { agentId, generatedSessionId },
               "Session stored with server-generated ID",

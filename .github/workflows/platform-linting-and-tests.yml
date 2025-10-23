@@ -150,7 +150,7 @@ jobs:
           done
 
       - name: Cleanup
-        if: always()
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
           docker compose -f .github/testing/docker-compose-platform.yml down -v
 

@@ -183,8 +183,15 @@ async function createAgentServer(
       const args = (request.params.arguments as Record<string, unknown>) || {};
 
       logger.info(
-        { agentId, toolName, args },
-        "Custom tools/call handler - calling tool",
+        {
+          agentId,
+          toolName,
+          args,
+          argsKeys: Object.keys(args),
+          argsType: typeof args,
+          rawArguments: request.params.arguments,
+        },
+        "Custom tools/call handler - received request",
       );
 
       // @ts-expect-error - Accessing private property

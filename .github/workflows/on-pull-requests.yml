@@ -20,10 +20,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  platform-linting-and-tests:
-    name: Platform Linting and Tests
+  platform-linting-and-tests-pr:
+    name: Platform Linting and Tests (Optional)
+    if: github.event_name == 'pull_request'
     permissions:
       contents: write
       security-events: write
       id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/platform-linting-and-tests.yml
+
+  platform-linting-and-tests-merge-queue:
+    name: Platform Linting and Tests (Required)
+    permissions:
+      contents: write
+      security-events: write
+      id-token: write # Required for Workload Identity Federation
+    uses: ./.github/workflows/platform-linting-and-tests.yml
+    with:
+      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}

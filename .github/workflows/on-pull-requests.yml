@@ -37,4 +37,4 @@ jobs:
       id-token: write # Required for Workload Identity Federation
     uses: ./.github/workflows/platform-linting-and-tests.yml
     with:
-      should-skip-running-and-always-succeed: github.event_name == 'pull_request'
+      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}

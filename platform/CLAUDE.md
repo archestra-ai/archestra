@@ -63,7 +63,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js)
 
 **Workspaces**:
 

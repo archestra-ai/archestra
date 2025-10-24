@@ -122,9 +122,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       resolvedAgentId = agentId;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
-        headers["user-agent"],
-      );
+      resolvedAgentId = await utils.getAgentIdFromRequest();
     }
 
     const { "x-goog-api-key": geminiApiKey } = headers;

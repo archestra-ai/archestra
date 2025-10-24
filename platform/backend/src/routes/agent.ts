@@ -54,6 +54,48 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/agents/default",
+    {
+      schema: {
+        operationId: RouteId.GetDefaultAgent,
+        description: "Get or create default agent",
+        tags: ["Agents"],
+        response: {
+          200: SelectAgentSchema,
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const agent = await AgentModel.getAgentOrCreateDefault(undefined);
+        return reply.send(agent);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
   fastify.post(
     "/api/agents",
     {

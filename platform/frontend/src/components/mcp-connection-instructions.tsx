@@ -10,7 +10,7 @@ import config from "@/lib/config";
 const { displayProxyUrl: apiBaseUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
-  agentId?: string;
+  agentId: string;
 }
 
 export function McpConnectionInstructions({
@@ -19,8 +19,8 @@ export function McpConnectionInstructions({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
 
-  const mcpUrl = `${apiBaseUrl}/v1/mcp`;
-  const token = agentId || "<agent-id>";
+  const mcpUrl = `${apiBaseUrl}/mcp`;
+  const token = agentId;
 
   const httpExample = `${mcpUrl}\nAuthorization: Bearer ${token}`;
 

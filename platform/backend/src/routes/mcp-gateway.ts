@@ -181,9 +181,7 @@ function createTransport(
 /**
  * Extract and validate agent ID from Authorization header bearer token
  */
-function extractAgentIdFromAuth(
-  authHeader: string | undefined,
-): string | null {
+function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
   if (!authHeader) {
     return null;
   }
@@ -224,6 +222,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             capabilities: z.object({
               tools: z.boolean(),
             }),
+          }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
           }),
         },
       },

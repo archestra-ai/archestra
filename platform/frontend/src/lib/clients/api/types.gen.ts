@@ -2218,6 +2218,76 @@ export type CreateAgentResponses = {
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
 
+export type GetDefaultAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/default';
+};
+
+export type GetDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDefaultAgentError = GetDefaultAgentErrors[keyof GetDefaultAgentErrors];
+
+export type GetDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        usersWithAccess: Array<string>;
+    };
+};
+
+export type GetDefaultAgentResponse = GetDefaultAgentResponses[keyof GetDefaultAgentResponses];
+
 export type DeleteAgentData = {
     body?: never;
     path: {
@@ -2890,6 +2960,237 @@ export type PutV1AnthropicBy__Data = {
 };
 
 export type PutV1AnthropicBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type DeleteV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type GetV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type HeadV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type OptionsV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type PatchV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type PostV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicV1ByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/';
+};
+
+export type PutV1AnthropicV1ByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type DeleteV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type GetV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type HeadV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type OptionsV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type PatchV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type PostV1AnthropicV1ByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1AnthropicV1ByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/anthropic/v1/{agentId}/{*}';
+};
+
+export type PutV1AnthropicV1ByAgentIdBy__Responses = {
     /**
      * Default Response
      */
@@ -4853,16 +5154,26 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
-export type GetMcpByAgentIdData = {
+export type GetV1McpData = {
     body?: never;
-    path: {
-        agentId: string;
-    };
+    path?: never;
     query?: never;
-    url: '/mcp/{agentId}';
+    url: '/v1/mcp';
 };
 
-export type GetMcpByAgentIdResponses = {
+export type GetV1McpErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
+
+export type GetV1McpResponses = {
     /**
      * Default Response
      */
@@ -4877,59 +5188,23 @@ export type GetMcpByAgentIdResponses = {
     };
 };
 
-export type GetMcpByAgentIdResponse = GetMcpByAgentIdResponses[keyof GetMcpByAgentIdResponses];
+export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
 
-export type PostMcpByAgentIdData = {
-    body: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        method: string;
-        params?: {
-            [key: string]: unknown;
-        };
+export type PostV1McpData = {
+    body?: {
+        [key: string]: unknown;
     };
-    path: {
-        agentId: string;
-    };
+    path?: never;
     query?: never;
-    url: '/mcp/{agentId}';
+    url: '/v1/mcp';
 };
 
-export type PostMcpByAgentIdErrors = {
+export type PostV1McpResponses = {
     /**
      * Default Response
      */
-    500: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
+    200: unknown;
 };
-
-export type PostMcpByAgentIdError = PostMcpByAgentIdErrors[keyof PostMcpByAgentIdErrors];
-
-export type PostMcpByAgentIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
-};
-
-export type PostMcpByAgentIdResponse = PostMcpByAgentIdResponses[keyof PostMcpByAgentIdResponses];
 
 export type GetMcpServersData = {
     body?: never;
@@ -5322,6 +5597,237 @@ export type PutV1OpenaiBy__Data = {
 };
 
 export type PutV1OpenaiBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type DeleteV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type GetV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type HeadV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type OptionsV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type PatchV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type PostV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiByAgentIdData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/';
+};
+
+export type PutV1OpenaiByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type DeleteV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type DeleteV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type GetV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type HeadV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type HeadV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type OptionsV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type OptionsV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PatchV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type PatchV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PostV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type PostV1OpenaiByAgentIdBy__Responses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type PutV1OpenaiByAgentIdBy__Data = {
+    body?: never;
+    path: {
+        agentId: string;
+        '*': string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/{*}';
+};
+
+export type PutV1OpenaiByAgentIdBy__Responses = {
     /**
      * Default Response
      */

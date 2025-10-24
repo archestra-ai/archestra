@@ -238,13 +238,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const oauthConfig = catalogItem.oauthConfig;
 
-        // For proxy servers, use the registered redirect URI (typically port 8080)
-        // For non-proxy servers, use our platform's callback URL
-        const redirectUri = oauthConfig.requires_proxy
-          ? oauthConfig.redirect_uris.find((uri) =>
-              uri.includes("localhost:8080"),
-            ) || oauthConfig.redirect_uris[0]
-          : `${request.protocol}://${request.hostname}:3000/oauth-callback`;
+        // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
+        // This ensures the redirect URI matches where the user initiated the OAuth flow from
+        const redirectUri = oauthConfig.redirect_uris[0];
 
         let clientId = oauthConfig.client_id;
         let clientSecret = oauthConfig.client_secret;
@@ -531,7 +527,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const clientSecret =
           oauthState.clientSecret || oauthConfig.client_secret;
 
-        const redirectUri = `${request.protocol}://${request.hostname}:3000/oauth-callback`;
+        // Use the same redirect URI that was registered during initiation
+        // This must match exactly what was used in the authorization request
+        const redirectUri = oauthConfig.redirect_uris[0];
         let tokenData: {
           access_token: string;
           refresh_token?: string;

@@ -306,9 +306,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Proxy servers typically don't support dynamic registration
           registrationEndpoint = undefined;
         } else {
-          try {
-            // If the server supports resource metadata discovery, use it first
-            if (oauthConfig.supports_resource_metadata) {
+          // Try resource metadata discovery first, but treat failures as non-fatal
+          if (oauthConfig.supports_resource_metadata) {
+            try {
               fastify.log.info(
                 { serverUrl: oauthConfig.server_url },
                 "Server supports resource metadata, discovering resource metadata first",
@@ -330,8 +330,17 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   "Using authorization server URL from resource metadata",
                 );
               }
+            } catch (error) {
+              // Some servers require auth to access resource metadata (may return 401).
+              // Log and continue with standard authorization server discovery.
+              fastify.log.warn(
+                { error },
+                "Resource metadata discovery failed; continuing with standard discovery",
+              );
             }
+          }
 
+          try {
             fastify.log.info(
               { serverUrl: discoveryServerUrl },
               "Discovering authorization server metadata",
@@ -349,7 +358,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Discovery successful",
             );
           } catch (error) {
-            fastify.log.error({ error }, "Discovery failed");
+            fastify.log.error(
+              { error },
+              "Authorization server discovery failed",
+            );
             return reply.status(500).send({
               error: {
                 message:
@@ -564,26 +576,34 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           let discoveryServerUrl = oauthConfig.server_url;
 
           try {
-            // If the server supports resource metadata discovery, use it first
+            // Try resource metadata discovery first, but treat failures as non-fatal
             if (oauthConfig.supports_resource_metadata) {
-              fastify.log.info(
-                { serverUrl: oauthConfig.server_url },
-                "Server supports resource metadata, discovering resource metadata first",
-              );
-              const resourceMetadata = await discoverOAuthResourceMetadata(
-                oauthConfig.server_url,
-              );
-
-              // Extract authorization server URL from resource metadata
-              if (
-                resourceMetadata.authorization_servers &&
-                Array.isArray(resourceMetadata.authorization_servers) &&
-                resourceMetadata.authorization_servers.length > 0
-              ) {
-                discoveryServerUrl = resourceMetadata.authorization_servers[0];
+              try {
                 fastify.log.info(
-                  { authServerUrl: discoveryServerUrl },
-                  "Using authorization server URL from resource metadata",
+                  { serverUrl: oauthConfig.server_url },
+                  "Server supports resource metadata, discovering resource metadata first",
+                );
+                const resourceMetadata = await discoverOAuthResourceMetadata(
+                  oauthConfig.server_url,
+                );
+
+                // Extract authorization server URL from resource metadata
+                if (
+                  resourceMetadata.authorization_servers &&
+                  Array.isArray(resourceMetadata.authorization_servers) &&
+                  resourceMetadata.authorization_servers.length > 0
+                ) {
+                  discoveryServerUrl =
+                    resourceMetadata.authorization_servers[0];
+                  fastify.log.info(
+                    { authServerUrl: discoveryServerUrl },
+                    "Using authorization server URL from resource metadata",
+                  );
+                }
+              } catch (error) {
+                fastify.log.warn(
+                  { error },
+                  "Resource metadata discovery failed; continuing with standard discovery",
                 );
               }
             }

@@ -203,6 +203,103 @@ class InteractionModel {
       pagination,
     );
   }
+
+  /**
+   * Get past tool responses for a specific tool and agent
+   * Returns the most recent tool responses (up to limit)
+   */
+  static async getPastToolResponses(
+    agentId: string,
+    toolName: string,
+    limit = 10,
+  ): Promise<Array<{ content: unknown; timestamp: Date }>> {
+    const interactions = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.agentId, agentId))
+      .orderBy(desc(schema.interactionsTable.createdAt))
+      .limit(limit * 10); // Get more interactions to filter through
+
+    const toolResponses: Array<{ content: unknown; timestamp: Date }> = [];
+
+    // Parse interactions and extract tool responses matching the tool name
+    for (const interaction of interactions) {
+      if (toolResponses.length >= limit) break;
+
+      const response = interaction.response as Record<string, unknown>;
+
+      // Handle different LLM provider response formats
+      if (interaction.type === "openai:chatCompletions") {
+        const choices = response.choices as Array<{
+          message?: { tool_calls?: Array<{ function?: { name?: string } }> };
+        }>;
+        if (choices && choices[0]?.message?.tool_calls) {
+          for (const toolCall of choices[0].message.tool_calls) {
+            if (toolCall.function?.name === toolName) {
+              // Find the corresponding tool result in the request
+              const request = interaction.request as Record<string, unknown>;
+              const messages = request.messages as Array<{
+                role?: string;
+                tool_call_id?: string;
+                content?: unknown;
+              }>;
+              if (messages) {
+                const toolResult = messages.find(
+                  (m) => m.role === "tool" && m.tool_call_id === toolCall,
+                );
+                if (toolResult) {
+                  toolResponses.push({
+                    content: toolResult.content,
+                    timestamp: interaction.createdAt,
+                  });
+                }
+              }
+            }
+          }
+        }
+      } else if (interaction.type === "anthropic:messages") {
+        const content = response.content as Array<{
+          type?: string;
+          name?: string;
+          input?: unknown;
+        }>;
+        if (content) {
+          for (const block of content) {
+            if (block.type === "tool_use" && block.name === toolName) {
+              // Find the corresponding tool result in the request
+              const request = interaction.request as Record<string, unknown>;
+              const messages = request.messages as Array<{
+                content?:
+                  | Array<{
+                      type?: string;
+                      tool_use_id?: string;
+                      content?: unknown;
+                    }>
+                  | unknown;
+              }>;
+              if (messages) {
+                for (const msg of messages) {
+                  if (Array.isArray(msg.content)) {
+                    const toolResult = msg.content.find(
+                      (c) => c.type === "tool_result" && c.tool_use_id === block,
+                    );
+                    if (toolResult) {
+                      toolResponses.push({
+                        content: toolResult.content,
+                        timestamp: interaction.createdAt,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return toolResponses;
+  }
 }
 
 export default InteractionModel;

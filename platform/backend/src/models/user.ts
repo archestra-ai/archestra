@@ -35,10 +35,12 @@ class User {
           .where(eq(schema.usersTable.email, email));
 
         console.log("Admin user created successfully:", email);
+        return result.user;
       }
-      return result.user;
+      return null;
     } catch (err) {
       console.error("Failed to create admin:", err);
+      return null;
     }
   }
 }

@@ -105,11 +105,20 @@ export const auth = betterAuth({
           ?.split("invitationId=")[1]
           ?.split("&")[0];
 
-        if (!invitationId) {
+        // Allow default admin user creation to bypass invitation check
+        const isDefaultAdminEmail =
+          body.email === config.auth.adminDefaultEmail;
+
+        if (!invitationId && !isDefaultAdminEmail) {
           throw new APIError("FORBIDDEN", {
             message:
               "Direct sign-up is disabled. You need an invitation to create an account.",
           });
+        }
+
+        // Skip invitation validation for default admin user
+        if (isDefaultAdminEmail) {
+          return ctx;
         }
 
         // Validate the invitation exists and is pending

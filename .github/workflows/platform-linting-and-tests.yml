@@ -252,20 +252,20 @@ jobs:
           # Run db generate with timeout to prevent hanging on interactive prompts
           set +e  # Don't exit on command failure
 
-          echo "Running pnpm db generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
+          echo "Running pnpm db:generate -- awaiting up to 15 seconds for a potential drizzle-kit generate interactive prompt (which could indicate a pending database migration, such as a table rename)"
 
           # Use timeout and expect no interaction - if it hangs, it means there's a pending migration which requires
           # user input to continue
-          if timeout 15s pnpm db generate > /tmp/db_generate_output.txt 2>&1; then
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
             # Command completed successfully within timeout
             output=$(cat /tmp/db_generate_output.txt)
-            echo "Output from pnpm db generate:"
+            echo "Output from pnpm db:generate:"
             echo "$output"
 
             # Check if there's an interactive prompt in the output (shouldn't happen if it completed)
             if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
               echo "❌ Interactive prompt detected - there are pending database migrations that need to be committed"
-              echo "Run 'pnpm db generate' locally, make your choices, and commit the resulting migration files"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
               exit 1
             fi
           else
@@ -273,15 +273,15 @@ jobs:
             exit_code=$?
             output=$(cat /tmp/db_generate_output.txt 2>/dev/null || echo "No output captured")
 
-            echo "Output from pnpm db generate (before timeout/failure):"
+            echo "Output from pnpm db:generate (before timeout/failure):"
             echo "$output"
 
             if [ $exit_code -eq 124 ]; then
               # Timeout occurred - likely waiting for interactive input
               echo "❌ Command timed out - likely waiting for interactive input about pending database migrations"
-              echo "Run 'pnpm db generate' locally, make your choices, and commit the resulting migration files"
+              echo "Run 'pnpm db:generate' locally, make your choices, and commit the resulting migration files"
             else
-              echo "❌ pnpm db generate failed with exit code $exit_code"
+              echo "❌ pnpm db:generate failed with exit code $exit_code"
             fi
             exit 1
           fi
@@ -299,7 +299,7 @@ jobs:
 
       - name: Ensure database migrations run successfully
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: pnpm db migrate
+        run: pnpm db:migrate
 
       - name: Add and commit database migration changes
         # Only commit if changes exist and it's not a PR from a fork

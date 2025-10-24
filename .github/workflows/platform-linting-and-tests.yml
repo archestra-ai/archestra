@@ -72,32 +72,20 @@ jobs:
       - name: Start platform with docker compose
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         run: |
-          docker compose -f .github/testing/docker-compose-platform.yml up -d
+          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml up -d
+
           echo "=== Containers started ==="
-          docker compose -f .github/testing/docker-compose-platform.yml ps
-          echo ""
+          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+
           echo "=== Waiting for services to initialize (30s) ==="
           sleep 30
-          echo ""
+
           echo "=== Container status after wait ==="
-          docker compose -f .github/testing/docker-compose-platform.yml ps
-          echo ""
+          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
+
           echo "=== Quick log check for each container ==="
           docker logs archestra-platform-test --tail 50
-          echo ""
-          docker logs archestra-platform-test-custom-api-base-url --tail 50
-          echo ""
-          docker logs archestra-platform-test-custom-database-url --tail 50
-          echo ""
-          echo "=== Network inspection ==="
-          docker network inspect testing_default || echo "Network not found"
-          echo ""
-          echo "=== Port bindings ==="
-          docker port archestra-platform-test || echo "Container not running"
-          docker port archestra-platform-test-custom-api-base-url || echo "Container not running"
-          docker port archestra-platform-test-custom-database-url || echo "Container not running"
 
-      # E2e tests start
       - name: Install Playwright browsers
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests
@@ -115,44 +103,22 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           retention-days: 30
-      # E2e tests end
 
       - name: Show container logs on failure
         if: failure()
         run: |
           echo "=== Container Status ==="
-          docker compose -f .github/testing/docker-compose-platform.yml ps
-          echo ""
-          echo "=== Platform Container (default - port 9000) Logs ==="
-          docker logs archestra-platform-test || echo "Container not found"
-          echo ""
-          echo "=== Platform Container (custom API URL - port 9001) Logs ==="
-          docker logs archestra-platform-test-custom-api-base-url || echo "Container not found"
-          echo ""
-          echo "=== Platform Container (custom DB - port 9002) Logs ==="
-          docker logs archestra-platform-test-custom-database-url || echo "Container not found"
-          echo ""
-          echo "=== PostgreSQL Container Logs ==="
-          docker logs archestra-platform-test-postgresql || echo "Container not found"
-          echo ""
-          echo "=== All Container Stats ==="
-          docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
-          echo ""
-          echo "=== Port bindings check ==="
-          docker port archestra-platform-test || echo "Container not running"
-          docker port archestra-platform-test-custom-api-base-url || echo "Container not running"
-          docker port archestra-platform-test-custom-database-url || echo "Container not running"
-          echo ""
-          echo "=== Network connectivity from host ==="
-          for port in 9000 9001 9002 3000 3001 3002; do
-            echo "Testing port $port..."
-            nc -zv localhost $port 2>&1 || echo "Port $port not accessible"
-          done
+          docker compose -f ./platform/e2e-tests/docker-compose-platform.yml ps
 
-      - name: Cleanup
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        run: |
-          docker compose -f .github/testing/docker-compose-platform.yml down -v
+          echo "=== Platform Container Logs ==="
+          docker logs archestra-platform-test
+
+          echo "=== PostgreSQL Container Logs ==="
+          docker logs archestra-platform-test-postgresql
+
+          echo "=== All Container Stats ==="
+
+          docker stats --no-stream
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

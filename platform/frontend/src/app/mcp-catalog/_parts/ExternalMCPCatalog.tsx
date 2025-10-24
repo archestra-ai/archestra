@@ -211,11 +211,19 @@ export function ExternalMCPCatalog({
     <div className="w-full h-full">
       <div className="">
         <h1 className="text-lg font-semibold tracking-tight mb-2">
-          External MCP Catalog
+          External MCP Registry
         </h1>
         <p className="text-sm text-muted-foreground">
-          Browse and discover Model Context Protocol (MCP) servers from the
-          external catalog
+          MCP Servers listed below are not available for your agents unless they
+          are added to the private registry. Based on{" "}
+          <a
+            href="https://www.archestra.ai/mcp-catalog"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-primary"
+          >
+            Archestra MCP Catalog
+          </a>
         </p>
       </div>
       <div className="mx-auto py-4 space-y-6">

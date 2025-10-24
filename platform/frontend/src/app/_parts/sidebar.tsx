@@ -81,7 +81,7 @@ const getNavigationItems = (
             icon: FileJson2,
           },
           {
-            title: "MCP Catalog",
+            title: "MCP Registry",
             url: "/mcp-catalog",
             icon: Router,
           },

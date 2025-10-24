@@ -73,6 +73,9 @@ export function ProxyConnectionInstructions({
       {selectedProvider === "openai" && (
         <>
           <p className="text-sm text-muted-foreground">
+            Default should be https://api.openai.com/v1/
+          </p>
+          <p className="text-sm text-muted-foreground">
             OpenAI provides{" "}
             <CodeText className="text-xs">/chat/completions</CodeText> and{" "}
             <CodeText className="text-xs">/responses</CodeText> API's. Archestra

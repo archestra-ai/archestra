@@ -185,3 +185,12 @@ local_resource(
   auto_init=False,
   resource_deps=['pnpm-install', 'pnpm-dev']
 )
+
+local_resource(
+  'wiremock',
+  serve_cmd='docker compose -f e2e-tests/docker-compose-platform.yml up wiremock',
+  serve_dir='.',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)

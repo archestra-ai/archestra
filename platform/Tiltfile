@@ -166,6 +166,8 @@ local_resource(
   },
   serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
   labels=['dev'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )
 
 local_resource(

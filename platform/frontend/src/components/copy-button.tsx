@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 
@@ -24,13 +25,17 @@ export default function CopyButton({
 
   return (
     <Button
-      type="button"
       onClick={onCopy}
       className={`transition ${className}`}
       aria-label="Copy to clipboard"
       variant="ghost"
+      size="icon"
     >
-      {copied ? "Copied" : "Copy"}
+      {copied ? (
+        <Check className="h-4 w-4 text-green-500" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
     </Button>
   );
 }

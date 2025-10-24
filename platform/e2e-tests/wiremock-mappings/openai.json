@@ -24,6 +24,7 @@
           "message": {
             "role": "assistant",
             "content": null,
+            "refusal": null,
             "tool_calls": [
               {
                 "id": "call_test_123",

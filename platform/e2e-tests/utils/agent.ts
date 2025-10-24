@@ -6,7 +6,10 @@ import { BASE_URL } from '../consts';
  */
 export async function createAgent(request: APIRequestContext, name: string) {
   const response = await request.post(`${BASE_URL}/api/agents`, {
-    data: { name },
+    data: {
+      name,
+      usersWithAccess: [],
+    },
   });
 
   if (!response.ok()) {

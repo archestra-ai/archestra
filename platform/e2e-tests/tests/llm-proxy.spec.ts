@@ -57,31 +57,40 @@ test.describe('LLM Proxy - OpenAI', () => {
       },
     );
 
-    expect(initialResponse.ok()).toBeTruthy();
+    if (!initialResponse.ok()) {
+      const errorText = await initialResponse.text();
+      throw new Error(
+        `Initial OpenAI request failed: ${initialResponse.status()} ${errorText}`,
+      );
+    }
 
-    // Get the tool ID from the backend
-    const toolsResponse = await request.get(`${BASE_URL}/api/tools`);
-    expect(toolsResponse.ok()).toBeTruthy();
-    const tools = await toolsResponse.json();
-    const readFileTool = tools.find((t: any) => t.name === 'read_file');
-    expect(readFileTool).toBeDefined();
-    toolId = readFileTool.id;
+    // Get the agent-tool relationship ID from the backend
+    const agentToolsResponse = await request.get(`${BASE_URL}/api/agent-tools`);
+    expect(agentToolsResponse.ok()).toBeTruthy();
+    const agentTools = await agentToolsResponse.json();
+    const readFileAgentTool = agentTools.find(
+      (at: any) => at.agent.id === agentId && at.tool.name === 'read_file',
+    );
+    expect(readFileAgentTool).toBeDefined();
+    toolId = readFileAgentTool.id;
 
     // 3. Create a trusted data policy that marks messages with "untrusted" in content as untrusted
     const trustedDataPolicy =
       await utils.trustedDataPolicy.createTrustedDataPolicy(request, {
+        agentToolId: toolId,
+        description: 'Mark messages containing UNTRUSTED_DATA as untrusted',
         attributePath: '$.content',
         operator: 'contains',
         value: 'UNTRUSTED_DATA',
-        action: 'allow',
+        action: 'mark_as_trusted',
       });
     trustedDataPolicyId = trustedDataPolicy.id;
 
     // 4. Create a tool invocation policy that blocks read_file when context is untrusted
     const toolInvocationPolicy =
       await utils.toolInvocationPolicy.createToolInvocationPolicy(request, {
-        toolId,
-        argumentPath: '$.file_path',
+        agentToolId: toolId,
+        argumentPath: 'file_path',
         operator: 'contains',
         value: '/etc/',
         action: 'block_always',
@@ -157,11 +166,11 @@ test.describe('LLM Proxy - OpenAI', () => {
       `${BASE_URL}/api/interactions?agentId=${agentId}`,
     );
     expect(interactionsResponse.ok()).toBeTruthy();
-    const interactions = await interactionsResponse.json();
-    expect(interactions.length).toBeGreaterThan(0);
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
 
     // Find the interaction with untrusted data
-    const blockedInteraction = interactions.find((i: any) =>
+    const blockedInteraction = interactionsData.data.find((i: any) =>
       i.request?.messages?.some((m: any) =>
         m.content?.includes('UNTRUSTED_DATA'),
       ),
@@ -245,31 +254,40 @@ test.describe('LLM Proxy - Anthropic', () => {
       },
     );
 
-    expect(initialResponse.ok()).toBeTruthy();
+    if (!initialResponse.ok()) {
+      const errorText = await initialResponse.text();
+      throw new Error(
+        `Initial Anthropic request failed: ${initialResponse.status()} ${errorText}`,
+      );
+    }
 
-    // Get the tool ID from the backend
-    const toolsResponse = await request.get(`${BASE_URL}/api/tools`);
-    expect(toolsResponse.ok()).toBeTruthy();
-    const tools = await toolsResponse.json();
-    const readFileTool = tools.find((t: any) => t.name === 'read_file');
-    expect(readFileTool).toBeDefined();
-    toolId = readFileTool.id;
+    // Get the agent-tool relationship ID from the backend
+    const agentToolsResponse = await request.get(`${BASE_URL}/api/agent-tools`);
+    expect(agentToolsResponse.ok()).toBeTruthy();
+    const agentTools = await agentToolsResponse.json();
+    const readFileAgentTool = agentTools.find(
+      (at: any) => at.agent.id === agentId && at.tool.name === 'read_file',
+    );
+    expect(readFileAgentTool).toBeDefined();
+    toolId = readFileAgentTool.id;
 
     // 3. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted
     const trustedDataPolicy =
       await utils.trustedDataPolicy.createTrustedDataPolicy(request, {
+        agentToolId: toolId,
+        description: 'Mark messages containing UNTRUSTED_DATA as untrusted',
         attributePath: '$.content',
         operator: 'contains',
         value: 'UNTRUSTED_DATA',
-        action: 'allow',
+        action: 'mark_as_trusted',
       });
     trustedDataPolicyId = trustedDataPolicy.id;
 
     // 4. Create a tool invocation policy that blocks read_file when accessing /etc/
     const toolInvocationPolicy =
       await utils.toolInvocationPolicy.createToolInvocationPolicy(request, {
-        toolId,
-        argumentPath: '$.file_path',
+        agentToolId: toolId,
+        argumentPath: 'file_path',
         operator: 'contains',
         value: '/etc/',
         action: 'block_always',
@@ -342,11 +360,11 @@ test.describe('LLM Proxy - Anthropic', () => {
       `${BASE_URL}/api/interactions?agentId=${agentId}`,
     );
     expect(interactionsResponse.ok()).toBeTruthy();
-    const interactions = await interactionsResponse.json();
-    expect(interactions.length).toBeGreaterThan(0);
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
 
     // Find the interaction with untrusted data
-    const blockedInteraction = interactions.find((i: any) =>
+    const blockedInteraction = interactionsData.data.find((i: any) =>
       i.request?.messages?.some((m: any) =>
         m.content?.includes('UNTRUSTED_DATA'),
       ),

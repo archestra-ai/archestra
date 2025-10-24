@@ -126,7 +126,7 @@ export default {
       baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     },
     anthropic: {
-      baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1",
+      baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
   },
   features: {

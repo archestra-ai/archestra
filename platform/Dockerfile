@@ -49,7 +49,7 @@ ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
 ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV OPENAI_BASE_URL="https://api.openai.com/v1"
-ENV ANTHROPIC_BASE_URL="https://api.anthropic.com/v1"
+ENV ANTHROPIC_BASE_URL="https://api.anthropic.com"
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \

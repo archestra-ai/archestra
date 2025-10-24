@@ -2,24 +2,36 @@ import { APIRequestContext } from '@playwright/test';
 import { BASE_URL } from '../consts';
 
 /**
- * Create a trusted data policy via the API
+ * Create a tool invocation policy via the API
  */
-export async function createTrustedDataPolicy(
+export async function createToolInvocationPolicy(
   request: APIRequestContext,
   policy: {
-    attributePath: string;
+    agentToolId: string;
+    argumentPath: string;
     operator: string;
     value: string;
-    action: 'allow' | 'block_always';
+    action: 'allow_when_context_is_untrusted' | 'block_always';
+    reason?: string;
   },
 ) {
-  const response = await request.post(`${BASE_URL}/api/trusted-data-policies`, {
-    data: policy,
-  });
+  const response = await request.post(
+    `${BASE_URL}/api/autonomy-policies/tool-invocation`,
+    {
+      data: {
+        agentToolId: policy.agentToolId,
+        argumentName: policy.argumentPath, // argumentPath maps to argumentName in the schema
+        operator: policy.operator,
+        value: policy.value,
+        action: policy.action,
+        reason: policy.reason,
+      },
+    },
+  );
 
   if (!response.ok()) {
     throw new Error(
-      `Failed to create trusted data policy: ${response.status()} ${await response.text()}`,
+      `Failed to create tool invocation policy: ${response.status()} ${await response.text()}`,
     );
   }
 

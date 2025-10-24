@@ -7,10 +7,12 @@ import { BASE_URL } from '../consts';
 export async function createTrustedDataPolicy(
   request: APIRequestContext,
   policy: {
+    agentToolId: string;
+    description: string;
     attributePath: string;
     operator: string;
     value: string;
-    action: 'allow' | 'block_always';
+    action: 'block_always' | 'mark_as_trusted' | 'sanitize_with_dual_llm';
   },
 ) {
   const response = await request.post(`${BASE_URL}/api/trusted-data-policies`, {

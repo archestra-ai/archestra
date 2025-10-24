@@ -285,6 +285,7 @@ class ToolModel {
     Array<{
       toolName: string;
       mcpServerInstallationMetadata: Record<string, unknown>;
+      responseModifierTemplate: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -295,6 +296,8 @@ class ToolModel {
       .select({
         toolName: schema.toolsTable.name,
         mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
       })
       .from(schema.toolsTable)
       .innerJoin(

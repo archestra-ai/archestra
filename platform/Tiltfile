@@ -160,6 +160,17 @@ local_resource(
 )
 
 local_resource(
+  'mcp-inspector',
+  serve_env={
+    'DANGEROUSLY_OMIT_AUTH': 'true'
+  },
+  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
+  labels=['dev'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
   'unit-tests',
   cmd='pnpm test',
   labels=['test'],

@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ToolModel } from "@/models";
+import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -39,6 +40,14 @@ class McpClientService {
       return [];
     }
 
+    // Create a mapping of tool names to response modifier templates
+    const templatesByToolName = new Map<string, string>();
+    for (const tool of mcpTools) {
+      if (tool.responseModifierTemplate) {
+        templatesByToolName.set(tool.toolName, tool.responseModifierTemplate);
+      }
+    }
+
     const results: CommonToolResult[] = [];
 
     /**
@@ -73,9 +82,27 @@ class McpClientService {
             arguments: toolCall.arguments,
           });
 
+          // Apply response modifier template if one exists
+          let modifiedContent = result.content;
+          const template = templatesByToolName.get(toolCall.name);
+          if (template) {
+            try {
+              modifiedContent = applyResponseModifierTemplate(
+                template,
+                result.content,
+              );
+            } catch (error) {
+              console.error(
+                `Error applying response modifier template for tool ${toolCall.name}:`,
+                error,
+              );
+              // If template fails, use original content
+            }
+          }
+
           results.push({
             id: toolCall.id,
-            content: result.content,
+            content: modifiedContent,
             isError: !!result.isError,
           });
         } catch (error) {

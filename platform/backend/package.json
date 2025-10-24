@@ -43,6 +43,7 @@
     "fastify-metrics": "^12.1.0",
     "fastify-plugin": "^5.1.0",
     "fastify-type-provider-zod": "^6.0.0",
+    "handlebars": "^4.7.8",
     "lodash": "^4.17.21",
     "openai": "^6.0.0",
     "pg": "^8.16.3",

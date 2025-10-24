@@ -2526,6 +2526,7 @@ export type GetAllAgentToolsResponses = {
         id: string;
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2708,6 +2709,7 @@ export type UpdateAgentToolData = {
     body?: {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
     };
     path: {
         id: string;
@@ -2749,6 +2751,7 @@ export type UpdateAgentToolResponses = {
         toolId?: string;
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };

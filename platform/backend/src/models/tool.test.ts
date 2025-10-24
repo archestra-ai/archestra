@@ -298,6 +298,7 @@ describe("ToolModel", () => {
           url: "https://api.githubcopilot.com/mcp/",
           headers: { Authorization: "Bearer test-github-token-123" },
         },
+        responseModifierTemplate: null,
       });
     });
 

@@ -214,6 +214,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: UpdateAgentToolSchema.pick({
           allowUsageWhenUntrustedDataIsPresent: true,
           toolResultTreatment: true,
+          responseModifierTemplate: true,
         }).partial(),
         response: {
           200: UpdateAgentToolSchema,

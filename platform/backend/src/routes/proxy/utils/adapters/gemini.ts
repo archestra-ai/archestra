@@ -6,47 +6,48 @@ type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
 /**
  * Convert Gemini contents to common format for trusted data evaluation
  */
-export function toCommonFormat(_contents: GeminiContents): CommonMessage[] {
+export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
   const commonMessages: CommonMessage[] = [];
 
-  // TODO: implement this
-  // for (const content of contents) {
-  //   const commonMessage: CommonMessage = {
-  //     role: content.role as CommonMessage["role"],
-  //   };
+  for (const content of contents) {
+    const commonMessage: CommonMessage = {
+      role: content.role as CommonMessage["role"],
+    };
 
-  //   // Process parts looking for function responses
-  //   if (content.parts) {
-  //     const toolCalls = [];
+    // Process parts looking for function responses
+    if (content.parts) {
+      const toolCalls = [];
 
-  //     for (const part of content.parts) {
-  //       // Check if this part has the functionResponse property
-  //       const partWithResponse = part as any;
-  //       if (
-  //         "functionResponse" in partWithResponse &&
-  //         partWithResponse.functionResponse
-  //       ) {
-  //         const { functionResponse } = partWithResponse;
+      for (const part of content.parts) {
+        // Check if this part has the functionResponse property
+        if (
+          "functionResponse" in part &&
+          part.functionResponse &&
+          typeof part.functionResponse === "object" &&
+          "name" in part.functionResponse &&
+          "response" in part.functionResponse
+        ) {
+          const { functionResponse } = part;
+          const id =
+            "id" in functionResponse && typeof functionResponse.id === "string"
+              ? functionResponse.id
+              : generateToolCallId(functionResponse.name as string);
 
-  //         // Parse the function response
-  //         const toolResult: unknown = functionResponse.response;
+          toolCalls.push({
+            id,
+            name: functionResponse.name as string,
+            result: functionResponse.response,
+          });
+        }
+      }
 
-  //         toolCalls.push({
-  //           id:
-  //             functionResponse.id || generateToolCallId(functionResponse.name),
-  //           name: functionResponse.name,
-  //           result: toolResult,
-  //         });
-  //       }
-  //     }
+      if (toolCalls.length > 0) {
+        commonMessage.toolCalls = toolCalls;
+      }
+    }
 
-  //     if (toolCalls.length > 0) {
-  //       commonMessage.toolCalls = toolCalls;
-  //     }
-  //   }
-
-  //   commonMessages.push(commonMessage);
-  // }
+    commonMessages.push(commonMessage);
+  }
 
   return commonMessages;
 }
@@ -62,15 +63,55 @@ export function applyUpdates(
     return contents;
   }
 
-  // TODO: implement this
-  return contents;
+  // biome-ignore lint/suspicious/noExplicitAny: Gemini types need explicit handling
+  return contents.map((content): any => {
+    // Only process user messages with parts
+    if (content.role === "user" && content.parts) {
+      const updatedParts = content.parts.map((part) => {
+        // Check if this part is a function response
+        if (
+          "functionResponse" in part &&
+          part.functionResponse &&
+          typeof part.functionResponse === "object" &&
+          "name" in part.functionResponse
+        ) {
+          const { functionResponse } = part;
+          const id =
+            "id" in functionResponse && typeof functionResponse.id === "string"
+              ? functionResponse.id
+              : generateToolCallId(functionResponse.name as string);
+
+          if (updates[id]) {
+            // Update the function response with sanitized content
+            return {
+              functionResponse: {
+                ...functionResponse,
+                response: { sanitizedContent: updates[id] } as Record<
+                  string,
+                  unknown
+                >,
+              },
+            };
+          }
+        }
+        return part;
+      });
+
+      return {
+        ...content,
+        parts: updatedParts,
+      };
+    }
+
+    return content;
+  });
 }
 
 /**
  * Generate a consistent tool call ID for function responses that don't have one
  * This is needed because Gemini's function responses may not always have an ID
  */
-function _generateToolCallId(functionName: string): string {
+function generateToolCallId(functionName: string): string {
   // Use a simple deterministic approach for now
   // In practice, this might need to be more sophisticated
   return `gemini-tool-${functionName}-${Date.now()}`;
@@ -79,18 +120,17 @@ function _generateToolCallId(functionName: string): string {
 /**
  * Extract the user's original request from Gemini contents
  */
-export function extractUserRequest(_contents: GeminiContents): string {
+export function extractUserRequest(contents: GeminiContents): string {
   // Find the last user content with text
-  // for (let i = contents.length - 1; i >= 0; i--) {
-  //   const content = contents[i];
-  //   if (content.role === "user" && content.parts) {
-  //     for (const part of content.parts) {
-  //       const partWithText = part as any;
-  //       if ("text" in partWithText && partWithText.text) {
-  //         return partWithText.text;
-  //       }
-  //     }
-  //   }
-  // }
+  for (let i = contents.length - 1; i >= 0; i--) {
+    const content = contents[i];
+    if (content.role === "user" && content.parts) {
+      for (const part of content.parts) {
+        if ("text" in part && part.text && typeof part.text === "string") {
+          return part.text;
+        }
+      }
+    }
+  }
   return "process this data";
 }

@@ -8,6 +8,7 @@ services:
     environment:
       - OPENAI_BASE_URL=http://wiremock:8080/v1
       - ANTHROPIC_BASE_URL=http://wiremock:8080
+      - GEMINI_BASE_URL=http://wiremock:8080
     healthcheck:
       test:
         [

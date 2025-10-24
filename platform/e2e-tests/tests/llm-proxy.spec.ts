@@ -391,3 +391,203 @@ test.describe('LLM Proxy - Anthropic', () => {
     }
   });
 });
+
+test.describe('LLM Proxy - Gemini', () => {
+  const GEMINI_TEST_CASE_1_HEADER = 'Bearer test-case-1-gemini-tool-call';
+
+  let agentId: string;
+  let trustedDataPolicyId: string;
+  let toolInvocationPolicyId: string;
+  let toolId: string;
+
+  test('blocks tool invocation when untrusted data is consumed', async ({
+    request,
+  }) => {
+    // 1. Create a test agent
+    const agent = await utils.agent.createAgent(request, 'Gemini Test Agent');
+    agentId = agent.id;
+
+    // 2. Send initial request to register the tool and get the toolId
+    const initialResponse = await request.post(
+      `${BASE_URL}/v1/gemini/${agentId}/models/gemini-2.0-flash-exp:generateContent`,
+      {
+        headers: {
+          'x-goog-api-key': GEMINI_TEST_CASE_1_HEADER,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Read the file at /etc/passwd',
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'read_file',
+                  description: 'Read a file from the filesystem',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      file_path: {
+                        type: 'string',
+                        description: 'The path to the file to read',
+                      },
+                    },
+                    required: ['file_path'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    );
+
+    if (!initialResponse.ok()) {
+      const errorText = await initialResponse.text();
+      throw new Error(
+        `Initial Gemini request failed: ${initialResponse.status()} ${errorText}`,
+      );
+    }
+
+    // Get the agent-tool relationship ID from the backend
+    const agentToolsResponse = await request.get(`${BASE_URL}/api/agent-tools`);
+    expect(agentToolsResponse.ok()).toBeTruthy();
+    const agentTools = await agentToolsResponse.json();
+    const readFileAgentTool = agentTools.find(
+      (at: any) => at.agent.id === agentId && at.tool.name === 'read_file',
+    );
+    expect(readFileAgentTool).toBeDefined();
+    toolId = readFileAgentTool.id;
+
+    // 3. Create a trusted data policy that marks messages with "UNTRUSTED_DATA" in content as untrusted
+    const trustedDataPolicy =
+      await utils.trustedDataPolicy.createTrustedDataPolicy(request, {
+        agentToolId: toolId,
+        description: 'Mark messages containing UNTRUSTED_DATA as untrusted',
+        attributePath: '$.parts[0].text',
+        operator: 'contains',
+        value: 'UNTRUSTED_DATA',
+        action: 'mark_as_trusted',
+      });
+    trustedDataPolicyId = trustedDataPolicy.id;
+
+    // 4. Create a tool invocation policy that blocks read_file when accessing /etc/
+    const toolInvocationPolicy =
+      await utils.toolInvocationPolicy.createToolInvocationPolicy(request, {
+        agentToolId: toolId,
+        argumentPath: 'file_path',
+        operator: 'contains',
+        value: '/etc/',
+        action: 'block_always',
+        reason: 'Reading /etc/ files is not allowed for security reasons',
+      });
+    toolInvocationPolicyId = toolInvocationPolicy.id;
+
+    // 5. Send a request with untrusted data
+    const response = await request.post(
+      `${BASE_URL}/v1/gemini/${agentId}/models/gemini-2.0-flash-exp:generateContent`,
+      {
+        headers: {
+          'x-goog-api-key': GEMINI_TEST_CASE_1_HEADER,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'UNTRUSTED_DATA: This is untrusted content from an external source',
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'read_file',
+                  description: 'Read a file from the filesystem',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      file_path: {
+                        type: 'string',
+                        description: 'The path to the file to read',
+                      },
+                    },
+                    required: ['file_path'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    );
+
+    expect(response.ok()).toBeTruthy();
+    const responseData = await response.json();
+
+    // 6. Verify the tool call was blocked
+    expect(responseData.candidates).toBeDefined();
+    expect(responseData.candidates.length).toBeGreaterThan(0);
+    expect(responseData.candidates[0].content).toBeDefined();
+    expect(responseData.candidates[0].content.parts).toBeDefined();
+
+    const parts = responseData.candidates[0].content.parts;
+
+    // The response should have text content indicating the tool was blocked
+    const textPart = parts.find((p: any) => p.text);
+    expect(textPart).toBeDefined();
+    expect(textPart.text).toContain('read_file');
+    expect(textPart.text).toContain('denied');
+
+    // The original functionCall parts should not be present (replaced with text refusal)
+    const functionCallParts = parts.filter((p: any) => p.functionCall);
+    expect(functionCallParts.length).toBe(0);
+
+    // 7. Verify the interaction was persisted
+    const interactionsResponse = await request.get(
+      `${BASE_URL}/api/interactions?agentId=${agentId}`,
+    );
+    expect(interactionsResponse.ok()).toBeTruthy();
+    const interactionsData = await interactionsResponse.json();
+    expect(interactionsData.data.length).toBeGreaterThan(0);
+
+    // Find the interaction with untrusted data
+    const blockedInteraction = interactionsData.data.find((i: any) =>
+      i.request?.contents?.some((c: any) =>
+        c.parts?.some((p: any) => p.text?.includes('UNTRUSTED_DATA')),
+      ),
+    );
+    expect(blockedInteraction).toBeDefined();
+  });
+
+  test.afterEach(async ({ request }) => {
+    // Clean up: delete the created resources
+    if (toolInvocationPolicyId) {
+      await utils.toolInvocationPolicy.deleteToolInvocationPolicy(
+        request,
+        toolInvocationPolicyId,
+      );
+    }
+    if (trustedDataPolicyId) {
+      await utils.trustedDataPolicy.deleteTrustedDataPolicy(
+        request,
+        trustedDataPolicyId,
+      );
+    }
+    if (agentId) {
+      await utils.agent.deleteAgent(request, agentId);
+    }
+  });
+});

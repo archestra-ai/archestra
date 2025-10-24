@@ -128,6 +128,11 @@ export default {
     anthropic: {
       baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
+    gemini: {
+      baseUrl:
+        process.env.GEMINI_BASE_URL ||
+        "https://generativelanguage.googleapis.com/v1",
+    },
   },
   features: {
     mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",

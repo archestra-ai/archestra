@@ -1,4 +1,4 @@
-export type SupportedProviders = "openai" | "anthropic";
+export type SupportedProviders = "openai" | "anthropic" | "gemini";
 
 /**
  * Represents a tool call in a provider-agnostic way

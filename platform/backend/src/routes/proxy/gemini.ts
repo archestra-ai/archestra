@@ -1,5 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { GoogleGenAI } from "@google/genai";
+import { type Candidate, GoogleGenAI } from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import * as utils from "./utils";
  * Inject assigned MCP tools into Gemini tools object
  * Assigned tools take priority and override tools with the same name from the request
  */
-const _injectTools = async (
+const injectTools = async (
   requestTools: Gemini.Types.Tool[] | undefined,
   agentId: string,
 ): Promise<Gemini.Types.Tool[] | undefined> => {
@@ -107,6 +107,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
+    const { tools } = body;
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -134,28 +135,78 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const modelName = model || "gemini-2.5-pro";
 
     try {
-      // TODO: Persist tools if present
-      // await utils.tools.persistTools(commonRequest.tools, resolvedAgentId);
+      await utils.tools.persistTools(
+        (tools || [])
+          .filter((tool) => tool.functionDeclarations !== undefined)
+          .map((tool) => {
+            return {
+              toolName: tool.functionDeclarations?.[0].name ?? "unnamed_tool",
+              toolParameters: tool.functionDeclarations?.[0].parameters || {},
+              toolDescription: tool.functionDeclarations?.[0].description || "",
+            };
+          }),
+        resolvedAgentId,
+      );
 
-      // TODO: Inject assigned MCP tools (assigned tools take priority)
-      // const _mergedTools = await injectTools(
-      //   body.tools,
-      //   resolvedAgentId,
-      // );
+      const mergedTools = await injectTools(body.tools, resolvedAgentId);
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.gemini.toCommonFormat(
         body.contents || [],
       );
-      const { toolResultUpdates, contextIsTrusted: _contextIsTrusted } =
+      const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
           commonMessages,
           resolvedAgentId,
           geminiApiKey,
-          /**
-           * TODO: gemini isn't properly supported yet...
-           */
-          "openai",
+          "gemini",
+          stream
+            ? () => {
+                // Send initial indicator when dual LLM starts (streaming only)
+                const startChunk = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            text: "Analyzing with Dual LLM:\n\n",
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                };
+                reply.raw.write(`${JSON.stringify(startChunk)}\n`);
+              }
+            : undefined,
+          stream
+            ? (progress) => {
+                // Stream Q&A progress with options
+                const optionsText = progress.options
+                  .map((opt, idx) => `  ${idx}: ${opt}`)
+                  .join("\n");
+                const progressChunk = {
+                  candidates: [
+                    {
+                      content: {
+                        parts: [
+                          {
+                            text: `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
+                          },
+                        ],
+                        role: "model",
+                      },
+                      finishReason: "STOP",
+                      index: 0,
+                    },
+                  ],
+                };
+                reply.raw.write(`${JSON.stringify(progressChunk)}\n`);
+              }
+            : undefined,
         );
 
       // Apply updates back to Gemini contents
@@ -171,160 +222,345 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
 
       if (stream) {
-        // reply.header("Content-Type", "text/event-stream");
-        // reply.header("Cache-Control", "no-cache");
-        // reply.header("Connection", "keep-alive");
+        reply.header("Content-Type", "text/event-stream");
+        reply.header("Cache-Control", "no-cache");
+        reply.header("Connection", "keep-alive");
 
-        // // Handle streaming response
-        // const result = await genAI.models.generateContentStream({
-        //   model: modelName,
-        //   ...geminiRequest,
-        // });
-
-        // const chunks: Gemini.Types.GenerateContentResponse[] = [];
-        // let accumulatedResponse:
-        //   | Gemini.Types.GenerateContentResponse
-        //   | undefined;
-
-        // for await (const chunk of result) {
-        //   chunks.push({
-        //     candidates: chunk.candidates as any,
-        //     modelVersion: modelName,
-        //   });
-
-        //   // Accumulate response for persistence
-        //   if (!accumulatedResponse) {
-        //     accumulatedResponse = {
-        //       candidates: chunk.candidates as any,
-        //       usageMetadata: chunk.usageMetadata as any,
-        //       modelVersion: modelName,
-        //     };
-        //   } else if (chunk.candidates) {
-        //     // Accumulate content from chunks
-        //     for (let i = 0; i < chunk.candidates.length; i++) {
-        //       const candidate = chunk.candidates[i];
-        //       const accCandidate = accumulatedResponse.candidates![i];
-        //       if (candidate.content && accCandidate?.content) {
-        //         // Append parts
-        //         accCandidate.content.parts = [
-        //           ...(accCandidate.content.parts || []),
-        //           ...(candidate.content.parts || []),
-        //         ];
-        //       }
-        //     }
-        //   }
-
-        //   // Convert to common format for SSE
-        //   const commonChunk = transformer.chunkToOpenAI
-        //     ? transformer.chunkToOpenAI(chunk as any)
-        //     : chunk;
-
-        //   reply.raw.write(`data: ${JSON.stringify(commonChunk)}\n\n`);
-        //   await new Promise((resolve) =>
-        //     setTimeout(resolve, Math.random() * 10),
-        //   );
-        // }
-
-        // // Evaluate tool invocation policies on the accumulated response
-        // if (accumulatedResponse) {
-        //   const commonResponse =
-        //     transformer.responseToOpenAI(accumulatedResponse);
-
-        //   // Check if tool invocation is blocked
-        //   const assistantMessage = commonResponse.choices[0]?.message;
-        //   if (assistantMessage) {
-        //     const toolInvocationRefusal =
-        //       await utils.toolInvocation.evaluatePolicies(
-        //         assistantMessage,
-        //         resolvedAgentId,
-        //         contextIsTrusted,
-        //       );
-
-        //     if (toolInvocationRefusal) {
-        //       // Send refusal as final chunk
-        //       const refusalChunk = {
-        //         id: "chatcmpl-blocked",
-        //         object: "chat.completion.chunk" as const,
-        //         created: Date.now() / 1000,
-        //         model: modelName,
-        //         choices: [
-        //           {
-        //             index: 0,
-        //             delta: toolInvocationRefusal.message,
-        //             finish_reason: "stop",
-        //             logprobs: null,
-        //           },
-        //         ],
-        //       };
-
-        //       reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-
-        //       // Update response for persistence
-        //       commonResponse.choices = [toolInvocationRefusal];
-        //       accumulatedResponse = transformer.responseFromOpenAI(
-        //         commonResponse,
-        //       );
-        //     }
-        //   }
-
-        //   // Store the complete interaction
-        //   await InteractionModel.create({
-        //     agentId: resolvedAgentId,
-        //     type: "gemini:generateContent",
-        //     request: body,
-        //     response: accumulatedResponse,
-        //   });
-        // }
-
-        // reply.raw.write("data: [DONE]\n\n");
-        // reply.raw.end();
-        // return reply;
-
-        return reply.code(400).send({
-          error: {
-            message: "Streaming is not supported for Anthropic. Coming soon!",
-            type: "not_supported",
-          },
+        // Handle streaming response
+        const result = await genAI.models.generateContentStream({
+          model: modelName,
+          ...processedBody,
+          ...(mergedTools ? { tools: mergedTools } : {}),
         });
+
+        // Accumulate response for policy evaluation and persistence
+        const accumulatedToolCalls: Array<{
+          id: string;
+          name: string;
+          arguments: string;
+        }> = [];
+        const chunks: Array<{ candidates?: Candidate[] }> = [];
+
+        for await (const chunk of result) {
+          chunks.push(chunk);
+
+          // Accumulate tool calls but don't stream them yet (need to evaluate policies first)
+          if (chunk.candidates?.[0]?.content?.parts) {
+            for (const part of chunk.candidates[0].content.parts) {
+              if (
+                "functionCall" in part &&
+                part.functionCall &&
+                part.functionCall.name
+              ) {
+                const toolCallId = `gemini-tool-${part.functionCall.name}-${Date.now()}`;
+                accumulatedToolCalls.push({
+                  id: toolCallId,
+                  name: part.functionCall.name,
+                  arguments: JSON.stringify(part.functionCall.args || {}),
+                });
+              } else {
+                // Stream non-tool content immediately
+                reply.raw.write(`${JSON.stringify(chunk)}\n`);
+              }
+            }
+          } else {
+            // Stream chunks without parts immediately
+            reply.raw.write(`${JSON.stringify(chunk)}\n`);
+          }
+        }
+
+        // Evaluate tool invocation policies
+        let toolInvocationRefusal: [string, string] | null = null;
+        if (accumulatedToolCalls.length > 0) {
+          const validToolCalls = accumulatedToolCalls.map((tc) => ({
+            toolCallName: tc.name,
+            toolCallArgs: tc.arguments,
+          }));
+
+          toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+            validToolCalls,
+            resolvedAgentId,
+            contextIsTrusted,
+          );
+        }
+
+        if (toolInvocationRefusal) {
+          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
+
+          // Stream refusal message
+          const refusalChunk = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: contentMessage,
+                    },
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP",
+                index: 0,
+              },
+            ],
+          };
+          reply.raw.write(`${JSON.stringify(refusalChunk)}\n`);
+
+          // Store the interaction with refusal
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+            response: { chunks, refusal: contentMessage } as any,
+          });
+        } else if (accumulatedToolCalls.length > 0) {
+          // Tool calls are allowed - execute MCP tools
+          const commonToolCalls = accumulatedToolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: JSON.parse(tc.arguments),
+          }));
+
+          const mcpResults = await utils.tools.executeMcpToolCalls(
+            commonToolCalls,
+            resolvedAgentId,
+          );
+
+          if (mcpResults.length > 0) {
+            // Stream the tool calls first
+            const lastChunkWithToolCalls = chunks.find((c) =>
+              c.candidates?.[0]?.content?.parts?.some(
+                (p) => "functionCall" in p,
+              ),
+            );
+            if (lastChunkWithToolCalls) {
+              reply.raw.write(`${JSON.stringify(lastChunkWithToolCalls)}\n`);
+            }
+
+            // Convert MCP results to Gemini format
+            const toolResultParts = mcpResults.map((result) => ({
+              functionResponse: {
+                name:
+                  commonToolCalls.find((tc) => tc.id === result.id)?.name ||
+                  "unknown",
+                response: result.isError
+                  ? ({
+                      error: result.error || "Tool execution failed",
+                    } as Record<string, unknown>)
+                  : (result.content as Record<string, unknown>),
+              },
+            }));
+
+            // Make another streaming call with the tool results
+            const modelResponse = chunks
+              .flatMap((c) => c.candidates?.[0]?.content?.parts || [])
+              .filter((p) => "functionCall" in p || "text" in p);
+
+            const updatedContents = [
+              ...filteredContents,
+              {
+                role: "model" as const,
+                parts: modelResponse,
+              },
+              {
+                role: "user" as const,
+                parts: toolResultParts,
+              },
+            ];
+
+            // Make final streaming call with tool results
+            const finalResult = await genAI.models.generateContentStream({
+              model: modelName,
+              ...processedBody,
+              contents: updatedContents,
+              ...(mergedTools ? { tools: mergedTools } : {}),
+            });
+
+            const finalChunks: Array<{ candidates?: Candidate[] }> = [];
+            for await (const finalChunk of finalResult) {
+              finalChunks.push(finalChunk);
+              reply.raw.write(`${JSON.stringify(finalChunk)}\n`);
+            }
+
+            // Store the interaction with final response
+            await InteractionModel.create({
+              agentId: resolvedAgentId,
+              type: "gemini:generateContent",
+              request: body,
+              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+              response: { chunks: finalChunks } as any,
+            });
+          } else {
+            // No MCP results, stream the tool calls
+            const lastChunkWithToolCalls = chunks.find((c) =>
+              c.candidates?.[0]?.content?.parts?.some(
+                (p) => "functionCall" in p,
+              ),
+            );
+            if (lastChunkWithToolCalls) {
+              reply.raw.write(`${JSON.stringify(lastChunkWithToolCalls)}\n`);
+            }
+
+            // Store the interaction
+            await InteractionModel.create({
+              agentId: resolvedAgentId,
+              type: "gemini:generateContent",
+              request: body,
+              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+              response: { chunks } as any,
+            });
+          }
+        } else {
+          // No tool calls, just store the interaction
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+            response: { chunks } as any,
+          });
+        }
+
+        reply.raw.end();
+        return reply;
       } else {
         // Non-streaming response
         const response = await genAI.models.generateContent({
           model: modelName,
           ...processedBody,
-          // tools: mergedTools,
+          ...(mergedTools ? { tools: mergedTools } : {}),
         });
 
-        // Convert to common format for policy evaluation
-        // const commonResponse = transformer.responseToOpenAI(geminiResponse);
+        // Extract tool calls from response
+        const toolCalls = [];
+        if (response.candidates) {
+          toolCalls.push(
+            ...(response.candidates[0]?.content?.parts
+              ?.filter((p) => p.functionCall)
+              .map((p) => p.functionCall) || []),
+          );
+        }
 
-        // TODO:
         // Evaluate tool invocation policies
-        // const assistantMessage = commonResponse.choices[0]?.message;
-        // if (assistantMessage) {
-        //   const toolInvocationRefusal =
-        //     await utils.toolInvocation.evaluatePolicies(
-        //       assistantMessage,
-        //       resolvedAgentId,
-        //       contextIsTrusted,
-        //     );
+        let toolInvocationRefusal: [string, string] | null = null;
+        if (toolCalls.length > 0) {
+          const validToolCalls = toolCalls
+            .filter(
+              (tc): tc is { name: string; args?: Record<string, unknown> } =>
+                Boolean(tc?.name),
+            )
+            .map((toolCall) => ({
+              toolCallName: toolCall.name,
+              toolCallArgs: JSON.stringify(toolCall.args || {}),
+            }));
 
-        //   if (toolInvocationRefusal) {
-        //     commonResponse.choices = [toolInvocationRefusal];
-        //     // Convert back to Gemini format
-        //     const refusalResponse =
-        //       transformer.responseFromOpenAI(commonResponse);
+          if (validToolCalls.length > 0) {
+            toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
+              validToolCalls,
+              resolvedAgentId,
+              contextIsTrusted,
+            );
+          }
+        }
 
-        //     // Store the interaction with refusal
-        //     await InteractionModel.create({
-        //       agentId: resolvedAgentId,
-        //       type: "gemini:generateContent",
-        //       request: body,
-        //       response: refusalResponse,
-        //     });
+        if (toolInvocationRefusal) {
+          const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
-        //     return reply.send(refusalResponse);
-        //   }
-        // }
+          // Create refusal response in Gemini format
+          const refusalResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: contentMessage,
+                    },
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP",
+                index: 0,
+              },
+            ],
+          };
+
+          // Store the interaction with refusal
+          await InteractionModel.create({
+            agentId: resolvedAgentId,
+            type: "gemini:generateContent",
+            request: body,
+            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+            response: refusalResponse as any,
+          });
+
+          return reply.send(refusalResponse);
+        } else if (toolCalls.length > 0) {
+          // Tool calls are allowed - execute MCP tools
+          const commonToolCalls = toolCalls
+            .filter(
+              (tc): tc is { name: string; args?: Record<string, unknown> } =>
+                Boolean(tc?.name),
+            )
+            .map((tc, index) => ({
+              id: `gemini-${Date.now()}-${index}`,
+              name: tc.name,
+              arguments: tc.args || {},
+            }));
+
+          const mcpResults = await utils.tools.executeMcpToolCalls(
+            commonToolCalls,
+            resolvedAgentId,
+          );
+
+          if (mcpResults.length > 0) {
+            // Convert MCP results to Gemini format
+            const toolResultParts = mcpResults.map((result) => ({
+              functionResponse: {
+                name:
+                  commonToolCalls.find((tc) => tc.id === result.id)?.name ||
+                  "unknown",
+                response: result.isError
+                  ? ({
+                      error: result.error || "Tool execution failed",
+                    } as Record<string, unknown>)
+                  : (result.content as Record<string, unknown>),
+              },
+            }));
+
+            // Make another call with the tool results
+            const updatedContents = [
+              ...filteredContents,
+              {
+                role: "model" as const,
+                parts: response.candidates?.[0]?.content?.parts || [],
+              },
+              {
+                role: "user" as const,
+                parts: toolResultParts,
+              },
+            ];
+
+            // Make final call with tool results
+            const finalResponse = await genAI.models.generateContent({
+              model: modelName,
+              ...processedBody,
+              contents: updatedContents,
+              ...(mergedTools ? { tools: mergedTools } : {}),
+            });
+
+            // Store the interaction with final response
+            await InteractionModel.create({
+              agentId: resolvedAgentId,
+              type: "gemini:generateContent",
+              request: body,
+              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+              response: finalResponse as any,
+            });
+
+            return reply.send(finalResponse);
+          }
+        }
 
         // Store the complete interaction
         await InteractionModel.create({

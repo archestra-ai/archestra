@@ -21,11 +21,24 @@ function generateCodeChallenge(verifier: string): string {
 
 /**
  * Discover OAuth resource metadata (for MCP servers)
+ * Sends MCP-Protocol-Version header for MCP-aware servers
  */
 async function discoverOAuthResourceMetadata(serverUrl: string) {
   try {
-    const wellKnownUrl = `${serverUrl}/.well-known/oauth-protected-resource`;
-    const response = await fetch(wellKnownUrl);
+    // MCP SDK uses "path-aware discovery": /.well-known/{type}{pathname}
+    // For https://huggingface.co/mcp -> https://huggingface.co/.well-known/oauth-protected-resource/mcp
+    const url = new URL(serverUrl);
+    const pathname = url.pathname.endsWith("/")
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+    const wellKnownUrl = `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
+
+    const response = await fetch(wellKnownUrl, {
+      headers: {
+        "MCP-Protocol-Version": "2025-06-18",
+        Accept: "application/json",
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch resource metadata: ${response.status}`);
@@ -37,6 +50,49 @@ async function discoverOAuthResourceMetadata(serverUrl: string) {
       `Resource metadata discovery failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
   }
+}
+
+/**
+ * Discover OAuth scopes from server metadata
+ * Tries multiple discovery methods like the desktop app does
+ */
+async function discoverScopes(
+  serverUrl: string,
+  supportsResourceMetadata: boolean,
+  defaultScopes: string[],
+): Promise<string[]> {
+  // Try resource metadata discovery first if supported
+  if (supportsResourceMetadata) {
+    try {
+      const resourceMetadata = await discoverOAuthResourceMetadata(serverUrl);
+      if (
+        resourceMetadata?.scopes_supported &&
+        Array.isArray(resourceMetadata.scopes_supported) &&
+        resourceMetadata.scopes_supported.length > 0
+      ) {
+        return resourceMetadata.scopes_supported;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  // Try authorization server metadata discovery
+  try {
+    const metadata = await discoverAuthorizationServerMetadata(serverUrl);
+    if (
+      metadata.scopes_supported &&
+      Array.isArray(metadata.scopes_supported) &&
+      metadata.scopes_supported.length > 0
+    ) {
+      return metadata.scopes_supported;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  // Fall back to default scopes
+  return defaultScopes;
 }
 
 /**
@@ -78,12 +134,17 @@ async function discoverAuthorizationServerMetadata(serverUrl: string): Promise<{
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
+  scopes_supported?: string[];
 }> {
   const urls = buildDiscoveryUrls(serverUrl);
 
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          "MCP-Protocol-Version": "2025-06-18",
+        },
+      });
 
       // If we get a 4xx error, try the next URL
       if (!response.ok && response.status >= 400 && response.status < 500) {
@@ -245,6 +306,30 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         let clientId = oauthConfig.client_id;
         let clientSecret = oauthConfig.client_secret;
 
+        // Discover actual scopes from the OAuth server (like desktop app does)
+        const discoveredScopes = await discoverScopes(
+          oauthConfig.server_url,
+          oauthConfig.supports_resource_metadata || false,
+          oauthConfig.default_scopes || oauthConfig.scopes,
+        );
+
+        // Use discovered scopes if different from configured
+        const scopesToUse =
+          JSON.stringify(discoveredScopes.sort()) !==
+          JSON.stringify(oauthConfig.scopes.sort())
+            ? discoveredScopes
+            : oauthConfig.scopes;
+
+        if (scopesToUse !== oauthConfig.scopes) {
+          fastify.log.info(
+            {
+              configured: oauthConfig.scopes,
+              discovered: scopesToUse,
+            },
+            "Using discovered scopes instead of configured scopes",
+          );
+        }
+
         // Check if dynamic registration is needed
         if (!clientId || clientId === "") {
           fastify.log.info(
@@ -387,7 +472,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 redirect_uris: [redirectUri],
                 grant_types: ["authorization_code", "refresh_token"],
                 response_types: ["code"],
-                scope: oauthConfig.scopes.join(" "),
+                scope: scopesToUse.join(" "),
               },
             );
 
@@ -414,7 +499,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           } catch (error) {
             fastify.log.warn(
-              { error },
+              {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
               "Dynamic registration failed, continuing with default client_id",
             );
             // Continue with default client_id if registration fails
@@ -442,7 +530,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authUrl.searchParams.set("code_challenge", codeChallenge);
         authUrl.searchParams.set("code_challenge_method", "S256");
         authUrl.searchParams.set("state", state);
-        authUrl.searchParams.set("scope", oauthConfig.scopes.join(" "));
+        authUrl.searchParams.set("scope", scopesToUse.join(" "));
         authUrl.searchParams.set("redirect_uri", redirectUri);
 
         return reply.send({

@@ -79,7 +79,10 @@ function ServerCard({
             {server.name}
           </p>
         )}
-        <TransportBadges server={server} className="mt-1" />
+        <TransportBadges
+          isRemote={server.server.type === "remote"}
+          className="mt-1"
+        />
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-3">
         {server.description && (
@@ -130,11 +133,7 @@ function ServerCard({
             size="sm"
             className="w-full"
           >
-            {isInCatalog
-              ? "Added"
-              : isAdding
-                ? "Adding..."
-                : "Add to Your Registry"}
+            {isInCatalog ? "Added" : "Add to Your Registry"}
           </Button>
         </div>
       </CardContent>

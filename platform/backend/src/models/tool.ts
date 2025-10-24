@@ -296,7 +296,8 @@ class ToolModel {
       .select({
         toolName: schema.toolsTable.name,
         mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
-        responseModifierTemplate: schema.agentToolsTable.responseModifierTemplate,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
       })
       .from(schema.toolsTable)
       .innerJoin(

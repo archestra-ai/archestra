@@ -1,7 +1,12 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
 import Handlebars from "handlebars";
-import { AgentModel, AgentToolModel, InteractionModel, ToolModel } from "@/models";
+import { z } from "zod";
+import {
+  AgentModel,
+  AgentToolModel,
+  InteractionModel,
+  ToolModel,
+} from "@/models";
 import {
   ErrorResponseSchema,
   RouteId,
@@ -320,7 +325,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.PreviewResponseModifier,
-        description: "Preview how a response modifier template transforms content",
+        description:
+          "Preview how a response modifier template transforms content",
         tags: ["Agent Tools"],
         body: z.object({
           template: z.string(),

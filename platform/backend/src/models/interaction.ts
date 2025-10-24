@@ -233,7 +233,7 @@ class InteractionModel {
         const choices = response.choices as Array<{
           message?: { tool_calls?: Array<{ function?: { name?: string } }> };
         }>;
-        if (choices && choices[0]?.message?.tool_calls) {
+        if (choices?.[0]?.message?.tool_calls) {
           for (const toolCall of choices[0].message.tool_calls) {
             if (toolCall.function?.name === toolName) {
               // Find the corresponding tool result in the request
@@ -281,7 +281,8 @@ class InteractionModel {
                 for (const msg of messages) {
                   if (Array.isArray(msg.content)) {
                     const toolResult = msg.content.find(
-                      (c) => c.type === "tool_result" && c.tool_use_id === block,
+                      (c) =>
+                        c.type === "tool_result" && c.tool_use_id === block,
                     );
                     if (toolResult) {
                       toolResponses.push({

@@ -2,10 +2,17 @@
 
 import { Editor } from "@monaco-editor/react";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,16 +28,57 @@ interface ResponseModifierEditorProps {
   agentTool: GetAllAgentToolsResponses["200"][number];
 }
 
-export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProps) {
+export function ResponseModifierEditor({
+  agentTool,
+}: ResponseModifierEditorProps) {
   const agentToolPatchMutation = useAgentToolPatchMutation();
 
-  const [template, setTemplate] = useState<string>(agentTool.responseModifierTemplate || "");
-  const [pastResponses, setPastResponses] = useState<Array<{ content: unknown; timestamp: Date }>>([]);
+  const [template, setTemplate] = useState<string>(
+    agentTool.responseModifierTemplate || "",
+  );
+  const [pastResponses, setPastResponses] = useState<
+    Array<{ content: unknown; timestamp: Date }>
+  >([]);
   const [selectedResponseIndex, setSelectedResponseIndex] = useState<number>(0);
   const [previewResult, setPreviewResult] = useState<unknown>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingResponses, setIsLoadingResponses] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  // Preview template whenever template or selected response changes
+  const previewTemplate = useCallback(
+    async (templateStr: string, content: unknown) => {
+      if (!templateStr.trim()) {
+        setPreviewResult(content);
+        setPreviewError(null);
+        return;
+      }
+
+      setIsPreviewLoading(true);
+      try {
+        const response = await fetch("/api/tools/preview-response-modifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template: templateStr, content }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setPreviewResult(data.result);
+          setPreviewError(data.error);
+        } else {
+          setPreviewError("Failed to preview template");
+        }
+      } catch (error) {
+        setPreviewError(
+          error instanceof Error ? error.message : "Preview error",
+        );
+      } finally {
+        setIsPreviewLoading(false);
+      }
+    },
+    [],
+  );
 
   // Load past responses when component mounts or tool changes
   useEffect(() => {
@@ -43,7 +91,7 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
       setIsLoadingResponses(true);
       try {
         const response = await fetch(
-          `/api/agents/${agentTool.agent.id}/tools/${encodeURIComponent(agentTool.tool.name)}/past-responses?limit=10`
+          `/api/agents/${agentTool.agent.id}/tools/${encodeURIComponent(agentTool.tool.name)}/past-responses?limit=10`,
         );
 
         if (response.ok) {
@@ -63,41 +111,14 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
     };
 
     loadPastResponses();
-  }, [agentTool.agent.id, agentTool.tool.name, agentTool.tool.mcpServerId]);
-
-  // Preview template whenever template or selected response changes
-  const previewTemplate = useCallback(async (templateStr: string, content: unknown) => {
-    if (!templateStr.trim()) {
-      setPreviewResult(content);
-      setPreviewError(null);
-      return;
-    }
-
-    setIsPreviewLoading(true);
-    try {
-      const response = await fetch("/api/tools/preview-response-modifier", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: templateStr, content }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPreviewResult(data.result);
-        setPreviewError(data.error);
-      } else {
-        setPreviewError("Failed to preview template");
-      }
-    } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : "Preview error");
-    } finally {
-      setIsPreviewLoading(false);
-    }
-  }, []);
+  }, [agentTool, template, previewTemplate]);
 
   // Update preview when template or selected response changes
   useEffect(() => {
-    if (pastResponses.length > 0 && selectedResponseIndex < pastResponses.length) {
+    if (
+      pastResponses.length > 0 &&
+      selectedResponseIndex < pastResponses.length
+    ) {
       const debounceTimer = setTimeout(() => {
         previewTemplate(template, pastResponses[selectedResponseIndex].content);
       }, 300);
@@ -144,9 +165,24 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
       <CardHeader>
         <CardTitle>Response Modifier</CardTitle>
         <CardDescription>
-          Use Handlebars.js templates to transform tool responses before they're sent to the LLM.
-          Access the response content with <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{content}}"}</code> or
-          text-only content with <code className="text-xs bg-muted px-1 py-0.5 rounded">{"{{text}}"}</code>.
+          Use{" "}
+          <Link
+            href="https://handlebarsjs.com/"
+            target="_blank"
+            className="text-primary hover:underline"
+          >
+            Handlebars.js
+          </Link>{" "}
+          templates to transform tool responses before they're sent to the LLM.
+          Access the response content with{" "}
+          <code className="text-xs bg-muted px-1 py-0.5 rounded">
+            {"{{content}}"}
+          </code>{" "}
+          or text-only content with{" "}
+          <code className="text-xs bg-muted px-1 py-0.5 rounded">
+            {"{{text}}"}
+          </code>
+          .
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -202,15 +238,21 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
               <Label>Preview with Past Response</Label>
               <Select
                 value={String(selectedResponseIndex)}
-                onValueChange={(value) => setSelectedResponseIndex(Number(value))}
+                onValueChange={(value) =>
+                  setSelectedResponseIndex(Number(value))
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {pastResponses.map((response, index) => (
-                    <SelectItem key={index} value={String(index)}>
-                      Response {index + 1} - {new Date(response.timestamp).toLocaleString()}
+                    <SelectItem
+                      key={response.timestamp.toISOString()}
+                      value={String(index)}
+                    >
+                      Response {index + 1} -{" "}
+                      {new Date(response.timestamp).toLocaleString()}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -219,10 +261,16 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Original Response</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Original Response
+                </Label>
                 <div className="border rounded-md p-3 bg-muted/50 overflow-auto max-h-[300px]">
                   <pre className="text-xs">
-                    {JSON.stringify(pastResponses[selectedResponseIndex]?.content, null, 2)}
+                    {JSON.stringify(
+                      pastResponses[selectedResponseIndex]?.content,
+                      null,
+                      2,
+                    )}
                   </pre>
                 </div>
               </div>
@@ -236,7 +284,9 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
                 </Label>
                 <div className="border rounded-md p-3 bg-muted/50 overflow-auto max-h-[300px]">
                   {previewError ? (
-                    <div className="text-xs text-destructive">{previewError}</div>
+                    <div className="text-xs text-destructive">
+                      {previewError}
+                    </div>
                   ) : (
                     <pre className="text-xs">
                       {JSON.stringify(previewResult, null, 2)}
@@ -257,7 +307,8 @@ export function ResponseModifierEditor({ agentTool }: ResponseModifierEditorProp
 
         {!isLoadingResponses && pastResponses.length === 0 && (
           <div className="text-sm text-muted-foreground py-4 border-t">
-            No past tool responses found. The preview will appear once this tool has been executed.
+            No past tool responses found. The preview will appear once this tool
+            has been executed.
           </div>
         )}
       </CardContent>

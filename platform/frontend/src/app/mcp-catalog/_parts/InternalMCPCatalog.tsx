@@ -388,56 +388,6 @@ export function InternalMCPCatalog({
         </div>
       )}
 
-      {/* Show orphaned servers (servers without matching catalog items) */}
-      {orphanedServers.length > 0 && (
-        <div className="space-y-4 pt-8 border-t">
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              Installed Servers Without Catalog Entry
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              These servers are installed but their catalog entry is missing
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {orphanedServers.map((server) => (
-              <div
-                key={server.id}
-                className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 flex flex-col"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-h-[3rem]">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium">{server.name}</h3>
-                      <Badge variant="outline" className="text-xs">
-                        Orphaned
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Installed:{" "}
-                      {formatDate({
-                        date: server.createdAt,
-                        dateFormat: "MM/dd/yyyy",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-auto">
-                  <Button
-                    onClick={() => handleUninstallClick(server.id, server.name)}
-                    size="sm"
-                    variant="destructive"
-                    className="w-full"
-                  >
-                    Uninstall
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}

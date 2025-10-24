@@ -16,12 +16,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Key URLs
 
-- **Frontend**: http://localhost:3000/
-- **Tools Inspector**: http://localhost:3000/tools
-- **Dual LLM Config**: http://localhost:3000/dual-llm
-- **Tilt UI**: http://localhost:10350/
-- **Drizzle Studio**: https://local.drizzle.studio/
-- **MCP Gateway**: http://localhost:9000/mcp/{agentId}
+- **Frontend**: <http://localhost:3000/>
+- **Tools Inspector**: <http://localhost:3000/tools>
+- **Dual LLM Config**: <http://localhost:3000/dual-llm>
+- **Tilt UI**: <http://localhost:10350/>
+- **Drizzle Studio**: <https://local.drizzle.studio/>
+- **MCP Gateway**: <http://localhost:9000/mcp/{agentId}>
 
 ## Common Commands
 
@@ -32,10 +32,15 @@ pnpm dev             # Start all workspaces
 pnpm lint            # Lint and auto-fix
 pnpm type-check      # Check TypeScript types
 pnpm test            # Run tests
+pnpm test:e2e        # Run e2e tests with Playwright (includes WireMock)
 
 # Database
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
+
+# Logs
+tilt logs pnpm-dev                   # Get logs for frontend + backend
+tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 ```
 
 ## Environment Variables
@@ -48,6 +53,10 @@ DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/arche
 OPENAI_API_KEY=your-api-key-here
 GEMINI_API_KEY=your-api-key-here
 ANTHROPIC_API_KEY=your-api-key-here
+
+# Provider Base URLs (optional - for testing)
+OPENAI_BASE_URL=https://api.openai.com/v1
+ANTHROPIC_BASE_URL=https://api.anthropic.com
 ```
 
 ## Architecture
@@ -57,6 +66,7 @@ ANTHROPIC_API_KEY=your-api-key-here
 **Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies
 
 **Workspaces**:
+
 - `backend/` - Fastify API server with security guardrails
 - `frontend/` - Next.js app with tool management UI
 - `experiments/` - CLI testing and proxy prototypes
@@ -65,6 +75,7 @@ ANTHROPIC_API_KEY=your-api-key-here
 ## Coding Conventions
 
 **Frontend**:
+
 - Use TanStack Query for data fetching
 - Use shadcn/ui components only
 - Small focused components with extracted business logic
@@ -72,9 +83,10 @@ ANTHROPIC_API_KEY=your-api-key-here
 - Only export what's needed externally
 
 **Backend**:
+
 - Use Drizzle ORM for database operations
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
 - Only export public APIs
 
-**Testing**: Vitest with PGLite for in-memory PostgreSQL testing
+**Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

@@ -5,6 +5,12 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -78,18 +84,13 @@ export function ResponseModifierEditor({
           templates to transform tool responses before they're sent to the LLM.
           Access the response content with{" "}
           <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            {"{{content}}"}
-          </code>{" "}
-          or text-only content with{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            {"{{text}}"}
+            {"{{response}}"}
           </code>
-          .
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Template (Handlebars.js)</Label>
+          <Label>Template</Label>
           <div className="border rounded-md overflow-hidden">
             <Editor
               height="200px"
@@ -133,6 +134,153 @@ export function ResponseModifierEditor({
             Clear
           </Button>
         </div>
+
+        <Accordion type="single" collapsible className="mt-6">
+          <AccordionItem
+            value="cheat-sheet"
+            className="border border-border rounded-lg bg-card"
+          >
+            <AccordionTrigger className="px-4 hover:no-underline">
+              <span className="text-sm font-medium">
+                📖 MCP Response Templating Cheat Sheet
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <div className="space-y-4 text-sm">
+                <p className="text-muted-foreground">
+                  MCP tool responses follow the{" "}
+                  <Link
+                    href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    MCP specification
+                  </Link>
+                  . Use Handlebars templates to transform responses. Access the
+                  response with{" "}
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                    {"{{response}}"}
+                  </code>
+                  .
+                </p>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">
+                      Example 1: Extract text from first element
+                    </h4>
+                    <p className="text-muted-foreground">
+                      MCP tools often return stringified JSON in a text block:
+                    </p>
+                    <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                      {`[
+  {
+    "type": "text",
+    "text": "{\\"issues\\":[{\\"id\\":816,\\"title\\":\\"Add authentication\\"}]}"
+  }
+]`}
+                    </pre>
+                    <p className="text-muted-foreground mt-2">
+                      Template to extract text (use triple braces to prevent
+                      HTML escaping):
+                    </p>
+                    <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                      {'{{{lookup (lookup response 0) "text"}}}'}
+                    </pre>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-medium">
+                      Example 2: Parse and transform JSON
+                    </h4>
+                    <p className="text-muted-foreground">
+                      Use nested{" "}
+                      <code className="bg-muted px-1 rounded">with</code> blocks
+                      with <code className="bg-muted px-1 rounded">json</code>{" "}
+                      and{" "}
+                      <code className="bg-muted px-1 rounded">escapeJson</code>{" "}
+                      helpers:
+                    </p>
+                    <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                      {`{{#with (lookup response 0)}}{{#with (json this.text)}}
+{
+  {{#each this.issues}}
+    "{{this.id}}": "{{{escapeJson this.title}}}"{{#unless @last}},{{/unless}}
+  {{/each}}
+}
+{{/with}}{{/with}}`}
+                    </pre>
+                    <p className="text-muted-foreground mt-2">
+                      Transforms GitHub issues to{" "}
+                      <code className="bg-muted px-1 rounded">
+                        {"{ id: title }"}
+                      </code>{" "}
+                      format
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-medium">
+                      Example 3: Return full response as-is
+                    </h4>
+                    <p className="text-muted-foreground">
+                      Use the{" "}
+                      <code className="bg-muted px-1 rounded">json</code> helper
+                      to return the entire response array:
+                    </p>
+                    <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs">
+                      {"{{{json response}}}"}
+                    </pre>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Available Helpers</h4>
+                    <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{lookup array index}}"}
+                        </code>{" "}
+                        - Access array element by index
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{#with expression}}"}
+                        </code>{" "}
+                        - Change context scope
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{json value}}"}
+                        </code>{" "}
+                        - Parse JSON string or stringify object
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{{escapeJson string}}}"}
+                        </code>{" "}
+                        - Escape quotes/special chars for JSON
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{#each array}}"}
+                        </code>{" "}
+                        - Iterate over arrays
+                      </li>
+                      <li>
+                        <code className="bg-muted px-1 rounded">
+                          {"{{{...}}}"}
+                        </code>{" "}
+                        - Triple braces prevent HTML escaping (required for
+                        JSON)
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </CardContent>
     </Card>
   );

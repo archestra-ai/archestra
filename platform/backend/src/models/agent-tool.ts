@@ -10,7 +10,9 @@ class AgentToolModel {
     options?: Partial<
       Pick<
         InsertAgentTool,
-        "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
+        | "responseModifierTemplate"
       >
     >,
   ) {

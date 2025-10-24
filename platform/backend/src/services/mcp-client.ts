@@ -1,8 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import Handlebars from "handlebars";
 import { ToolModel } from "@/models";
+import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
@@ -87,7 +87,7 @@ class McpClientService {
           const template = templatesByToolName.get(toolCall.name);
           if (template) {
             try {
-              modifiedContent = this.applyResponseModifierTemplate(
+              modifiedContent = applyResponseModifierTemplate(
                 template,
                 result.content,
               );
@@ -127,39 +127,6 @@ class McpClientService {
     }
 
     return results;
-  }
-
-  /**
-   * Apply a handlebars template to transform a tool response
-   */
-  private applyResponseModifierTemplate(
-    templateString: string,
-    content: unknown,
-  ): unknown {
-    // Compile the handlebars template
-    const template = Handlebars.compile(templateString);
-
-    // The content from MCP tools is typically an array of content blocks
-    // We'll pass the full content as the context for the template
-    const context = {
-      content: content,
-      // If content is an array, also provide easy access to text content
-      text:
-        Array.isArray(content) && content.length > 0 && content[0].text
-          ? content[0].text
-          : null,
-    };
-
-    // Render the template with the content as context
-    const rendered = template(context);
-
-    // Try to parse as JSON if possible, otherwise return as text
-    try {
-      return JSON.parse(rendered);
-    } catch {
-      // If it's not valid JSON, return as a text content block
-      return [{ type: "text", text: rendered }];
-    }
   }
 
   /**

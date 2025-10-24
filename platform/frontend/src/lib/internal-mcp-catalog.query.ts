@@ -27,6 +27,7 @@ export function useCreateInternalMcpCatalogItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
+      label?: string;
       name: string;
       version?: string;
       serverType?: "local" | "remote";

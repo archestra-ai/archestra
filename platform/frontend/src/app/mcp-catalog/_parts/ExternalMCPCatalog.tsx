@@ -178,6 +178,7 @@ export function ExternalMCPCatalog({
 
   const handleAddToCatalog = async (server: ArchestraMcpServerManifest) => {
     await createMutation.mutateAsync({
+      label: server.display_name || server.name,
       name: server.name,
       version: undefined, // No version in archestra catalog
       serverType: server.server.type,

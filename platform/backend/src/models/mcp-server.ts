@@ -202,12 +202,14 @@ class McpServerModel {
     metadata: McpServerMetadata,
     catalogId?: string,
   ): Promise<boolean> {
-    // if (serverName === GITHUB_MCP_SERVER_NAME) {
-    //   const githubToken = metadata.githubToken as string;
-    //   if (githubToken) {
-    //     return await mcpClientService.validateGitHubConnection(githubToken);
-    //   }
-    // }
+    // Special-case validation for GitHub MCP server using a PAT
+    if (serverName === GITHUB_MCP_SERVER_NAME) {
+      const githubToken = metadata.githubToken as string;
+      if (githubToken && typeof githubToken === "string") {
+        return await mcpClientService.validateGitHubConnection(githubToken);
+      }
+      return false;
+    }
 
     // For other remote servers, check if we can connect using catalog info
     if (catalogId) {

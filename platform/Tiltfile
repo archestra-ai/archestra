@@ -101,6 +101,15 @@ local_resource(
   labels=['database']
 )
 
+local_resource(
+  'db-generate',
+  cmd='cd backend && pnpm db:generate',
+  resource_deps=['postgresql'],
+  labels=['database'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
 # prod bundle
 if is_prod:
   local_resource(

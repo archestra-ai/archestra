@@ -22,15 +22,17 @@ export function CreateCatalogDialog({
   onClose,
 }: CreateCatalogDialogProps) {
   const [itemName, setItemName] = useState("");
+  const [itemLabel, setItemLabel] = useState("");
   const createMutation = useCreateInternalMcpCatalogItem();
 
   const handleClose = () => {
     onClose();
     setItemName("");
+    setItemLabel("");
   };
 
   const handleSubmit = async () => {
-    await createMutation.mutateAsync({ name: itemName });
+    await createMutation.mutateAsync({ name: itemName, label: itemLabel });
     handleClose();
   };
 
@@ -50,6 +52,15 @@ export function CreateCatalogDialog({
             value={itemName}
             onChange={(e) => setItemName(e.target.value)}
             placeholder="Enter server name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="label">Label</Label>
+          <Input
+            id="label"
+            value={itemLabel}
+            onChange={(e) => setItemLabel(e.target.value)}
+            placeholder="Enter display label (e.g., Asana MCP)"
           />
         </div>
         <DialogFooter>

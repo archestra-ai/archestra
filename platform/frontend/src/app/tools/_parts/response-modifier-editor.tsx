@@ -1,10 +1,10 @@
 "use client";
 
-import { Editor } from "@monaco-editor/react";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { Editor } from "@/components/editor";
 import {
   Accordion,
   AccordionContent,
@@ -77,12 +77,13 @@ export function ResponseModifierEditor({
           <Link
             href="https://handlebarsjs.com/"
             target="_blank"
-            className="text-primary hover:underline"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground"
           >
-            Handlebars.js
+            Handlebars
           </Link>{" "}
-          templates to transform tool responses before they're sent to the LLM.
-          Access the response content with{" "}
+          templates to transform tool responses before they're returned to the
+          receiving MCP client. Access the response content with{" "}
           <code className="text-xs bg-muted px-1 py-0.5 rounded">
             {"{{response}}"}
           </code>
@@ -94,10 +95,9 @@ export function ResponseModifierEditor({
           <div className="border rounded-md overflow-hidden">
             <Editor
               height="200px"
-              defaultLanguage="handlebars"
+              defaultLanguage="Handlebars"
               value={template}
               onChange={(value) => setTemplate(value || "")}
-              theme="vs-dark"
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
@@ -157,8 +157,16 @@ export function ResponseModifierEditor({
                   >
                     MCP specification
                   </Link>
-                  . Use Handlebars templates to transform responses. Access the
-                  response with{" "}
+                  . Use{" "}
+                  <Link
+                    href="https://handlebarsjs.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Handlebars
+                  </Link>{" "}
+                  templates to transform responses. Access the response with{" "}
                   <code className="text-xs bg-muted px-1 py-0.5 rounded">
                     {"{{response}}"}
                   </code>

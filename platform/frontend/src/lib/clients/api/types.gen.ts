@@ -2138,7 +2138,7 @@ export type GetAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     }>;
 };
 
@@ -2148,7 +2148,7 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
     path?: never;
     query?: never;
@@ -2212,7 +2212,7 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
@@ -2336,7 +2336,7 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
@@ -2346,7 +2346,7 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
-        usersWithAccess?: Array<string>;
+        teams?: Array<string>;
     };
     path: {
         id: string;
@@ -2412,7 +2412,7 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
@@ -5165,6 +5165,7 @@ export type GetMcpServersResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     }>;
 };
 
@@ -5177,6 +5178,7 @@ export type InstallMcpServerData = {
         metadata?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        teams?: Array<string>;
         agentIds?: Array<string>;
     };
     path?: never;
@@ -5220,6 +5222,7 @@ export type InstallMcpServerResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     };
 };
 
@@ -5313,6 +5316,7 @@ export type GetMcpServerResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     };
 };
 
@@ -5894,6 +5898,515 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetTeamsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/teams';
+};
+
+export type GetTeamsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamsError = GetTeamsErrors[keyof GetTeamsErrors];
+
+export type GetTeamsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetTeamsResponse = GetTeamsResponses[keyof GetTeamsResponses];
+
+export type CreateTeamData = {
+    body: {
+        name: string;
+        description?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/teams';
+};
+
+export type CreateTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTeamError = CreateTeamErrors[keyof CreateTeamErrors];
+
+export type CreateTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type CreateTeamResponse = CreateTeamResponses[keyof CreateTeamResponses];
+
+export type DeleteTeamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type DeleteTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTeamError = DeleteTeamErrors[keyof DeleteTeamErrors];
+
+export type DeleteTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamResponse = DeleteTeamResponses[keyof DeleteTeamResponses];
+
+export type GetTeamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type GetTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamError = GetTeamErrors[keyof GetTeamErrors];
+
+export type GetTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetTeamResponse = GetTeamResponses[keyof GetTeamResponses];
+
+export type UpdateTeamData = {
+    body?: {
+        name?: string;
+        description?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type UpdateTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTeamError = UpdateTeamErrors[keyof UpdateTeamErrors];
+
+export type UpdateTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type UpdateTeamResponse = UpdateTeamResponses[keyof UpdateTeamResponses];
+
+export type GetTeamMembersData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members';
+};
+
+export type GetTeamMembersErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamMembersError = GetTeamMembersErrors[keyof GetTeamMembersErrors];
+
+export type GetTeamMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetTeamMembersResponse = GetTeamMembersResponses[keyof GetTeamMembersResponses];
+
+export type AddTeamMemberData = {
+    body: {
+        userId: string;
+        role?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members';
+};
+
+export type AddTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AddTeamMemberError = AddTeamMemberErrors[keyof AddTeamMemberErrors];
+
+export type AddTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        createdAt: string;
+    };
+};
+
+export type AddTeamMemberResponse = AddTeamMemberResponses[keyof AddTeamMemberResponses];
+
+export type RemoveTeamMemberData = {
+    body?: never;
+    path: {
+        id: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members/{userId}';
+};
+
+export type RemoveTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RemoveTeamMemberError = RemoveTeamMemberErrors[keyof RemoveTeamMemberErrors];
+
+export type RemoveTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
 
 export type GetToolsData = {
     body?: never;

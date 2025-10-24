@@ -2689,89 +2689,6 @@ export type UpdateAgentToolResponses = {
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
 
-export type GetPastToolResponsesData = {
-    body?: never;
-    path: {
-        agentId: string;
-        toolName: string;
-    };
-    query?: {
-        limit?: number;
-    };
-    url: '/api/agents/{agentId}/tools/{toolName}/past-responses';
-};
-
-export type GetPastToolResponsesErrors = {
-    /**
-     * Default Response
-     */
-    404: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type GetPastToolResponsesError = GetPastToolResponsesErrors[keyof GetPastToolResponsesErrors];
-
-export type GetPastToolResponsesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        content: unknown;
-        timestamp: string;
-    }>;
-};
-
-export type GetPastToolResponsesResponse = GetPastToolResponsesResponses[keyof GetPastToolResponsesResponses];
-
-export type PreviewResponseModifierData = {
-    body: {
-        template: string;
-        content: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/tools/preview-response-modifier';
-};
-
-export type PreviewResponseModifierErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
-};
-
-export type PreviewResponseModifierError = PreviewResponseModifierErrors[keyof PreviewResponseModifierErrors];
-
-export type PreviewResponseModifierResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        result: unknown;
-        error: string | null;
-    };
-};
-
-export type PreviewResponseModifierResponse = PreviewResponseModifierResponses[keyof PreviewResponseModifierResponses];
-
 export type DeleteV1AnthropicData = {
     body?: never;
     path?: never;
@@ -5197,13 +5114,8 @@ export type GetV1McpByAgentIdResponses = {
 export type GetV1McpByAgentIdResponse = GetV1McpByAgentIdResponses[keyof GetV1McpByAgentIdResponses];
 
 export type PostV1McpByAgentIdData = {
-    body: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        method: string;
-        params?: {
-            [key: string]: unknown;
-        };
+    body?: {
+        [key: string]: unknown;
     };
     path: {
         agentId: string;
@@ -5212,41 +5124,12 @@ export type PostV1McpByAgentIdData = {
     url: '/v1/mcp/{agentId}';
 };
 
-export type PostV1McpByAgentIdErrors = {
-    /**
-     * Default Response
-     */
-    500: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
-};
-
-export type PostV1McpByAgentIdError = PostV1McpByAgentIdErrors[keyof PostV1McpByAgentIdErrors];
-
 export type PostV1McpByAgentIdResponses = {
     /**
      * Default Response
      */
-    200: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
+    200: unknown;
 };
-
-export type PostV1McpByAgentIdResponse = PostV1McpByAgentIdResponses[keyof PostV1McpByAgentIdResponses];
 
 export type GetMcpServersData = {
     body?: never;

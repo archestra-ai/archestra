@@ -17,8 +17,8 @@ const requestCounter = new client.Counter({
 
 class RequestMetrics {
   public handle(
-    request: FastifyRequest,
-    reply: FastifyReply,
+    _request: FastifyRequest,
+    _reply: FastifyReply,
     done: DoneFuncWithErrOrRes,
   ) {
     requestCounter.inc();

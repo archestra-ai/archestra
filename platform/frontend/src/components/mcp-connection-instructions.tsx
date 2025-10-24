@@ -16,25 +16,46 @@ interface McpConnectionInstructionsProps {
 export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedConfig, setCopiedConfig] = useState(false);
 
   const mcpUrl = agentId
     ? `${apiBaseUrl}/mcp/${agentId}`
     : `${apiBaseUrl}/mcp/:agentId`;
 
-  const handleCopy = useCallback(async () => {
+  const mcpConfig = JSON.stringify(
+    {
+      mcpServers: {
+        archestra: {
+          type: "streamable-http",
+          url: mcpUrl,
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const handleCopyUrl = useCallback(async () => {
     await navigator.clipboard.writeText(mcpUrl);
-    setCopied(true);
+    setCopiedUrl(true);
     toast.success("MCP URL copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopiedUrl(false), 2000);
   }, [mcpUrl]);
+
+  const handleCopyConfig = useCallback(async () => {
+    await navigator.clipboard.writeText(mcpConfig);
+    setCopiedConfig(true);
+    toast.success("Configuration copied to clipboard");
+    setTimeout(() => setCopiedConfig(false), 2000);
+  }, [mcpConfig]);
 
   return (
     <div className="space-y-3">
       <div className="bg-muted rounded-md p-3 flex items-center justify-between">
         <CodeText className="text-sm">{mcpUrl}</CodeText>
-        <Button variant="ghost" size="icon" onClick={handleCopy}>
-          {copied ? (
+        <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
+          {copiedUrl ? (
             <Check className="h-4 w-4 text-green-500" />
           ) : (
             <Copy className="h-4 w-4" />
@@ -43,6 +64,28 @@ export function McpConnectionInstructions({
       </div>
 
       <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Example configuration for MCP clients:
+        </p>
+
+        <div className="bg-muted rounded-md p-3 relative">
+          <pre className="text-xs overflow-x-auto">
+            <code>{mcpConfig}</code>
+          </pre>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2"
+            onClick={handleCopyConfig}
+          >
+            {copiedConfig ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
         <p className="text-sm text-muted-foreground">
           Connect using the{" "}
           <a

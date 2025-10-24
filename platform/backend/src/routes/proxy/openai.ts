@@ -83,6 +83,29 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  /**
+   * Register HTTP proxy for agent-specific routes /v1/openai/:agentId/* EXCEPT chat/completions
+   * This allows using /v1/openai/:agentId/ as a base URL for OpenAI API calls
+   * Example: /v1/openai/:agentId/models -> https://api.openai.com/v1/models
+   */
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://api.openai.com",
+    prefix: `${API_PREFIX}/:agentId`,
+    rewritePrefix: "/v1",
+    // Exclude chat/completions route since we handle it specially below
+    preHandler: (request, _reply, next) => {
+      if (
+        request.method === "POST" &&
+        request.url.includes(CHAT_COMPLETIONS_SUFFIX)
+      ) {
+        // Skip proxy for this route - we handle it below
+        next(new Error("skip"));
+      } else {
+        next();
+      }
+    },
+  });
+
   const handleChatCompletion = async (
     body: OpenAi.Types.ChatCompletionsRequest,
     headers: OpenAi.Types.ChatCompletionsHeaders,
@@ -114,7 +137,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
       ? (new MockOpenAIClient() as unknown as OpenAIProvider)
-      : new OpenAIProvider({ apiKey: openAiApiKey });
+      : new OpenAIProvider({
+          apiKey: openAiApiKey,
+          baseURL: config.llm.openai.baseUrl,
+        });
 
     try {
       await utils.tools.persistTools(
@@ -141,13 +167,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
-
-      // For streaming requests, set headers first
-      if (stream) {
-        reply.header("Content-Type", "text/event-stream");
-        reply.header("Cache-Control", "no-cache");
-        reply.header("Connection", "keep-alive");
-      }
 
       const { toolResultUpdates, contextIsTrusted } =
         await utils.trustedData.evaluateIfContextIsTrusted(
@@ -213,11 +232,17 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (stream) {
         // Handle streaming response
-        const stream = await openAiClient.chat.completions.create({
+        const streamingResponse = await openAiClient.chat.completions.create({
           ...body,
           messages: filteredMessages,
           tools: mergedTools.length > 0 ? mergedTools : undefined,
           stream: true,
+        });
+
+        // We are using reply.raw.writeHead because it sets headers immediately before the streaming starts
+        // unlike reply.header(key, value) which will set headers too late, after the streaming is over.
+        reply.raw.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
         });
 
         // Accumulate tool calls and track content for persistence
@@ -228,12 +253,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           [];
 
-        for await (const chunk of stream) {
+        for await (const chunk of streamingResponse) {
           chunks.push(chunk);
           const delta = chunk.choices[0]?.delta;
+          const finishReason = chunk.choices[0]?.finish_reason;
 
-          // Stream text content immediately
-          if (delta?.content || delta?.refusal) {
+          // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
+          if (
+            delta?.content !== undefined ||
+            delta?.refusal !== undefined ||
+            delta?.role ||
+            finishReason
+          ) {
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
             // Also accumulate for persistence

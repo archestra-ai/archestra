@@ -1,15 +1,7 @@
 "use client";
 
 import { E2eTestId } from "@shared";
-import {
-  MoreVertical,
-  Pencil,
-  Plug,
-  Plus,
-  Trash2,
-  Wrench,
-  X,
-} from "lucide-react";
+import { Pencil, Plug, Plus, Trash2, Wrench, X } from "lucide-react";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -33,12 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -56,7 +42,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -249,60 +234,83 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                         />
                       </TableCell>
                       <WithPermission permissions={["agent:delete"]}>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                data-testid={`${E2eTestId.AgentActionsDropdownTrigger}-${agent.name}`}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setConnectingAgent({
-                                    id: agent.id,
-                                    name: agent.name,
-                                  })
-                                }
-                              >
-                                <Plug className="h-4 w-4" />
-                                Connect
-                              </DropdownMenuItem>
-                              {mcpRegistryEnabled && (
-                                <DropdownMenuItem
-                                  onClick={() => setAssigningToolsAgent(agent)}
-                                >
-                                  <Wrench className="h-4 w-4" />
-                                  Assign Tools
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setEditingAgent({
-                                    id: agent.id,
-                                    name: agent.name,
-                                    usersWithAccess:
-                                      agent.usersWithAccess || [],
-                                  })
-                                }
-                              >
-                                <Pencil className="h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
-                                onClick={() => setDeletingAgentId(agent.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        <TableCell>
+                          <div className="flex items-center gap-1 justify-end">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      setConnectingAgent({
+                                        id: agent.id,
+                                        name: agent.name,
+                                      })
+                                    }
+                                  >
+                                    <Plug className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Connect</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            {mcpRegistryEnabled && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() =>
+                                        setAssigningToolsAgent(agent)
+                                      }
+                                    >
+                                      <Wrench className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Assign Tools</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      setEditingAgent({
+                                        id: agent.id,
+                                        name: agent.name,
+                                        usersWithAccess:
+                                          agent.usersWithAccess || [],
+                                      })
+                                    }
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    data-testid={`${E2eTestId.DeleteAgentButton}-${agent.name}`}
+                                    onClick={() => setDeletingAgentId(agent.id)}
+                                    className="hover:bg-destructive/10 hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                         </TableCell>
                       </WithPermission>
                     </TableRow>
@@ -456,7 +464,7 @@ function CreateAgentDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-2xl max-h-[90vh] flex flex-col"
+        className="max-w-4xl max-h-[90vh] flex flex-col"
         onInteractOutside={(e) => e.preventDefault()}
       >
         {!createdAgent ? (
@@ -561,11 +569,9 @@ function CreateAgentDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>How to connect to {createdAgent.name}</DialogTitle>
-              <DialogDescription>
-                Connect your agent via LLM Proxy (for conversations) or MCP
-                Gateway (for tool access).
-              </DialogDescription>
+              <DialogTitle>
+                How to connect "{createdAgent.name}" to Archestra
+              </DialogTitle>
             </DialogHeader>
             <div className="py-4">
               <AgentConnectionTabs agentId={createdAgent.id} />
@@ -787,18 +793,26 @@ function EditAgentDialog({
 
 function AgentConnectionTabs({ agentId }: { agentId: string }) {
   return (
-    <Tabs defaultValue="llm-proxy" className="w-full">
-      <TabsList>
-        <TabsTrigger value="llm-proxy">LLM Proxy</TabsTrigger>
-        <TabsTrigger value="mcp-gateway">MCP Gateway</TabsTrigger>
-      </TabsList>
-      <TabsContent value="llm-proxy" className="mt-4">
+    <div className="grid grid-cols-2 gap-6">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b">
+          <h3 className="font-medium">LLM Proxy</h3>
+          <h4 className="text-sm text-muted-foreground">
+            For security, observibility and enabling tools
+          </h4>
+        </div>
         <ProxyConnectionInstructions agentId={agentId} />
-      </TabsContent>
-      <TabsContent value="mcp-gateway" className="mt-4">
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b">
+          <h3 className="font-medium">MCP Gateway</h3>
+          <h4 className="text-sm text-muted-foreground">
+            To enable tools for the agent
+          </h4>
+        </div>
         <McpConnectionInstructions agentId={agentId} />
-      </TabsContent>
-    </Tabs>
+      </div>
+    </div>
   );
 }
 
@@ -813,13 +827,9 @@ function ConnectAgentDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>How to connect to {agent.name}</DialogTitle>
-          <DialogDescription>
-            Connect your agent via LLM Proxy (for conversations) or MCP Gateway
-            (for tool access).
-          </DialogDescription>
+          <DialogTitle>How to connect "{agent.name}" to Archestra</DialogTitle>
         </DialogHeader>
         <div className="py-4">
           <AgentConnectionTabs agentId={agent.id} />

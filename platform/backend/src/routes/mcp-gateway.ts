@@ -1,66 +1,23 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
-  type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import type { ZodRawShape } from "zod";
 import { z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import mcpClientService from "@/services/mcp-client";
-import { type CommonToolCall, type Tool, UuidIdSchema } from "@/types";
-
-/**
- * Convert JSON Schema properties to a Zod schema that accepts all properties
- * We use a passthrough schema to allow any properties from the JSON schema
- */
-function createPermissiveZodSchema(
-  jsonSchema: Record<string, unknown>,
-): z.ZodObject<z.ZodRawShape> {
-  const properties = (jsonSchema.properties as Record<string, unknown>) || {};
-  const zodShape: Record<string, z.ZodTypeAny> = {};
-
-  // Create a Zod schema that accepts each property as an unknown type
-  // This allows the SDK to extract the arguments while being permissive
-  for (const key of Object.keys(properties)) {
-    zodShape[key] = z.unknown().optional();
-  }
-
-  // Wrap in z.object() and use passthrough to allow any additional properties
-  return z.object(zodShape).passthrough();
-}
-
-/**
- * Cache of MCP server factories by agent ID
- * We cache tools to avoid database queries
- */
-const agentServerFactories = new Map<
-  string,
-  {
-    tools: Tool[];
-    lastFetch: number;
-  }
->();
-
-/**
- * Cache configuration
- */
-const TOOLS_CACHE_MINUTES = 5;
-const SECONDS_PER_MINUTE = 60;
-const MILLISECONDS_PER_SECOND = 1000;
-// 5 minutes * 60 seconds/minute * 1000 milliseconds/second
-const TOOLS_CACHE_TTL = TOOLS_CACHE_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
  * Session management types
  */
 interface SessionData {
-  server: McpServer;
+  server: Server;
   transport: StreamableHTTPServerTransport;
   lastAccess: number;
 }
@@ -79,7 +36,9 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 /**
  * Clean up expired sessions periodically
  */
-function cleanupExpiredSessions(logger: { info: (obj: unknown, msg: string) => void }): void {
+function cleanupExpiredSessions(logger: {
+  info: (obj: unknown, msg: string) => void;
+}): void {
   const now = Date.now();
   const expiredSessionIds: string[] = [];
 
@@ -95,37 +54,6 @@ function cleanupExpiredSessions(logger: { info: (obj: unknown, msg: string) => v
   }
 }
 
-// Run cleanup every 5 minutes
-setInterval(() => {
-  cleanupExpiredSessions({ info: console.log });
-}, 5 * 60 * 1000);
-
-/**
- * Get cached tools for an agent or fetch them
- */
-async function getToolsForAgent(
-  agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
-): Promise<Tool[]> {
-  const cached = agentServerFactories.get(agentId);
-  const now = Date.now();
-
-  if (cached && now - cached.lastFetch < TOOLS_CACHE_TTL) {
-    logger.info(
-      { agentId, toolCount: cached.tools.length },
-      "Using cached tools",
-    );
-    return cached.tools;
-  }
-
-  logger.info({ agentId }, "Fetching tools from database");
-  const tools = await ToolModel.getToolsByAgent(agentId);
-  logger.info({ agentId, toolCount: tools.length }, "Fetched tools for agent");
-
-  agentServerFactories.set(agentId, { tools, lastFetch: now });
-  return tools;
-}
-
 /**
  * Create a fresh MCP server for a request
  * In stateless mode, we need to create new server instances per request
@@ -133,11 +61,8 @@ async function getToolsForAgent(
 async function createAgentServer(
   agentId: string,
   logger: { info: (obj: unknown, msg: string) => void },
-): Promise<McpServer> {
-  logger.info({ agentId }, "Creating new MCP server instance");
-
-  // Create new MCP server instance for this agent
-  const server = new McpServer(
+): Promise<Server> {
+  const server = new Server(
     {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
@@ -149,192 +74,32 @@ async function createAgentServer(
     },
   );
 
-  // Get tools for this agent (from cache or database)
-  const tools = await getToolsForAgent(agentId, logger);
+  const tools = await ToolModel.getToolsByAgent(agentId);
 
-  // Deduplicate tools by name (in case there are duplicates in the database)
-  const uniqueTools = new Map<string, Tool>();
-  for (const tool of tools) {
-    if (!uniqueTools.has(tool.name)) {
-      uniqueTools.set(tool.name, tool);
-    } else {
-      logger.info({ agentId, toolName: tool.name }, "Skipping duplicate tool");
-    }
-  }
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: tools.map(({ name, description, parameters }) => ({
+      name,
+      title: name,
+      description,
+      inputSchema: parameters,
+      annotations: {},
+      _meta: {},
+    })),
+  }));
 
-  // Register all unique tool handlers
-  for (const tool of uniqueTools.values()) {
-    await registerToolHandler(server, tool, agentId, logger);
-  }
-
-  // Override both tools/list and tools/call handlers
-  // This gives us full control over argument passing without Zod schema issues
-
-  // First, remove the SDK's default handlers that were registered when we added tools
-  server.server.removeRequestHandler("tools/list");
-  server.server.removeRequestHandler("tools/call");
-
-  // Override tools/list to return our JSON schemas
-  server.server.setRequestHandler(ListToolsRequestSchema, async () => {
-    // @ts-expect-error - Accessing private property
-    const registeredTools = server._registeredTools as Record<
-      string,
-      {
-        enabled: boolean;
-        title?: string;
-        description?: string;
-        _jsonSchema?: unknown;
-        annotations?: unknown;
-        _meta?: unknown;
-      }
-    >;
-
-    const tools = Object.entries(registeredTools)
-      .filter(([, tool]) => tool.enabled)
-      .map(([name, tool]) => ({
-        name,
-        title: tool.title,
-        description: tool.description,
-        // Use our stored JSON schema instead of converting from Zod
-        inputSchema: tool._jsonSchema || {
-          type: "object",
-          properties: {},
-        },
-        annotations: tool.annotations,
-        _meta: tool._meta,
-      }));
-
-    logger.info(
-      { agentId, toolCount: tools.length },
-      "Responding to tools/list with JSON schemas",
-    );
-
-    return { tools };
-  });
-
-  // Override tools/call to pass arguments directly without Zod validation
-  server.server.setRequestHandler(
+  server.setRequestHandler(
     CallToolRequestSchema,
-    async (request: { params: { name: string; arguments?: unknown } }) => {
-      const toolName = request.params.name;
-      const args = (request.params.arguments as Record<string, unknown>) || {};
-
-      logger.info(
-        {
-          agentId,
-          toolName,
-          args,
-          argsKeys: Object.keys(args),
-          argsType: typeof args,
-          rawArguments: request.params.arguments,
-        },
-        "Custom tools/call handler - received request",
-      );
-
-      // @ts-expect-error - Accessing private property
-      const registeredTools = server._registeredTools as Record<
-        string,
-        {
-          enabled: boolean;
-          callback: (
-            args: Record<string, unknown>,
-            extra: unknown,
-          ) => Promise<CallToolResult> | CallToolResult;
-        }
-      >;
-
-      const tool = registeredTools[toolName];
-      if (!tool || !tool.enabled) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Tool '${toolName}' not found or not enabled`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Call the tool handler with the raw arguments
+    async ({ params: { name, arguments: args } }) => {
       try {
-        const result = await tool.callback(args, {});
-        return result;
-      } catch (error) {
-        logger.info(
-          {
-            agentId,
-            toolName,
-            error: error instanceof Error ? error.message : "Unknown",
-          },
-          "Custom tools/call handler - error",
-        );
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown error occurred",
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
-  );
+        // Generate a unique ID for this tool call
+        const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-  logger.info({ agentId }, "MCP server instance created");
-  return server;
-}
-
-/**
- * Register a tool handler on the MCP server
- */
-async function registerToolHandler(
-  server: McpServer,
-  tool: Tool,
-  agentId: string,
-  logger: { info: (obj: unknown, msg: string) => void },
-): Promise<void> {
-  const toolName = tool.name;
-  const toolDescription = tool.description || `Tool: ${toolName}`;
-
-  // We store JSON schemas in the database, but the SDK converts Zod schemas to JSON schemas
-  // To bypass this, we'll register the tool with a permissive Zod schema that accepts
-  // all the properties from our JSON schema, then patch the internal registry to use
-  // our JSON schema for the tools/list response
-  const inputSchema = (tool.parameters as Record<string, unknown>) || {
-    type: "object",
-    properties: {},
-  };
-
-  logger.info({ toolName, agentId, inputSchema }, "Registering tool handler");
-
-  // Register the tool with an empty schema
-  // We'll handle argument extraction in our custom tools/call handler
-  const registeredTool = server.tool(
-    toolName,
-    toolDescription,
-    {}, // Intentionally permissive: validation omitted because JSON schemas are stored in DB (see above)
-    async (
-      args: Record<string, unknown>,
-      _extra: unknown,
-    ): Promise<CallToolResult> => {
-      logger.info({ toolName, args, agentId }, "Tool handler called");
-      try {
-        // Create a CommonToolCall for McpClientService
+        // Create CommonToolCall for McpClientService
         const toolCall: CommonToolCall = {
-          id: `tool-${Date.now()}-${randomUUID()}`,
-          name: toolName,
-          arguments: args as Record<string, unknown>,
+          id: toolCallId,
+          name,
+          arguments: args || {},
         };
-
-        logger.info(
-          { toolName, toolCallId: toolCall.id, agentId },
-          "Executing tool via McpClientService",
-        );
 
         // Execute the tool call via McpClientService
         const results = await mcpClientService.executeToolCalls(
@@ -342,74 +107,23 @@ async function registerToolHandler(
           agentId,
         );
 
-        logger.info(
-          { toolName, resultsCount: results.length, agentId },
-          "McpClientService returned results",
-        );
-
         if (results.length === 0) {
-          logger.info(
-            { toolName, agentId },
-            "No results returned - tool not found or not assigned",
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Tool '${toolName}' not found or not assigned to agent`,
-              },
-            ],
-            isError: true,
+          throw {
+            code: -32603, // Internal error
+            message: `Tool '${name}' not found or not assigned to agent`,
           };
         }
 
         const result = results[0];
 
-        logger.info(
-          {
-            toolName,
-            resultIsError: result.isError,
-            resultError: result.error,
-            resultContent: result.content,
-            agentId,
-          },
-          "Received result from McpClientService",
-        );
-
         if (result.isError) {
-          logger.info(
-            { toolName, error: result.error, content: result.content, agentId },
-            "Tool execution returned error",
-          );
-          // The error message might be in result.error OR in result.content
-          // Return the content as-is if it exists, otherwise use error or fallback
-          return {
-            content: result.content
-              ? Array.isArray(result.content)
-                ? result.content
-                : [{ type: "text", text: JSON.stringify(result.content) }]
-              : [
-                  {
-                    type: "text",
-                    text: result.error || "Tool execution failed",
-                  },
-                ],
-            isError: true,
+          throw {
+            code: -32603, // Internal error
+            message: result.error || "Tool execution failed",
           };
         }
 
-        // Transform CommonToolResult to MCP CallToolResult format
-        logger.info(
-          {
-            toolName,
-            contentType: Array.isArray(result.content)
-              ? "array"
-              : typeof result.content,
-            agentId,
-          },
-          "Tool execution successful - returning result",
-        );
-
+        // Transform CommonToolResult to MCP response format
         return {
           content: Array.isArray(result.content)
             ? result.content
@@ -417,42 +131,21 @@ async function registerToolHandler(
           isError: false,
         };
       } catch (error) {
-        logger.info(
-          {
-            toolName,
-            error: error instanceof Error ? error.message : "Unknown",
-            stack: error instanceof Error ? error.stack : undefined,
-            agentId,
-          },
-          "Tool handler caught exception",
-        );
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown error occurred",
-            },
-          ],
-          isError: true,
+        if (typeof error === "object" && error !== null && "code" in error) {
+          throw error; // Re-throw JSON-RPC errors
+        }
+
+        throw {
+          code: -32603, // Internal error
+          message: "Tool execution failed",
+          data: error instanceof Error ? error.message : "Unknown error",
         };
       }
     },
   );
 
-  // Store the JSON schema in the registered tool's metadata
-  // We'll use this when responding to tools/list requests
-  // @ts-expect-error - Accessing private property to store JSON schema
-  const internalTools = server._registeredTools as Record<
-    string,
-    { _jsonSchema: unknown }
-  >;
-  if (internalTools[toolName]) {
-    internalTools[toolName]._jsonSchema = inputSchema;
-    logger.info({ toolName, agentId }, "Stored JSON schema in tool metadata");
-  }
+  logger.info({ agentId }, "MCP server instance created");
+  return server;
 }
 
 /**
@@ -471,8 +164,7 @@ function createTransport(
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => {
       const sessionId =
-        clientSessionId ||
-        `session-${Date.now()}-${randomUUID()}`;
+        clientSessionId || `session-${Date.now()}-${randomUUID()}`;
       logger.info(
         { agentId, sessionId, wasClientProvided: !!clientSessionId },
         "Using session ID",
@@ -542,7 +234,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { agentId } = request.params;
       const sessionId = request.headers["mcp-session-id"] as string | undefined;
-      const isInitialize = typeof request.body?.method === "string" && request.body.method === "initialize";
+      const isInitialize =
+        typeof request.body?.method === "string" &&
+        request.body.method === "initialize";
 
       fastify.log.info(
         {
@@ -557,7 +251,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       try {
-        let server: McpServer;
+        let server: Server;
         let transport: StreamableHTTPServerTransport;
 
         // Check if we have an existing session
@@ -569,7 +263,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             "Reusing existing session",
           );
-          const sessionData = activeSessions.get(sessionId)!;
+
+          const sessionData = activeSessions.get(sessionId);
+          if (!sessionData) {
+            throw new Error("Session data not found");
+          }
+
           transport = sessionData.transport;
           server = sessionData.server;
           // Update last access time
@@ -591,9 +290,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId,
               clientProvidedSessionId: sessionId,
               hasSessionId: !!sessionId,
-              sessionExists: sessionId
-                ? activeSessions.has(sessionId)
-                : false,
+              sessionExists: sessionId ? activeSessions.has(sessionId) : false,
               activeSessions: Array.from(activeSessions.keys()),
             },
             "Initialize request - creating NEW session",
@@ -715,5 +412,15 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Run session cleanup every 5 minutes
+ */
+setInterval(
+  () => {
+    cleanupExpiredSessions({ info: console.log });
+  },
+  5 * 60 * 1000,
+);
 
 export default mcpGatewayRoutes;

@@ -27,7 +27,6 @@ import type {
 } from "@/lib/clients/api";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
-import { formatDate } from "@/lib/utils";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
@@ -317,7 +316,7 @@ export function InternalMCPCatalog({
   }, [catalogItems, catalogSearchQuery, installedServers]);
 
   // Find installed servers that don't have matching catalog items
-  const orphanedServers = useMemo(() => {
+  const _orphanedServers = useMemo(() => {
     if (!installedServers) return [];
 
     const catalogIds = new Set(catalogItems?.map((item) => item.id) || []);

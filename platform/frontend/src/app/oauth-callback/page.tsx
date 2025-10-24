@@ -18,10 +18,10 @@ import { useInstallMcpServer } from "@/lib/mcp-server.query";
 export default function OAuthCallbackPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [status, setStatus] = useState<
+  const [status, _setStatus] = useState<
     "waiting" | "processing" | "success" | "error"
   >("waiting");
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorMessage, _setErrorMessage] = useState<string>("");
   const [hasProcessed, setHasProcessed] = useState(false);
   const installMutation = useInstallMcpServer();
 
@@ -100,7 +100,13 @@ export default function OAuthCallbackPage() {
 
     handleOAuthCallback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [
+    searchParams,
+    hasProcessed,
+    installMutation.mutateAsync, // The mutation's onError handler will show the error toast
+    // Redirect back to catalog
+    router.push,
+  ]);
 
   return (
     <div className="container mx-auto p-6 max-w-2xl">

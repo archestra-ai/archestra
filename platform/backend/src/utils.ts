@@ -21,7 +21,7 @@ export function prepareErrorResponse(
  */
 export async function getUserFromRequest(
   request: FastifyRequest,
-): Promise<{ id: string; isAdmin: boolean } | null> {
+): Promise<{ id: string; isAdmin: boolean; organizationId: string } | null> {
   const session = await auth.api.getSession({
     headers: new Headers(request.headers as HeadersInit),
     query: { disableCookieCache: true },
@@ -34,5 +34,6 @@ export async function getUserFromRequest(
   return {
     id: session.user.id,
     isAdmin: session.user.role === "admin",
+    organizationId: session.session.activeOrganizationId,
   };
 }

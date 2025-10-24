@@ -125,6 +125,16 @@ export const RouteId = {
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
 
+  // Team Routes
+  GetTeams: "getTeams",
+  CreateTeam: "createTeam",
+  GetTeam: "getTeam",
+  UpdateTeam: "updateTeam",
+  DeleteTeam: "deleteTeam",
+  GetTeamMembers: "getTeamMembers",
+  AddTeamMember: "addTeamMember",
+  RemoveTeamMember: "removeTeamMember",
+
   // Tool Routes
   GetTools: "getTools",
   GetUnassignedTools: "getUnassignedTools",

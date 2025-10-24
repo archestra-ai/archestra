@@ -128,9 +128,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       resolvedAgentId = agentId;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
-        headers["user-agent"],
-      );
+      resolvedAgentId = await utils.getAgentIdFromRequest();
     }
 
     const { "x-api-key": anthropicApiKey } = headers;

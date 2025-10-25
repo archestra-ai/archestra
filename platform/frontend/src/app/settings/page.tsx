@@ -1,6 +1,5 @@
 "use client";
 
-import { DEFAULT_AGENT_NAME } from "@shared";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -160,8 +159,8 @@ export default function SettingsPage() {
             <br />
             <br />
             Below are instructions for how to connect to Archestra using a
-            default agent (named <b>{DEFAULT_AGENT_NAME}</b>). If you'd like to
-            configure a specific agent, you can do so in the{" "}
+            default agent. If you'd like to configure a specific agent, you can
+            do so in the{" "}
             <Link href="/agents" className="text-blue-500">
               Agents
             </Link>{" "}

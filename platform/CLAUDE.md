@@ -44,6 +44,20 @@ tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 ```
 
+## Terraform Provider
+
+```bash
+# Build and test (from platform/terraform/)
+make build
+make test
+
+# Example usage
+export TF_VAR_archestra_api_key="your-api-key"
+terraform init
+terraform plan
+terraform apply
+```
+
 ## Environment Variables
 
 ```bash
@@ -72,6 +86,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - `frontend/` - Next.js app with tool management UI
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
+- `terraform/` - Terraform provider for managing Archestra resources
 
 ## Coding Conventions
 

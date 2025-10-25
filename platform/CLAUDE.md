@@ -28,12 +28,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Development
-tilt up              # Start full development environment
-pnpm dev             # Start all workspaces
-pnpm lint            # Lint and auto-fix
-pnpm type-check      # Check TypeScript types
-pnpm test            # Run tests
-pnpm test:e2e        # Run e2e tests with Playwright (includes WireMock)
+tilt up                                 # Start full development environment
+pnpm dev                                # Start all workspaces
+pnpm lint                               # Lint and auto-fix
+pnpm type-check                         # Check TypeScript types
+pnpm test                               # Run tests
+pnpm test:e2e -- --reporter=line        # Run e2e tests with Playwright (includes WireMock)
 
 # Database
 pnpm db:migrate      # Run database migrations
@@ -92,6 +92,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Only export public APIs
 
 **Team-based Access Control**:
+
 - Agents and MCP servers use team-based authorization (not user-based)
 - Teams managed via better-auth organization plugin
 - Junction tables: `agent_team` and `mcp_server_team`

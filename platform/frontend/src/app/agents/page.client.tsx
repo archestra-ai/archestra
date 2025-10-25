@@ -562,10 +562,10 @@ function CreateAgentDialog({
                 How to connect "{createdAgent.name}" to Archestra
               </DialogTitle>
             </DialogHeader>
-            <div className="py-4">
+            <div className="overflow-y-auto py-4 flex-1">
               <AgentConnectionTabs agentId={createdAgent.id} />
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <Button
                 type="button"
                 onClick={handleClose}

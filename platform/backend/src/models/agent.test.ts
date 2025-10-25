@@ -1,4 +1,8 @@
-import { createTestAdmin, createTestUser } from "@/test-utils";
+import {
+  createTestAdmin,
+  createTestOrganization,
+  createTestUser,
+} from "@/test-utils";
 import AgentModel from "./agent";
 import TeamModel from "./team";
 
@@ -13,9 +17,10 @@ describe("AgentModel", () => {
   describe("Access Control", () => {
     test("can create agent with team assignments", async () => {
       const userId = await createTestUser();
+      const orgId = await createTestOrganization();
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: userId,
       });
 
@@ -43,16 +48,17 @@ describe("AgentModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       // Create two teams
       const team1 = await TeamModel.create({
         name: "Team 1",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
       const team2 = await TeamModel.create({
         name: "Team 2",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
 
@@ -84,10 +90,11 @@ describe("AgentModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
       await TeamModel.addMember(team.id, user1Id);
@@ -118,10 +125,11 @@ describe("AgentModel", () => {
     test("findById returns agent for user in assigned team", async () => {
       const user1Id = await createTestUser();
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
       await TeamModel.addMember(team.id, user1Id);
@@ -140,10 +148,11 @@ describe("AgentModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
       await TeamModel.addMember(team.id, user1Id);
@@ -159,15 +168,16 @@ describe("AgentModel", () => {
 
     test("update syncs team assignments correctly", async () => {
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team1 = await TeamModel.create({
         name: "Team 1",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
       const team2 = await TeamModel.create({
         name: "Team 2",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
 
@@ -191,10 +201,11 @@ describe("AgentModel", () => {
 
     test("update without teams keeps existing assignments", async () => {
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
 
@@ -216,10 +227,11 @@ describe("AgentModel", () => {
 
     test("teams is always populated in responses", async () => {
       const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
       const team = await TeamModel.create({
         name: "Test Team",
-        organizationId: "test-org",
+        organizationId: orgId,
         createdBy: adminId,
       });
 

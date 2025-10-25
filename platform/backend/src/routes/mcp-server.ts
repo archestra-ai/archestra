@@ -8,6 +8,7 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -19,13 +20,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         response: {
           200: z.array(SelectMcpServerSchema),
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
-        return reply.send(await McpServerModel.findAll());
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        return reply.send(await McpServerModel.findAll(user.id, user.isAdmin));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -51,6 +64,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectMcpServerSchema,
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -58,7 +72,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const server = await McpServerModel.findById(request.params.id);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const server = await McpServerModel.findById(
+          request.params.id,
+          user.id,
+          user.isAdmin,
+        );
 
         if (!server) {
           return reply.status(404).send({

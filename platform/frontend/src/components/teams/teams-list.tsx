@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
-import { createTeam, deleteTeam, getTeams } from "@/lib/clients/api/sdk.gen";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,28 +23,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import {
+  createTeam,
+  deleteTeam,
+  type GetTeamsResponses,
+  getTeams,
+} from "@/lib/clients/api";
 import { TeamMembersDialog } from "./team-members-dialog";
 
-interface Team {
-  id: string;
-  name: string;
-  description: string | null;
-  organizationId: string;
-  createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-  members?: Array<{
-    id: string;
-    teamId: string;
-    userId: string;
-    role: string;
-    createdAt: Date;
-  }>;
-}
+type Team = GetTeamsResponses["200"][number];
 
 export function TeamsList() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -59,8 +48,8 @@ export function TeamsList() {
   const { data: teams, isLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const response = await getTeams();
-      return response.data as Team[];
+      const { data } = await getTeams();
+      return data;
     },
   });
 
@@ -75,17 +64,10 @@ export function TeamsList() {
       setCreateDialogOpen(false);
       setTeamName("");
       setTeamDescription("");
-      toast({
-        title: "Team created",
-        description: "The team has been created successfully.",
-      });
+      toast.success("Team created successfully");
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create team",
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to create team");
     },
   });
 
@@ -99,27 +81,16 @@ export function TeamsList() {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setDeleteDialogOpen(false);
       setTeamToDelete(null);
-      toast({
-        title: "Team deleted",
-        description: "The team has been deleted successfully.",
-      });
+      toast.success("Team deleted successfully");
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete team",
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to delete team");
     },
   });
 
   const handleCreateTeam = () => {
     if (!teamName.trim()) {
-      toast({
-        title: "Validation error",
-        description: "Team name is required",
-        variant: "destructive",
-      });
+      toast.error("Team name is required");
       return;
     }
 
@@ -220,9 +191,8 @@ export function TeamsList() {
         </CardContent>
       </Card>
 
-      {/* Create Team Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Create New Team</DialogTitle>
             <DialogDescription>
@@ -266,14 +236,13 @@ export function TeamsList() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Delete Team</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{teamToDelete?.name}"? This action
-              cannot be undone.
+              Are you sure you want to delete "{teamToDelete?.name}"? This
+              action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -294,7 +263,6 @@ export function TeamsList() {
         </DialogContent>
       </Dialog>
 
-      {/* Team Members Dialog */}
       {selectedTeam && (
         <TeamMembersDialog
           open={membersDialogOpen}

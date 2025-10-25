@@ -1,10 +1,13 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Search, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { GetMcpServersResponses } from "@/lib/clients/api";
+import { getTeams } from "@/lib/clients/api/sdk.gen";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 export function InstalledMCP({
@@ -13,6 +16,13 @@ export function InstalledMCP({
   initialData?: GetMcpServersResponses["200"];
 }) {
   const { data: servers } = useMcpServers({ initialData });
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await getTeams();
+      return data;
+    },
+  });
   const deleteMutation = useDeleteMcpServer();
   const [serverSearchQuery, setServerSearchQuery] = useState("");
 
@@ -55,6 +65,25 @@ export function InstalledMCP({
               <p className="text-sm text-muted-foreground">
                 Installed: {new Date(server.createdAt).toLocaleDateString()}
               </p>
+              {server.teams && server.teams.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground mb-1">Teams:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {server.teams.map((teamId) => {
+                      const team = teams?.find((t) => t.id === teamId);
+                      return (
+                        <Badge
+                          key={teamId}
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          {team?.name || teamId}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             <Button
               onClick={() => handleDelete(server)}

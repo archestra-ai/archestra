@@ -3,12 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import {
-  addTeamMember,
-  getTeamMembers,
-  removeTeamMember,
-} from "@/lib/clients/api/sdk.gen";
-import { useActiveOrganization } from "@/lib/organization.query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,15 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-
-interface TeamMember {
-  id: string;
-  teamId: string;
-  userId: string;
-  role: string;
-  createdAt: Date;
-}
+import {
+  addTeamMember,
+  getTeamMembers,
+  removeTeamMember,
+} from "@/lib/clients/api/sdk.gen";
+import { useActiveOrganization } from "@/lib/organization.query";
 
 interface Team {
   id: string;
@@ -53,7 +45,6 @@ export function TeamMembersDialog({
   onOpenChange,
   team,
 }: TeamMembersDialogProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -61,10 +52,10 @@ export function TeamMembersDialog({
   const { data: teamMembers } = useQuery({
     queryKey: ["teamMembers", team.id],
     queryFn: async () => {
-      const response = await getTeamMembers({
+      const { data } = await getTeamMembers({
         path: { id: team.id },
       });
-      return response.data as TeamMember[];
+      return data;
     },
     enabled: open,
   });
@@ -90,17 +81,10 @@ export function TeamMembersDialog({
       queryClient.invalidateQueries({ queryKey: ["teamMembers", team.id] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setSelectedUserId("");
-      toast({
-        title: "Member added",
-        description: "The member has been added to the team successfully.",
-      });
+      toast.success("Member added to team successfully");
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add member",
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to add member");
     },
   });
 
@@ -113,17 +97,10 @@ export function TeamMembersDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teamMembers", team.id] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
-      toast({
-        title: "Member removed",
-        description: "The member has been removed from the team successfully.",
-      });
+      toast.success("Member removed from team successfully");
     },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to remove member",
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to remove member");
     },
   });
 
@@ -144,19 +121,21 @@ export function TeamMembersDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Add Member Section */}
           {availableMembers.length > 0 && (
             <div className="space-y-2">
               <Label>Add Member</Label>
               <div className="flex gap-2">
-                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <Select
+                  value={selectedUserId}
+                  onValueChange={setSelectedUserId}
+                >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select a member" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableMembers.map((member) => (
                       <SelectItem key={member.id} value={member.userId}>
-                        {member.email || member.userId}
+                        {member.user.email || member.userId}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -171,7 +150,6 @@ export function TeamMembersDialog({
             </div>
           )}
 
-          {/* Current Members List */}
           <div className="space-y-2">
             <Label>Current Members ({teamMembers?.length || 0})</Label>
             {!teamMembers || teamMembers.length === 0 ? (
@@ -193,7 +171,7 @@ export function TeamMembersDialog({
                     >
                       <div>
                         <p className="text-sm font-medium">
-                          {orgMember?.email || member.userId}
+                          {orgMember?.user.email || member.userId}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Role: {member.role}

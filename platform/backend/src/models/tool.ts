@@ -143,8 +143,10 @@ class ToolModel {
      * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
      */
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 

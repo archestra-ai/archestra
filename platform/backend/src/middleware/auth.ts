@@ -217,6 +217,30 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.GetTeams]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeam]: {
+    team: ["read"],
+  },
+  [RouteId.CreateTeam]: {
+    team: ["create"],
+  },
+  [RouteId.UpdateTeam]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeam]: {
+    team: ["delete"],
+  },
+  [RouteId.GetTeamMembers]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamMember]: {
+    team: ["update"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

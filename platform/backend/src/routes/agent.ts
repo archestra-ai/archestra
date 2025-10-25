@@ -128,7 +128,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(await AgentModel.create(request.body, user.id));
+        return reply.send(await AgentModel.create(request.body));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

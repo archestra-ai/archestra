@@ -30,7 +30,10 @@ class McpServerModel {
     };
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean): Promise<McpServer[]> {
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<McpServer[]> {
     let query = db.select().from(schema.mcpServersTable).$dynamic();
 
     // Apply access control filtering for non-admins
@@ -50,11 +53,14 @@ class McpServerModel {
     const servers = await query;
 
     // Populate teams for each MCP server
-    for (const server of servers) {
-      server.teams = await McpServerTeamModel.getTeamsForMcpServer(server.id);
-    }
+    const serversWithTeams: McpServer[] = await Promise.all(
+      servers.map(async (server) => ({
+        ...server,
+        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
+      })),
+    );
 
-    return servers;
+    return serversWithTeams;
   }
 
   static async findById(

@@ -3,4 +3,3 @@ packages:
   - "frontend"
   - "shared"
   - "e2e-tests"
-  - "terraform"

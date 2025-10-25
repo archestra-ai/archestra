@@ -71,7 +71,7 @@ class TeamModel {
     // Fetch members for each team
     const teamsWithMembers = await Promise.all(
       teams.map(async (team) => {
-        const members = await this.getTeamMembers(team.id);
+        const members = await TeamModel.getTeamMembers(team.id);
         return { ...team, members };
       }),
     );
@@ -93,7 +93,7 @@ class TeamModel {
       return null;
     }
 
-    const members = await this.getTeamMembers(id);
+    const members = await TeamModel.getTeamMembers(id);
 
     return { ...team, members };
   }
@@ -118,7 +118,7 @@ class TeamModel {
       return null;
     }
 
-    const members = await this.getTeamMembers(id);
+    const members = await TeamModel.getTeamMembers(id);
 
     return { ...updatedTeam, members };
   }
@@ -195,7 +195,7 @@ class TeamModel {
 
     const teams = await Promise.all(
       teamMemberships.map(async (membership) => {
-        return this.findById(membership.teamId);
+        return TeamModel.findById(membership.teamId);
       }),
     );
 

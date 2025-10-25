@@ -144,8 +144,10 @@ class AgentToolModel {
 
     // Apply access control filtering for non-admins if needed
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return [];

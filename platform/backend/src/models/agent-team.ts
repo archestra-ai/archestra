@@ -11,7 +11,9 @@ class AgentTeamModel {
   ): Promise<string[]> {
     // Admins have access to all agents
     if (isAdmin) {
-      const allAgents = await db.select({ id: schema.agentsTable.id }).from(schema.agentsTable);
+      const allAgents = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable);
       return allAgents.map((agent) => agent.id);
     }
 

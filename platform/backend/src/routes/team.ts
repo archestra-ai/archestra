@@ -236,7 +236,10 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Verify the team exists and belongs to the user's organization
         const existingTeam = await TeamModel.findById(request.params.id);
-        if (!existingTeam || existingTeam.organizationId !== user.organizationId) {
+        if (
+          !existingTeam ||
+          existingTeam.organizationId !== user.organizationId
+        ) {
           return reply.status(404).send({
             error: {
               message: "Team not found",
@@ -316,7 +319,10 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Verify the team exists and belongs to the user's organization
         const existingTeam = await TeamModel.findById(request.params.id);
-        if (!existingTeam || existingTeam.organizationId !== user.organizationId) {
+        if (
+          !existingTeam ||
+          existingTeam.organizationId !== user.organizationId
+        ) {
           return reply.status(404).send({
             error: {
               message: "Team not found",

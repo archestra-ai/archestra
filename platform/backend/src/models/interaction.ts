@@ -34,8 +34,10 @@ class InteractionModel {
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -65,8 +67,10 @@ class InteractionModel {
     // Build where clause for access control
     let whereClause: SQL | undefined;
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);

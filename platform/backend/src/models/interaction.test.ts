@@ -9,7 +9,7 @@ describe("InteractionModel", () => {
     // Create test agent
     const agent = await AgentModel.create({
       name: "Test Agent",
-      usersWithAccess: [],
+      teams: [],
     });
     agentId = agent.id;
   });
@@ -159,7 +159,7 @@ describe("InteractionModel", () => {
       // Create another agent
       const otherAgent = await AgentModel.create({
         name: "Other Agent",
-        usersWithAccess: [],
+        teams: [],
       });
 
       // Create interactions for both agents
@@ -230,14 +230,14 @@ describe("InteractionModel", () => {
       const user2Id = await createTestUser();
       const adminId = await createTestAdmin();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
-      const agent2 = await AgentModel.create(
-        { name: "Agent 2", usersWithAccess: [] },
-        user2Id,
-      );
+      const agent1 = await AgentModel.create({
+        name: "Agent 1",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Agent 2",
+        teams: [],
+      });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -273,14 +273,14 @@ describe("InteractionModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
-      const agent2 = await AgentModel.create(
-        { name: "Agent 2", usersWithAccess: [] },
-        user2Id,
-      );
+      const agent1 = await AgentModel.create({
+        name: "Agent 1",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Agent 2",
+        teams: [],
+      });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -317,10 +317,7 @@ describe("InteractionModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -343,10 +340,7 @@ describe("InteractionModel", () => {
       const user1Id = await createTestUser();
       const adminId = await createTestAdmin();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,
@@ -373,10 +367,7 @@ describe("InteractionModel", () => {
     test("findById returns interaction for user with agent access", async () => {
       const user1Id = await createTestUser();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,
@@ -404,10 +395,7 @@ describe("InteractionModel", () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,

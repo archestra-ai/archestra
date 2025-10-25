@@ -1,7 +1,7 @@
 import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentTool, InsertAgentTool, UpdateAgentTool } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 
 class AgentToolModel {
   static async create(
@@ -145,7 +145,7 @@ class AgentToolModel {
     // Apply access control filtering for non-admins if needed
     if (userId && !isAdmin) {
       const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
 
       if (accessibleAgentIds.length === 0) {
         return [];

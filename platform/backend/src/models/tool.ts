@@ -11,7 +11,7 @@ import {
 
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
 const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
@@ -89,7 +89,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,
@@ -144,7 +144,7 @@ class ToolModel {
      */
     if (userId && !isAdmin) {
       const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId);
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
@@ -179,7 +179,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,

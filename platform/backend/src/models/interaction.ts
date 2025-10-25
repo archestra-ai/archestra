@@ -10,7 +10,7 @@ import type {
   PaginationQuery,
   SortingQuery,
 } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 
 class InteractionModel {
   static async create(data: InsertInteraction) {
@@ -35,7 +35,7 @@ class InteractionModel {
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
       const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -66,7 +66,7 @@ class InteractionModel {
     let whereClause: SQL | undefined;
     if (userId && !isAdmin) {
       const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
 
       if (accessibleAgentIds.length === 0) {
         return createPaginatedResult([], 0, pagination);
@@ -138,7 +138,7 @@ class InteractionModel {
 
     // Check access control for non-admins
     if (userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         interaction.agentId,
         false,

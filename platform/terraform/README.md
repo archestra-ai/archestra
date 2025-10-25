@@ -38,6 +38,8 @@ provider "archestra" {
 
 - `archestra_team` - Retrieves team information
 - `archestra_user` - Retrieves user information
+- `archestra_agent_tool` - Retrieves agent tool information by agent ID and tool name
+- `archestra_mcp_server_tool` - Retrieves MCP server tool information by MCP server ID and tool name
 
 ## Development
 

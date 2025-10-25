@@ -404,3 +404,106 @@ func (c *Client) DeleteToolInvocationPolicy(ctx context.Context, id string) erro
 	_, err := c.doRequest(ctx, http.MethodDelete, fmt.Sprintf("/api/autonomy-policies/tool-invocation/%s", id), nil)
 	return err
 }
+
+// Tool methods
+
+// ListToolsByMCPServer fetches tools for a specific MCP server
+func (c *Client) ListToolsByMCPServer(ctx context.Context, mcpServerID string) ([]Tool, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/mcp-servers/%s/tools", mcpServerID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var tools []Tool
+	if err := decodeResponse(resp, &tools); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return tools, nil
+}
+
+// GetToolByMCPServerAndName fetches a specific tool by MCP server ID and tool name
+func (c *Client) GetToolByMCPServerAndName(ctx context.Context, mcpServerID, toolName string) (*Tool, error) {
+	tools, err := c.ListToolsByMCPServer(ctx, mcpServerID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, tool := range tools {
+		if tool.Name == toolName {
+			return &tool, nil
+		}
+	}
+
+	return nil, fmt.Errorf("tool %s not found in MCP server %s", toolName, mcpServerID)
+}
+
+// AgentTool methods
+
+// ListAgentTools fetches agent tools for a specific agent
+func (c *Client) ListAgentTools(ctx context.Context, agentID string) ([]AgentTool, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/agents/%s/tools", agentID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var agentTools []AgentTool
+	if err := decodeResponse(resp, &agentTools); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return agentTools, nil
+}
+
+// GetAgentTool fetches a specific agent tool by ID
+func (c *Client) GetAgentTool(ctx context.Context, agentToolID string) (*AgentTool, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/agent-tools/%s", agentToolID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var agentTool AgentTool
+	if err := decodeResponse(resp, &agentTool); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &agentTool, nil
+}
+
+// GetAgentToolByAgentAndToolName fetches a specific agent tool by agent ID and tool name
+func (c *Client) GetAgentToolByAgentAndToolName(ctx context.Context, agentID, toolName string) (*AgentTool, error) {
+	agentTools, err := c.ListAgentTools(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need to also fetch the tool details to match by name
+	for _, agentTool := range agentTools {
+		// Fetch the tool to get its name
+		tool, err := c.GetTool(ctx, agentTool.ToolID)
+		if err != nil {
+			continue // Skip if we can't fetch the tool
+		}
+
+		if tool.Name == toolName {
+			return &agentTool, nil
+		}
+	}
+
+	return nil, fmt.Errorf("agent tool with tool name %s not found for agent %s", toolName, agentID)
+}
+
+// GetTool fetches a specific tool by ID
+func (c *Client) GetTool(ctx context.Context, toolID string) (*Tool, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/tools/%s", toolID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var tool Tool
+	if err := decodeResponse(resp, &tool); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tool, nil
+}

@@ -83,6 +83,30 @@ type User struct {
 	UpdatedAt     time.Time  `json:"updated_at,omitempty"`
 }
 
+// Tool represents a tool (from either MCP server or agent proxy)
+type Tool struct {
+	ID          string                 `json:"id,omitempty"`
+	AgentID     *string                `json:"agent_id,omitempty"`
+	MCPServerID *string                `json:"mcp_server_id,omitempty"`
+	Name        string                 `json:"name"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+	Description *string                `json:"description,omitempty"`
+	CreatedAt   time.Time              `json:"created_at,omitempty"`
+	UpdatedAt   time.Time              `json:"updated_at,omitempty"`
+}
+
+// AgentTool represents the agent-tool association with configuration
+type AgentTool struct {
+	ID                                  string    `json:"id,omitempty"`
+	AgentID                             string    `json:"agent_id"`
+	ToolID                              string    `json:"tool_id"`
+	AllowUsageWhenUntrustedDataIsPresent bool      `json:"allow_usage_when_untrusted_data_is_present"`
+	ToolResultTreatment                 string    `json:"tool_result_treatment"`
+	ResponseModifierTemplate            *string   `json:"response_modifier_template,omitempty"`
+	CreatedAt                           time.Time `json:"created_at,omitempty"`
+	UpdatedAt                           time.Time `json:"updated_at,omitempty"`
+}
+
 // ListResponse represents a paginated list response
 type ListResponse[T any] struct {
 	Data       []T `json:"data"`

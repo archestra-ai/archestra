@@ -143,8 +143,7 @@ class AgentModel {
   static async getAgentOrCreateDefault(
     name: string | undefined,
   ): Promise<Agent> {
-    const agentName = name || DEFAULT_AGENT_NAME;
-
+    // First, try to find an agent with isDefault=true
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -152,23 +151,32 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
       )
-      .where(eq(schema.agentsTable.name, agentName));
+      .where(eq(schema.agentsTable.isDefault, true));
 
-    if (rows.length === 0) {
-      return AgentModel.create({ name: agentName, usersWithAccess: [] });
+    if (rows.length > 0) {
+      // Default agent exists, return it
+      const agent = rows[0].agents;
+      const tools = rows
+        .map((row) => row.tools)
+        .filter((tool) => tool !== null);
+
+      const usersWithAccess =
+        await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
+
+      return {
+        ...agent,
+        tools,
+        usersWithAccess,
+      };
     }
 
-    const agent = rows[0].agents;
-    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
-
-    const usersWithAccess =
-      await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
-
-    return {
-      ...agent,
-      tools,
-      usersWithAccess,
-    };
+    // No default agent exists, create one
+    const agentName = name || DEFAULT_AGENT_NAME;
+    return AgentModel.create({
+      name: agentName,
+      isDefault: true,
+      usersWithAccess: [],
+    });
   }
 
   static async update(
@@ -176,6 +184,14 @@ class AgentModel {
     { usersWithAccess, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
     let updatedAgent: Omit<Agent, "tools" | "usersWithAccess"> | undefined;
+
+    // If setting isDefault to true, unset all other agents' isDefault first
+    if (agent.isDefault === true) {
+      await db
+        .update(schema.agentsTable)
+        .set({ isDefault: false })
+        .where(eq(schema.agentsTable.isDefault, true));
+    }
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {

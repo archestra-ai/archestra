@@ -2115,6 +2115,7 @@ export type GetAgentsResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2151,6 +2152,7 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
+        isDefault?: boolean;
         usersWithAccess: Array<string>;
     };
     path?: never;
@@ -2189,6 +2191,7 @@ export type CreateAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2259,6 +2262,7 @@ export type GetDefaultAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2383,6 +2387,7 @@ export type GetAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2419,6 +2424,7 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
+        isDefault?: boolean;
         usersWithAccess?: Array<string>;
     };
     path: {
@@ -2459,6 +2465,7 @@ export type UpdateAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{

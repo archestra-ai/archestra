@@ -217,7 +217,17 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                   {agents.map((agent) => (
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">
-                        {agent.name}
+                        <div className="flex items-center gap-2">
+                          {agent.name}
+                          {agent.isDefault && (
+                            <Badge
+                              variant="outline"
+                              className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
+                            >
+                              DEFAULT
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {new Date(agent.createdAt).toLocaleDateString("en-US", {

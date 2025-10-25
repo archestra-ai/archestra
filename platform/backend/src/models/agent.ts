@@ -156,7 +156,9 @@ class AgentModel {
     if (rows.length > 0) {
       // Default agent exists, return it
       const agent = rows[0].agents;
-      const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
+      const tools = rows
+        .map((row) => row.tools)
+        .filter((tool) => tool !== null);
 
       const usersWithAccess =
         await AgentAccessControlModel.getUsersWithAccessToAgent(agent.id);
@@ -173,7 +175,7 @@ class AgentModel {
     return AgentModel.create({
       name: agentName,
       isDefault: true,
-      usersWithAccess: []
+      usersWithAccess: [],
     });
   }
 

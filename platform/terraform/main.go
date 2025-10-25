@@ -9,9 +9,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
 
+// Generate the API client from OpenAPI spec using oapi-codegen:
+//
+//go:generate go tool oapi-codegen -config oapi-config.yaml ../shared/openapi.json
+
 // Generate the Terraform provider documentation using tfplugindocs:
 //
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
+//go:generate go tool tfplugindocs
 
 var (
 	// these will be set by the goreleaser configuration

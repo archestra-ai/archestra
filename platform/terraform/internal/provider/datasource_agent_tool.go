@@ -21,13 +21,13 @@ type AgentToolDataSource struct {
 }
 
 type AgentToolDataSourceModel struct {
-	ID                                  types.String `tfsdk:"id"`
-	AgentID                             types.String `tfsdk:"agent_id"`
-	ToolID                              types.String `tfsdk:"tool_id"`
-	ToolName                            types.String `tfsdk:"tool_name"`
+	ID                                   types.String `tfsdk:"id"`
+	AgentID                              types.String `tfsdk:"agent_id"`
+	ToolID                               types.String `tfsdk:"tool_id"`
+	ToolName                             types.String `tfsdk:"tool_name"`
 	AllowUsageWhenUntrustedDataIsPresent types.Bool   `tfsdk:"allow_usage_when_untrusted_data_is_present"`
-	ToolResultTreatment                 types.String `tfsdk:"tool_result_treatment"`
-	ResponseModifierTemplate            types.String `tfsdk:"response_modifier_template"`
+	ToolResultTreatment                  types.String `tfsdk:"tool_result_treatment"`
+	ResponseModifierTemplate             types.String `tfsdk:"response_modifier_template"`
 }
 
 func (d *AgentToolDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {

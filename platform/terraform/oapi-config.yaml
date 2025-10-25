@@ -3,6 +3,7 @@
 # https://github.com/oapi-codegen/oapi-codegen
 package: client
 generate:
+  models: true
   client: true
 output: internal/client/archestra_client.go
 
@@ -10,6 +11,15 @@ output-options:
   # Exclude routes with wildcard paths incompatible with oapi-codegen
   # These routes use fastify wildcards (*) or HTTP proxy patterns
   exclude-tags:
-    - llm-proxy     # OpenAI & Anthropic proxy routes
-    - auth          # better-auth wildcard routes
+    - llm-proxy     # LLM proxy routes
+    - auth          # auth wildcard routes
     - mcp-gateway   # MCP gateway routes
+    - Interaction   # Interaction routes
+    - Health        # Health routes
+  exclude-schemas:
+    - OpenAiChatCompletionRequest
+    - OpenAiChatCompletionResponse
+    - GeminiGenerateContentRequest
+    - GeminiGenerateContentResponse
+    - AnthropicMessagesRequest
+    - AnthropicMessagesResponse

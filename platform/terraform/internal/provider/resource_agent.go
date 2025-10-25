@@ -107,8 +107,8 @@ func (r *AgentResource) Create(ctx context.Context, req resource.CreateRequest, 
 		IsDefault *bool    `json:"isDefault,omitempty"`
 		Teams     []string `json:"teams"`
 	}{
-		Name:      data.Name.ValueString(),
-		Teams:     []string{}, // Empty teams array (required by API)
+		Name:  data.Name.ValueString(),
+		Teams: []string{}, // Empty teams array (required by API)
 	}
 
 	// Set optional fields if provided

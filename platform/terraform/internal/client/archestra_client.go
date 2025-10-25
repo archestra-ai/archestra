@@ -18,6 +18,386 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for UpdateAgentToolJSONBodyToolResultTreatment.
+const (
+	UpdateAgentToolJSONBodyToolResultTreatmentSanitizeWithDualLlm UpdateAgentToolJSONBodyToolResultTreatment = "sanitize_with_dual_llm"
+	UpdateAgentToolJSONBodyToolResultTreatmentTrusted             UpdateAgentToolJSONBodyToolResultTreatment = "trusted"
+	UpdateAgentToolJSONBodyToolResultTreatmentUntrusted           UpdateAgentToolJSONBodyToolResultTreatment = "untrusted"
+)
+
+// Defines values for CreateToolInvocationPolicyJSONBodyAction.
+const (
+	CreateToolInvocationPolicyJSONBodyActionAllowWhenContextIsUntrusted CreateToolInvocationPolicyJSONBodyAction = "allow_when_context_is_untrusted"
+	CreateToolInvocationPolicyJSONBodyActionBlockAlways                 CreateToolInvocationPolicyJSONBodyAction = "block_always"
+)
+
+// Defines values for CreateToolInvocationPolicyJSONBodyOperator.
+const (
+	CreateToolInvocationPolicyJSONBodyOperatorContains    CreateToolInvocationPolicyJSONBodyOperator = "contains"
+	CreateToolInvocationPolicyJSONBodyOperatorEndsWith    CreateToolInvocationPolicyJSONBodyOperator = "endsWith"
+	CreateToolInvocationPolicyJSONBodyOperatorEqual       CreateToolInvocationPolicyJSONBodyOperator = "equal"
+	CreateToolInvocationPolicyJSONBodyOperatorNotContains CreateToolInvocationPolicyJSONBodyOperator = "notContains"
+	CreateToolInvocationPolicyJSONBodyOperatorNotEqual    CreateToolInvocationPolicyJSONBodyOperator = "notEqual"
+	CreateToolInvocationPolicyJSONBodyOperatorRegex       CreateToolInvocationPolicyJSONBodyOperator = "regex"
+	CreateToolInvocationPolicyJSONBodyOperatorStartsWith  CreateToolInvocationPolicyJSONBodyOperator = "startsWith"
+)
+
+// Defines values for UpdateToolInvocationPolicyJSONBodyAction.
+const (
+	UpdateToolInvocationPolicyJSONBodyActionAllowWhenContextIsUntrusted UpdateToolInvocationPolicyJSONBodyAction = "allow_when_context_is_untrusted"
+	UpdateToolInvocationPolicyJSONBodyActionBlockAlways                 UpdateToolInvocationPolicyJSONBodyAction = "block_always"
+)
+
+// Defines values for UpdateToolInvocationPolicyJSONBodyOperator.
+const (
+	UpdateToolInvocationPolicyJSONBodyOperatorContains    UpdateToolInvocationPolicyJSONBodyOperator = "contains"
+	UpdateToolInvocationPolicyJSONBodyOperatorEndsWith    UpdateToolInvocationPolicyJSONBodyOperator = "endsWith"
+	UpdateToolInvocationPolicyJSONBodyOperatorEqual       UpdateToolInvocationPolicyJSONBodyOperator = "equal"
+	UpdateToolInvocationPolicyJSONBodyOperatorNotContains UpdateToolInvocationPolicyJSONBodyOperator = "notContains"
+	UpdateToolInvocationPolicyJSONBodyOperatorNotEqual    UpdateToolInvocationPolicyJSONBodyOperator = "notEqual"
+	UpdateToolInvocationPolicyJSONBodyOperatorRegex       UpdateToolInvocationPolicyJSONBodyOperator = "regex"
+	UpdateToolInvocationPolicyJSONBodyOperatorStartsWith  UpdateToolInvocationPolicyJSONBodyOperator = "startsWith"
+)
+
+// Defines values for CreateInternalMcpCatalogItemJSONBodyAuthFields03.
+const (
+	CreateInternalMcpCatalogItemJSONBodyAuthFields03LessThannil CreateInternalMcpCatalogItemJSONBodyAuthFields03 = "<nil>"
+)
+
+// Defines values for UpdateInternalMcpCatalogItemJSONBodyAuthFields03.
+const (
+	UpdateInternalMcpCatalogItemJSONBodyAuthFields03LessThannil UpdateInternalMcpCatalogItemJSONBodyAuthFields03 = "<nil>"
+)
+
+// Defines values for InstallMcpServerJSONBodyMetadata03.
+const (
+	LessThannil InstallMcpServerJSONBodyMetadata03 = "<nil>"
+)
+
+// Defines values for CreateTrustedDataPolicyJSONBodyAction.
+const (
+	CreateTrustedDataPolicyJSONBodyActionBlockAlways         CreateTrustedDataPolicyJSONBodyAction = "block_always"
+	CreateTrustedDataPolicyJSONBodyActionMarkAsTrusted       CreateTrustedDataPolicyJSONBodyAction = "mark_as_trusted"
+	CreateTrustedDataPolicyJSONBodyActionSanitizeWithDualLlm CreateTrustedDataPolicyJSONBodyAction = "sanitize_with_dual_llm"
+)
+
+// Defines values for CreateTrustedDataPolicyJSONBodyOperator.
+const (
+	CreateTrustedDataPolicyJSONBodyOperatorContains    CreateTrustedDataPolicyJSONBodyOperator = "contains"
+	CreateTrustedDataPolicyJSONBodyOperatorEndsWith    CreateTrustedDataPolicyJSONBodyOperator = "endsWith"
+	CreateTrustedDataPolicyJSONBodyOperatorEqual       CreateTrustedDataPolicyJSONBodyOperator = "equal"
+	CreateTrustedDataPolicyJSONBodyOperatorNotContains CreateTrustedDataPolicyJSONBodyOperator = "notContains"
+	CreateTrustedDataPolicyJSONBodyOperatorNotEqual    CreateTrustedDataPolicyJSONBodyOperator = "notEqual"
+	CreateTrustedDataPolicyJSONBodyOperatorRegex       CreateTrustedDataPolicyJSONBodyOperator = "regex"
+	CreateTrustedDataPolicyJSONBodyOperatorStartsWith  CreateTrustedDataPolicyJSONBodyOperator = "startsWith"
+)
+
+// Defines values for UpdateTrustedDataPolicyJSONBodyAction.
+const (
+	BlockAlways         UpdateTrustedDataPolicyJSONBodyAction = "block_always"
+	MarkAsTrusted       UpdateTrustedDataPolicyJSONBodyAction = "mark_as_trusted"
+	SanitizeWithDualLlm UpdateTrustedDataPolicyJSONBodyAction = "sanitize_with_dual_llm"
+)
+
+// Defines values for UpdateTrustedDataPolicyJSONBodyOperator.
+const (
+	UpdateTrustedDataPolicyJSONBodyOperatorContains    UpdateTrustedDataPolicyJSONBodyOperator = "contains"
+	UpdateTrustedDataPolicyJSONBodyOperatorEndsWith    UpdateTrustedDataPolicyJSONBodyOperator = "endsWith"
+	UpdateTrustedDataPolicyJSONBodyOperatorEqual       UpdateTrustedDataPolicyJSONBodyOperator = "equal"
+	UpdateTrustedDataPolicyJSONBodyOperatorNotContains UpdateTrustedDataPolicyJSONBodyOperator = "notContains"
+	UpdateTrustedDataPolicyJSONBodyOperatorNotEqual    UpdateTrustedDataPolicyJSONBodyOperator = "notEqual"
+	UpdateTrustedDataPolicyJSONBodyOperatorRegex       UpdateTrustedDataPolicyJSONBodyOperator = "regex"
+	UpdateTrustedDataPolicyJSONBodyOperatorStartsWith  UpdateTrustedDataPolicyJSONBodyOperator = "startsWith"
+)
+
+// UpdateAgentToolJSONBody defines parameters for UpdateAgentTool.
+type UpdateAgentToolJSONBody struct {
+	AllowUsageWhenUntrustedDataIsPresent *bool                                       `json:"allowUsageWhenUntrustedDataIsPresent,omitempty"`
+	ResponseModifierTemplate             *string                                     `json:"responseModifierTemplate"`
+	ToolResultTreatment                  *UpdateAgentToolJSONBodyToolResultTreatment `json:"toolResultTreatment,omitempty"`
+}
+
+// UpdateAgentToolJSONBodyToolResultTreatment defines parameters for UpdateAgentTool.
+type UpdateAgentToolJSONBodyToolResultTreatment string
+
+// CreateAgentJSONBody defines parameters for CreateAgent.
+type CreateAgentJSONBody struct {
+	IsDefault *bool    `json:"isDefault,omitempty"`
+	IsDemo    *bool    `json:"isDemo,omitempty"`
+	Name      string   `json:"name"`
+	Teams     []string `json:"teams"`
+}
+
+// UpdateAgentJSONBody defines parameters for UpdateAgent.
+type UpdateAgentJSONBody struct {
+	IsDefault *bool     `json:"isDefault,omitempty"`
+	IsDemo    *bool     `json:"isDemo,omitempty"`
+	Name      *string   `json:"name,omitempty"`
+	Teams     *[]string `json:"teams,omitempty"`
+}
+
+// CreateToolInvocationPolicyJSONBody defines parameters for CreateToolInvocationPolicy.
+type CreateToolInvocationPolicyJSONBody struct {
+	Action       CreateToolInvocationPolicyJSONBodyAction   `json:"action"`
+	AgentToolId  openapi_types.UUID                         `json:"agentToolId"`
+	ArgumentName string                                     `json:"argumentName"`
+	Operator     CreateToolInvocationPolicyJSONBodyOperator `json:"operator"`
+	Reason       *string                                    `json:"reason"`
+	Value        string                                     `json:"value"`
+}
+
+// CreateToolInvocationPolicyJSONBodyAction defines parameters for CreateToolInvocationPolicy.
+type CreateToolInvocationPolicyJSONBodyAction string
+
+// CreateToolInvocationPolicyJSONBodyOperator defines parameters for CreateToolInvocationPolicy.
+type CreateToolInvocationPolicyJSONBodyOperator string
+
+// UpdateToolInvocationPolicyJSONBody defines parameters for UpdateToolInvocationPolicy.
+type UpdateToolInvocationPolicyJSONBody struct {
+	Action       *UpdateToolInvocationPolicyJSONBodyAction   `json:"action,omitempty"`
+	AgentToolId  *openapi_types.UUID                         `json:"agentToolId,omitempty"`
+	ArgumentName *string                                     `json:"argumentName,omitempty"`
+	Operator     *UpdateToolInvocationPolicyJSONBodyOperator `json:"operator,omitempty"`
+	Reason       *string                                     `json:"reason"`
+	Value        *string                                     `json:"value,omitempty"`
+}
+
+// UpdateToolInvocationPolicyJSONBodyAction defines parameters for UpdateToolInvocationPolicy.
+type UpdateToolInvocationPolicyJSONBodyAction string
+
+// UpdateToolInvocationPolicyJSONBodyOperator defines parameters for UpdateToolInvocationPolicy.
+type UpdateToolInvocationPolicyJSONBodyOperator string
+
+// CreateDualLlmConfigJSONBody defines parameters for CreateDualLlmConfig.
+type CreateDualLlmConfigJSONBody struct {
+	Enabled                *bool  `json:"enabled,omitempty"`
+	MainAgentPrompt        string `json:"mainAgentPrompt"`
+	MaxRounds              *int   `json:"maxRounds,omitempty"`
+	QuarantinedAgentPrompt string `json:"quarantinedAgentPrompt"`
+	SummaryPrompt          string `json:"summaryPrompt"`
+}
+
+// UpdateDualLlmConfigJSONBody defines parameters for UpdateDualLlmConfig.
+type UpdateDualLlmConfigJSONBody struct {
+	Enabled                *bool   `json:"enabled,omitempty"`
+	MainAgentPrompt        *string `json:"mainAgentPrompt,omitempty"`
+	MaxRounds              *int    `json:"maxRounds,omitempty"`
+	QuarantinedAgentPrompt *string `json:"quarantinedAgentPrompt,omitempty"`
+	SummaryPrompt          *string `json:"summaryPrompt,omitempty"`
+}
+
+// CreateInternalMcpCatalogItemJSONBody defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBody struct {
+	AuthDescription     *string                                          `json:"authDescription"`
+	AuthFields          *CreateInternalMcpCatalogItemJSONBody_AuthFields `json:"authFields"`
+	Description         *string                                          `json:"description"`
+	InstallationCommand *string                                          `json:"installationCommand"`
+	Name                string                                           `json:"name"`
+	Repository          *string                                          `json:"repository"`
+	RequiresAuth        *bool                                            `json:"requiresAuth,omitempty"`
+	Version             *string                                          `json:"version"`
+}
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields0 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields0 struct {
+	union json.RawMessage
+}
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields00 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields00 = string
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields01 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields01 = float32
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields02 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields02 = bool
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields03 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields03 string
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields1 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields1 map[string]interface{}
+
+// CreateInternalMcpCatalogItemJSONBodyAuthFields2 defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBodyAuthFields2 = []interface{}
+
+// CreateInternalMcpCatalogItemJSONBody_AuthFields defines parameters for CreateInternalMcpCatalogItem.
+type CreateInternalMcpCatalogItemJSONBody_AuthFields struct {
+	union json.RawMessage
+}
+
+// UpdateInternalMcpCatalogItemJSONBody defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBody struct {
+	AuthDescription     *string                                          `json:"authDescription"`
+	AuthFields          *UpdateInternalMcpCatalogItemJSONBody_AuthFields `json:"authFields"`
+	Description         *string                                          `json:"description"`
+	InstallationCommand *string                                          `json:"installationCommand"`
+	Name                *string                                          `json:"name,omitempty"`
+	Repository          *string                                          `json:"repository"`
+	RequiresAuth        *bool                                            `json:"requiresAuth,omitempty"`
+	Version             *string                                          `json:"version"`
+}
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields0 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields0 struct {
+	union json.RawMessage
+}
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields00 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields00 = string
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields01 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields01 = float32
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields02 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields02 = bool
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields03 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields03 string
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields1 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields1 map[string]interface{}
+
+// UpdateInternalMcpCatalogItemJSONBodyAuthFields2 defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBodyAuthFields2 = []interface{}
+
+// UpdateInternalMcpCatalogItemJSONBody_AuthFields defines parameters for UpdateInternalMcpCatalogItem.
+type UpdateInternalMcpCatalogItemJSONBody_AuthFields struct {
+	union json.RawMessage
+}
+
+// InstallMcpServerJSONBody defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBody struct {
+	AgentIds  *[]openapi_types.UUID              `json:"agentIds,omitempty"`
+	CatalogId *openapi_types.UUID                `json:"catalogId"`
+	Metadata  *InstallMcpServerJSONBody_Metadata `json:"metadata,omitempty"`
+	Name      string                             `json:"name"`
+	Teams     *[]string                          `json:"teams,omitempty"`
+}
+
+// InstallMcpServerJSONBodyMetadata0 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata0 struct {
+	union json.RawMessage
+}
+
+// InstallMcpServerJSONBodyMetadata00 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata00 = string
+
+// InstallMcpServerJSONBodyMetadata01 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata01 = float32
+
+// InstallMcpServerJSONBodyMetadata02 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata02 = bool
+
+// InstallMcpServerJSONBodyMetadata03 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata03 string
+
+// InstallMcpServerJSONBodyMetadata1 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata1 map[string]interface{}
+
+// InstallMcpServerJSONBodyMetadata2 defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBodyMetadata2 = []interface{}
+
+// InstallMcpServerJSONBody_Metadata defines parameters for InstallMcpServer.
+type InstallMcpServerJSONBody_Metadata struct {
+	union json.RawMessage
+}
+
+// CreateTeamJSONBody defines parameters for CreateTeam.
+type CreateTeamJSONBody struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+}
+
+// UpdateTeamJSONBody defines parameters for UpdateTeam.
+type UpdateTeamJSONBody struct {
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+}
+
+// AddTeamMemberJSONBody defines parameters for AddTeamMember.
+type AddTeamMemberJSONBody struct {
+	Role   *string `json:"role,omitempty"`
+	UserId string  `json:"userId"`
+}
+
+// CreateTrustedDataPolicyJSONBody defines parameters for CreateTrustedDataPolicy.
+type CreateTrustedDataPolicyJSONBody struct {
+	Action        CreateTrustedDataPolicyJSONBodyAction   `json:"action"`
+	AgentToolId   openapi_types.UUID                      `json:"agentToolId"`
+	AttributePath string                                  `json:"attributePath"`
+	Description   string                                  `json:"description"`
+	Operator      CreateTrustedDataPolicyJSONBodyOperator `json:"operator"`
+	Value         string                                  `json:"value"`
+}
+
+// CreateTrustedDataPolicyJSONBodyAction defines parameters for CreateTrustedDataPolicy.
+type CreateTrustedDataPolicyJSONBodyAction string
+
+// CreateTrustedDataPolicyJSONBodyOperator defines parameters for CreateTrustedDataPolicy.
+type CreateTrustedDataPolicyJSONBodyOperator string
+
+// UpdateTrustedDataPolicyJSONBody defines parameters for UpdateTrustedDataPolicy.
+type UpdateTrustedDataPolicyJSONBody struct {
+	Action        *UpdateTrustedDataPolicyJSONBodyAction   `json:"action,omitempty"`
+	AgentToolId   *openapi_types.UUID                      `json:"agentToolId,omitempty"`
+	AttributePath *string                                  `json:"attributePath,omitempty"`
+	Description   *string                                  `json:"description,omitempty"`
+	Operator      *UpdateTrustedDataPolicyJSONBodyOperator `json:"operator,omitempty"`
+	Value         *string                                  `json:"value,omitempty"`
+}
+
+// UpdateTrustedDataPolicyJSONBodyAction defines parameters for UpdateTrustedDataPolicy.
+type UpdateTrustedDataPolicyJSONBodyAction string
+
+// UpdateTrustedDataPolicyJSONBodyOperator defines parameters for UpdateTrustedDataPolicy.
+type UpdateTrustedDataPolicyJSONBodyOperator string
+
+// UpdateAgentToolJSONRequestBody defines body for UpdateAgentTool for application/json ContentType.
+type UpdateAgentToolJSONRequestBody UpdateAgentToolJSONBody
+
+// CreateAgentJSONRequestBody defines body for CreateAgent for application/json ContentType.
+type CreateAgentJSONRequestBody CreateAgentJSONBody
+
+// UpdateAgentJSONRequestBody defines body for UpdateAgent for application/json ContentType.
+type UpdateAgentJSONRequestBody UpdateAgentJSONBody
+
+// CreateToolInvocationPolicyJSONRequestBody defines body for CreateToolInvocationPolicy for application/json ContentType.
+type CreateToolInvocationPolicyJSONRequestBody CreateToolInvocationPolicyJSONBody
+
+// UpdateToolInvocationPolicyJSONRequestBody defines body for UpdateToolInvocationPolicy for application/json ContentType.
+type UpdateToolInvocationPolicyJSONRequestBody UpdateToolInvocationPolicyJSONBody
+
+// CreateDualLlmConfigJSONRequestBody defines body for CreateDualLlmConfig for application/json ContentType.
+type CreateDualLlmConfigJSONRequestBody CreateDualLlmConfigJSONBody
+
+// UpdateDualLlmConfigJSONRequestBody defines body for UpdateDualLlmConfig for application/json ContentType.
+type UpdateDualLlmConfigJSONRequestBody UpdateDualLlmConfigJSONBody
+
+// CreateInternalMcpCatalogItemJSONRequestBody defines body for CreateInternalMcpCatalogItem for application/json ContentType.
+type CreateInternalMcpCatalogItemJSONRequestBody CreateInternalMcpCatalogItemJSONBody
+
+// UpdateInternalMcpCatalogItemJSONRequestBody defines body for UpdateInternalMcpCatalogItem for application/json ContentType.
+type UpdateInternalMcpCatalogItemJSONRequestBody UpdateInternalMcpCatalogItemJSONBody
+
+// InstallMcpServerJSONRequestBody defines body for InstallMcpServer for application/json ContentType.
+type InstallMcpServerJSONRequestBody InstallMcpServerJSONBody
+
+// CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
+type CreateTeamJSONRequestBody CreateTeamJSONBody
+
+// UpdateTeamJSONRequestBody defines body for UpdateTeam for application/json ContentType.
+type UpdateTeamJSONRequestBody UpdateTeamJSONBody
+
+// AddTeamMemberJSONRequestBody defines body for AddTeamMember for application/json ContentType.
+type AddTeamMemberJSONRequestBody AddTeamMemberJSONBody
+
+// CreateTrustedDataPolicyJSONRequestBody defines body for CreateTrustedDataPolicy for application/json ContentType.
+type CreateTrustedDataPolicyJSONRequestBody CreateTrustedDataPolicyJSONBody
+
+// UpdateTrustedDataPolicyJSONRequestBody defines body for UpdateTrustedDataPolicy for application/json ContentType.
+type UpdateTrustedDataPolicyJSONRequestBody UpdateTrustedDataPolicyJSONBody
+
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -182,12 +562,6 @@ type ClientInterface interface {
 
 	// GetFeatures request
 	GetFeatures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetInteractions request
-	GetInteractions(ctx context.Context, params *GetInteractionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetInteraction request
-	GetInteraction(ctx context.Context, interactionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetInternalMcpCatalog request
 	GetInternalMcpCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -667,30 +1041,6 @@ func (c *Client) GetDualLlmResultByToolCallId(ctx context.Context, toolCallId st
 
 func (c *Client) GetFeatures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFeaturesRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetInteractions(ctx context.Context, params *GetInteractionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetInteractionsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetInteraction(ctx context.Context, interactionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetInteractionRequest(c.Server, interactionId)
 	if err != nil {
 		return nil, err
 	}
@@ -2009,153 +2359,6 @@ func NewGetFeaturesRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewGetInteractionsRequest generates requests for GetInteractions
-func NewGetInteractionsRequest(server string, params *GetInteractionsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/interactions")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.AgentId != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "agentId", runtime.ParamLocationQuery, *params.AgentId); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.SortBy != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sortBy", runtime.ParamLocationQuery, *params.SortBy); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.SortDirection != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sortDirection", runtime.ParamLocationQuery, *params.SortDirection); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetInteractionRequest generates requests for GetInteraction
-func NewGetInteractionRequest(server string, interactionId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "interactionId", runtime.ParamLocationPath, interactionId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/interactions/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetInternalMcpCatalogRequest generates requests for GetInternalMcpCatalog
 func NewGetInternalMcpCatalogRequest(server string) (*http.Request, error) {
 	var err error
@@ -3174,12 +3377,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetFeaturesWithResponse request
 	GetFeaturesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetFeaturesResponse, error)
-
-	// GetInteractionsWithResponse request
-	GetInteractionsWithResponse(ctx context.Context, params *GetInteractionsParams, reqEditors ...RequestEditorFn) (*GetInteractionsResponse, error)
-
-	// GetInteractionWithResponse request
-	GetInteractionWithResponse(ctx context.Context, interactionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetInteractionResponse, error)
 
 	// GetInternalMcpCatalogWithResponse request
 	GetInternalMcpCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetInternalMcpCatalogResponse, error)
@@ -4618,152 +4815,6 @@ func (r GetFeaturesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetFeaturesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetInteractionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data       []GetInteractions_200_Data_Item `json:"data"`
-		Pagination struct {
-			CurrentPage int  `json:"currentPage"`
-			HasNext     bool `json:"hasNext"`
-			HasPrev     bool `json:"hasPrev"`
-			Limit       int  `json:"limit"`
-			Total       int  `json:"total"`
-			TotalPages  int  `json:"totalPages"`
-		} `json:"pagination"`
-	}
-	JSON401 *struct {
-		Error GetInteractions_401_Error `json:"error"`
-	}
-}
-type GetInteractions200Data0 struct {
-	AgentId   openapi_types.UUID           `json:"agentId"`
-	CreatedAt time.Time                    `json:"createdAt"`
-	Id        openapi_types.UUID           `json:"id"`
-	Request   OpenAiChatCompletionRequest  `json:"request"`
-	Response  OpenAiChatCompletionResponse `json:"response"`
-	Type      GetInteractions200Data0Type  `json:"type"`
-}
-type GetInteractions200Data0Type string
-type GetInteractions200Data1 struct {
-	AgentId   openapi_types.UUID            `json:"agentId"`
-	CreatedAt time.Time                     `json:"createdAt"`
-	Id        openapi_types.UUID            `json:"id"`
-	Request   GeminiGenerateContentRequest  `json:"request"`
-	Response  GeminiGenerateContentResponse `json:"response"`
-	Type      GetInteractions200Data1Type   `json:"type"`
-}
-type GetInteractions200Data1Type string
-type GetInteractions200Data2 struct {
-	AgentId   openapi_types.UUID          `json:"agentId"`
-	CreatedAt time.Time                   `json:"createdAt"`
-	Id        openapi_types.UUID          `json:"id"`
-	Request   AnthropicMessagesRequest    `json:"request"`
-	Response  AnthropicMessagesResponse   `json:"response"`
-	Type      GetInteractions200Data2Type `json:"type"`
-}
-type GetInteractions200Data2Type string
-type GetInteractions_200_Data_Item struct {
-	union json.RawMessage
-}
-type GetInteractions401Error0 = string
-type GetInteractions401Error1 struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-}
-type GetInteractions_401_Error struct {
-	union json.RawMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r GetInteractionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetInteractionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetInteractionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		union json.RawMessage
-	}
-	JSON401 *struct {
-		Error GetInteraction_401_Error `json:"error"`
-	}
-	JSON404 *struct {
-		Error GetInteraction_404_Error `json:"error"`
-	}
-}
-type GetInteraction2000 struct {
-	AgentId   openapi_types.UUID           `json:"agentId"`
-	CreatedAt time.Time                    `json:"createdAt"`
-	Id        openapi_types.UUID           `json:"id"`
-	Request   OpenAiChatCompletionRequest  `json:"request"`
-	Response  OpenAiChatCompletionResponse `json:"response"`
-	Type      GetInteraction2000Type       `json:"type"`
-}
-type GetInteraction2000Type string
-type GetInteraction2001 struct {
-	AgentId   openapi_types.UUID            `json:"agentId"`
-	CreatedAt time.Time                     `json:"createdAt"`
-	Id        openapi_types.UUID            `json:"id"`
-	Request   GeminiGenerateContentRequest  `json:"request"`
-	Response  GeminiGenerateContentResponse `json:"response"`
-	Type      GetInteraction2001Type        `json:"type"`
-}
-type GetInteraction2001Type string
-type GetInteraction2002 struct {
-	AgentId   openapi_types.UUID        `json:"agentId"`
-	CreatedAt time.Time                 `json:"createdAt"`
-	Id        openapi_types.UUID        `json:"id"`
-	Request   AnthropicMessagesRequest  `json:"request"`
-	Response  AnthropicMessagesResponse `json:"response"`
-	Type      GetInteraction2002Type    `json:"type"`
-}
-type GetInteraction2002Type string
-type GetInteraction401Error0 = string
-type GetInteraction401Error1 struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-}
-type GetInteraction_401_Error struct {
-	union json.RawMessage
-}
-type GetInteraction404Error0 = string
-type GetInteraction404Error1 struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-}
-type GetInteraction_404_Error struct {
-	union json.RawMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r GetInteractionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetInteractionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6518,24 +6569,6 @@ func (c *ClientWithResponses) GetFeaturesWithResponse(ctx context.Context, reqEd
 	return ParseGetFeaturesResponse(rsp)
 }
 
-// GetInteractionsWithResponse request returning *GetInteractionsResponse
-func (c *ClientWithResponses) GetInteractionsWithResponse(ctx context.Context, params *GetInteractionsParams, reqEditors ...RequestEditorFn) (*GetInteractionsResponse, error) {
-	rsp, err := c.GetInteractions(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetInteractionsResponse(rsp)
-}
-
-// GetInteractionWithResponse request returning *GetInteractionResponse
-func (c *ClientWithResponses) GetInteractionWithResponse(ctx context.Context, interactionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetInteractionResponse, error) {
-	rsp, err := c.GetInteraction(ctx, interactionId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetInteractionResponse(rsp)
-}
-
 // GetInternalMcpCatalogWithResponse request returning *GetInternalMcpCatalogResponse
 func (c *ClientWithResponses) GetInternalMcpCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetInternalMcpCatalogResponse, error) {
 	rsp, err := c.GetInternalMcpCatalog(ctx, reqEditors...)
@@ -8125,97 +8158,6 @@ func ParseGetFeaturesResponse(rsp *http.Response) (*GetFeaturesResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetInteractionsResponse parses an HTTP response from a GetInteractionsWithResponse call
-func ParseGetInteractionsResponse(rsp *http.Response) (*GetInteractionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetInteractionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data       []GetInteractions_200_Data_Item `json:"data"`
-			Pagination struct {
-				CurrentPage int  `json:"currentPage"`
-				HasNext     bool `json:"hasNext"`
-				HasPrev     bool `json:"hasPrev"`
-				Limit       int  `json:"limit"`
-				Total       int  `json:"total"`
-				TotalPages  int  `json:"totalPages"`
-			} `json:"pagination"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest struct {
-			Error GetInteractions_401_Error `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetInteractionResponse parses an HTTP response from a GetInteractionWithResponse call
-func ParseGetInteractionResponse(rsp *http.Response) (*GetInteractionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetInteractionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			union json.RawMessage
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest struct {
-			Error GetInteraction_401_Error `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest struct {
-			Error GetInteraction_404_Error `json:"error"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 

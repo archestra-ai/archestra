@@ -1,8 +1,8 @@
 import { defineConfig, createClient } from '@hey-api/openapi-ts';
 import { pathToFileURL } from 'node:url';
 
-const archestraApiConfig =  await defineConfig({
-  input: '../shared/openapi.json',
+const archestraApiConfig = await defineConfig({
+  input: 'http://localhost:9000/openapi.json',
   output: {
     path: './src/lib/clients/api',
     clean: false,
@@ -22,7 +22,7 @@ const archestraApiConfig =  await defineConfig({
   ],
 });
 
-const archestraCatalogConfig =  await defineConfig({
+const archestraCatalogConfig = await defineConfig({
   input: 'https://www.archestra.ai/mcp-catalog/api/docs',
   output: {
     path: './src/lib/clients/archestra-catalog',
@@ -38,7 +38,6 @@ const archestraCatalogConfig =  await defineConfig({
     },
   ],
 });
-
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   await createClient(archestraApiConfig);

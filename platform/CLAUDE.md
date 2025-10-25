@@ -35,9 +35,6 @@ pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
 pnpm test:e2e -- --reporter=line        # Run e2e tests with Playwright (includes WireMock)
 
-# Code Generation
-pnpm codegen         # Generate OpenAPI spec and TypeScript/Go clients
-
 # Database
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio

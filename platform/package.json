@@ -15,7 +15,7 @@
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",
     "check:ci": "turbo check:ci",
-    "codegen": "pnpm --filter @backend generate:openapi && turbo codegen",
+    "codegen:api-client": "turbo codegen:api-client",
     "db:generate": "turbo db:generate --ui=tui",
     "db:migrate": "turbo db:migrate",
     "db:push": "turbo db:push",

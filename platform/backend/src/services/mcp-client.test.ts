@@ -5,7 +5,6 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { createTestUser } from "@/test-utils";
 import mcpClientService from "./mcp-client";
 
 // Mock the MCP SDK
@@ -27,17 +26,12 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 }));
 
 describe("McpClientService", () => {
-  let userId: string;
   let agentId: string;
   let mcpServerId: string;
 
   beforeEach(async () => {
-    // Create test user and agent
-    userId = await createTestUser();
-    const agent = await AgentModel.create(
-      { name: "Test Agent", usersWithAccess: [] },
-      userId,
-    );
+    // Create test agent
+    const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
     agentId = agent.id;
 
     // Create MCP server for testing

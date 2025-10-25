@@ -1,21 +1,18 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import type { z } from "zod";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
-import { createTestUser } from "@/test-utils";
 import type { Anthropic } from "@/types";
 import { injectTools } from "./anthropic";
 
 describe("Anthropic injectTools", () => {
-  let userId: string;
   let agentId: string;
 
   beforeEach(async () => {
-    // Create test user and agent
-    userId = await createTestUser();
-    const agent = await AgentModel.create(
-      { name: "Test Agent", usersWithAccess: [] },
-      userId,
-    );
+    // Create test agent
+    const agent = await AgentModel.create({
+      name: "Test Agent",
+      teams: [],
+    });
     agentId = agent.id;
   });
 

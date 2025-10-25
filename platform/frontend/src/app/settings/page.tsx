@@ -7,9 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { useDefaultAgent } from "@/lib/agent.query";
+import { useHealth } from "@/lib/health.query";
 
 export default function SettingsPage() {
   const { data: defaultAgent } = useDefaultAgent();
+  const { data: health } = useHealth();
   const [particles, setParticles] = useState<
     Array<{
       id: number;
@@ -526,6 +528,14 @@ export default function SettingsPage() {
                 </a>
               </div>
             </div>
+
+            {health?.version && (
+              <div className="border-t pt-6 mt-6">
+                <p className="text-xs text-muted-foreground text-center">
+                  Version {health.version}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

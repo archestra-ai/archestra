@@ -2071,7 +2071,10 @@ export type GetHealthResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    200: {
+        status: string;
+        version: string;
+    };
 };
 
 export type GetAgentsData = {

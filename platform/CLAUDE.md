@@ -39,9 +39,6 @@ pnpm test:e2e -- --reporter=line        # Run e2e tests with Playwright (include
 pnpm db:migrate      # Run database migrations
 pnpm db:studio       # Open Drizzle Studio
 
-# Code Generation
-pnpm generate:openapi   # Generate OpenAPI spec for Terraform provider
-
 # Logs
 tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource

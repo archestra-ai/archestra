@@ -90,6 +90,6 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Flat file structure, avoid barrel files
 - When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
 - Only export public APIs
-- Teams: Agents and MCP servers now use team-based access control (not user-based)
+- Teams: Agents and MCP servers use team-based access control via `agent_team` and `mcp_server_team` tables
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

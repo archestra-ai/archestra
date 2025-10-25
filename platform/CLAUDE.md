@@ -64,7 +64,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers)
 
 **Workspaces**:
 
@@ -90,6 +90,11 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Flat file structure, avoid barrel files
 - When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
 - Only export public APIs
-- Teams: Agents and MCP servers use team-based access control via `agent_team` and `mcp_server_team` tables
+
+**Team-based Access Control**:
+- Agents and MCP servers use team-based authorization (not user-based)
+- Teams managed via better-auth organization plugin
+- Junction tables: `agent_team` and `mcp_server_team`
+- Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

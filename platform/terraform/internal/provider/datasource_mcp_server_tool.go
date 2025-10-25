@@ -17,7 +17,7 @@ func NewMCPServerToolDataSource() datasource.DataSource {
 }
 
 type MCPServerToolDataSource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type MCPServerToolDataSourceModel struct {
@@ -62,11 +62,11 @@ func (d *MCPServerToolDataSource) Configure(ctx context.Context, req datasource.
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -82,15 +82,44 @@ func (d *MCPServerToolDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
-	tool, err := d.client.GetToolByMCPServerAndName(ctx, data.MCPServerID.ValueString(), data.Name.ValueString())
+	// Get all tools
+	toolsResp, err := d.client.GetToolsWithResponse(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read MCP server tool, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read tools, got error: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(tool.ID)
-	if tool.Description != nil {
-		data.Description = types.StringValue(*tool.Description)
+	if toolsResp.JSON200 == nil {
+		resp.Diagnostics.AddError("Unexpected API Response", fmt.Sprintf("Expected 200 OK, got status %d", toolsResp.StatusCode()))
+		return
+	}
+
+	// Filter by MCP server ID and tool name
+	targetMCPServerID := data.MCPServerID.ValueString()
+	targetToolName := data.Name.ValueString()
+
+	var foundIndex = -1
+	for i := range *toolsResp.JSON200 {
+		tool := &(*toolsResp.JSON200)[i]
+
+		// Check if tool has mcpServer and matches our criteria
+		if tool.McpServer != nil && tool.McpServer.Id == targetMCPServerID && tool.Name == targetToolName {
+			foundIndex = i
+			break
+		}
+	}
+
+	if foundIndex == -1 {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Tool '%s' not found for MCP server %s", targetToolName, targetMCPServerID))
+		return
+	}
+
+	foundTool := (*toolsResp.JSON200)[foundIndex]
+
+	// Map to state
+	data.ID = types.StringValue(foundTool.Id.String())
+	if foundTool.Description != nil {
+		data.Description = types.StringValue(*foundTool.Description)
 	} else {
 		data.Description = types.StringNull()
 	}

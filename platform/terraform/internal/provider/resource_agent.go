@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/archestra-ai/archestra/terraform-provider-archestra/internal/client"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -12,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -100,13 +100,8 @@ func (r *AgentResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	// Create request body matching OpenAPI schema
-	requestBody := struct {
-		Name      string   `json:"name"`
-		IsDemo    *bool    `json:"isDemo,omitempty"`
-		IsDefault *bool    `json:"isDefault,omitempty"`
-		Teams     []string `json:"teams"`
-	}{
+	// Create request body using generated type
+	requestBody := client.CreateAgentJSONRequestBody{
 		Name:  data.Name.ValueString(),
 		Teams: []string{}, // Empty teams array (required by API)
 	}
@@ -129,19 +124,19 @@ func (r *AgentResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Check response
-	if apiResp.JSON201 == nil {
+	if apiResp.JSON200 == nil {
 		resp.Diagnostics.AddError(
 			"Unexpected API Response",
-			fmt.Sprintf("Expected 201 Created, got status %d", apiResp.StatusCode()),
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
 		)
 		return
 	}
 
 	// Map response to Terraform state
-	data.ID = types.StringValue(apiResp.JSON201.Id.String())
-	data.Name = types.StringValue(apiResp.JSON201.Name)
-	data.IsDemo = types.BoolValue(apiResp.JSON201.IsDemo)
-	data.IsDefault = types.BoolValue(apiResp.JSON201.IsDefault)
+	data.ID = types.StringValue(apiResp.JSON200.Id.String())
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.IsDemo = types.BoolValue(apiResp.JSON200.IsDemo)
+	data.IsDefault = types.BoolValue(apiResp.JSON200.IsDefault)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -156,7 +151,7 @@ func (r *AgentResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	// Parse UUID from state
-	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
+	agentID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return
@@ -202,19 +197,16 @@ func (r *AgentResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	// Parse UUID from state
-	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
+	agentID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return
 	}
 
-	// Create request body matching OpenAPI schema
-	requestBody := struct {
-		Name      string `json:"name"`
-		IsDemo    *bool  `json:"isDemo,omitempty"`
-		IsDefault *bool  `json:"isDefault,omitempty"`
-	}{
-		Name: data.Name.ValueString(),
+	// Create request body using generated type
+	name := data.Name.ValueString()
+	requestBody := client.UpdateAgentJSONRequestBody{
+		Name: &name,
 	}
 
 	// Set optional fields if provided
@@ -261,7 +253,7 @@ func (r *AgentResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	// Parse UUID from state
-	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
+	agentID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return

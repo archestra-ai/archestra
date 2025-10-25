@@ -15,7 +15,7 @@ import (
 
 // Generate the Terraform provider documentation using tfplugindocs:
 //
-//go:generate go tool tfplugindocs
+//go:generate go tool tfplugindocs generate --provider-name archestra --providers-schema ./providers-schema.json
 
 var (
 	// these will be set by the goreleaser configuration

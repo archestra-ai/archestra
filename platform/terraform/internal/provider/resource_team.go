@@ -22,7 +22,7 @@ func NewTeamResource() resource.Resource {
 }
 
 type TeamResource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type TeamMemberModel struct {
@@ -98,11 +98,11 @@ func (r *TeamResource) Configure(ctx context.Context, req resource.ConfigureRequ
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
@@ -117,29 +117,39 @@ func (r *TeamResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	team := &client.Team{
-		Name:           data.Name.ValueString(),
-		OrganizationID: data.OrganizationID.ValueString(),
-		CreatedBy:      data.CreatedBy.ValueString(),
+	// Create request body using generated type
+	requestBody := client.CreateTeamJSONRequestBody{
+		Name: data.Name.ValueString(),
 	}
 
 	if !data.Description.IsNull() {
 		desc := data.Description.ValueString()
-		team.Description = &desc
+		requestBody.Description = &desc
 	}
 
-	created, err := r.client.CreateTeam(ctx, team)
+	// Call API
+	apiResp, err := r.client.CreateTeamWithResponse(ctx, requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create team, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to create team, got error: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(created.ID)
-	data.Name = types.StringValue(created.Name)
-	data.OrganizationID = types.StringValue(created.OrganizationID)
-	data.CreatedBy = types.StringValue(created.CreatedBy)
-	if created.Description != nil {
-		data.Description = types.StringValue(*created.Description)
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.ID = types.StringValue(apiResp.JSON200.Id)
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.OrganizationID = types.StringValue(apiResp.JSON200.OrganizationId)
+	data.CreatedBy = types.StringValue(apiResp.JSON200.CreatedBy)
+	if apiResp.JSON200.Description != nil {
+		data.Description = types.StringValue(*apiResp.JSON200.Description)
 	}
 
 	// Add team members
@@ -150,9 +160,23 @@ func (r *TeamResource) Create(ctx context.Context, req resource.CreateRequest, r
 				role = member.Role.ValueString()
 			}
 
-			_, err := r.client.AddTeamMember(ctx, created.ID, member.UserID.ValueString(), role)
+			memberBody := client.AddTeamMemberJSONRequestBody{
+				UserId: member.UserID.ValueString(),
+			}
+			if role != "" {
+				memberBody.Role = &role
+			}
+
+			memberResp, err := r.client.AddTeamMemberWithResponse(ctx, apiResp.JSON200.Id, memberBody)
 			if err != nil {
-				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to add team member, got error: %s", err))
+				resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to add team member, got error: %s", err))
+				return
+			}
+			if memberResp.JSON200 == nil {
+				resp.Diagnostics.AddError(
+					"Unexpected API Response",
+					fmt.Sprintf("Unable to add team member, got status %d", memberResp.StatusCode()),
+				)
 				return
 			}
 		}
@@ -168,32 +192,57 @@ func (r *TeamResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	team, err := r.client.GetTeam(ctx, data.ID.ValueString())
+	// Call API
+	apiResp, err := r.client.GetTeamWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read team, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read team, got error: %s", err))
 		return
 	}
 
-	data.Name = types.StringValue(team.Name)
-	data.OrganizationID = types.StringValue(team.OrganizationID)
-	data.CreatedBy = types.StringValue(team.CreatedBy)
-	if team.Description != nil {
-		data.Description = types.StringValue(*team.Description)
+	// Handle not found
+	if apiResp.JSON404 != nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.OrganizationID = types.StringValue(apiResp.JSON200.OrganizationId)
+	data.CreatedBy = types.StringValue(apiResp.JSON200.CreatedBy)
+	if apiResp.JSON200.Description != nil {
+		data.Description = types.StringValue(*apiResp.JSON200.Description)
 	} else {
 		data.Description = types.StringNull()
 	}
 
 	// Fetch team members
-	members, err := r.client.GetTeamMembers(ctx, data.ID.ValueString())
+	membersResp, err := r.client.GetTeamMembersWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read team members, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read team members, got error: %s", err))
 		return
 	}
 
-	data.Members = make([]TeamMemberModel, len(members))
-	for i, member := range members {
+	if membersResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK for team members, got status %d", membersResp.StatusCode()),
+		)
+		return
+	}
+
+	data.Members = make([]TeamMemberModel, len(*membersResp.JSON200))
+	for i, member := range *membersResp.JSON200 {
 		data.Members[i] = TeamMemberModel{
-			UserID: types.StringValue(member.UserID),
+			UserID: types.StringValue(member.UserId),
 			Role:   types.StringValue(member.Role),
 		}
 	}
@@ -211,35 +260,54 @@ func (r *TeamResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	team := &client.Team{
-		Name:           data.Name.ValueString(),
-		OrganizationID: data.OrganizationID.ValueString(),
-		CreatedBy:      data.CreatedBy.ValueString(),
+	// Create request body using generated type
+	name := data.Name.ValueString()
+	requestBody := client.UpdateTeamJSONRequestBody{
+		Name: &name,
 	}
 
 	if !data.Description.IsNull() {
 		desc := data.Description.ValueString()
-		team.Description = &desc
+		requestBody.Description = &desc
 	}
 
-	updated, err := r.client.UpdateTeam(ctx, data.ID.ValueString(), team)
+	// Call API
+	apiResp, err := r.client.UpdateTeamWithResponse(ctx, data.ID.ValueString(), requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update team, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to update team, got error: %s", err))
 		return
 	}
 
-	data.Name = types.StringValue(updated.Name)
-	data.OrganizationID = types.StringValue(updated.OrganizationID)
-	data.CreatedBy = types.StringValue(updated.CreatedBy)
-	if updated.Description != nil {
-		data.Description = types.StringValue(*updated.Description)
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.OrganizationID = types.StringValue(apiResp.JSON200.OrganizationId)
+	data.CreatedBy = types.StringValue(apiResp.JSON200.CreatedBy)
+	if apiResp.JSON200.Description != nil {
+		data.Description = types.StringValue(*apiResp.JSON200.Description)
 	}
 
 	// Handle team member changes
 	// Get current members
-	currentMembers, err := r.client.GetTeamMembers(ctx, data.ID.ValueString())
+	membersResp, err := r.client.GetTeamMembersWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read current team members, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read current team members, got error: %s", err))
+		return
+	}
+
+	if membersResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK for team members, got status %d", membersResp.StatusCode()),
+		)
 		return
 	}
 
@@ -254,11 +322,18 @@ func (r *TeamResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	// Remove members not in desired state
-	for _, currentMember := range currentMembers {
-		if _, exists := desiredMembers[currentMember.UserID]; !exists {
-			err := r.client.RemoveTeamMember(ctx, data.ID.ValueString(), currentMember.ID)
+	for _, currentMember := range *membersResp.JSON200 {
+		if _, exists := desiredMembers[currentMember.UserId]; !exists {
+			removeResp, err := r.client.RemoveTeamMemberWithResponse(ctx, data.ID.ValueString(), currentMember.UserId)
 			if err != nil {
-				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to remove team member, got error: %s", err))
+				resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to remove team member, got error: %s", err))
+				return
+			}
+			if removeResp.JSON200 == nil {
+				resp.Diagnostics.AddError(
+					"Unexpected API Response",
+					fmt.Sprintf("Unable to remove team member, got status %d", removeResp.StatusCode()),
+				)
 				return
 			}
 		}
@@ -266,15 +341,29 @@ func (r *TeamResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	// Add new members
 	currentMemberIDs := make(map[string]bool)
-	for _, member := range currentMembers {
-		currentMemberIDs[member.UserID] = true
+	for _, member := range *membersResp.JSON200 {
+		currentMemberIDs[member.UserId] = true
 	}
 
 	for userID, role := range desiredMembers {
 		if !currentMemberIDs[userID] {
-			_, err := r.client.AddTeamMember(ctx, data.ID.ValueString(), userID, role)
+			memberBody := client.AddTeamMemberJSONRequestBody{
+				UserId: userID,
+			}
+			if role != "" {
+				memberBody.Role = &role
+			}
+
+			addResp, err := r.client.AddTeamMemberWithResponse(ctx, data.ID.ValueString(), memberBody)
 			if err != nil {
-				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to add team member, got error: %s", err))
+				resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to add team member, got error: %s", err))
+				return
+			}
+			if addResp.JSON200 == nil {
+				resp.Diagnostics.AddError(
+					"Unexpected API Response",
+					fmt.Sprintf("Unable to add team member, got status %d", addResp.StatusCode()),
+				)
 				return
 			}
 		}
@@ -290,9 +379,19 @@ func (r *TeamResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	err := r.client.DeleteTeam(ctx, data.ID.ValueString())
+	// Call API
+	apiResp, err := r.client.DeleteTeamWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete team, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to delete team, got error: %s", err))
+		return
+	}
+
+	// Check response (200 or 404 are both acceptable for delete)
+	if apiResp.JSON200 == nil && apiResp.JSON404 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK or 404 Not Found, got status %d", apiResp.StatusCode()),
+		)
 		return
 	}
 }

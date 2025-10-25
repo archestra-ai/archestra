@@ -1,8 +1,9 @@
 module github.com/archestra-ai/archestra/terraform-provider-archestra
 
-go 1.25.3
+go 1.24.0
 
 require (
+	github.com/google/uuid v1.5.0
 	github.com/hashicorp/terraform-plugin-framework v1.4.2
 	github.com/oapi-codegen/runtime v1.1.1
 )
@@ -26,7 +27,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.5.0 // indirect
 	github.com/hashicorp/cli v1.1.7 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-checkpoint v0.5.0 // indirect

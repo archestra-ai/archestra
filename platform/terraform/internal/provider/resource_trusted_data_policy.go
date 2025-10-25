@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/archestra-ai/archestra/terraform-provider-archestra/internal/client"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -12,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 var _ resource.Resource = &TrustedDataPolicyResource{}
@@ -22,7 +24,7 @@ func NewTrustedDataPolicyResource() resource.Resource {
 }
 
 type TrustedDataPolicyResource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type TrustedDataPolicyResourceModel struct {
@@ -86,11 +88,11 @@ func (r *TrustedDataPolicyResource) Configure(ctx context.Context, req resource.
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
@@ -105,28 +107,48 @@ func (r *TrustedDataPolicyResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	policy := &client.TrustedDataPolicy{
-		AgentToolID:   data.AgentToolID.ValueString(),
+	// Parse AgentToolID as UUID
+	parsedAgentToolID, err := uuid.Parse(data.AgentToolID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid Agent Tool ID", fmt.Sprintf("Unable to parse agent tool ID: %s", err))
+		return
+	}
+	agentToolID := openapi_types.UUID(parsedAgentToolID)
+
+	// Create request body using generated type
+	requestBody := client.CreateTrustedDataPolicyJSONRequestBody{
+		AgentToolId:   agentToolID,
 		Description:   data.Description.ValueString(),
 		AttributePath: data.AttributePath.ValueString(),
-		Operator:      data.Operator.ValueString(),
+		Operator:      client.CreateTrustedDataPolicyJSONBodyOperator(data.Operator.ValueString()),
 		Value:         data.Value.ValueString(),
-		Action:        data.Action.ValueString(),
+		Action:        client.CreateTrustedDataPolicyJSONBodyAction(data.Action.ValueString()),
 	}
 
-	created, err := r.client.CreateTrustedDataPolicy(ctx, policy)
+	// Call API
+	apiResp, err := r.client.CreateTrustedDataPolicyWithResponse(ctx, requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create trusted data policy, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to create trusted data policy, got error: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(created.ID)
-	data.AgentToolID = types.StringValue(created.AgentToolID)
-	data.Description = types.StringValue(created.Description)
-	data.AttributePath = types.StringValue(created.AttributePath)
-	data.Operator = types.StringValue(created.Operator)
-	data.Value = types.StringValue(created.Value)
-	data.Action = types.StringValue(created.Action)
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.ID = types.StringValue(apiResp.JSON200.Id.String())
+	data.AgentToolID = types.StringValue(apiResp.JSON200.AgentToolId.String())
+	data.Description = types.StringValue(apiResp.JSON200.Description)
+	data.AttributePath = types.StringValue(apiResp.JSON200.AttributePath)
+	data.Operator = types.StringValue(string(apiResp.JSON200.Operator))
+	data.Value = types.StringValue(apiResp.JSON200.Value)
+	data.Action = types.StringValue(string(apiResp.JSON200.Action))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -138,18 +160,43 @@ func (r *TrustedDataPolicyResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	policy, err := r.client.GetTrustedDataPolicy(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	parsedID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read trusted data policy, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse policy ID: %s", err))
+		return
+	}
+	policyID := openapi_types.UUID(parsedID)
+
+	// Call API
+	apiResp, err := r.client.GetTrustedDataPolicyWithResponse(ctx, policyID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read trusted data policy, got error: %s", err))
 		return
 	}
 
-	data.AgentToolID = types.StringValue(policy.AgentToolID)
-	data.Description = types.StringValue(policy.Description)
-	data.AttributePath = types.StringValue(policy.AttributePath)
-	data.Operator = types.StringValue(policy.Operator)
-	data.Value = types.StringValue(policy.Value)
-	data.Action = types.StringValue(policy.Action)
+	// Handle not found
+	if apiResp.JSON404 != nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.AgentToolID = types.StringValue(apiResp.JSON200.AgentToolId.String())
+	data.Description = types.StringValue(apiResp.JSON200.Description)
+	data.AttributePath = types.StringValue(apiResp.JSON200.AttributePath)
+	data.Operator = types.StringValue(string(apiResp.JSON200.Operator))
+	data.Value = types.StringValue(apiResp.JSON200.Value)
+	data.Action = types.StringValue(string(apiResp.JSON200.Action))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -161,27 +208,60 @@ func (r *TrustedDataPolicyResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	policy := &client.TrustedDataPolicy{
-		AgentToolID:   data.AgentToolID.ValueString(),
-		Description:   data.Description.ValueString(),
-		AttributePath: data.AttributePath.ValueString(),
-		Operator:      data.Operator.ValueString(),
-		Value:         data.Value.ValueString(),
-		Action:        data.Action.ValueString(),
+	// Parse UUIDs from state
+	parsedID, err := uuid.Parse(data.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse policy ID: %s", err))
+		return
+	}
+	policyID := openapi_types.UUID(parsedID)
+
+	parsedAgentToolID, err := uuid.Parse(data.AgentToolID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid Agent Tool ID", fmt.Sprintf("Unable to parse agent tool ID: %s", err))
+		return
+	}
+	agentToolID := openapi_types.UUID(parsedAgentToolID)
+
+	// Create request body using generated type
+	description := data.Description.ValueString()
+	attributePath := data.AttributePath.ValueString()
+	operator := client.UpdateTrustedDataPolicyJSONBodyOperator(data.Operator.ValueString())
+	value := data.Value.ValueString()
+	action := client.UpdateTrustedDataPolicyJSONBodyAction(data.Action.ValueString())
+
+	requestBody := client.UpdateTrustedDataPolicyJSONRequestBody{
+		AgentToolId:   &agentToolID,
+		Description:   &description,
+		AttributePath: &attributePath,
+		Operator:      &operator,
+		Value:         &value,
+		Action:        &action,
 	}
 
-	updated, err := r.client.UpdateTrustedDataPolicy(ctx, data.ID.ValueString(), policy)
+	// Call API
+	apiResp, err := r.client.UpdateTrustedDataPolicyWithResponse(ctx, policyID, requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update trusted data policy, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to update trusted data policy, got error: %s", err))
 		return
 	}
 
-	data.AgentToolID = types.StringValue(updated.AgentToolID)
-	data.Description = types.StringValue(updated.Description)
-	data.AttributePath = types.StringValue(updated.AttributePath)
-	data.Operator = types.StringValue(updated.Operator)
-	data.Value = types.StringValue(updated.Value)
-	data.Action = types.StringValue(updated.Action)
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.AgentToolID = types.StringValue(apiResp.JSON200.AgentToolId.String())
+	data.Description = types.StringValue(apiResp.JSON200.Description)
+	data.AttributePath = types.StringValue(apiResp.JSON200.AttributePath)
+	data.Operator = types.StringValue(string(apiResp.JSON200.Operator))
+	data.Value = types.StringValue(apiResp.JSON200.Value)
+	data.Action = types.StringValue(string(apiResp.JSON200.Action))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -193,9 +273,27 @@ func (r *TrustedDataPolicyResource) Delete(ctx context.Context, req resource.Del
 		return
 	}
 
-	err := r.client.DeleteTrustedDataPolicy(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	parsedID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete trusted data policy, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse policy ID: %s", err))
+		return
+	}
+	policyID := openapi_types.UUID(parsedID)
+
+	// Call API
+	apiResp, err := r.client.DeleteTrustedDataPolicyWithResponse(ctx, policyID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to delete trusted data policy, got error: %s", err))
+		return
+	}
+
+	// Check response (200 or 404 are both acceptable for delete)
+	if apiResp.JSON200 == nil && apiResp.JSON404 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK or 404 Not Found, got status %d", apiResp.StatusCode()),
+		)
 		return
 	}
 }

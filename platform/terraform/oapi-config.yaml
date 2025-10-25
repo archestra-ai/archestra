@@ -11,11 +11,11 @@ output-options:
   # Exclude routes with wildcard paths incompatible with oapi-codegen
   # These routes use fastify wildcards (*) or HTTP proxy patterns
   exclude-tags:
-    - llm-proxy     # LLM proxy routes
-    - auth          # auth wildcard routes
-    - mcp-gateway   # MCP gateway routes
-    - Interaction   # Interaction routes
-    - Health        # Health routes
+    - llm-proxy # LLM proxy routes
+    - auth # auth wildcard routes (see TODOs for user resources.. basically we need to expand this out and not use a wildcard)
+    - mcp-gateway # MCP gateway routes
+    - Interaction # Interaction routes
+    - Health # Health routes
   exclude-schemas:
     - OpenAiChatCompletionRequest
     - OpenAiChatCompletionResponse

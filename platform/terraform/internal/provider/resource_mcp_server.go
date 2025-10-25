@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	"github.com/archestra-ai/archestra/terraform-provider-archestra/internal/client"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 var _ resource.Resource = &MCPServerResource{}
@@ -21,7 +23,7 @@ func NewMCPServerResource() resource.Resource {
 }
 
 type MCPServerResource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type MCPServerResourceModel struct {
@@ -49,10 +51,16 @@ func (r *MCPServerResource) Schema(ctx context.Context, req resource.SchemaReque
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The name of the MCP server",
 				Required:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"catalog_id": schema.StringAttribute{
 				MarkdownDescription: "The catalog ID for the MCP server",
 				Optional:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 	}
@@ -63,11 +71,11 @@ func (r *MCPServerResource) Configure(ctx context.Context, req resource.Configur
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
@@ -82,25 +90,42 @@ func (r *MCPServerResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	server := &client.MCPServer{
+	// Create request body using generated type
+	requestBody := client.InstallMcpServerJSONRequestBody{
 		Name: data.Name.ValueString(),
 	}
 
 	if !data.CatalogID.IsNull() {
-		catalogID := data.CatalogID.ValueString()
-		server.CatalogID = &catalogID
+		catalogID, err := uuid.Parse(data.CatalogID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid Catalog ID", fmt.Sprintf("Unable to parse catalog ID: %s", err))
+			return
+		}
+		catalogUUID := openapi_types.UUID(catalogID)
+		requestBody.CatalogId = &catalogUUID
 	}
 
-	created, err := r.client.CreateMCPServer(ctx, server)
+	// Call API
+	apiResp, err := r.client.InstallMcpServerWithResponse(ctx, requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create MCP server, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to install MCP server, got error: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(created.ID)
-	data.Name = types.StringValue(created.Name)
-	if created.CatalogID != nil {
-		data.CatalogID = types.StringValue(*created.CatalogID)
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.ID = types.StringValue(apiResp.JSON200.Id.String())
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	if apiResp.JSON200.CatalogId != nil {
+		data.CatalogID = types.StringValue(apiResp.JSON200.CatalogId.String())
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -113,15 +138,40 @@ func (r *MCPServerResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	server, err := r.client.GetMCPServer(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	parsedID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read MCP server, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse MCP server ID: %s", err))
+		return
+	}
+	serverID := openapi_types.UUID(parsedID)
+
+	// Call API
+	apiResp, err := r.client.GetMcpServerWithResponse(ctx, serverID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read MCP server, got error: %s", err))
 		return
 	}
 
-	data.Name = types.StringValue(server.Name)
-	if server.CatalogID != nil {
-		data.CatalogID = types.StringValue(*server.CatalogID)
+	// Handle not found
+	if apiResp.JSON404 != nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	if apiResp.JSON200.CatalogId != nil {
+		data.CatalogID = types.StringValue(apiResp.JSON200.CatalogId.String())
 	} else {
 		data.CatalogID = types.StringNull()
 	}
@@ -130,33 +180,13 @@ func (r *MCPServerResource) Read(ctx context.Context, req resource.ReadRequest, 
 }
 
 func (r *MCPServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data MCPServerResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	server := &client.MCPServer{
-		Name: data.Name.ValueString(),
-	}
-
-	if !data.CatalogID.IsNull() {
-		catalogID := data.CatalogID.ValueString()
-		server.CatalogID = &catalogID
-	}
-
-	updated, err := r.client.UpdateMCPServer(ctx, data.ID.ValueString(), server)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update MCP server, got error: %s", err))
-		return
-	}
-
-	data.Name = types.StringValue(updated.Name)
-	if updated.CatalogID != nil {
-		data.CatalogID = types.StringValue(*updated.CatalogID)
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// NOTE: The Archestra API does not support updating MCP servers.
+	// Updates will trigger resource replacement (delete + create).
+	// This function should never be called due to RequiresReplace plan modifiers on all attributes.
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"MCP server updates are not supported by the API. This should have triggered a replacement.",
+	)
 }
 
 func (r *MCPServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -166,9 +196,27 @@ func (r *MCPServerResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	err := r.client.DeleteMCPServer(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	parsedID, err := uuid.Parse(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete MCP server, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse MCP server ID: %s", err))
+		return
+	}
+	serverID := openapi_types.UUID(parsedID)
+
+	// Call API
+	apiResp, err := r.client.DeleteMcpServerWithResponse(ctx, serverID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to delete MCP server, got error: %s", err))
+		return
+	}
+
+	// Check response (200 or 404 are both acceptable for delete)
+	if apiResp.JSON200 == nil && apiResp.JSON404 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK or 404 Not Found, got status %d", apiResp.StatusCode()),
+		)
 		return
 	}
 }

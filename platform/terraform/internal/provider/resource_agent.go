@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -24,7 +25,7 @@ func NewAgentResource() resource.Resource {
 
 // AgentResource defines the resource implementation.
 type AgentResource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 // AgentResourceModel describes the resource data model.
@@ -76,12 +77,12 @@ func (r *AgentResource) Configure(ctx context.Context, req resource.ConfigureReq
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -99,22 +100,48 @@ func (r *AgentResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	agent := &client.Agent{
+	// Create request body matching OpenAPI schema
+	requestBody := struct {
+		Name      string   `json:"name"`
+		IsDemo    *bool    `json:"isDemo,omitempty"`
+		IsDefault *bool    `json:"isDefault,omitempty"`
+		Teams     []string `json:"teams"`
+	}{
 		Name:      data.Name.ValueString(),
-		IsDemo:    data.IsDemo.ValueBool(),
-		IsDefault: data.IsDefault.ValueBool(),
+		Teams:     []string{}, // Empty teams array (required by API)
 	}
 
-	created, err := r.client.CreateAgent(ctx, agent)
+	// Set optional fields if provided
+	if !data.IsDemo.IsNull() {
+		isDemo := data.IsDemo.ValueBool()
+		requestBody.IsDemo = &isDemo
+	}
+	if !data.IsDefault.IsNull() {
+		isDefault := data.IsDefault.ValueBool()
+		requestBody.IsDefault = &isDefault
+	}
+
+	// Call API
+	apiResp, err := r.client.CreateAgentWithResponse(ctx, requestBody)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create agent, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to create agent, got error: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(created.ID)
-	data.Name = types.StringValue(created.Name)
-	data.IsDemo = types.BoolValue(created.IsDemo)
-	data.IsDefault = types.BoolValue(created.IsDefault)
+	// Check response
+	if apiResp.JSON201 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 201 Created, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.ID = types.StringValue(apiResp.JSON201.Id.String())
+	data.Name = types.StringValue(apiResp.JSON201.Name)
+	data.IsDemo = types.BoolValue(apiResp.JSON201.IsDemo)
+	data.IsDefault = types.BoolValue(apiResp.JSON201.IsDefault)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -128,15 +155,39 @@ func (r *AgentResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	agent, err := r.client.GetAgent(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read agent, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return
 	}
 
-	data.Name = types.StringValue(agent.Name)
-	data.IsDemo = types.BoolValue(agent.IsDemo)
-	data.IsDefault = types.BoolValue(agent.IsDefault)
+	// Call API
+	apiResp, err := r.client.GetAgentWithResponse(ctx, agentID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read agent, got error: %s", err))
+		return
+	}
+
+	// Handle not found
+	if apiResp.JSON404 != nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.IsDemo = types.BoolValue(apiResp.JSON200.IsDemo)
+	data.IsDefault = types.BoolValue(apiResp.JSON200.IsDefault)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -150,21 +201,52 @@ func (r *AgentResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	agent := &client.Agent{
-		Name:      data.Name.ValueString(),
-		IsDemo:    data.IsDemo.ValueBool(),
-		IsDefault: data.IsDefault.ValueBool(),
-	}
-
-	updated, err := r.client.UpdateAgent(ctx, data.ID.ValueString(), agent)
+	// Parse UUID from state
+	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update agent, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return
 	}
 
-	data.Name = types.StringValue(updated.Name)
-	data.IsDemo = types.BoolValue(updated.IsDemo)
-	data.IsDefault = types.BoolValue(updated.IsDefault)
+	// Create request body matching OpenAPI schema
+	requestBody := struct {
+		Name      string `json:"name"`
+		IsDemo    *bool  `json:"isDemo,omitempty"`
+		IsDefault *bool  `json:"isDefault,omitempty"`
+	}{
+		Name: data.Name.ValueString(),
+	}
+
+	// Set optional fields if provided
+	if !data.IsDemo.IsNull() {
+		isDemo := data.IsDemo.ValueBool()
+		requestBody.IsDemo = &isDemo
+	}
+	if !data.IsDefault.IsNull() {
+		isDefault := data.IsDefault.ValueBool()
+		requestBody.IsDefault = &isDefault
+	}
+
+	// Call API
+	apiResp, err := r.client.UpdateAgentWithResponse(ctx, agentID, requestBody)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to update agent, got error: %s", err))
+		return
+	}
+
+	// Check response
+	if apiResp.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK, got status %d", apiResp.StatusCode()),
+		)
+		return
+	}
+
+	// Map response to Terraform state
+	data.Name = types.StringValue(apiResp.JSON200.Name)
+	data.IsDemo = types.BoolValue(apiResp.JSON200.IsDemo)
+	data.IsDefault = types.BoolValue(apiResp.JSON200.IsDefault)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -178,9 +260,26 @@ func (r *AgentResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	err := r.client.DeleteAgent(ctx, data.ID.ValueString())
+	// Parse UUID from state
+	agentID, err := openapi_types.ParseUUID(data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete agent, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
+		return
+	}
+
+	// Call API
+	apiResp, err := r.client.DeleteAgentWithResponse(ctx, agentID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to delete agent, got error: %s", err))
+		return
+	}
+
+	// Check response (200 or 404 are both acceptable for delete)
+	if apiResp.JSON200 == nil && apiResp.JSON404 == nil {
+		resp.Diagnostics.AddError(
+			"Unexpected API Response",
+			fmt.Sprintf("Expected 200 OK or 404 Not Found, got status %d", apiResp.StatusCode()),
+		)
 		return
 	}
 }

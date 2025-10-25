@@ -4,6 +4,13 @@
   "description": "Terraform provider for Archestra",
   "private": true,
   "scripts": {
-    "codegen": "make generate"
+    "build": "go build -o terraform-provider-archestra",
+    "install": "pnpm build && mkdir -p ~/.terraform.d/plugins/archestra-ai/archestra/0.1.0/linux_amd64 && cp terraform-provider-archestra ~/.terraform.d/plugins/archestra-ai/archestra/0.1.0/linux_amd64/",
+    "test": "go test -v ./...",
+    "clean": "rm -f terraform-provider-archestra && rm -rf dist/",
+    "codegen": "go generate",
+    "lint": "golangci-lint run",
+    "lint:fix": "go fmt ./...",
+    "check:ci": "pnpm lint && pnpm test && pnpm fmt"
   }
 }

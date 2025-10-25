@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/archestra-ai/archestra/terraform-provider-archestra/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -112,7 +113,24 @@ func (p *ArchestraProvider) Configure(ctx context.Context, req provider.Configur
 	}
 
 	// Create a new Archestra client using the configuration values
-	apiClient := client.NewClient(baseURL, apiKey)
+	apiClient, err := client.NewClientWithResponses(
+		baseURL,
+		client.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
+			// Add API key as Bearer token to all requests
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+			return nil
+		}),
+	)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Create Archestra API Client",
+			"An unexpected error occurred when creating the Archestra API client. "+
+				"If the error is not clear, please contact the provider developers.\n\n"+
+				"Archestra Client Error: "+err.Error(),
+		)
+		return
+	}
 
 	// Make the Archestra client available during DataSource and Resource
 	// type Configure methods.

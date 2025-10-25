@@ -46,6 +46,12 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 
 ## Terraform Provider
 
+Manages Archestra resources via Infrastructure as Code.
+
+**Resources**: `archestra_agent`, `archestra_mcp_server_installation`, `archestra_team`, `archestra_user`, `archestra_trusted_data_policy`, `archestra_tool_invocation_policy`
+
+**Data Sources**: `archestra_agent_tool`, `archestra_mcp_server_tool`, `archestra_team`, `archestra_user`
+
 ```bash
 # Build and test (from platform/terraform/)
 make build

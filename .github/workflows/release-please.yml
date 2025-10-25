@@ -125,11 +125,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version-file: platform/terraform/go.mod
-          cache-dependency-path: platform/terraform/go.sum
+      - name: Setup Terraform environment
+        uses: ./.github/actions/setup-terraform-env
 
       - name: Import GPG key
         id: import_gpg

@@ -1,0 +1,9 @@
+{
+  "name": "@archestra/terraform-provider",
+  "version": "0.0.12",
+  "description": "Terraform provider for Archestra",
+  "private": true,
+  "scripts": {
+    "codegen": "make generate"
+  }
+}

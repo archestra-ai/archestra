@@ -367,6 +367,8 @@ importers:
         specifier: ^5.9.2
         version: 5.9.2
 
+  terraform: {}
+
 packages:
 
   '@ai-sdk/gateway@1.0.33':

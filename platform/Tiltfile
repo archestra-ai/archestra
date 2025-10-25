@@ -153,8 +153,8 @@ local_resource(
 )
 
 local_resource(
-  'codegen:api-client',
-  cmd='pnpm codegen:api-client',
+  'codegen',
+  cmd='pnpm codegen',
   labels=['dev'],
   resource_deps=['pnpm-install', 'pnpm-dev']
 )

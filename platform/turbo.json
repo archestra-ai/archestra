@@ -36,7 +36,7 @@
     "test:e2e:ui": {
       "cache": false
     },
-    "codegen:api-client": {
+    "codegen": {
       "cache": false
     },
     "db:generate": {

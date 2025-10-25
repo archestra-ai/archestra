@@ -33,6 +33,22 @@ updates:
     commit-message:
       prefix: deps(platform)
 
+  - package-ecosystem: gomod
+    directory: platform/terraform
+    schedule:
+      interval: weekly
+    groups:
+      terraform-go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps(terraform)
+
   - package-ecosystem: github-actions
     directory: .github
     groups:

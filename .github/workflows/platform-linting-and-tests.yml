@@ -149,3 +149,28 @@ jobs:
         # and helm package explicitly checks this
         run: |
           helm package . --version v0.0.1 --app-version v0.0.1
+
+  terraform-linting-and-tests:
+    name: Terraform Provider Linting and Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./platform/terraform
+    steps:
+      - name: Checkout project
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform environment
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: ./.github/actions/setup-terraform-env
+
+      - name: Run linting
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: make lint
+
+      - name: Run tests
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        run: make test

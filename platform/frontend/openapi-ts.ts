@@ -2,12 +2,13 @@ import { defineConfig, createClient } from '@hey-api/openapi-ts';
 import { pathToFileURL } from 'node:url';
 
 const archestraApiConfig =  await defineConfig({
-  input: 'http://localhost:9000/openapi.json',
+  input: '../shared/openapi.json',
   output: {
     path: './src/lib/clients/api',
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',
+    format: 'biome',
   },
   /**
    * We need to define the following so that we can support setting the baseUrl of the API client AT RUNTIME
@@ -28,6 +29,7 @@ const archestraCatalogConfig =  await defineConfig({
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',
+    format: 'biome',
   },
   plugins: [
     {

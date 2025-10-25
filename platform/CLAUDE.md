@@ -97,5 +97,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Teams managed via better-auth organization plugin
 - Junction tables: `agent_team` and `mcp_server_team`
 - Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
+- Admin-only team CRUD operations via `/api/teams/*` routes
+- Members can read teams and access team-assigned agents/MCP servers
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Dual LLM Config**: <http://localhost:3000/dual-llm>
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
-- **MCP Gateway**: <http://localhost:9000/mcp/{agentId}> (GET for discovery, POST for JSON-RPC with session support)
+- **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
 
 ## Common Commands
 
@@ -87,6 +87,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Use Drizzle ORM for database operations
 - Colocate test files with source (`.test.ts`)
 - Flat file structure, avoid barrel files
+- When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
 - Only export public APIs
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

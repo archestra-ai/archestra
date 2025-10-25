@@ -5,10 +5,7 @@ import type { Agent, InsertAgent, UpdateAgent } from "@/types";
 import AgentTeamModel from "./agent-team";
 
 class AgentModel {
-  static async create(
-    { teams, ...agent }: InsertAgent,
-    creatorUserId?: string,
-  ): Promise<Agent> {
+  static async create({ teams, ...agent }: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values(agent)
@@ -42,8 +39,10 @@ class AgentModel {
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentTeamModel.getUserAccessibleAgentIds(userId, false);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       if (accessibleAgentIds.length === 0) {
         return [];
@@ -130,8 +129,7 @@ class AgentModel {
   static async getAgentOrCreateDefault(
     name: string | undefined,
   ): Promise<Agent> {
-    const agentName = name || DEFAULT_AGENT_NAME;
-
+    // First, try to find an agent with isDefault=true
     const rows = await db
       .select()
       .from(schema.agentsTable)
@@ -139,22 +137,28 @@ class AgentModel {
         schema.toolsTable,
         eq(schema.agentsTable.id, schema.toolsTable.agentId),
       )
-      .where(eq(schema.agentsTable.name, agentName));
+      .where(eq(schema.agentsTable.isDefault, true));
 
-    if (rows.length === 0) {
-      return AgentModel.create({ name: agentName, teams: [] });
+    if (rows.length > 0) {
+      // Default agent exists, return it
+      const agent = rows[0].agents;
+      const tools = rows
+        .map((row) => row.tools)
+        .filter((tool) => tool !== null);
+
+      return {
+        ...agent,
+        tools,
+        teams: await AgentTeamModel.getTeamsForAgent(agent.id),
+      };
     }
 
-    const agent = rows[0].agents;
-    const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
-
-    const teams = await AgentTeamModel.getTeamsForAgent(agent.id);
-
-    return {
-      ...agent,
-      tools,
-      teams,
-    };
+    // No default agent exists, create one
+    return AgentModel.create({
+      name: name || DEFAULT_AGENT_NAME,
+      isDefault: true,
+      teams: [],
+    });
   }
 
   static async update(
@@ -162,6 +166,14 @@ class AgentModel {
     { teams, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
     let updatedAgent: Omit<Agent, "tools" | "teams"> | undefined;
+
+    // If setting isDefault to true, unset all other agents' isDefault first
+    if (agent.isDefault === true) {
+      await db
+        .update(schema.agentsTable)
+        .set({ isDefault: false })
+        .where(eq(schema.agentsTable.isDefault, true));
+    }
 
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {

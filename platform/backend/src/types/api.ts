@@ -96,6 +96,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
+  GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 

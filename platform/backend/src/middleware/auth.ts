@@ -91,6 +91,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetAgent]: {
     agent: ["read"],
   },
+  [RouteId.GetDefaultAgent]: {
+    agent: ["read"],
+  },
   [RouteId.CreateAgent]: {
     agent: ["create"],
   },

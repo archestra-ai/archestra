@@ -120,10 +120,25 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    fastify.get("/health", async () => ({
-      status: name,
-      version,
-    }));
+    fastify.get(
+      "/health",
+      {
+        schema: {
+          response: {
+            200: z.object({
+              name: z.string(),
+              status: z.string(),
+              version: z.string(),
+            }),
+          },
+        },
+      },
+      async () => ({
+        name,
+        status: "ok",
+        version,
+      }),
+    );
 
     fastify.addHook("preHandler", authMiddleware.handle);
 

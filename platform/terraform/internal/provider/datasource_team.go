@@ -17,7 +17,7 @@ func NewTeamDataSource() datasource.DataSource {
 }
 
 type TeamDataSource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type TeamDataSourceModel struct {
@@ -83,11 +83,11 @@ func (d *TeamDataSource) Configure(ctx context.Context, req datasource.Configure
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -103,14 +103,26 @@ func (d *TeamDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	team, err := d.client.GetTeam(ctx, data.ID.ValueString())
+	// Get team data
+	teamResp, err := d.client.GetTeamWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read team, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read team, got error: %s", err))
 		return
 	}
 
+	if teamResp.JSON404 != nil {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Team with ID %s not found", data.ID.ValueString()))
+		return
+	}
+
+	if teamResp.JSON200 == nil {
+		resp.Diagnostics.AddError("Unexpected API Response", fmt.Sprintf("Expected 200 OK, got status %d", teamResp.StatusCode()))
+		return
+	}
+
+	team := teamResp.JSON200
 	data.Name = types.StringValue(team.Name)
-	data.OrganizationID = types.StringValue(team.OrganizationID)
+	data.OrganizationID = types.StringValue(team.OrganizationId)
 	data.CreatedBy = types.StringValue(team.CreatedBy)
 	if team.Description != nil {
 		data.Description = types.StringValue(*team.Description)
@@ -119,16 +131,21 @@ func (d *TeamDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	}
 
 	// Fetch team members
-	members, err := d.client.GetTeamMembers(ctx, data.ID.ValueString())
+	membersResp, err := d.client.GetTeamMembersWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read team members, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read team members, got error: %s", err))
 		return
 	}
 
-	data.Members = make([]TeamMemberModel, len(members))
-	for i, member := range members {
+	if membersResp.JSON200 == nil {
+		resp.Diagnostics.AddError("Unexpected API Response", fmt.Sprintf("Expected 200 OK, got status %d", membersResp.StatusCode()))
+		return
+	}
+
+	data.Members = make([]TeamMemberModel, len(*membersResp.JSON200))
+	for i, member := range *membersResp.JSON200 {
 		data.Members[i] = TeamMemberModel{
-			UserID: types.StringValue(member.UserID),
+			UserID: types.StringValue(member.UserId),
 			Role:   types.StringValue(member.Role),
 		}
 	}

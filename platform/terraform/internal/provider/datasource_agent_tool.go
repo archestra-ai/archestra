@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 var _ datasource.DataSource = &AgentToolDataSource{}
@@ -17,7 +18,7 @@ func NewAgentToolDataSource() datasource.DataSource {
 }
 
 type AgentToolDataSource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type AgentToolDataSourceModel struct {
@@ -77,11 +78,11 @@ func (d *AgentToolDataSource) Configure(ctx context.Context, req datasource.Conf
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -97,19 +98,63 @@ func (d *AgentToolDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	agentTool, err := d.client.GetAgentToolByAgentAndToolName(ctx, data.AgentID.ValueString(), data.ToolName.ValueString())
+	// Parse agent ID
+	agentID, err := openapi_types.ParseUUID(data.AgentID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read agent tool, got error: %s", err))
+		resp.Diagnostics.AddError("Invalid Agent ID", fmt.Sprintf("Unable to parse agent ID: %s", err))
 		return
 	}
 
-	data.ID = types.StringValue(agentTool.ID)
-	data.ToolID = types.StringValue(agentTool.ToolID)
-	data.AllowUsageWhenUntrustedDataIsPresent = types.BoolValue(agentTool.AllowUsageWhenUntrustedDataIsPresent)
-	data.ToolResultTreatment = types.StringValue(agentTool.ToolResultTreatment)
+	// Get all tools for the agent
+	toolsResp, err := d.client.GetAgentToolsWithResponse(ctx, agentID)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read agent tools, got error: %s", err))
+		return
+	}
 
-	if agentTool.ResponseModifierTemplate != nil {
-		data.ResponseModifierTemplate = types.StringValue(*agentTool.ResponseModifierTemplate)
+	if toolsResp.JSON200 == nil {
+		resp.Diagnostics.AddError("Unexpected API Response", fmt.Sprintf("Expected 200 OK, got status %d", toolsResp.StatusCode()))
+		return
+	}
+
+	// Filter by tool name
+	toolName := data.ToolName.ValueString()
+	var foundTool *struct {
+		AgentId                              *openapi_types.UUID `json:"agentId"`
+		AllowUsageWhenUntrustedDataIsPresent bool                `json:"allowUsageWhenUntrustedDataIsPresent"`
+		CreatedAt                            string              `json:"createdAt"`
+		Description                          *string             `json:"description"`
+		Id                                   openapi_types.UUID  `json:"id"`
+		McpServerId                          *openapi_types.UUID `json:"mcpServerId"`
+		Name                                 string              `json:"name"`
+		Parameters                           *interface{}        `json:"parameters,omitempty"`
+		ResponseModifierTemplate             *string             `json:"responseModifierTemplate,omitempty"`
+		ToolId                               openapi_types.UUID  `json:"toolId"`
+		ToolResultTreatment                  string              `json:"toolResultTreatment"`
+		UpdatedAt                            string              `json:"updatedAt"`
+	}
+
+	for i := range *toolsResp.JSON200 {
+		tool := &(*toolsResp.JSON200)[i]
+		if tool.Name == toolName {
+			foundTool = tool
+			break
+		}
+	}
+
+	if foundTool == nil {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Tool '%s' not found for agent %s", toolName, data.AgentID.ValueString()))
+		return
+	}
+
+	// Map to state
+	data.ID = types.StringValue(foundTool.Id.String())
+	data.ToolID = types.StringValue(foundTool.ToolId.String())
+	data.AllowUsageWhenUntrustedDataIsPresent = types.BoolValue(foundTool.AllowUsageWhenUntrustedDataIsPresent)
+	data.ToolResultTreatment = types.StringValue(foundTool.ToolResultTreatment)
+
+	if foundTool.ResponseModifierTemplate != nil {
+		data.ResponseModifierTemplate = types.StringValue(*foundTool.ResponseModifierTemplate)
 	} else {
 		data.ResponseModifierTemplate = types.StringNull()
 	}

@@ -1,109 +1,64 @@
-# GoReleaser configuration for Terraform Provider
-# See: https://goreleaser.com
+# Copied from https://github.com/hashicorp/terraform-provider-scaffolding-framework/blob/main/.goreleaser.yml
+# See https://developer.hashicorp.com/terraform/registry/providers/publishing#github-actions-preferred
 
+# Visit https://goreleaser.com for documentation on how to customize this
+# behavior.
 version: 2
-
 before:
   hooks:
-    # Ensure dependencies are up to date
+    # this is just an example and not a requirement for provider building/publishing
     - go mod tidy
-    - go mod download
-
 builds:
-  - env:
-      - CGO_ENABLED=0
-    mod_timestamp: '{{ .CommitTimestamp }}'
-    flags:
-      - -trimpath
-    ldflags:
-      - '-s -w -X main.version={{.Version}}'
-    goos:
-      - freebsd
-      - windows
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - '386'
-      - arm
-      - arm64
-    ignore:
-      - goos: darwin
-        goarch: '386'
-      - goos: darwin
-        goarch: arm
-    binary: '{{ .ProjectName }}_v{{ .Version }}'
-
+- env:
+    # goreleaser does not work with CGO, it could also complicate
+    # usage by users in CI/CD systems like HCP Terraform where
+    # they are unable to install libraries.
+    - CGO_ENABLED=0
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  flags:
+    - -trimpath
+  ldflags:
+    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+  goos:
+    - freebsd
+    - windows
+    - linux
+    - darwin
+  goarch:
+    - amd64
+    - '386'
+    - arm
+    - arm64
+  ignore:
+    - goos: darwin
+      goarch: '386'
+  binary: '{{ .ProjectName }}_v{{ .Version }}'
 archives:
-  - format: zip
-    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
-
+- format: zip
+  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
-
 signs:
   - artifacts: checksum
     args:
-      # The passphrase is handled via the GPG_PASSPHRASE env variable
+      # if you are using this in a GitHub action or some other automated pipeline, you
+      # need to pass the batch flag to indicate its not interactive.
       - "--batch"
       - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
       - "--output"
       - "${signature}"
       - "--detach-sign"
       - "${artifact}"
-
 release:
-  draft: false
-  replace_existing_draft: true
-  prerelease: auto
-  name_template: "{{.ProjectName}} v{{.Version}}"
-  header: |
-    ## Terraform Provider Release
-
-    This release contains the Archestra Terraform Provider binaries.
-
-    ### Installation
-
-    To use this provider, add the following to your Terraform configuration:
-
-    ```hcl
-    terraform {
-      required_providers {
-        archestra = {
-          source  = "archestra-ai/archestra"
-          version = "~> {{ .Version }}"
-        }
-      }
-    }
-    ```
-
   extra_files:
-    - glob: terraform-registry-manifest.json
-    - glob: terraform-provider-archestra_*
-
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+  # If you want to manually examine the release before its live, uncomment this line:
+  # draft: true
 changelog:
-  sort: asc
-  use: github
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - 'merge conflict'
-      - Merge pull request
-      - Merge remote-tracking branch
-      - Merge branch
-  groups:
-    - title: 'New Features'
-      regexp: "^.*feat[(\\w)]*:+.*$"
-      order: 0
-    - title: 'Bug Fixes'
-      regexp: "^.*fix[(\\w)]*:+.*$"
-      order: 10
-    - title: 'Documentation Updates'
-      regexp: "^.*docs[(\\w)]*:+.*$"
-      order: 20
-    - title: 'Other Changes'
-      order: 999
+  disable: true

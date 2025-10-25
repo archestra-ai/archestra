@@ -17,7 +17,7 @@ func NewUserDataSource() datasource.DataSource {
 }
 
 type UserDataSource struct {
-	client *client.Client
+	client *client.ClientWithResponses
 }
 
 type UserDataSourceModel struct {
@@ -81,11 +81,11 @@ func (d *UserDataSource) Configure(ctx context.Context, req datasource.Configure
 		return
 	}
 
-	client, ok := req.ProviderData.(*client.Client)
+	client, ok := req.ProviderData.(*client.ClientWithResponses)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientWithResponses, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -101,12 +101,24 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	user, err := d.client.GetUser(ctx, data.ID.ValueString())
+	// Get user data
+	userResp, err := d.client.GetUserWithResponse(ctx, data.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read user, got error: %s", err))
+		resp.Diagnostics.AddError("API Error", fmt.Sprintf("Unable to read user, got error: %s", err))
 		return
 	}
 
+	if userResp.JSON404 != nil {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("User with ID %s not found", data.ID.ValueString()))
+		return
+	}
+
+	if userResp.JSON200 == nil {
+		resp.Diagnostics.AddError("Unexpected API Response", fmt.Sprintf("Expected 200 OK, got status %d", userResp.StatusCode()))
+		return
+	}
+
+	user := userResp.JSON200
 	data.Name = types.StringValue(user.Name)
 	data.Email = types.StringValue(user.Email)
 	data.EmailVerified = types.BoolValue(user.EmailVerified)

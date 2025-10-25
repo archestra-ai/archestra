@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+
+# https://github.com/oapi-codegen/oapi-codegen
+package: client
+generate:
+  client: true
+output: internal/client/archestra_client.go
+
+output-options:
+  # Exclude routes with wildcard paths incompatible with oapi-codegen
+  # These routes use fastify wildcards (*) or HTTP proxy patterns
+  exclude-tags:
+    - llm-proxy     # OpenAI & Anthropic proxy routes
+    - auth          # better-auth wildcard routes
+    - mcp-gateway   # MCP gateway routes

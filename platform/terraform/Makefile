@@ -23,7 +23,7 @@ generate:
 	@echo "Installing oapi-codegen if not present..."
 	@command -v oapi-codegen >/dev/null 2>&1 || go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	@echo "Generating API client..."
-	oapi-codegen -package client -generate types,client -o internal/client/archestra_client.go ../shared/openapi.json
+	oapi-codegen -config oapi-config.yaml ../shared/openapi.json
 	@echo "API client generated successfully"
 
 # Format code

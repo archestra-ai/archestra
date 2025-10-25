@@ -213,6 +213,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     endpoint,
     {
       schema: {
+        tags: ["mcp-gateway"],
         response: {
           200: z.object({
             name: z.string(),
@@ -262,6 +263,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     endpoint,
     {
       schema: {
+        tags: ["mcp-gateway"],
         // Accept any JSON body - will be validated by MCP SDK
         body: z.record(z.string(), z.unknown()),
       },

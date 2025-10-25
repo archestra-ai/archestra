@@ -2,9 +2,6 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
-/**
- * Team table - compatible with better-auth organization teams plugin
- */
 export const team = pgTable("team", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -21,9 +18,6 @@ export const team = pgTable("team", {
     .notNull(),
 });
 
-/**
- * TeamMember table - maps users to teams
- */
 export const teamMember = pgTable("team_member", {
   id: text("id").primaryKey(),
   teamId: text("team_id")

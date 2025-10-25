@@ -8,10 +8,6 @@ import {
 import agentsTable from "./agent";
 import { team } from "./team";
 
-/**
- * AgentTeam table - many-to-many relationship between agents and teams
- * Replaces the old agent_access_control table for team-based authorization
- */
 const agentTeamTable = pgTable(
   "agent_team",
   {

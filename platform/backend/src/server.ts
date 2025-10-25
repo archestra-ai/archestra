@@ -126,6 +126,7 @@ const start = async () => {
         schema: {
           response: {
             200: z.object({
+              name: z.string(),
               status: z.string(),
               version: z.string(),
             }),
@@ -133,7 +134,8 @@ const start = async () => {
         },
       },
       async () => ({
-        status: name,
+        name,
+        status: "ok",
         version,
       }),
     );

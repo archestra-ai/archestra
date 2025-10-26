@@ -41,14 +41,96 @@ const MOCK_RESPONSE: OpenAI.Chat.Completions.ChatCompletion = {
   },
 };
 
+const MOCK_STREAMING_CHUNKS: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
+  {
+    id: "chatcmpl-mock123",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: "gpt-4o",
+    choices: [
+      {
+        index: 0,
+        delta: { role: "assistant", content: "" },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  },
+  {
+    id: "chatcmpl-mock123",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: "gpt-4o",
+    choices: [
+      {
+        index: 0,
+        delta: { content: "How can" },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  },
+  {
+    id: "chatcmpl-mock123",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: "gpt-4o",
+    choices: [
+      {
+        index: 0,
+        delta: { content: "I help you?" },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  },
+  {
+    id: "chatcmpl-mock123",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: "gpt-4o",
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: "stop",
+        logprobs: null,
+      },
+    ],
+  },
+];
+
 /**
  * Mock OpenAI Client that returns immediate tool call responses
  */
 export class MockOpenAIClient {
   chat = {
     completions: {
-      create: async () => {
-        return MOCK_RESPONSE;
+      create: async (
+        params: OpenAI.Chat.Completions.ChatCompletionCreateParams,
+      ) => {
+        // Mock response in chat streaming mode
+        if (params.stream) {
+          return {
+            [Symbol.asyncIterator]() {
+              let index = 0;
+              return {
+                async next() {
+                  if (index < MOCK_STREAMING_CHUNKS.length) {
+                    return {
+                      value: MOCK_STREAMING_CHUNKS[index++],
+                      done: false,
+                    };
+                  }
+                  return { done: true };
+                },
+              };
+            },
+          };
+          // Mock response in regular mode
+        } else {
+          return MOCK_RESPONSE;
+        }
       },
     },
   };

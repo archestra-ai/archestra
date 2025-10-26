@@ -41,6 +41,7 @@ class AuthMiddleware {
       url.startsWith("/json") ||
       url === "/openapi.json" ||
       url === "/health" ||
+      url === "/metrics" ||
       url === "/api/features" ||
       url.startsWith(config.mcpGateway.endpoint)
     ) {
@@ -88,6 +89,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
   },
   [RouteId.GetAgent]: {
+    agent: ["read"],
+  },
+  [RouteId.GetDefaultAgent]: {
     agent: ["read"],
   },
   [RouteId.CreateAgent]: {
@@ -212,6 +216,30 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.GetTeams]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeam]: {
+    team: ["read"],
+  },
+  [RouteId.CreateTeam]: {
+    team: ["create"],
+  },
+  [RouteId.UpdateTeam]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeam]: {
+    team: ["delete"],
+  },
+  [RouteId.GetTeamMembers]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamMember]: {
+    team: ["update"],
   },
 };
 

@@ -29,6 +29,7 @@ const agentToolsTable = pgTable(
       .$type<ToolResultTreatment>()
       .notNull()
       .default("untrusted"),
+    responseModifierTemplate: text("response_modifier_template"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

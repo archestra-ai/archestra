@@ -16,7 +16,7 @@ describe("ToolInvocationPolicyModel", () => {
     // Create test agent
     const agent = await AgentModel.create({
       name: "Test Agent",
-      usersWithAccess: [],
+      teams: [],
     });
     agentId = agent.id;
 

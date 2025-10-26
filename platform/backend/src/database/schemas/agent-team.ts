@@ -6,22 +6,22 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
-import usersTable from "./user";
+import { team } from "./team";
 
-const agentAccessControlTable = pgTable(
-  "agent_access_control",
+const agentTeamTable = pgTable(
+  "agent_team",
   {
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
-    userId: text("user_id")
+    teamId: text("team_id")
       .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+      .references(() => team.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.agentId, table.userId] }),
+    pk: primaryKey({ columns: [table.agentId, table.teamId] }),
   }),
 );
 
-export default agentAccessControlTable;
+export default agentTeamTable;

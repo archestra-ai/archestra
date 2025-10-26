@@ -2046,20 +2046,6 @@ export type AnthropicMessagesResponse = {
     usage: unknown;
 };
 
-export type GetOpenapiJsonData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/openapi.json';
-};
-
-export type GetOpenapiJsonResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
 export type GetHealthData = {
     body?: never;
     path?: never;
@@ -2071,8 +2057,14 @@ export type GetHealthResponses = {
     /**
      * Default Response
      */
-    200: unknown;
+    200: {
+        name: string;
+        status: string;
+        version: string;
+    };
 };
+
+export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
 export type GetAgentsData = {
     body?: never;
@@ -2112,6 +2104,7 @@ export type GetAgentsResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2138,7 +2131,7 @@ export type GetAgentsResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     }>;
 };
 
@@ -2148,7 +2141,8 @@ export type CreateAgentData = {
     body: {
         name: string;
         isDemo?: boolean;
-        usersWithAccess: Array<string>;
+        isDefault?: boolean;
+        teams: Array<string>;
     };
     path?: never;
     query?: never;
@@ -2186,6 +2180,7 @@ export type CreateAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2212,11 +2207,82 @@ export type CreateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
 export type CreateAgentResponse = CreateAgentResponses[keyof CreateAgentResponses];
+
+export type GetDefaultAgentData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/default';
+};
+
+export type GetDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetDefaultAgentError = GetDefaultAgentErrors[keyof GetDefaultAgentErrors];
+
+export type GetDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        isDemo: boolean;
+        isDefault: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            mcpServerId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<string>;
+    };
+};
+
+export type GetDefaultAgentResponse = GetDefaultAgentResponses[keyof GetDefaultAgentResponses];
 
 export type DeleteAgentData = {
     body?: never;
@@ -2310,6 +2376,7 @@ export type GetAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2336,7 +2403,7 @@ export type GetAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
@@ -2346,7 +2413,8 @@ export type UpdateAgentData = {
     body?: {
         name?: string;
         isDemo?: boolean;
-        usersWithAccess?: Array<string>;
+        isDefault?: boolean;
+        teams?: Array<string>;
     };
     path: {
         id: string;
@@ -2386,6 +2454,7 @@ export type UpdateAgentResponses = {
         id: string;
         name: string;
         isDemo: boolean;
+        isDefault: boolean;
         createdAt: string;
         updatedAt: string;
         tools: Array<{
@@ -2412,7 +2481,7 @@ export type UpdateAgentResponses = {
             createdAt: string;
             updatedAt: string;
         }>;
-        usersWithAccess: Array<string>;
+        teams: Array<string>;
     };
 };
 
@@ -2456,6 +2525,7 @@ export type GetAllAgentToolsResponses = {
         id: string;
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2638,6 +2708,7 @@ export type UpdateAgentToolData = {
     body?: {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
     };
     path: {
         id: string;
@@ -2679,222 +2750,13 @@ export type UpdateAgentToolResponses = {
         toolId?: string;
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
+        responseModifierTemplate?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
-
-export type DeleteV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type DeleteV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type GetV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type HeadV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type OptionsV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PatchV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PostV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1AnthropicData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/anthropic/';
-};
-
-export type PutV1AnthropicResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type DeleteV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type GetV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type HeadV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type OptionsV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PatchV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PostV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1AnthropicBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/anthropic/{*}';
-};
-
-export type PutV1AnthropicBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -3976,216 +3838,6 @@ export type GetFeaturesResponses = {
 
 export type GetFeaturesResponse = GetFeaturesResponses[keyof GetFeaturesResponses];
 
-export type DeleteV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type DeleteV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type GetV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type HeadV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type OptionsV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PatchV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PostV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1GeminiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/gemini/';
-};
-
-export type PutV1GeminiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type DeleteV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type GetV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type HeadV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type OptionsV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PatchV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PostV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1GeminiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/gemini/{*}';
-};
-
-export type PutV1GeminiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
 export type PostV1GeminiModelsByModelGenerateContentData = {
     body?: GeminiGenerateContentRequestInput;
     headers: {
@@ -4853,16 +4505,26 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
-export type GetMcpByAgentIdData = {
+export type GetV1McpData = {
     body?: never;
-    path: {
-        agentId: string;
-    };
+    path?: never;
     query?: never;
-    url: '/mcp/{agentId}';
+    url: '/v1/mcp';
 };
 
-export type GetMcpByAgentIdResponses = {
+export type GetV1McpErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string;
+        message: string;
+    };
+};
+
+export type GetV1McpError = GetV1McpErrors[keyof GetV1McpErrors];
+
+export type GetV1McpResponses = {
     /**
      * Default Response
      */
@@ -4877,59 +4539,23 @@ export type GetMcpByAgentIdResponses = {
     };
 };
 
-export type GetMcpByAgentIdResponse = GetMcpByAgentIdResponses[keyof GetMcpByAgentIdResponses];
+export type GetV1McpResponse = GetV1McpResponses[keyof GetV1McpResponses];
 
-export type PostMcpByAgentIdData = {
-    body: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        method: string;
-        params?: {
-            [key: string]: unknown;
-        };
+export type PostV1McpData = {
+    body?: {
+        [key: string]: unknown;
     };
-    path: {
-        agentId: string;
-    };
+    path?: never;
     query?: never;
-    url: '/mcp/{agentId}';
+    url: '/v1/mcp';
 };
 
-export type PostMcpByAgentIdErrors = {
+export type PostV1McpResponses = {
     /**
      * Default Response
      */
-    500: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
+    200: unknown;
 };
-
-export type PostMcpByAgentIdError = PostMcpByAgentIdErrors[keyof PostMcpByAgentIdErrors];
-
-export type PostMcpByAgentIdResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        jsonrpc: '2.0';
-        id?: string | number | null;
-        result?: unknown;
-        error?: {
-            code: number;
-            message: string;
-            data?: unknown;
-        };
-    };
-};
-
-export type PostMcpByAgentIdResponse = PostMcpByAgentIdResponses[keyof PostMcpByAgentIdResponses];
 
 export type GetMcpServersData = {
     body?: never;
@@ -4939,6 +4565,15 @@ export type GetMcpServersData = {
 };
 
 export type GetMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -4965,6 +4600,7 @@ export type GetMcpServersResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     }>;
 };
 
@@ -4977,6 +4613,7 @@ export type InstallMcpServerData = {
         metadata?: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
+        teams?: Array<string>;
         agentIds?: Array<string>;
     };
     path?: never;
@@ -5020,6 +4657,7 @@ export type InstallMcpServerResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     };
 };
 
@@ -5081,6 +4719,15 @@ export type GetMcpServerErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -5113,220 +4760,11 @@ export type GetMcpServerResponses = {
         };
         createdAt: string;
         updatedAt: string;
+        teams?: Array<string>;
     };
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
-
-export type DeleteV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type DeleteV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type GetV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type HeadV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type OptionsV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PatchV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PostV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/v1/openai/';
-};
-
-export type PutV1OpenaiResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type DeleteV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type DeleteV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type GetV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type GetV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type HeadV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type HeadV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type OptionsV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type OptionsV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PatchV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PatchV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PostV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PostV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type PutV1OpenaiBy__Data = {
-    body?: never;
-    path: {
-        '*': string;
-    };
-    query?: never;
-    url: '/v1/openai/{*}';
-};
-
-export type PutV1OpenaiBy__Responses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;
@@ -5463,6 +4901,515 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type GetTeamsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/teams';
+};
+
+export type GetTeamsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamsError = GetTeamsErrors[keyof GetTeamsErrors];
+
+export type GetTeamsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetTeamsResponse = GetTeamsResponses[keyof GetTeamsResponses];
+
+export type CreateTeamData = {
+    body: {
+        name: string;
+        description?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/teams';
+};
+
+export type CreateTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateTeamError = CreateTeamErrors[keyof CreateTeamErrors];
+
+export type CreateTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type CreateTeamResponse = CreateTeamResponses[keyof CreateTeamResponses];
+
+export type DeleteTeamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type DeleteTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteTeamError = DeleteTeamErrors[keyof DeleteTeamErrors];
+
+export type DeleteTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteTeamResponse = DeleteTeamResponses[keyof DeleteTeamResponses];
+
+export type GetTeamData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type GetTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamError = GetTeamErrors[keyof GetTeamErrors];
+
+export type GetTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetTeamResponse = GetTeamResponses[keyof GetTeamResponses];
+
+export type UpdateTeamData = {
+    body?: {
+        name?: string;
+        description?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}';
+};
+
+export type UpdateTeamErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateTeamError = UpdateTeamErrors[keyof UpdateTeamErrors];
+
+export type UpdateTeamResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        organizationId: string;
+        createdBy: string;
+        createdAt: string;
+        updatedAt: string;
+        members?: Array<{
+            id: string;
+            teamId: string;
+            userId: string;
+            role: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type UpdateTeamResponse = UpdateTeamResponses[keyof UpdateTeamResponses];
+
+export type GetTeamMembersData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members';
+};
+
+export type GetTeamMembersErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetTeamMembersError = GetTeamMembersErrors[keyof GetTeamMembersErrors];
+
+export type GetTeamMembersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetTeamMembersResponse = GetTeamMembersResponses[keyof GetTeamMembersResponses];
+
+export type AddTeamMemberData = {
+    body: {
+        userId: string;
+        role?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members';
+};
+
+export type AddTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AddTeamMemberError = AddTeamMemberErrors[keyof AddTeamMemberErrors];
+
+export type AddTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        createdAt: string;
+    };
+};
+
+export type AddTeamMemberResponse = AddTeamMemberResponses[keyof AddTeamMemberResponses];
+
+export type RemoveTeamMemberData = {
+    body?: never;
+    path: {
+        id: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members/{userId}';
+};
+
+export type RemoveTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RemoveTeamMemberError = RemoveTeamMemberErrors[keyof RemoveTeamMemberErrors];
+
+export type RemoveTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
 
 export type GetToolsData = {
     body?: never;

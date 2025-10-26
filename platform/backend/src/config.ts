@@ -106,7 +106,7 @@ export default {
     authHeaderName: "X-Archestra-API-Key",
   },
   mcpGateway: {
-    endpoint: "/mcp",
+    endpoint: "/v1/mcp",
   },
   auth: {
     secret: process.env.ARCHESTRA_AUTH_SECRET,
@@ -120,6 +120,14 @@ export default {
   },
   database: {
     url: process.env.DATABASE_URL,
+  },
+  llm: {
+    openai: {
+      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    },
+    anthropic: {
+      baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+    },
   },
   features: {
     mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",

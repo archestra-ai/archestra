@@ -76,11 +76,12 @@ export function InternalMCPCatalog({
         return;
       }
 
-      // For other servers, install directly
+      // For other servers, install directly (no teams assigned)
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
+        teams: [],
       });
       setInstallingItemId(null);
     },
@@ -91,12 +92,14 @@ export function InternalMCPCatalog({
     async (
       catalogItem: GetInternalMcpCatalogResponses["200"][number],
       metadata: Record<string, unknown>,
+      teams: string[],
     ) => {
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
         metadata,
+        teams,
       });
       setInstallingItemId(null);
     },
@@ -153,14 +156,14 @@ export function InternalMCPCatalog({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Your MCP Servers</h2>
+          <h2 className="text-lg font-semibold">Private MCP Registry</h2>
           <p className="text-sm text-muted-foreground">
-            MCP Servers added to your internal registry
+            MCP Servers from this registry can be assigned to your agents.
           </p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Add custom server
+          Add MCP server using config
         </Button>
       </div>
       <div className="relative">

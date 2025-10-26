@@ -21,10 +21,11 @@ export default function McpRegistryPage({
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">
-            MCP Catalog
+            MCP Registry
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage your internal Model Context Protocol (MCP) server catalog
+            Self-hosted MCP registry allows you to manage your own list of MCP
+            servers and make them available to your agents.
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { GoogleGenAI } from "@google/genai";
+import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -107,6 +108,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
+    // Add OpenTelemetry span attribute for filtering in Jaeger
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute("route.category", "llm-proxy");
+      span.setAttribute("llm.provider", "gemini");
+    }
+
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -287,12 +295,32 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       } else {
-        // Non-streaming response
-        const response = await genAI.models.generateContent({
-          model: modelName,
-          ...processedBody,
-          // tools: mergedTools,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const tracer = trace.getTracer("archestra");
+        const response = await tracer.startActiveSpan(
+          "gemini.generateContent",
+          {
+            attributes: {
+              "llm.model": modelName,
+              "llm.stream": false,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const response = await genAI.models.generateContent({
+                model: modelName,
+                ...processedBody,
+                // tools: mergedTools,
+              });
+              llmSpan.end();
+              return response;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
+        );
 
         // Convert to common format for policy evaluation
         // const commonResponse = transformer.responseToOpenAI(geminiResponse);

@@ -23,6 +23,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.67.0
         version: 0.67.0(zod@4.1.12)
+      '@better-auth/core':
+        specifier: ^1.3.27
+        version: 1.3.29(@better-auth/utils@0.3.0)(@better-fetch/fetch@1.1.18)(better-call@1.0.19)(jose@6.1.0)(kysely@0.28.8)(nanostores@1.0.1)
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.1.0

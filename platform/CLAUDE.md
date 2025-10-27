@@ -75,6 +75,13 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - `experiments/` - CLI testing and proxy prototypes
 - `shared/` - Common utilities and types
 
+## Authentication
+
+- **API Key Auth**: API keys can be used via `Authorization` header
+- API keys have all permissions by default
+- API keys work as fallback when session auth fails (e.g., "No active organization" errors)
+- Use `pnpm test:e2e` to run API tests with API key authentication
+
 ## Coding Conventions
 
 **Frontend**:

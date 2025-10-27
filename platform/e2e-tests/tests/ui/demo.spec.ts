@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { E2eTestId } from '@shared';
-import utils from '../utils';
+import utils from '../../utils';
 
 test('has `How it works` heading on home page', async ({ page }) => {
   await utils.common.goToPage(page);

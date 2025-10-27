@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { BASE_URL } from '../consts';
-import utils from '../utils';
+import { BASE_URL } from '../../consts';
+import utils from '../../utils';
 
 test.describe('LLM Proxy - OpenAI', () => {
   const OPENAI_TEST_CASE_1_HEADER = 'Bearer test-case-1-openai-tool-call';

@@ -286,8 +286,9 @@ class ToolModel {
   ): Promise<
     Array<{
       toolName: string;
-      mcpServerInstallationMetadata: Record<string, unknown>;
       responseModifierTemplate: string | null;
+      mcpServerSecretId: string | null;
+      mcpServerName: string;
     }>
   > {
     if (toolNames.length === 0) {
@@ -297,9 +298,10 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
         responseModifierTemplate:
           schema.agentToolsTable.responseModifierTemplate,
+        mcpServerSecretId: schema.mcpServersTable.secretId,
+        mcpServerName: schema.mcpServersTable.name,
       })
       .from(schema.toolsTable)
       .innerJoin(

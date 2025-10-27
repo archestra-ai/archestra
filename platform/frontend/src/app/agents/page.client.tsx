@@ -58,7 +58,6 @@ import {
 } from "@/lib/agent.query";
 import type { GetAgentsResponses } from "@/lib/clients/api";
 import { getTeams } from "@/lib/clients/api/sdk.gen";
-import { useFeatureFlag } from "@/lib/features.hook";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
@@ -144,7 +143,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
       return data || [];
     },
   });
-  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
@@ -272,24 +271,22 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                                 <TooltipContent>Connect</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            {mcpRegistryEnabled && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() =>
-                                        setAssigningToolsAgent(agent)
-                                      }
-                                    >
-                                      <Wrench className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Assign Tools</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      setAssigningToolsAgent(agent)
+                                    }
+                                  >
+                                    <Wrench className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Assign Tools</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>

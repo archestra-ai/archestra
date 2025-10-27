@@ -3832,7 +3832,7 @@ export type GetFeaturesResponses = {
      * Default Response
      */
     200: {
-        mcp_registry: boolean;
+        [key: string]: never;
     };
 };
 
@@ -4269,6 +4269,7 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
+        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4276,9 +4277,51 @@ export type GetInternalMcpCatalogResponses = {
         installationCommand: string | null;
         requiresAuth: boolean;
         authDescription: string | null;
-        authFields: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -4288,6 +4331,7 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
+        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -4295,9 +4339,51 @@ export type CreateInternalMcpCatalogItemData = {
         installationCommand?: string | null;
         requiresAuth?: boolean;
         authDescription?: string | null;
-        authFields?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields?: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType?: 'local' | 'remote';
+        serverUrl?: string | null;
+        docsUrl?: string | null;
+        userConfig?: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig?: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
     };
     path?: never;
     query?: never;
@@ -4324,6 +4410,7 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
+        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4331,9 +4418,51 @@ export type CreateInternalMcpCatalogItemResponses = {
         installationCommand: string | null;
         requiresAuth: boolean;
         authDescription: string | null;
-        authFields: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -4422,6 +4551,7 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
+        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4429,9 +4559,51 @@ export type GetInternalMcpCatalogItemResponses = {
         installationCommand: string | null;
         requiresAuth: boolean;
         authDescription: string | null;
-        authFields: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -4441,6 +4613,7 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
+        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -4448,9 +4621,51 @@ export type UpdateInternalMcpCatalogItemData = {
         installationCommand?: string | null;
         requiresAuth?: boolean;
         authDescription?: string | null;
-        authFields?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields?: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType?: 'local' | 'remote';
+        serverUrl?: string | null;
+        docsUrl?: string | null;
+        userConfig?: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig?: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
     };
     path: {
         id: string;
@@ -4488,6 +4703,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
+        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4495,9 +4711,51 @@ export type UpdateInternalMcpCatalogItemResponses = {
         installationCommand: string | null;
         requiresAuth: boolean;
         authDescription: string | null;
-        authFields: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown> | null;
+        authFields: Array<{
+            name: string;
+            label: string;
+            type: string;
+            required: boolean;
+            description?: string;
+        }> | null;
+        serverType: string | null;
+        serverUrl: string | null;
+        docsUrl: string | null;
+        userConfig: {
+            [key: string]: {
+                type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+                title: string;
+                description: string;
+                required?: boolean;
+                default?: string | number | boolean | Array<string>;
+                multiple?: boolean;
+                sensitive?: boolean;
+                min?: number;
+                max?: number;
+            };
+        } | null;
+        oauthConfig: {
+            name: string;
+            server_url: string;
+            auth_server_url?: string;
+            resource_metadata_url?: string;
+            client_id: string;
+            client_secret?: string;
+            redirect_uris: Array<string>;
+            scopes: Array<string>;
+            description?: string;
+            well_known_url?: string;
+            default_scopes: Array<string>;
+            supports_resource_metadata: boolean;
+            generic_oauth?: boolean;
+            token_endpoint?: string;
+            access_token_env_var?: string;
+            requires_proxy?: boolean;
+            provider_name?: string;
+            browser_auth?: boolean;
+            streamable_http_url?: string;
+            streamable_http_port?: number;
+        } | null;
         createdAt: string;
         updatedAt: string;
     };
@@ -4595,9 +4853,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -4610,11 +4866,10 @@ export type InstallMcpServerData = {
     body: {
         name: string;
         catalogId?: string | null;
-        metadata?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        secretId?: string;
         teams?: Array<string>;
         agentIds?: Array<string>;
+        accessToken?: string;
     };
     path?: never;
     query?: never;
@@ -4652,9 +4907,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -4755,9 +5008,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -4765,6 +5016,110 @@ export type GetMcpServerResponses = {
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type InitiateOAuthData = {
+    body: {
+        catalogId: string;
+        serverId?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/oauth/initiate';
+};
+
+export type InitiateOAuthErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type InitiateOAuthError = InitiateOAuthErrors[keyof InitiateOAuthErrors];
+
+export type InitiateOAuthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        authorizationUrl: string;
+        state: string;
+    };
+};
+
+export type InitiateOAuthResponse = InitiateOAuthResponses[keyof InitiateOAuthResponses];
+
+export type HandleOAuthCallbackData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/oauth/callback';
+};
+
+export type HandleOAuthCallbackErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type HandleOAuthCallbackError = HandleOAuthCallbackErrors[keyof HandleOAuthCallbackErrors];
+
+export type HandleOAuthCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        catalogId: string;
+        name: string;
+        accessToken: string;
+        refreshToken?: string;
+        expiresIn?: number;
+        secretId: string;
+    };
+};
+
+export type HandleOAuthCallbackResponse = HandleOAuthCallbackResponses[keyof HandleOAuthCallbackResponses];
 
 export type OpenAiChatCompletionsWithDefaultAgentData = {
     body?: OpenAiChatCompletionRequestInput;

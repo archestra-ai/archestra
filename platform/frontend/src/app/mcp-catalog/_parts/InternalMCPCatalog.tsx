@@ -10,8 +10,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,12 +27,107 @@ import type {
 } from "@/lib/clients/api";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
-import { formatDate } from "@/lib/utils";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
+import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
+import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
+
+type CatalogItemWithOptionalLabel =
+  GetInternalMcpCatalogResponses["200"][number] & {
+    label?: string | null;
+  };
+
+function InternalServerCard({
+  item,
+  installed,
+  isInstalling,
+  onInstall,
+  onUninstall,
+  onEdit,
+  onDelete,
+}: {
+  item: CatalogItemWithOptionalLabel;
+  installed: boolean;
+  isInstalling: boolean;
+  onInstall: () => void;
+  onUninstall: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Card className="flex flex-col relative pt-4">
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <CardTitle className="text-lg truncate mb-1 flex items-center">
+              {item.label || item.name}
+            </CardTitle>
+            {item.label && item.label !== item.name && (
+              <p className="text-xs text-muted-foreground font-mono truncate mb-2">
+                {item.name}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              {item.oauthConfig && (
+                <Badge variant="secondary" className="text-xs">
+                  OAuth
+                </Badge>
+              )}
+              <TransportBadges isRemote={item.serverType === "remote"} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col pt-3">
+        {installed ? (
+          <Button
+            onClick={onUninstall}
+            size="sm"
+            className="w-full bg-accent text-accent-foreground hover:bg-accent"
+          >
+            Uninstall
+          </Button>
+        ) : (
+          <Button
+            onClick={onInstall}
+            disabled={isInstalling}
+            size="sm"
+            className="w-full"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {isInstalling ? "Installing..." : "Install"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function InternalMCPCatalog({
   initialData,
@@ -59,9 +156,12 @@ export function InternalMCPCatalog({
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
+  const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
+    useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
     GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
+  const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
 
   const handleInstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
@@ -76,7 +176,25 @@ export function InternalMCPCatalog({
         return;
       }
 
-      // For other servers, install directly (no teams assigned)
+      // Check if this server requires OAuth authentication
+      if (catalogItem.oauthConfig) {
+        setSelectedCatalogItem(catalogItem);
+        setIsOAuthDialogOpen(true);
+        return;
+      }
+
+      // Check if this is a remote server with user configuration
+      if (
+        catalogItem.serverType === "remote" &&
+        catalogItem.userConfig &&
+        Object.keys(catalogItem.userConfig).length > 0
+      ) {
+        setSelectedCatalogItem(catalogItem);
+        setIsRemoteServerDialogOpen(true);
+        return;
+      }
+
+      // For servers without configuration, install directly
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
@@ -91,20 +209,75 @@ export function InternalMCPCatalog({
   const handleGitHubInstall = useCallback(
     async (
       catalogItem: GetInternalMcpCatalogResponses["200"][number],
-      metadata: Record<string, unknown>,
+      accessToken: string,
       teams: string[],
     ) => {
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        metadata,
+        accessToken,
         teams,
       });
       setInstallingItemId(null);
     },
     [installMutation],
   );
+
+  const handleRemoteServerInstall = useCallback(
+    async (
+      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      metadata?: Record<string, unknown>,
+    ) => {
+      setInstallingItemId(catalogItem.id);
+
+      // Extract access_token from metadata if present and pass as accessToken
+      const accessToken =
+        metadata?.access_token && typeof metadata.access_token === "string"
+          ? metadata.access_token
+          : undefined;
+
+      await installMutation.mutateAsync({
+        name: catalogItem.name,
+        catalogId: catalogItem.id,
+        ...(accessToken && { accessToken }),
+      });
+      setInstallingItemId(null);
+    },
+    [installMutation],
+  );
+
+  const handleOAuthConfirm = useCallback(async () => {
+    if (!selectedCatalogItem) return;
+
+    try {
+      // Call backend to initiate OAuth flow
+      const response = await fetch("/api/oauth/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          catalogId: selectedCatalogItem.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to initiate OAuth flow");
+      }
+
+      const { authorizationUrl, state } = await response.json();
+
+      // Store state in session storage for the callback
+      sessionStorage.setItem("oauth_state", state);
+      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+
+      // Redirect to OAuth provider
+      window.location.href = authorizationUrl;
+    } catch {
+      // TODO: Show error toast
+    }
+  }, [selectedCatalogItem]);
 
   const getInstallationCount = useCallback(
     (catalogId: string) => {
@@ -152,6 +325,16 @@ export function InternalMCPCatalog({
     });
   }, [catalogItems, catalogSearchQuery, installedServers]);
 
+  // Find installed servers that don't have matching catalog items
+  const _orphanedServers = useMemo(() => {
+    if (!installedServers) return [];
+
+    const catalogIds = new Set(catalogItems?.map((item) => item.id) || []);
+    return installedServers.filter(
+      (server) => server.catalogId && !catalogIds.has(server.catalogId),
+    );
+  }, [installedServers, catalogItems]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -178,81 +361,26 @@ export function InternalMCPCatalog({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filteredCatalogItems?.map((item) => {
           const installedServer = getInstalledServer(item.id);
+          const itemWithLabel = item as CatalogItemWithOptionalLabel;
 
           return (
-            <div key={item.id} className="rounded-lg border p-4 flex flex-col">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-h-[3rem]">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-medium">{item.name}</h3>
-                    {item.version && (
-                      <Badge variant="secondary" className="text-xs">
-                        v{item.version}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Created:{" "}
-                    {formatDate({
-                      date: item.createdAt,
-                      dateFormat: "MM/dd/yyyy",
-                    })}
-                  </p>
-                  {installedServer && (
-                    <p className="text-sm text-muted-foreground">
-                      Installed:{" "}
-                      {formatDate({
-                        date: installedServer.createdAt,
-                        dateFormat: "MM/dd/yyyy",
-                      })}
-                    </p>
-                  )}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditingItem(item)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDeletingItem(item)}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="mt-auto">
-                {installedServer ? (
-                  <Button
-                    onClick={() =>
-                      handleUninstallClick(
-                        installedServer.id,
-                        installedServer.name,
-                      )
-                    }
-                    size="sm"
-                    className="w-full bg-accent text-accent-foreground hover:bg-accent"
-                  >
-                    Uninstall
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => handleInstall(item)}
-                    disabled={installingItemId === item.id}
-                    size="sm"
-                    className="w-full"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    {installingItemId === item.id ? "Installing..." : "Install"}
-                  </Button>
-                )}
-              </div>
-            </div>
+            <InternalServerCard
+              key={item.id}
+              item={itemWithLabel}
+              installed={!!installedServer}
+              isInstalling={installingItemId === item.id}
+              onInstall={() => handleInstall(item)}
+              onUninstall={() => {
+                if (installedServer) {
+                  handleUninstallClick(
+                    installedServer.id,
+                    installedServer.name,
+                  );
+                }
+              }}
+              onEdit={() => setEditingItem(item)}
+              onDelete={() => setDeletingItem(item)}
+            />
           );
         })}
       </div>
@@ -296,6 +424,28 @@ export function InternalMCPCatalog({
         onInstall={handleGitHubInstall}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
+      />
+
+      <RemoteServerInstallDialog
+        isOpen={isRemoteServerDialogOpen}
+        onClose={() => {
+          setIsRemoteServerDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
+        onInstall={handleRemoteServerInstall}
+        catalogItem={selectedCatalogItem}
+        isInstalling={installMutation.isPending}
+      />
+
+      <OAuthConfirmationDialog
+        open={isOAuthDialogOpen}
+        onOpenChange={setIsOAuthDialogOpen}
+        serverName={selectedCatalogItem?.name || ""}
+        onConfirm={handleOAuthConfirm}
+        onCancel={() => {
+          setIsOAuthDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
       />
 
       <UninstallServerDialog

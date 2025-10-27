@@ -3,6 +3,7 @@ import {
   AgentModel,
   AgentToolModel,
   McpServerModel,
+  SecretModel,
   ToolModel,
 } from "@/models";
 import mcpClientService from "./mcp-client";
@@ -34,10 +35,17 @@ describe("McpClientService", () => {
     const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
     agentId = agent.id;
 
-    // Create MCP server for testing
+    // Create secret with access token
+    const secret = await SecretModel.create({
+      secret: {
+        access_token: "test-github-token-123",
+      },
+    });
+
+    // Create MCP server for testing with secret
     const mcpServer = await McpServerModel.create({
       name: "github-mcp-server",
-      metadata: { githubToken: "test-token" },
+      secretId: secret.id,
     });
     mcpServerId = mcpServer.id;
 

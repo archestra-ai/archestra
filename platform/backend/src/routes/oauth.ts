@@ -1,0 +1,749 @@
+import { createHash, randomBytes } from "node:crypto";
+import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { InternalMcpCatalogModel, SecretModel } from "@/models";
+import { ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+
+/**
+ * Generate PKCE code verifier
+ */
+function generateCodeVerifier(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * Generate PKCE code challenge from verifier
+ */
+function generateCodeChallenge(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+/**
+ * Discover OAuth resource metadata (for MCP servers)
+ * Sends MCP-Protocol-Version header for MCP-aware servers
+ */
+async function discoverOAuthResourceMetadata(serverUrl: string) {
+  try {
+    // MCP SDK uses "path-aware discovery": /.well-known/{type}{pathname}
+    // For https://huggingface.co/mcp -> https://huggingface.co/.well-known/oauth-protected-resource/mcp
+    const url = new URL(serverUrl);
+    const pathname = url.pathname.endsWith("/")
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+    const wellKnownUrl = `${url.origin}/.well-known/oauth-protected-resource${pathname}`;
+
+    const response = await fetch(wellKnownUrl, {
+      headers: {
+        "MCP-Protocol-Version": "2025-06-18",
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch resource metadata: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    throw new Error(
+      `Resource metadata discovery failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+}
+
+/**
+ * Discover OAuth scopes from server metadata
+ * Tries multiple discovery methods like the desktop app does
+ */
+async function discoverScopes(
+  serverUrl: string,
+  supportsResourceMetadata: boolean,
+  defaultScopes: string[],
+): Promise<string[]> {
+  // Try resource metadata discovery first if supported
+  if (supportsResourceMetadata) {
+    try {
+      const resourceMetadata = await discoverOAuthResourceMetadata(serverUrl);
+      if (
+        resourceMetadata?.scopes_supported &&
+        Array.isArray(resourceMetadata.scopes_supported) &&
+        resourceMetadata.scopes_supported.length > 0
+      ) {
+        return resourceMetadata.scopes_supported;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  // Try authorization server metadata discovery
+  try {
+    const metadata = await discoverAuthorizationServerMetadata(serverUrl);
+    if (
+      metadata.scopes_supported &&
+      Array.isArray(metadata.scopes_supported) &&
+      metadata.scopes_supported.length > 0
+    ) {
+      return metadata.scopes_supported;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  // Fall back to default scopes
+  return defaultScopes;
+}
+
+/**
+ * Build discovery URLs to try for authorization server metadata
+ * Implements the same fallback strategy as MCP SDK
+ */
+function buildDiscoveryUrls(serverUrl: string): string[] {
+  const url = new URL(serverUrl);
+  const hasPath = url.pathname !== "/" && url.pathname !== "";
+  const urls: string[] = [];
+
+  if (!hasPath) {
+    // Root path: try OAuth then OIDC
+    urls.push(`${url.origin}/.well-known/oauth-authorization-server`);
+    urls.push(`${url.origin}/.well-known/openid-configuration`);
+    return urls;
+  }
+
+  // Strip trailing slash
+  let pathname = url.pathname;
+  if (pathname.endsWith("/")) {
+    pathname = pathname.slice(0, -1);
+  }
+
+  // Try path-aware OAuth first, then root OAuth, then OIDC variants
+  urls.push(`${url.origin}/.well-known/oauth-authorization-server${pathname}`);
+  urls.push(`${url.origin}/.well-known/oauth-authorization-server`);
+  urls.push(`${url.origin}/.well-known/openid-configuration${pathname}`);
+  urls.push(`${url.origin}${pathname}/.well-known/openid-configuration`);
+
+  return urls;
+}
+
+/**
+ * Discover OAuth authorization server metadata with fallback support
+ * Tries multiple discovery URLs like the MCP SDK does
+ */
+async function discoverAuthorizationServerMetadata(serverUrl: string): Promise<{
+  authorization_endpoint: string;
+  token_endpoint: string;
+  registration_endpoint?: string;
+  scopes_supported?: string[];
+}> {
+  const urls = buildDiscoveryUrls(serverUrl);
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "MCP-Protocol-Version": "2025-06-18",
+        },
+      });
+
+      // If we get a 4xx error, try the next URL
+      if (!response.ok && response.status >= 400 && response.status < 500) {
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status} from discovery endpoint: ${url}`,
+        );
+      }
+
+      const metadata = await response.json();
+
+      // Validate that we got the required fields
+      if (metadata.authorization_endpoint && metadata.token_endpoint) {
+        return metadata;
+      }
+    } catch (error) {
+      // If this is the last URL, throw the error
+      if (url === urls[urls.length - 1]) {
+        throw new Error(
+          `Authorization server metadata discovery failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    }
+  }
+
+  throw new Error(
+    "Authorization server metadata discovery failed: No valid metadata found at any discovery endpoint",
+  );
+}
+
+/**
+ * Perform dynamic client registration (RFC 7591)
+ */
+async function registerOAuthClient(
+  registrationEndpoint: string,
+  clientMetadata: {
+    client_name: string;
+    redirect_uris: string[];
+    grant_types?: string[];
+    response_types?: string[];
+    scope?: string;
+  },
+) {
+  try {
+    const response = await fetch(registrationEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(clientMetadata),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Client registration failed: ${response.status} ${errorText}`,
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    throw new Error(
+      `Dynamic client registration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+}
+
+/**
+ * In-memory storage for OAuth state (serverId, catalogId, codeVerifier, clientId, clientSecret)
+ * In production, this should be stored in Redis or database with expiration
+ */
+const oauthStateStore = new Map<
+  string,
+  {
+    catalogId: string;
+    codeVerifier: string;
+    timestamp: number;
+    clientId?: string;
+    clientSecret?: string;
+  }
+>();
+
+// Clean up expired states every 10 minutes
+setInterval(
+  () => {
+    const now = Date.now();
+    const tenMinutes = 10 * 60 * 1000;
+
+    for (const [state, data] of oauthStateStore.entries()) {
+      if (now - data.timestamp > tenMinutes) {
+        oauthStateStore.delete(state);
+      }
+    }
+  },
+  10 * 60 * 1000,
+);
+
+const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Initiate OAuth flow for an MCP server
+   * Returns the authorization URL to redirect the user to
+   */
+  fastify.post(
+    "/api/oauth/initiate",
+    {
+      schema: {
+        operationId: RouteId.InitiateOAuth,
+        description: "Initiate OAuth flow for MCP server installation",
+        tags: ["OAuth"],
+        body: z.object({
+          catalogId: UuidIdSchema,
+          serverId: UuidIdSchema.optional(), // Optional: if server already exists
+        }),
+        response: {
+          200: z.object({
+            authorizationUrl: z.string().url(),
+            state: z.string(),
+          }),
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { catalogId } = request.body;
+
+        // Get catalog item to retrieve OAuth configuration
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+
+        if (!catalogItem) {
+          return reply.status(404).send({
+            error: {
+              message: "Catalog item not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        if (!catalogItem.oauthConfig) {
+          return reply.status(400).send({
+            error: {
+              message: "This server does not support OAuth",
+              type: "validation_error",
+            },
+          });
+        }
+
+        const oauthConfig = catalogItem.oauthConfig;
+
+        // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
+        // This ensures the redirect URI matches where the user initiated the OAuth flow from
+        const redirectUri = oauthConfig.redirect_uris[0];
+
+        let clientId = oauthConfig.client_id;
+        let clientSecret = oauthConfig.client_secret;
+
+        // Discover actual scopes from the OAuth server (like desktop app does)
+        const discoveredScopes = await discoverScopes(
+          oauthConfig.server_url,
+          oauthConfig.supports_resource_metadata || false,
+          oauthConfig.default_scopes || oauthConfig.scopes,
+        );
+
+        // Use discovered scopes if different from configured
+        const scopesToUse =
+          JSON.stringify(discoveredScopes.sort()) !==
+          JSON.stringify(oauthConfig.scopes.sort())
+            ? discoveredScopes
+            : oauthConfig.scopes;
+
+        if (scopesToUse !== oauthConfig.scopes) {
+          fastify.log.info(
+            {
+              configured: oauthConfig.scopes,
+              discovered: scopesToUse,
+            },
+            "Using discovered scopes instead of configured scopes",
+          );
+        }
+
+        // Check if dynamic registration is needed
+        if (!clientId) {
+          fastify.log.info(
+            "Client ID is empty, checking for cached credentials or performing dynamic registration",
+          );
+
+          // If still no client credentials, use a default public client identifier
+          // This supports PKCE-only flows where the server doesn't require
+          // pre-registered client credentials
+          if (!clientId) {
+            fastify.log.info(
+              "No client credentials found, using default public client identifier for PKCE flow",
+            );
+            clientId = "archestra-platform-public-client";
+            // No client_secret for public clients
+          }
+        }
+
+        // Discover authorization server metadata to get the correct authorization endpoint
+        let authorizationEndpoint: string;
+        let registrationEndpoint: string | undefined;
+        let discoveryServerUrl = oauthConfig.server_url;
+
+        // For proxy servers, skip discovery and use the MCP server URL directly
+        if (oauthConfig.requires_proxy) {
+          fastify.log.info(
+            { serverUrl: oauthConfig.server_url },
+            "Server requires proxy, using MCP server URL as OAuth server",
+          );
+          // GitHub Copilot MCP uses /mcp/oauth/authorize
+          authorizationEndpoint = `${oauthConfig.server_url}/oauth/authorize`;
+          // Proxy servers typically don't support dynamic registration
+          registrationEndpoint = undefined;
+        } else {
+          // Try resource metadata discovery first, but treat failures as non-fatal
+          if (oauthConfig.supports_resource_metadata) {
+            try {
+              fastify.log.info(
+                { serverUrl: oauthConfig.server_url },
+                "Server supports resource metadata, discovering resource metadata first",
+              );
+              const resourceMetadata = await discoverOAuthResourceMetadata(
+                oauthConfig.server_url,
+              );
+
+              // Extract authorization server URL from resource metadata
+              // RFC 8414: authorization_servers is an array of issuer URLs
+              if (
+                resourceMetadata.authorization_servers &&
+                Array.isArray(resourceMetadata.authorization_servers) &&
+                resourceMetadata.authorization_servers.length > 0
+              ) {
+                discoveryServerUrl = resourceMetadata.authorization_servers[0];
+                fastify.log.info(
+                  { authServerUrl: discoveryServerUrl },
+                  "Using authorization server URL from resource metadata",
+                );
+              }
+            } catch (error) {
+              // Some servers require auth to access resource metadata (may return 401).
+              // Log and continue with standard authorization server discovery.
+              fastify.log.warn(
+                { error },
+                "Resource metadata discovery failed; continuing with standard discovery",
+              );
+            }
+          }
+
+          try {
+            fastify.log.info(
+              { serverUrl: discoveryServerUrl },
+              "Discovering authorization server metadata",
+            );
+            const metadata =
+              await discoverAuthorizationServerMetadata(discoveryServerUrl);
+            authorizationEndpoint = metadata.authorization_endpoint;
+            registrationEndpoint = metadata.registration_endpoint;
+            fastify.log.info(
+              {
+                authorizationEndpoint,
+                tokenEndpoint: metadata.token_endpoint,
+                registrationEndpoint,
+              },
+              "Discovery successful",
+            );
+          } catch (error) {
+            fastify.log.error(
+              { error },
+              "Authorization server discovery failed",
+            );
+            return reply.status(500).send({
+              error: {
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to discover OAuth endpoints",
+                type: "api_error",
+              },
+            });
+          }
+        }
+
+        // If we don't have client credentials and registration endpoint is available, try dynamic registration
+        if (
+          (!clientId || clientId === "archestra-platform-public-client") &&
+          registrationEndpoint
+        ) {
+          try {
+            fastify.log.info(
+              { registrationEndpoint },
+              "Attempting dynamic client registration",
+            );
+            const registrationResult = await registerOAuthClient(
+              registrationEndpoint,
+              {
+                client_name: `Archestra Platform - ${catalogItem.name}`,
+                redirect_uris: [redirectUri],
+                grant_types: ["authorization_code", "refresh_token"],
+                response_types: ["code"],
+                scope: scopesToUse.join(" "),
+              },
+            );
+
+            clientId = registrationResult.client_id;
+            clientSecret = registrationResult.client_secret;
+
+            fastify.log.info(
+              { client_id: clientId },
+              "Dynamic registration successful",
+            );
+          } catch (error) {
+            fastify.log.warn(
+              {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
+              "Dynamic registration failed, continuing with default client_id",
+            );
+            // Continue with default client_id if registration fails
+          }
+        }
+
+        // Generate PKCE parameters
+        const codeVerifier = generateCodeVerifier();
+        const codeChallenge = generateCodeChallenge(codeVerifier);
+        const state = randomBytes(16).toString("base64url");
+
+        // Store state temporarily (will be used in callback)
+        oauthStateStore.set(state, {
+          catalogId,
+          codeVerifier,
+          timestamp: Date.now(),
+          clientId,
+          clientSecret,
+        });
+
+        // Build authorization URL using the discovered authorization endpoint
+        const authUrl = new URL(authorizationEndpoint);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("client_id", clientId);
+        authUrl.searchParams.set("code_challenge", codeChallenge);
+        authUrl.searchParams.set("code_challenge_method", "S256");
+        authUrl.searchParams.set("state", state);
+        authUrl.searchParams.set("scope", scopesToUse.join(" "));
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+
+        return reply.send({
+          authorizationUrl: authUrl.toString(),
+          state,
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * Handle OAuth callback
+   * Exchanges authorization code for access token
+   */
+  fastify.post(
+    "/api/oauth/callback",
+    {
+      schema: {
+        operationId: RouteId.HandleOAuthCallback,
+        description: "Handle OAuth callback and exchange code for tokens",
+        tags: ["OAuth"],
+        body: z.object({
+          code: z.string(),
+          state: z.string(),
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            catalogId: UuidIdSchema,
+            name: z.string(),
+            accessToken: z.string(),
+            refreshToken: z.string().optional(),
+            expiresIn: z.number().optional(),
+            secretId: UuidIdSchema,
+          }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { code, state } = request.body;
+
+        // Retrieve OAuth state
+        const oauthState = oauthStateStore.get(state);
+        if (!oauthState) {
+          return reply.status(400).send({
+            error: {
+              message: "Invalid or expired OAuth state",
+              type: "validation_error",
+            },
+          });
+        }
+
+        // Get catalog item to retrieve OAuth configuration
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          oauthState.catalogId,
+        );
+
+        if (!catalogItem || !catalogItem.oauthConfig) {
+          return reply.status(400).send({
+            error: {
+              message: "Invalid catalog item or OAuth configuration",
+              type: "validation_error",
+            },
+          });
+        }
+
+        const oauthConfig = catalogItem.oauthConfig;
+
+        // Use client credentials from state (dynamically registered) or fall back to config
+        const clientId = oauthState.clientId || oauthConfig.client_id;
+        const clientSecret =
+          oauthState.clientSecret || oauthConfig.client_secret;
+
+        // Use the same redirect URI that was registered during initiation
+        // This must match exactly what was used in the authorization request
+        const redirectUri = oauthConfig.redirect_uris[0];
+        let tokenData: {
+          access_token: string;
+          refresh_token?: string;
+          expires_in?: number;
+        };
+
+        // For proxy servers, use MCP SDK's exchangeAuthorization function
+        if (oauthConfig.requires_proxy) {
+          fastify.log.info(
+            { serverUrl: oauthConfig.server_url },
+            "Server requires proxy, using MCP SDK exchangeAuthorization",
+          );
+
+          try {
+            // Use MCP SDK's exchangeAuthorization - it handles all discovery and authentication
+            const tokens = await exchangeAuthorization(oauthConfig.server_url, {
+              clientInformation: {
+                client_id: clientId,
+                client_secret: clientSecret,
+              },
+              authorizationCode: code,
+              codeVerifier: oauthState.codeVerifier,
+              redirectUri,
+              // For GitHub Copilot, pass the MCP server URL as resource
+              resource: new URL(oauthConfig.server_url),
+            });
+
+            fastify.log.info("MCP SDK token exchange successful");
+            tokenData = tokens;
+          } catch (error) {
+            fastify.log.error({ error }, "MCP SDK token exchange failed");
+            return reply.status(400).send({
+              error: {
+                message: `Failed to exchange authorization code: ${error instanceof Error ? error.message : "Unknown error"}`,
+                type: "oauth_error",
+              },
+            });
+          }
+        } else {
+          // For non-proxy servers, use standard OAuth token exchange
+          let tokenEndpoint: string;
+          let discoveryServerUrl = oauthConfig.server_url;
+
+          try {
+            // Try resource metadata discovery first, but treat failures as non-fatal
+            if (oauthConfig.supports_resource_metadata) {
+              try {
+                fastify.log.info(
+                  { serverUrl: oauthConfig.server_url },
+                  "Server supports resource metadata, discovering resource metadata first",
+                );
+                const resourceMetadata = await discoverOAuthResourceMetadata(
+                  oauthConfig.server_url,
+                );
+
+                // Extract authorization server URL from resource metadata
+                if (
+                  resourceMetadata.authorization_servers &&
+                  Array.isArray(resourceMetadata.authorization_servers) &&
+                  resourceMetadata.authorization_servers.length > 0
+                ) {
+                  discoveryServerUrl =
+                    resourceMetadata.authorization_servers[0];
+                  fastify.log.info(
+                    { authServerUrl: discoveryServerUrl },
+                    "Using authorization server URL from resource metadata",
+                  );
+                }
+              } catch (error) {
+                fastify.log.warn(
+                  { error },
+                  "Resource metadata discovery failed; continuing with standard discovery",
+                );
+              }
+            }
+
+            const metadata =
+              await discoverAuthorizationServerMetadata(discoveryServerUrl);
+            tokenEndpoint = metadata.token_endpoint;
+            fastify.log.info(
+              { tokenEndpoint },
+              "Discovered token endpoint for callback",
+            );
+          } catch (error) {
+            fastify.log.error(
+              { error },
+              "Token endpoint discovery failed, using fallback",
+            );
+            // Fallback to config or constructed endpoint
+            tokenEndpoint =
+              oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
+          }
+
+          const tokenResponse = await fetch(tokenEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              grant_type: "authorization_code",
+              code,
+              redirect_uri: redirectUri,
+              client_id: clientId,
+              code_verifier: oauthState.codeVerifier,
+              ...(clientSecret && {
+                client_secret: clientSecret,
+              }),
+            }),
+          });
+
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            fastify.log.error(
+              `Token exchange failed: ${tokenResponse.status} ${errorText}`,
+            );
+            return reply.status(400).send({
+              error: {
+                message: `Failed to exchange authorization code: ${errorText}`,
+                type: "oauth_error",
+              },
+            });
+          }
+
+          tokenData = await tokenResponse.json();
+        }
+
+        // Create secret entry with the OAuth tokens
+        const secret = await SecretModel.create({
+          secret: {
+            access_token: tokenData.access_token,
+            ...(tokenData.refresh_token && {
+              refresh_token: tokenData.refresh_token,
+            }),
+            ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
+            token_type: "Bearer",
+          },
+        });
+
+        // Clean up used state
+        oauthStateStore.delete(state);
+
+        return reply.send({
+          success: true,
+          catalogId: oauthState.catalogId,
+          name: catalogItem.name,
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          expiresIn: tokenData.expires_in,
+          secretId: secret.id,
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+};
+
+export default oauthRoutes;

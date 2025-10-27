@@ -44,7 +44,6 @@ import {
 } from "@/components/ui/sidebar";
 import { WithRole } from "@/components/with-permission";
 import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
-import { useFeatureFlag } from "@/lib/features.hook";
 import { useGithubStars } from "@/lib/github.query";
 
 interface MenuItem {
@@ -57,7 +56,6 @@ interface MenuItem {
 const getNavigationItems = (
   isAuthenticated: boolean,
   role: Role,
-  mcpRegistryEnabled: boolean,
 ): MenuItem[] => {
   return [
     {
@@ -82,15 +80,11 @@ const getNavigationItems = (
             url: "/tools",
             icon: FileJson2,
           },
-          ...(mcpRegistryEnabled
-            ? [
-                {
-                  title: "MCP Registry",
-                  url: "/mcp-catalog",
-                  icon: Router,
-                },
-              ]
-            : []),
+          {
+            title: "MCP Registry",
+            url: "/mcp-catalog",
+            icon: Router,
+          },
           ...(role === "admin"
             ? [
                 {
@@ -126,7 +120,6 @@ export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
   const role = useRole();
-  const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
   const { data: starCount } = useGithubStars();
 
   return (
@@ -142,11 +135,7 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(
-                isAuthenticated,
-                role,
-                mcpRegistryEnabled,
-              ).map((item) => (
+              {getNavigationItems(isAuthenticated, role).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={item.url === pathname}>
                     <Link href={item.url}>

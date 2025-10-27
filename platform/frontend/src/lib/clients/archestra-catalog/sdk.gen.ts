@@ -20,6 +20,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 
 /**
  * Search MCP servers
+ *
  * Search for MCP servers with filtering and sorting options
  */
 export const searchMcpServerCatalog = <ThrowOnError extends boolean = false>(options?: Options<SearchMcpServerCatalogData, ThrowOnError>) => {
@@ -31,6 +32,7 @@ export const searchMcpServerCatalog = <ThrowOnError extends boolean = false>(opt
 
 /**
  * Get MCP server by name
+ *
  * Retrieve detailed information about a specific MCP server by its name identifier
  */
 export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => {
@@ -42,6 +44,7 @@ export const getMcpServer = <ThrowOnError extends boolean = false>(options: Opti
 
 /**
  * Get quality badge
+ *
  * Get an SVG quality badge for an MCP server
  */
 export const getMcpServerQualityBadge = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerQualityBadgeData, ThrowOnError>) => {
@@ -53,6 +56,7 @@ export const getMcpServerQualityBadge = <ThrowOnError extends boolean = false>(o
 
 /**
  * Get available categories
+ *
  * Get a list of all available MCP server categories
  */
 export const getMcpServerCategories = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerCategoriesData, ThrowOnError>) => {

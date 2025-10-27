@@ -1,19 +1,15 @@
 import { Badge } from "@/components/ui/badge";
-import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
 
 export function TransportBadges({
-  server,
+  isRemote,
   className,
 }: {
-  server: ArchestraMcpServerManifest;
+  isRemote?: boolean;
   className?: string;
 }) {
-  const isRemote = server.server.type === "remote";
-  const isLocal = server.server.type === "local";
-
   return (
     <div className={className}>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-2">
         {isRemote && (
           <>
             <Badge variant="outline" className="text-xs bg-blue-700 text-white">
@@ -27,7 +23,7 @@ export function TransportBadges({
             </Badge>
           </>
         )}
-        {isLocal && (
+        {!isRemote && (
           <>
             <Badge
               variant="outline"

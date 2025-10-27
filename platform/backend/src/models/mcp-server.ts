@@ -2,13 +2,9 @@ import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import { eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import mcpClientService from "@/services/mcp-client";
-import type {
-  InsertMcpServer,
-  McpServer,
-  McpServerMetadata,
-  UpdateMcpServer,
-} from "@/types";
+import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import McpServerTeamModel from "./mcp-server-team";
+import SecretModel from "./secret";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -177,14 +173,29 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
     }>
   > {
+    // Get catalog information if this server was installed from a catalog
+    let catalogItem = null;
+    if (mcpServer.catalogId) {
+      const { default: InternalMcpCatalogModel } = await import(
+        "./internal-mcp-catalog"
+      );
+      catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
+    }
+
+    // Load secrets if secretId is present
+    let secrets: Record<string, unknown> = {};
+    if (mcpServer.secretId) {
+      const secretRecord = await SecretModel.findById(mcpServer.secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secret;
+      }
+    }
+
     /**
-     * NOTE: this is just for demo purposes for right now.. should be removed once we have full support here..
-     *
-     * For GitHub MCP server, extract token from metadata and connect
+     * For GitHub MCP server, extract token from secrets and connect
      */
-    if (mcpServer.name === GITHUB_MCP_SERVER_NAME && mcpServer.metadata) {
-      const metadata = mcpServer.metadata;
-      const githubToken = metadata.githubToken as string;
+    if (mcpServer.name === GITHUB_MCP_SERVER_NAME) {
+      const githubToken = secrets.access_token as string | undefined;
 
       if (githubToken) {
         try {
@@ -199,6 +210,32 @@ class McpServerModel {
         } catch (error) {
           console.error(`Failed to get tools from GitHub MCP server:`, error);
         }
+      }
+    }
+
+    /**
+     * For remote servers, connect using the server URL and secrets
+     */
+    if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+      try {
+        const config = mcpClientService.createRemoteServerConfig({
+          name: mcpServer.name,
+          url: catalogItem.serverUrl,
+          secrets,
+        });
+        const tools = await mcpClientService.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to get tools from remote MCP server ${mcpServer.name}:`,
+          error,
+        );
+        throw error;
       }
     }
 
@@ -259,16 +296,55 @@ class McpServerModel {
   }
 
   /**
-   * Validate that an MCP server can be connected to with given metadata
+   * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(
     serverName: string,
-    metadata: McpServerMetadata,
+    catalogId?: string,
+    secretId?: string,
   ): Promise<boolean> {
+    // Load secrets if secretId is provided
+    let secrets: Record<string, unknown> = {};
+    if (secretId) {
+      const secretRecord = await SecretModel.findById(secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secret;
+      }
+    }
+
+    // Special-case validation for GitHub MCP server
     if (serverName === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = metadata.githubToken as string;
-      if (githubToken) {
+      const githubToken = secrets.access_token as string | undefined;
+
+      if (githubToken && typeof githubToken === "string") {
         return await mcpClientService.validateGitHubConnection(githubToken);
+      }
+      return false;
+    }
+
+    // For other remote servers, check if we can connect using catalog info
+    if (catalogId) {
+      try {
+        const { default: InternalMcpCatalogModel } = await import(
+          "./internal-mcp-catalog"
+        );
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+
+        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+          const config = mcpClientService.createRemoteServerConfig({
+            name: serverName,
+            url: catalogItem.serverUrl,
+            secrets,
+          });
+          const tools = await mcpClientService.connectAndGetTools(config);
+          return tools.length > 0;
+        }
+      } catch (error) {
+        console.error(
+          `Validation failed for remote MCP server ${serverName}:`,
+          error,
+        );
+        return false;
       }
     }
 

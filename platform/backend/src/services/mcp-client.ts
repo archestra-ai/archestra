@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { ToolModel } from "@/models";
+import { SecretModel, ToolModel } from "@/models";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -52,24 +52,40 @@ class McpClientService {
 
     /**
      * TODO:
-     *
-     * For now, assume all MCP tools use the same GitHub server
-     * Get the first GitHub token (all GitHub tools should use same token for an agent)
+     * For now, assume all MCP tools use the same server
+     * Get the first tool's secret ID (all tools should use same server for an agent)
      */
-    const githubToken = mcpTools[0]?.mcpServerInstallationMetadata.githubToken;
-    if (!githubToken) {
+    const firstTool = mcpTools[0];
+    if (!firstTool) {
       return mcpToolCalls.map((tc) => ({
         id: tc.id,
         content: null,
         isError: true,
-        error: "No GitHub token found for MCP tools",
+        error: "No MCP tools found",
+      }));
+    }
+
+    // Load secrets from the secrets table
+    let accessToken: string | undefined;
+    if (firstTool.mcpServerSecretId) {
+      const secret = await SecretModel.findById(firstTool.mcpServerSecretId);
+      if (secret?.secret) {
+        // All tokens (OAuth and PAT) are stored as access_token
+        accessToken = secret.secret.access_token as string | undefined;
+      }
+    }
+
+    if (!accessToken) {
+      return mcpToolCalls.map((tc) => ({
+        id: tc.id,
+        content: null,
+        isError: true,
+        error: "No access token found for MCP server",
       }));
     }
 
     try {
-      const client = await this.getOrCreateGitHubConnection(
-        githubToken as string,
-      );
+      const client = await this.getOrCreateGitHubConnection(accessToken);
 
       // Execute each MCP tool call
       for (const toolCall of mcpToolCalls) {
@@ -115,13 +131,13 @@ class McpClientService {
         }
       }
     } catch (error) {
-      // GitHub server connection failed - mark all tool calls as failed
+      // MCP server connection failed - mark all tool calls as failed
       for (const toolCall of mcpToolCalls) {
         results.push({
           id: toolCall.id,
           content: null,
           isError: true,
-          error: `Failed to connect to GitHub MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: `Failed to connect to MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
         });
       }
     }
@@ -261,6 +277,32 @@ class McpClientService {
       Authorization: `Bearer ${githubToken}`,
     },
   });
+
+  /**
+   * Create configuration for a generic remote MCP server
+   */
+  createRemoteServerConfig = (params: {
+    name: string;
+    url: string;
+    secrets: Record<string, unknown>;
+  }): McpServerConfig => {
+    const { name, url, secrets } = params;
+
+    // Build headers from secrets
+    const headers: Record<string, string> = {};
+
+    // All tokens (OAuth and PAT) are stored as access_token
+    if (secrets.access_token) {
+      headers.Authorization = `Bearer ${secrets.access_token}`;
+    }
+
+    return {
+      id: name,
+      name,
+      url,
+      headers,
+    };
+  };
 
   /**
    * Validate that a GitHub token can connect to the GitHub MCP server

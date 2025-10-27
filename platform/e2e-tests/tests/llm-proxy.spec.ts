@@ -12,7 +12,7 @@ test.describe('LLM Proxy - OpenAI', () => {
 
   test('blocks tool invocation when untrusted data is consumed', async ({
     request,
-  }) => {
+  })=> {
     // 1. Create a test agent
     const agent = await utils.agent.createAgent(request, 'OpenAI Test Agent');
     agentId = agent.id;
@@ -393,7 +393,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 });
 
 test.describe('LLM Proxy - Gemini', () => {
-  const GEMINI_TEST_CASE_1_HEADER = 'Bearer test-case-1-gemini-tool-call';
+  const GEMINI_TEST_CASE_1_HEADER = 'test-case-1-gemini-tool-call';
 
   let agentId: string;
   let trustedDataPolicyId: string;
@@ -423,6 +423,7 @@ test.describe('LLM Proxy - Gemini', () => {
                 {
                   text: 'Read the file at /etc/passwd',
                 },
+                
               ],
             },
           ],

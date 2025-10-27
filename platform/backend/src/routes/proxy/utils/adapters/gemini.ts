@@ -1,3 +1,4 @@
+import type { GenerateContentParameters } from "@google/genai";
 import type { Gemini } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
@@ -54,6 +55,7 @@ export function toCommonFormat(contents: GeminiContents): CommonMessage[] {
 
 /**
  * Apply tool result updates back to Gemini contents
+ * Returns an array of Content objects, not ContentListUnion
  */
 export function applyUpdates(
   contents: GeminiContents,
@@ -63,8 +65,7 @@ export function applyUpdates(
     return contents;
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: Gemini types need explicit handling
-  return contents.map((content): any => {
+  return contents.map((content) => {
     // Only process user messages with parts
     if (content.role === "user" && content.parts) {
       const updatedParts = content.parts.map((part) => {
@@ -133,4 +134,80 @@ export function extractUserRequest(contents: GeminiContents): string {
     }
   }
   return "process this data";
+}
+
+/**
+ * Convert a Gemini REST-style GenerateContentRequest body into the SDK's
+ * GenerateContentParameters shape. The SDK and REST shapes differ significantly:
+ * - SDK expects contents as an array of Content objects
+ * - SDK expects tools, systemInstruction, and generationConfig at top level
+ * - SDK doesn't use a nested "config" object for these parameters
+ */
+export function restToSdkGenerateContentParams(
+  body: Partial<Gemini.Types.GenerateContentRequest>,
+  model: string,
+  mergedTools?: Gemini.Types.Tool[] | undefined,
+): GenerateContentParameters {
+  const params: Record<string, unknown> = {};
+
+  // Required model param for SDK calls
+  params.model = model;
+
+  // Convert contents to array format expected by SDK
+  if (Array.isArray(body.contents)) {
+    // REST-style array or from applyUpdates - use as-is
+    params.contents = body.contents;
+  } else {
+    params.contents = [];
+  }
+
+  // Handle tools - SDK expects them at top level, not under config
+  if (mergedTools && mergedTools.length > 0) {
+    params.tools = mergedTools;
+  }
+
+  // Handle systemInstruction at top level
+  if (body.systemInstruction) {
+    params.systemInstruction = body.systemInstruction;
+  }
+
+  // Handle generationConfig - SDK expects it at top level
+  if (body.generationConfig) {
+    params.generationConfig = body.generationConfig;
+  } else {
+    // Build generationConfig from individual parameters if present
+    const generationConfig: Record<string, unknown> = {};
+    const configKeys = [
+      "temperature",
+      "maxOutputTokens",
+      "candidateCount",
+      "topP",
+      "topK",
+      "stopSequences",
+    ];
+    for (const k of configKeys) {
+      const val = (body as unknown as Record<string, unknown>)[k];
+      if (val !== undefined) generationConfig[k] = val;
+    }
+    if (Object.keys(generationConfig).length > 0) {
+      params.config = generationConfig;
+    }
+  }
+
+  // Handle safetySettings at top level
+  if (body.safetySettings) {
+    params.safetySettings = body.safetySettings;
+  }
+
+  // Handle toolConfig at top level
+  if (body.toolConfig) {
+    params.toolConfig = body.toolConfig;
+  }
+
+  // Handle cachedContent
+  if (body.cachedContent) {
+    params.cachedContent = body.cachedContent;
+  }
+
+  return params as unknown as GenerateContentParameters;
 }

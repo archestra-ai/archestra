@@ -1,12 +1,16 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { type Candidate, GoogleGenAI } from "@google/genai";
+import {
+  type Candidate,
+  type GenerateContentParameters,
+  GoogleGenAI,
+} from "@google/genai";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
-
 import * as utils from "./utils";
 
 /**
@@ -36,7 +40,7 @@ const injectTools = async (
   const requestFunctions: z.infer<
     typeof Gemini.Tools.FunctionDeclarationSchema
   >[] = [];
-  if (requestTools && requestTools.length > 0) {
+  if (requestTools && Array.isArray(requestTools) && requestTools.length > 0) {
     for (const tool of requestTools) {
       if (tool.functionDeclarations) {
         requestFunctions.push(...tool.functionDeclarations);
@@ -107,7 +111,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
-    const { tools } = body;
+    if (body.tools && !Array.isArray(body.tools)) {
+      body.tools = [body.tools];
+    }
+    const tools = Array.isArray(body.tools) ? body.tools : [];
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -129,9 +136,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { "x-goog-api-key": geminiApiKey } = headers;
-    const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
-
-    // Use the model from the URL path or default to gemini-pro
+    const genAI = new GoogleGenAI({
+      apiKey: geminiApiKey,
+      httpOptions: { baseUrl: config.llm.gemini.baseUrl },
+    });
     const modelName = model || "gemini-2.5-pro";
 
     try {
@@ -179,7 +187,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                   ],
                 };
-                reply.raw.write(`${JSON.stringify(startChunk)}\n`);
+                reply.raw.write(`data: ${JSON.stringify(startChunk)}\n`);
               }
             : undefined,
           stream
@@ -204,7 +212,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     },
                   ],
                 };
-                reply.raw.write(`${JSON.stringify(progressChunk)}\n`);
+                reply.raw.write(`data: ${JSON.stringify(progressChunk)}\n`);
               }
             : undefined,
         );
@@ -215,11 +223,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolResultUpdates,
       );
 
-      // Use filtered contents in request
-      const processedBody = {
-        ...body,
-        contents: filteredContents,
-      };
+      // Use filtered contents in request — convert REST body to SDK parameters
+      const processedBody =
+        utils.adapters.gemini.restToSdkGenerateContentParams(
+          { ...body, contents: filteredContents },
+          modelName,
+          mergedTools,
+        );
 
       if (stream) {
         reply.header("Content-Type", "text/event-stream");
@@ -227,11 +237,29 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Connection", "keep-alive");
 
         // Handle streaming response
-        const result = await genAI.models.generateContentStream({
-          model: modelName,
-          ...processedBody,
-          ...(mergedTools ? { tools: mergedTools } : {}),
-        });
+        // Log outbound URL we expect the SDK to call (helps debug WireMock path mismatches)
+        try {
+          const outbound = new URL(
+            `/v1beta/models/${modelName}:streamGenerateContent`,
+            config.llm.gemini.baseUrl,
+          );
+          fastify.log.info({
+            msg: "gemini proxy outbound (stream)",
+            outbound: outbound.toString(),
+          });
+        } catch (e) {
+          fastify.log.warn({
+            msg: "failed to compute outbound gemini url (stream)",
+            err: String(e),
+          });
+        }
+
+        // SDK expects a GenerateContentParameters object. processedBody already
+        // contains model and config.tools when mergedTools was provided, so pass
+        // it directly to avoid duplicate keys.
+        const result = await genAI.models.generateContentStream(
+          processedBody as GenerateContentParameters,
+        );
 
         // Accumulate response for policy evaluation and persistence
         const accumulatedToolCalls: Array<{
@@ -260,12 +288,12 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 });
               } else {
                 // Stream non-tool content immediately
-                reply.raw.write(`${JSON.stringify(chunk)}\n`);
+                reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
               }
             }
           } else {
             // Stream chunks without parts immediately
-            reply.raw.write(`${JSON.stringify(chunk)}\n`);
+            reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
           }
         }
 
@@ -304,7 +332,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ],
           };
-          reply.raw.write(`${JSON.stringify(refusalChunk)}\n`);
+          reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
 
           // Store the interaction with refusal
           await InteractionModel.create({
@@ -335,7 +363,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ),
             );
             if (lastChunkWithToolCalls) {
-              reply.raw.write(`${JSON.stringify(lastChunkWithToolCalls)}\n`);
+              reply.raw.write(
+                `data: ${JSON.stringify(lastChunkWithToolCalls)}\n\n`,
+              );
             }
 
             // Convert MCP results to Gemini format
@@ -370,17 +400,17 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ];
 
             // Make final streaming call with tool results
-            const finalResult = await genAI.models.generateContentStream({
-              model: modelName,
+            const finalParams = {
               ...processedBody,
               contents: updatedContents,
-              ...(mergedTools ? { tools: mergedTools } : {}),
-            });
+            } as GenerateContentParameters;
+            const finalResult =
+              await genAI.models.generateContentStream(finalParams);
 
             const finalChunks: Array<{ candidates?: Candidate[] }> = [];
             for await (const finalChunk of finalResult) {
               finalChunks.push(finalChunk);
-              reply.raw.write(`${JSON.stringify(finalChunk)}\n`);
+              reply.raw.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
             }
 
             // Store the interaction with final response
@@ -399,7 +429,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ),
             );
             if (lastChunkWithToolCalls) {
-              reply.raw.write(`${JSON.stringify(lastChunkWithToolCalls)}\n`);
+              reply.raw.write(
+                `data: ${JSON.stringify(lastChunkWithToolCalls)}\n\n`,
+              );
             }
 
             // Store the interaction
@@ -422,15 +454,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        reply.raw.write("data: [DONE]\n\n");
         reply.raw.end();
         return reply;
       } else {
-        // Non-streaming response
-        const response = await genAI.models.generateContent({
-          model: modelName,
-          ...processedBody,
-          ...(mergedTools ? { tools: mergedTools } : {}),
-        });
+        const response = await genAI.models.generateContent(
+          processedBody as GenerateContentParameters,
+        );
 
         // Extract tool calls from response
         const toolCalls = [];
@@ -542,12 +572,12 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ];
 
             // Make final call with tool results
-            const finalResponse = await genAI.models.generateContent({
-              model: modelName,
+            const finalParams = {
               ...processedBody,
               contents: updatedContents,
-              ...(mergedTools ? { tools: mergedTools } : {}),
-            });
+            } as GenerateContentParameters;
+            const finalResponse =
+              await genAI.models.generateContent(finalParams);
 
             // Store the interaction with final response
             await InteractionModel.create({
@@ -581,7 +611,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? (error.status as 200 | 400 | 404 | 403 | 500)
           : 500;
 
-      return reply.status(statusCode).send({
+      const errorPayload = {
         error: {
           message:
             error instanceof Error
@@ -589,7 +619,14 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : "An unexpected error occurred",
           type: "api_error",
         },
-      });
+      };
+      if (stream) {
+        reply.raw.write(`data: ${JSON.stringify(errorPayload) + "\n\n"}`);
+        reply.raw.end();
+        return;
+      }
+
+      return reply.status(statusCode).send(errorPayload);
     }
   };
 

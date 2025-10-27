@@ -173,28 +173,125 @@ const PartDataSchema = z
   ])
   .describe(`https://ai.google.dev/api/caching#Part`);
 
-const PartMetadataSchema = z.union([VideoMetadataSchema]);
+const PartMetadataSchema = z
+  .union([VideoMetadataSchema])
+  .optional()
+  .describe(`https://ai.google.dev/api/caching#Part`);
+
+// Support both the full API shape where part data is nested under `data`
+// and the shorthand shape allowed by the Gemini API where the part's
+// payload (e.g. { text: '...' }) may appear at the top-level of the part.
+// We model this by accepting either the full object or a set of top-level
+// variant objects mirroring the PartData union.
+
+const BasePartFields = {
+  thought: z
+    .boolean()
+    .optional()
+    .describe(`Indicates if the part is thought from the model`),
+  thoughtSignature: z
+    .string()
+    .optional()
+    .describe(
+      "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
+    ),
+};
+
+const TextPartTopLevel = z.object({
+  ...BasePartFields,
+  text: z.string(),
+  metadata: PartMetadataSchema,
+});
+
+const InlineDataPartTopLevel = z.object({
+  ...BasePartFields,
+  inlineData: z.object({
+    mimeType: z.string(),
+    data: z.string(),
+  }),
+  metadata: PartMetadataSchema,
+});
+
+const FunctionCallPartTopLevel = z.object({
+  ...BasePartFields,
+  functionCall: z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    args: z.record(z.string(), z.any()).optional(),
+  }),
+  metadata: PartMetadataSchema,
+});
+
+const FunctionResponsePartTopLevel = z.object({
+  ...BasePartFields,
+  functionResponse: z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    response: z.record(z.string(), z.any()),
+    willContinue: z.boolean().optional(),
+    scheduling: z
+      .enum(["SCHEDULING_UNSPECIFIED", "SILENT", "WHEN_IDLE", "INTERRUPT"])
+      .optional(),
+  }),
+  metadata: PartMetadataSchema,
+});
+
+const FileDataPartTopLevel = z.object({
+  ...BasePartFields,
+  fileData: z.object({
+    mimeType: z.string().optional(),
+    fileUri: z.string(),
+  }),
+  metadata: PartMetadataSchema,
+});
+
+const ExecutableCodePartTopLevel = z.object({
+  ...BasePartFields,
+  language: z.enum(["LANGUAGE_UNSPECIFIED", "PYTHON"]),
+  executableCode: z.object({ code: z.string() }),
+  metadata: PartMetadataSchema,
+});
+
+const CodeExecutionResultPartTopLevel = z.object({
+  ...BasePartFields,
+  codeExecutionResult: z.object({
+    outcome: z
+      .enum([
+        "OUTCOME_UNSPECIFIED",
+        "OUTCOME_OK",
+        "OUTCOME_FAILED",
+        "OUTCOME_DEADLINE_EXCEEDED",
+      ])
+      .describe("Outcome of the code execution."),
+    output: z.string().optional(),
+  }),
+  metadata: PartMetadataSchema,
+});
+
+const ShorthandPartSchema = z.union([
+  TextPartTopLevel,
+  InlineDataPartTopLevel,
+  FunctionCallPartTopLevel,
+  FunctionResponsePartTopLevel,
+  FileDataPartTopLevel,
+  ExecutableCodePartTopLevel,
+  CodeExecutionResultPartTopLevel,
+]);
+
+const FullPartSchema = z.object({
+  thought: z.boolean().optional(),
+  thoughtSignature: z.string().optional(),
+  data: PartDataSchema,
+  metadata: PartMetadataSchema,
+});
 
 export const PartSchema = z
-  .object({
-    thought: z
-      .boolean()
-      .optional()
-      .describe(`Indicates if the part is thought from the model`),
-    thoughtSignature: z
-      .string()
-      .optional()
-      .describe(
-        "An opaque signature for the thought so it can be reused in subsequent requests. A base64-encoded string",
-      ),
-    data: PartDataSchema,
-    metadata: PartMetadataSchema,
-  })
+  .union([FullPartSchema, ShorthandPartSchema])
   .describe(`https://ai.google.dev/api/caching#Part`);
 
 export const ContentSchema = z
   .object({
-    role: RoleSchema,
+    role: z.string().describe("The role of the author of this content."),
     parts: z.array(PartSchema),
   })
   .describe(`

@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/v1beta/models/.*:generateContent",
+    "urlPathPattern": "/v1beta/models/[^:]+:generateContent",
     "headers": {
       "x-goog-api-key": {
         "contains": "test-case-1-gemini-tool-call"

@@ -131,7 +131,7 @@ export default {
     gemini: {
       baseUrl:
         process.env.GEMINI_BASE_URL ||
-        "https://generativelanguage.googleapis.com/v1",
+        "https://generativelanguage.googleapis.com",
     },
   },
   features: {

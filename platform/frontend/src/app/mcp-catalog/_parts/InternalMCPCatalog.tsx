@@ -71,7 +71,7 @@ function InternalServerCard({
               </p>
             )}
             <div className="flex items-center gap-2">
-              {!item.oauthConfig?.requires_proxy && (
+              {item.oauthConfig && (
                 <Badge variant="secondary" className="text-xs">
                   OAuth
                 </Badge>
@@ -225,11 +225,22 @@ export function InternalMCPCatalog({
   );
 
   const handleRemoteServerInstall = useCallback(
-    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
+    async (
+      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      metadata?: Record<string, unknown>,
+    ) => {
       setInstallingItemId(catalogItem.id);
+
+      // Extract access_token from metadata if present and pass as accessToken
+      const accessToken =
+        metadata?.access_token && typeof metadata.access_token === "string"
+          ? metadata.access_token
+          : undefined;
+
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
+        ...(accessToken && { accessToken }),
       });
       setInstallingItemId(null);
     },

@@ -1,8 +1,8 @@
 import { Page } from '@playwright/test';
-import { BASE_URL } from '../consts';
+import { UI_BASE_URL } from '../consts';
 
 export function goToPage(page: Page, path = '') {
-  return page.goto(`${BASE_URL}${path}`);
+  return page.goto(`${UI_BASE_URL}${path}`);
 }
 
 export function getRandomString(length = 10, prefix = '') {

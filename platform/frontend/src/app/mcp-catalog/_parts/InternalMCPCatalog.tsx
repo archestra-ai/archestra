@@ -3,6 +3,7 @@
 import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import {
   Download,
+  Eye,
   MoreVertical,
   Pencil,
   Plus,
@@ -10,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,11 +28,17 @@ import type {
   GetMcpServersResponses,
 } from "@/lib/clients/api";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
-import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
+import {
+  useInstallMcpServer,
+  useMcpServers,
+  useMcpServerTools,
+} from "@/lib/mcp-server.query";
+import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
+import { McpToolsDialog } from "./mcp-tools-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
@@ -48,6 +56,7 @@ function InternalServerCard({
   onUninstall,
   onEdit,
   onDelete,
+  onViewTools,
 }: {
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
@@ -56,6 +65,7 @@ function InternalServerCard({
   onUninstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onViewTools?: () => void;
 }) {
   return (
     <Card className="flex flex-col relative pt-4">
@@ -104,15 +114,28 @@ function InternalServerCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col pt-3">
+      <CardContent className="flex-1 flex flex-col pt-3 gap-2">
         {installed ? (
-          <Button
-            onClick={onUninstall}
-            size="sm"
-            className="w-full bg-accent text-accent-foreground hover:bg-accent"
-          >
-            Uninstall
-          </Button>
+          <>
+            {onViewTools && (
+              <Button
+                onClick={onViewTools}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                View Tools
+              </Button>
+            )}
+            <Button
+              onClick={onUninstall}
+              size="sm"
+              className="w-full bg-accent text-accent-foreground hover:bg-accent"
+            >
+              Uninstall
+            </Button>
+          </>
         ) : (
           <Button
             onClick={onInstall}
@@ -162,6 +185,37 @@ export function InternalMCPCatalog({
     GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
+  const [toolsDialogServerId, setToolsDialogServerId] = useState<string | null>(
+    null,
+  );
+  const [toolsDialogKey, setToolsDialogKey] = useState(0);
+  const [selectedToolForAssignment, setSelectedToolForAssignment] = useState<{
+    id: string;
+    name: string;
+    description: string | null;
+    parameters: Record<string, unknown>;
+    createdAt: string;
+    mcpServerId: string | null;
+    mcpServerName: string | null;
+  } | null>(null);
+  const [bulkAssignTools, setBulkAssignTools] = useState<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      createdAt: string;
+    }>
+  >([]);
+
+  const toolsDialogServer = useMemo(() => {
+    return installedServers?.find(
+      (server) => server.id === toolsDialogServerId,
+    );
+  }, [installedServers, toolsDialogServerId]);
+
+  const { data: toolsDialogTools, isLoading: isLoadingToolsDialogTools } =
+    useMcpServerTools(toolsDialogServerId);
 
   const handleInstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
@@ -380,6 +434,11 @@ export function InternalMCPCatalog({
               }}
               onEdit={() => setEditingItem(item)}
               onDelete={() => setDeletingItem(item)}
+              onViewTools={
+                installedServer
+                  ? () => setToolsDialogServerId(installedServer.id)
+                  : undefined
+              }
             />
           );
         })}
@@ -451,6 +510,66 @@ export function InternalMCPCatalog({
       <UninstallServerDialog
         server={uninstallingServer}
         onClose={() => setUninstallingServer(null)}
+      />
+
+      <McpToolsDialog
+        key={toolsDialogKey}
+        open={!!toolsDialogServerId}
+        onOpenChange={(open) => {
+          if (!open) setToolsDialogServerId(null);
+        }}
+        serverName={toolsDialogServer?.name ?? ""}
+        tools={toolsDialogTools ?? []}
+        isLoading={isLoadingToolsDialogTools}
+        onAssignTool={(tool) => {
+          setSelectedToolForAssignment({
+            ...tool,
+            mcpServerId: toolsDialogServerId,
+            mcpServerName: toolsDialogServer?.name ?? null,
+          });
+        }}
+        onBulkAssignTools={(tools) => {
+          setBulkAssignTools(tools);
+        }}
+      />
+
+      <BulkAssignAgentDialog
+        tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
+        open={bulkAssignTools.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setBulkAssignTools([]);
+            // Reset the tools dialog to clear selections
+            setToolsDialogKey((prev) => prev + 1);
+          }
+        }}
+      />
+
+      <AssignAgentDialog
+        tool={
+          selectedToolForAssignment
+            ? {
+                id: selectedToolForAssignment.id,
+                tool: {
+                  id: selectedToolForAssignment.id,
+                  name: selectedToolForAssignment.name,
+                  description: selectedToolForAssignment.description,
+                  parameters: selectedToolForAssignment.parameters,
+                  createdAt: selectedToolForAssignment.createdAt,
+                  updatedAt: selectedToolForAssignment.createdAt,
+                  mcpServerId: selectedToolForAssignment.mcpServerId,
+                  mcpServerName: selectedToolForAssignment.mcpServerName,
+                },
+                agent: null,
+                createdAt: selectedToolForAssignment.createdAt,
+                updatedAt: selectedToolForAssignment.createdAt,
+              }
+            : null
+        }
+        open={!!selectedToolForAssignment}
+        onOpenChange={(open) => {
+          if (!open) setSelectedToolForAssignment(null);
+        }}
       />
     </div>
   );

@@ -338,12 +338,15 @@ export function AssignedToolsList({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="default" className="bg-indigo-500">
-                      MCP Server
+                    <Badge
+                      variant="default"
+                      className="bg-indigo-500 max-w-[120px]"
+                    >
+                      <span className="truncate">{mcpServerName}</span>
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{mcpServerName}</p>
+                    <p>MCP Server: {mcpServerName}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -358,7 +361,7 @@ export function AssignedToolsList({
                     variant="secondary"
                     className="bg-amber-700 text-white"
                   >
-                    Intercepted
+                    LLM Proxy
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>

@@ -1,3 +1,6 @@
+// Import tracing first to ensure auto-instrumentation works properly
+import "./tracing";
+
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
@@ -24,7 +27,14 @@ import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host, corsOrigins, authHeaderName },
+  api: {
+    port,
+    name,
+    version,
+    host,
+    corsOrigins,
+    apiKeyAuthorizationHeaderName,
+  },
 } = config;
 
 const fastify = Fastify({
@@ -84,10 +94,9 @@ const start = async () => {
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
-        "Authorization",
         "X-Requested-With",
         "Cookie",
-        authHeaderName,
+        apiKeyAuthorizationHeaderName,
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,

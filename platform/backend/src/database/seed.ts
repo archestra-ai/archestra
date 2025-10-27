@@ -76,9 +76,13 @@ export async function seedAdminUserAndDefaultOrg(): Promise<void> {
  * Seeds demo agents
  */
 async function seedAgents(): Promise<void> {
-  // Allowed demo agent
-  const allowedAgent = await AgentModel.findById(DEMO_AGENT_ID);
-  if (!allowedAgent) {
+  // Allowed demo agent - bypass access control during seeding
+  const allowedAgentRows = await db
+    .select()
+    .from(schema.agentsTable)
+    .where(eq(schema.agentsTable.id, DEMO_AGENT_ID));
+
+  if (allowedAgentRows.length === 0) {
     const agentData: InsertAgent = {
       id: DEMO_AGENT_ID,
       name: "Demo Agent without Archestra",
@@ -91,9 +95,13 @@ async function seedAgents(): Promise<void> {
     console.log("✓ Allowed demo agent already exists, skipping");
   }
 
-  // Blocked demo agent
-  const blockedAgent = await AgentModel.findById(BLOCKED_DEMO_AGENT_ID);
-  if (!blockedAgent) {
+  // Blocked demo agent - bypass access control during seeding
+  const blockedAgentRows = await db
+    .select()
+    .from(schema.agentsTable)
+    .where(eq(schema.agentsTable.id, BLOCKED_DEMO_AGENT_ID));
+
+  if (blockedAgentRows.length === 0) {
     const agentData: InsertAgent = {
       id: BLOCKED_DEMO_AGENT_ID,
       name: "Demo Agent with Archestra",

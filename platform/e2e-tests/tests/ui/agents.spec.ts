@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { E2eTestId } from '@shared';
-import utils from '../utils';
+import utils from '../../utils';
 
 test('can create and delete an agent', async ({ page }) => {
   const AGENT_NAME = utils.common.getRandomString(10, 'Test Agent');

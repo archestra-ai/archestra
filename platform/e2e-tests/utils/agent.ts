@@ -1,11 +1,11 @@
 import { APIRequestContext } from '@playwright/test';
-import { BASE_URL } from '../consts';
+import { UI_BASE_URL } from '../consts';
 
 /**
- * Create an agent via the API
+ * Create an agent via the UI (which in fact is a redirect that next.js makes to the API)
  */
 export async function createAgent(request: APIRequestContext, name: string) {
-  const response = await request.post(`${BASE_URL}/api/agents`, {
+  const response = await request.post(`${UI_BASE_URL}/api/agents`, {
     data: {
       name,
       teams: [],
@@ -22,10 +22,10 @@ export async function createAgent(request: APIRequestContext, name: string) {
 }
 
 /**
- * Delete an agent via the API
+ * Delete an agent via the UI (which in fact is a redirect that next.js makes to the API)
  */
 export async function deleteAgent(request: APIRequestContext, agentId: string) {
-  const response = await request.delete(`${BASE_URL}/api/agents/${agentId}`);
+  const response = await request.delete(`${UI_BASE_URL}/api/agents/${agentId}`);
 
   if (!response.ok()) {
     throw new Error(

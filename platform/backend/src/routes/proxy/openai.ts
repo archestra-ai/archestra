@@ -1,4 +1,5 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import OpenAIProvider from "openai";
@@ -112,6 +113,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
+    // Add OpenTelemetry span attribute for filtering in Jaeger
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute("route.category", "llm-proxy");
+      span.setAttribute("llm.provider", "openai");
+    }
+
     const { messages, tools, stream } = body;
 
     let resolvedAgentId: string;
@@ -231,13 +239,33 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
-        // Handle streaming response
-        const streamingResponse = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: true,
-        });
+        // Handle streaming response with span to measure LLM call duration
+        const tracer = trace.getTracer("archestra");
+        const streamingResponse = await tracer.startActiveSpan(
+          "openai.chat.completions",
+          {
+            attributes: {
+              "llm.model": body.model,
+              "llm.stream": true,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const response = await openAiClient.chat.completions.create({
+                ...body,
+                messages: filteredMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                stream: true,
+              });
+              llmSpan.end();
+              return response;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
+        );
 
         // We are using reply.raw.writeHead because it sets headers immediately before the streaming starts
         // unlike reply.header(key, value) which will set headers too late, after the streaming is over.
@@ -415,14 +443,34 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                  * We also need to remove tool_choice otherwise openai complains about:
                  * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
                  */
-                const continuationStream =
-                  await openAiClient.chat.completions.create({
-                    ...body,
-                    messages: updatedMessages,
-                    tools: undefined,
-                    tool_choice: undefined,
-                    stream: true,
-                  });
+                const continuationStream = await tracer.startActiveSpan(
+                  "openai.chat.completions.continuation",
+                  {
+                    attributes: {
+                      "llm.model": body.model,
+                      "llm.stream": true,
+                      "llm.continuation": true,
+                    },
+                  },
+                  async (continuationSpan) => {
+                    try {
+                      const response =
+                        await openAiClient.chat.completions.create({
+                          ...body,
+                          messages: updatedMessages,
+                          tools: undefined,
+                          tool_choice: undefined,
+                          stream: true,
+                        });
+                      continuationSpan.end();
+                      return response;
+                    } catch (error) {
+                      continuationSpan.recordException(error as Error);
+                      continuationSpan.end();
+                      throw error;
+                    }
+                  },
+                );
 
                 // Stream the continuation response
                 for await (const chunk of continuationStream) {
@@ -458,12 +506,33 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.raw.end();
         return reply;
       } else {
-        let response = await openAiClient.chat.completions.create({
-          ...body,
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: false,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const tracer = trace.getTracer("archestra");
+        let response = await tracer.startActiveSpan(
+          "openai.chat.completions",
+          {
+            attributes: {
+              "llm.model": body.model,
+              "llm.stream": false,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const response = await openAiClient.chat.completions.create({
+                ...body,
+                messages: filteredMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                stream: false,
+              });
+              llmSpan.end();
+              return response;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
+        );
 
         let assistantMessage = response.choices[0].message;
 
@@ -534,13 +603,33 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
              * We also need to remove tool_choice otherwise openai complains about:
              * "400 Invalid value for 'tool_choice': 'tool_choice' is only allowed when 'tools' are specified"
              */
-            const finalResponse = await openAiClient.chat.completions.create({
-              ...body,
-              messages: updatedMessages,
-              tools: undefined,
-              tool_choice: undefined,
-              stream: false,
-            });
+            const finalResponse = await tracer.startActiveSpan(
+              "openai.chat.completions.continuation",
+              {
+                attributes: {
+                  "llm.model": body.model,
+                  "llm.stream": false,
+                  "llm.continuation": true,
+                },
+              },
+              async (continuationSpan) => {
+                try {
+                  const response = await openAiClient.chat.completions.create({
+                    ...body,
+                    messages: updatedMessages,
+                    tools: undefined,
+                    tool_choice: undefined,
+                    stream: false,
+                  });
+                  continuationSpan.end();
+                  return response;
+                } catch (error) {
+                  continuationSpan.recordException(error as Error);
+                  continuationSpan.end();
+                  throw error;
+                }
+              },
+            );
 
             // Update the response with the final LLM response
             response = finalResponse;

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { BASE_URL } from '../consts';
-import utils from '../utils';
+import { API_BASE_URL } from '../../consts';
+import utils from '../../utils';
 
 test.describe('LLM Proxy - OpenAI', () => {
   const OPENAI_TEST_CASE_1_HEADER = 'Bearer test-case-1-openai-tool-call';
@@ -20,7 +20,7 @@ test.describe('LLM Proxy - OpenAI', () => {
     // 2. Send initial request to register the tool and get the toolId
     // First, let's make a request to create the tool
     const initialResponse = await request.post(
-      `${BASE_URL}/v1/openai/${agentId}/chat/completions`,
+      `${API_BASE_URL}/v1/openai/${agentId}/chat/completions`,
       {
         headers: {
           Authorization: OPENAI_TEST_CASE_1_HEADER,
@@ -65,7 +65,7 @@ test.describe('LLM Proxy - OpenAI', () => {
     }
 
     // Get the agent-tool relationship ID from the backend
-    const agentToolsResponse = await request.get(`${BASE_URL}/api/agent-tools`);
+    const agentToolsResponse = await request.get(`${API_BASE_URL}/api/agent-tools`);
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
     const readFileAgentTool = agentTools.find(
@@ -100,7 +100,7 @@ test.describe('LLM Proxy - OpenAI', () => {
 
     // 5. Send a request with untrusted data
     const response = await request.post(
-      `${BASE_URL}/v1/openai/${agentId}/chat/completions`,
+      `${API_BASE_URL}/v1/openai/${agentId}/chat/completions`,
       {
         headers: {
           Authorization: OPENAI_TEST_CASE_1_HEADER,
@@ -163,7 +163,7 @@ test.describe('LLM Proxy - OpenAI', () => {
 
     // 7. Verify the interaction was persisted
     const interactionsResponse = await request.get(
-      `${BASE_URL}/api/interactions?agentId=${agentId}`,
+      `${API_BASE_URL}/api/interactions?agentId=${agentId}`,
     );
     expect(interactionsResponse.ok()).toBeTruthy();
     const interactionsData = await interactionsResponse.json();
@@ -218,7 +218,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 
     // 2. Send initial request to register the tool and get the toolId
     const initialResponse = await request.post(
-      `${BASE_URL}/v1/anthropic/v1/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/v1/${agentId}/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,
@@ -262,7 +262,7 @@ test.describe('LLM Proxy - Anthropic', () => {
     }
 
     // Get the agent-tool relationship ID from the backend
-    const agentToolsResponse = await request.get(`${BASE_URL}/api/agent-tools`);
+    const agentToolsResponse = await request.get(`${API_BASE_URL}/api/agent-tools`);
     expect(agentToolsResponse.ok()).toBeTruthy();
     const agentTools = await agentToolsResponse.json();
     const readFileAgentTool = agentTools.find(
@@ -297,7 +297,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 
     // 5. Send a request with untrusted data
     const response = await request.post(
-      `${BASE_URL}/v1/anthropic/v1/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/v1/${agentId}/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,
@@ -357,7 +357,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 
     // 7. Verify the interaction was persisted
     const interactionsResponse = await request.get(
-      `${BASE_URL}/api/interactions?agentId=${agentId}`,
+      `${API_BASE_URL}/api/interactions?agentId=${agentId}`,
     );
     expect(interactionsResponse.ok()).toBeTruthy();
     const interactionsData = await interactionsResponse.json();

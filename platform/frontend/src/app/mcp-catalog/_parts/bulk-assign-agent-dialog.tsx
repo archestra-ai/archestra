@@ -16,20 +16,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
-import type { UnassignedToolData } from "./unassigned-tools-list";
 
-interface AssignAgentDialogProps {
-  tool: GetAllAgentToolsResponses["200"][number] | UnassignedToolData | null;
+interface BulkAssignAgentDialogProps {
+  tools: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    parameters: Record<string, unknown>;
+    createdAt: string;
+  }> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function AssignAgentDialog({
-  tool,
+export function BulkAssignAgentDialog({
+  tools,
   open,
   onOpenChange,
-}: AssignAgentDialogProps) {
+}: BulkAssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,7 +47,7 @@ export function AssignAgentDialog({
   }, [agents, searchQuery]);
 
   const handleAssign = useCallback(async () => {
-    if (!tool || selectedAgentIds.length === 0) return;
+    if (!tools || tools.length === 0 || selectedAgentIds.length === 0) return;
 
     // Helper function to check if an error is a duplicate key error
     const isDuplicateError = (error: unknown): boolean => {
@@ -56,9 +60,21 @@ export function AssignAgentDialog({
       );
     };
 
+    // Assign each tool to each selected agent
+    const assignments = tools.flatMap((tool) =>
+      selectedAgentIds.map((agentId) => ({
+        agentId,
+        toolId: tool.id,
+        toolName: tool.name,
+      })),
+    );
+
     const results = await Promise.allSettled(
-      selectedAgentIds.map((agentId) =>
-        assignMutation.mutateAsync({ agentId, toolId: tool.tool.id }),
+      assignments.map((assignment) =>
+        assignMutation.mutateAsync({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+        }),
       ),
     );
 
@@ -76,30 +92,30 @@ export function AssignAgentDialog({
     if (succeeded > 0) {
       if (duplicates > 0 && actualFailures === 0) {
         toast.success(
-          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
+          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
         );
       } else if (actualFailures > 0) {
         toast.warning(
-          `Assigned ${tool.tool.name} to ${succeeded} of ${totalAttempted} agent${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+          `Assigned ${succeeded} of ${totalAttempted} tool${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
         );
       } else {
         toast.success(
-          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}`,
+          `Successfully assigned ${succeeded} tool assignment${succeeded !== 1 ? "s" : ""}`,
         );
       }
     } else if (duplicates === failed) {
       toast.info(
-        `${tool.tool.name} is already assigned to all selected agents`,
+        "All selected tools are already assigned to the selected agents",
       );
     } else {
-      toast.error(`Failed to assign ${tool.tool.name}`);
-      console.error("Assignment errors:", results);
+      toast.error("Failed to assign tools");
+      console.error("Bulk assignment errors:", results);
     }
 
     setSelectedAgentIds([]);
     setSearchQuery("");
     onOpenChange(false);
-  }, [tool, selectedAgentIds, assignMutation, onOpenChange]);
+  }, [tools, selectedAgentIds, assignMutation, onOpenChange]);
 
   const toggleAgent = useCallback((agentId: string) => {
     setSelectedAgentIds((prev) =>
@@ -122,9 +138,10 @@ export function AssignAgentDialog({
     >
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Assign Tool to Agents</DialogTitle>
+          <DialogTitle>Bulk Assign Tools to Agents</DialogTitle>
           <DialogDescription>
-            Select one or more agents to assign "{tool?.tool.name}" to.
+            Select one or more agents to assign {tools?.length || 0} tool
+            {tools && tools.length !== 1 ? "s" : ""} to.
           </DialogDescription>
         </DialogHeader>
 

@@ -98,8 +98,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Create the assignment
-        await AgentToolModel.create(agentId, toolId);
+        // Create the assignment (no-op if already exists)
+        await AgentToolModel.createIfNotExists(agentId, toolId);
 
         return reply.send({ success: true });
       } catch (error) {

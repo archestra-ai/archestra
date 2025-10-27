@@ -60,6 +60,8 @@ export function useAssignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate all MCP server tools queries to update assigned agent counts
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
   });
 }
@@ -85,6 +87,8 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate all MCP server tools queries to update assigned agent counts
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
   });
 }

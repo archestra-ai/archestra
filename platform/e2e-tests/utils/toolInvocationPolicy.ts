@@ -1,8 +1,8 @@
 import { APIRequestContext } from '@playwright/test';
-import { BASE_URL } from '../consts';
+import { UI_BASE_URL } from '../consts';
 
 /**
- * Create a tool invocation policy via the API
+ * Create a tool invocation policy via the UI (which in fact is a redirect that next.js makes to the API)
  */
 export async function createToolInvocationPolicy(
   request: APIRequestContext,
@@ -16,7 +16,7 @@ export async function createToolInvocationPolicy(
   },
 ) {
   const response = await request.post(
-    `${BASE_URL}/api/autonomy-policies/tool-invocation`,
+    `${UI_BASE_URL}/api/autonomy-policies/tool-invocation`,
     {
       data: {
         agentToolId: policy.agentToolId,
@@ -39,14 +39,14 @@ export async function createToolInvocationPolicy(
 }
 
 /**
- * Delete a tool invocation policy via the API
+ * Delete a tool invocation policy via the UI (which in fact is a redirect that next.js makes to the API)
  */
 export async function deleteToolInvocationPolicy(
   request: APIRequestContext,
   policyId: string,
 ) {
   const response = await request.delete(
-    `${BASE_URL}/api/autonomy-policies/tool-invocation/${policyId}`,
+    `${UI_BASE_URL}/api/autonomy-policies/tool-invocation/${policyId}`,
   );
 
   if (!response.ok()) {

@@ -103,7 +103,7 @@ export default {
     name: "Archestra Platform API",
     version: packageJson.version,
     corsOrigins: getCorsOrigins(),
-    authHeaderName: "X-Archestra-API-Key",
+    apiKeyAuthorizationHeaderName: "Authorization",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",

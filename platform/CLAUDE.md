@@ -33,7 +33,7 @@ pnpm dev                                # Start all workspaces
 pnpm lint                               # Lint and auto-fix
 pnpm type-check                         # Check TypeScript types
 pnpm test                               # Run tests
-pnpm test:e2e -- --reporter=line        # Run e2e tests with Playwright (includes WireMock)
+pnpm test:e2e                           # Run e2e tests with Playwright (includes WireMock)
 
 # Database
 pnpm db:migrate      # Run database migrations

@@ -211,6 +211,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServer]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerTools]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },

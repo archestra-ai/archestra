@@ -264,6 +264,55 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+
+  fastify.get(
+    "/api/mcp_server/:id/tools",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerTools,
+        description: "Get all tools for an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              description: z.string().nullable(),
+              parameters: z.record(z.string(), z.any()),
+              createdAt: z.coerce.date(),
+              assignedAgentCount: z.number(),
+              assignedAgents: z.array(
+                z.object({
+                  id: z.string(),
+                  name: z.string(),
+                }),
+              ),
+            }),
+          ),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const tools = await ToolModel.findByMcpServerId(request.params.id);
+        return reply.send(tools);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
 };
 
 export default mcpServerRoutes;

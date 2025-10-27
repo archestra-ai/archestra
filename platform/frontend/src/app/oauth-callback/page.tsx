@@ -22,32 +22,42 @@ export default function OAuthCallbackPage() {
     "waiting" | "processing" | "success" | "error"
   >("waiting");
   const [errorMessage, _setErrorMessage] = useState<string>("");
-  const [hasProcessed, setHasProcessed] = useState(false);
   const installMutation = useInstallMcpServer();
 
   useEffect(() => {
-    // Prevent multiple executions
-    if (hasProcessed) return;
-    setHasProcessed(true);
-
     const handleOAuthCallback = async () => {
       const code = searchParams.get("code");
       const error = searchParams.get("error");
       const state = searchParams.get("state");
 
+      // Create a unique key for this OAuth callback to prevent duplicate processing
+      // This persists across React Strict Mode unmount/remount cycles
+      const processKey = `oauth_processing_${code}_${state}`;
+
+      // Check if we've already processed this callback
+      if (sessionStorage.getItem(processKey)) {
+        return;
+      }
+
+      // Mark as processing immediately
+      sessionStorage.setItem(processKey, "true");
+
       if (error) {
+        sessionStorage.removeItem(processKey);
         toast.error(`OAuth error: ${error}`);
         router.push("/mcp-catalog");
         return;
       }
 
       if (!code) {
+        sessionStorage.removeItem(processKey);
         toast.error("No authorization code received");
         router.push("/mcp-catalog");
         return;
       }
 
       if (!state) {
+        sessionStorage.removeItem(processKey);
         toast.error("Missing OAuth state");
         router.push("/mcp-catalog");
         return;
@@ -67,6 +77,7 @@ export default function OAuthCallbackPage() {
         });
 
         if (!response.ok) {
+          sessionStorage.removeItem(processKey);
           const errorData = await response.json();
           throw new Error(
             errorData.error?.message || "Failed to complete OAuth",
@@ -81,6 +92,9 @@ export default function OAuthCallbackPage() {
           catalogId,
           secretId,
         });
+
+        // Clean up the processing flag after successful installation
+        sessionStorage.removeItem(processKey);
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast
@@ -97,7 +111,6 @@ export default function OAuthCallbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     searchParams,
-    hasProcessed,
     installMutation.mutateAsync, // The mutation's onError handler will show the error toast
     // Redirect back to catalog
     router.push,

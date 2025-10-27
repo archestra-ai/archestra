@@ -146,6 +146,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         let { agentIds, secretId, accessToken, ...serverData } = request.body;
 
+        // Check if this MCP server is already installed (prevent duplicates)
+        if (serverData.catalogId) {
+          const existingServers = await McpServerModel.findByCatalogId(
+            serverData.catalogId,
+          );
+          if (existingServers.length > 0) {
+            return reply.status(400).send({
+              error: {
+                message: "This MCP server is already installed",
+                type: "validation_error",
+              },
+            });
+          }
+        }
+
         // If accessToken is provided (PAT flow), create a secret for it
         if (accessToken && !secretId) {
           const secret = await SecretModel.create({

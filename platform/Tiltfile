@@ -53,7 +53,7 @@ helm_remote(
   'jaeger',
   repo_url='https://jaegertracing.github.io/helm-charts',
   namespace='archestra-dev',
-  create_namespace=True,
+  create_namespace=False,
   set=[
     'provisionDataStore.cassandra=false',
     'allInOne.enabled=true',

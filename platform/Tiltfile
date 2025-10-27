@@ -101,6 +101,15 @@ local_resource(
   labels=['database']
 )
 
+local_resource(
+  'db-generate',
+  cmd='cd backend && pnpm db:generate',
+  resource_deps=['postgresql'],
+  labels=['database'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
 # prod bundle
 if is_prod:
   local_resource(
@@ -157,6 +166,17 @@ local_resource(
   cmd='pnpm codegen:api-client',
   labels=['dev'],
   resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'mcp-inspector',
+  serve_env={
+    'DANGEROUSLY_OMIT_AUTH': 'true'
+  },
+  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
+  labels=['dev'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )
 
 local_resource(

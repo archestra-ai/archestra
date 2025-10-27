@@ -32,3 +32,18 @@ export async function createTestAdmin(email?: string): Promise<string> {
   });
   return userId;
 }
+
+/**
+ * Creates a test organization in the database
+ * Returns the created organization ID
+ */
+export async function createTestOrganization(name?: string): Promise<string> {
+  const orgId = crypto.randomUUID();
+  await db.insert(schema.organizationsTable).values({
+    id: orgId,
+    name: name || `Test Org ${orgId.substring(0, 8)}`,
+    slug: `test-org-${orgId.substring(0, 8)}`,
+    createdAt: new Date(),
+  });
+  return orgId;
+}

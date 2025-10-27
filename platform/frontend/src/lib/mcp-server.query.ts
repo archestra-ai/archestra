@@ -26,8 +26,8 @@ export function useInstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: InstallMcpServerData["body"]) => {
-      const response = await installMcpServer({ body: data });
-      return response.data;
+      const { data: installedServer } = await installMcpServer({ body: data });
+      return installedServer;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });

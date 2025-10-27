@@ -83,7 +83,7 @@ async function seedAgents(): Promise<void> {
       id: DEMO_AGENT_ID,
       name: "Demo Agent without Archestra",
       isDemo: true,
-      usersWithAccess: [],
+      teams: [],
     };
     await AgentModel.create(agentData);
     console.log("✓ Seeded allowed demo agent");
@@ -98,7 +98,7 @@ async function seedAgents(): Promise<void> {
       id: BLOCKED_DEMO_AGENT_ID,
       name: "Demo Agent with Archestra",
       isDemo: true,
-      usersWithAccess: [],
+      teams: [],
     };
     await AgentModel.create(agentData);
     console.log("✓ Seeded blocked demo agent");

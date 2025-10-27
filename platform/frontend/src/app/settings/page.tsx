@@ -1,13 +1,16 @@
 "use client";
 
-import { DEFAULT_AGENT_NAME } from "@shared";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
+import { useDefaultAgent } from "@/lib/agent.query";
+import { useHealth } from "@/lib/health.query";
 
 export default function SettingsPage() {
+  const { data: defaultAgent } = useDefaultAgent();
+  const { data: health } = useHealth();
   const [particles, setParticles] = useState<
     Array<{
       id: number;
@@ -158,8 +161,8 @@ export default function SettingsPage() {
             <br />
             <br />
             Below are instructions for how to connect to Archestra using a
-            default agent (named <b>{DEFAULT_AGENT_NAME}</b>). If you'd like to
-            configure a specific agent, you can do so in the{" "}
+            default agent. If you'd like to configure a specific agent, you can
+            do so in the{" "}
             <Link href="/agents" className="text-blue-500">
               Agents
             </Link>{" "}
@@ -339,7 +342,9 @@ export default function SettingsPage() {
                       To enable tools for the agent
                     </h4>
                   </div>
-                  <McpConnectionInstructions />
+                  {defaultAgent && (
+                    <McpConnectionInstructions agentId={defaultAgent.id} />
+                  )}
                 </div>
               </div>
             </div>
@@ -522,6 +527,14 @@ export default function SettingsPage() {
                 </a>
               </div>
             </div>
+
+            {health?.version && (
+              <div className="border-t pt-6 mt-6">
+                <p className="text-xs text-muted-foreground text-center">
+                  Version {health.version}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

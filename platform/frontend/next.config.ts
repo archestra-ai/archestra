@@ -20,10 +20,6 @@ const nextConfig: NextConfig = {
         destination: 'https://www.archestra.ai/mcp-catalog/api/:path*',
       },
       {
-        source: '/api/mcp-registry-proxy/:path*',
-        destination: 'https://registry.modelcontextprotocol.io/:path*',
-      },
-      {
         source: '/api/:path*',
         destination: `${backendUrl}/api/:path*`,
       },
@@ -31,6 +27,10 @@ const nextConfig: NextConfig = {
         source: '/v1/:path*',
         destination: `${backendUrl}/v1/:path*`,
       },
+      {
+        source: '/health',
+        destination: `${backendUrl}/health`,
+      }
     ];
   },
 };

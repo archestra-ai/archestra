@@ -1,6 +1,6 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { McpServerMetadata } from "@/types/mcp-server";
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import mcpCatalogTable from "./internal-mcp-catalog";
+import secretTable from "./secret";
 
 const mcpServerTable = pgTable("mcp_server", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -8,7 +8,9 @@ const mcpServerTable = pgTable("mcp_server", {
   catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
     onDelete: "set null",
   }),
-  metadata: jsonb("metadata").$type<McpServerMetadata>().notNull().default({}),
+  secretId: uuid("secret_id").references(() => secretTable.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

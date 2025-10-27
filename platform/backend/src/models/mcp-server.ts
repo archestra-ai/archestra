@@ -1,35 +1,96 @@
 import { GITHUB_MCP_SERVER_NAME } from "@shared";
-import { eq, isNull } from "drizzle-orm";
+import { eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import mcpClientService from "@/services/mcp-client";
-import type {
-  InsertMcpServer,
-  McpServer,
-  McpServerMetadata,
-  UpdateMcpServer,
-} from "@/types";
+import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import McpServerTeamModel from "./mcp-server-team";
+import SecretModel from "./secret";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
+    const { teams, ...serverData } = server;
+
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values(server)
+      .values(serverData)
       .returning();
 
-    return createdServer;
+    // Assign teams to the MCP server if provided
+    if (teams && teams.length > 0) {
+      await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
+    }
+
+    return {
+      ...createdServer,
+      teams: teams || [],
+    };
   }
 
-  static async findAll(): Promise<McpServer[]> {
-    return await db.select().from(schema.mcpServersTable);
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<McpServer[]> {
+    let query = db.select().from(schema.mcpServersTable).$dynamic();
+
+    // Apply access control filtering for non-admins
+    if (userId && !isAdmin) {
+      const accessibleMcpServerIds =
+        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+
+      if (accessibleMcpServerIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
+      );
+    }
+
+    const servers = await query;
+
+    // Populate teams for each MCP server
+    const serversWithTeams: McpServer[] = await Promise.all(
+      servers.map(async (server) => ({
+        ...server,
+        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
+      })),
+    );
+
+    return serversWithTeams;
   }
 
-  static async findById(id: string): Promise<McpServer | null> {
+  static async findById(
+    id: string,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<McpServer | null> {
+    // Check access control for non-admins
+    if (userId && !isAdmin) {
+      const hasAccess = await McpServerTeamModel.userHasMcpServerAccess(
+        userId,
+        id,
+        false,
+      );
+      if (!hasAccess) {
+        return null;
+      }
+    }
+
     const [server] = await db
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
 
-    return server || null;
+    if (!server) {
+      return null;
+    }
+
+    const teams = await McpServerTeamModel.getTeamsForMcpServer(id);
+
+    return {
+      ...server,
+      teams,
+    };
   }
 
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
@@ -51,13 +112,47 @@ class McpServerModel {
     id: string,
     server: Partial<UpdateMcpServer>,
   ): Promise<McpServer | null> {
-    const [updatedServer] = await db
-      .update(schema.mcpServersTable)
-      .set(server)
-      .where(eq(schema.mcpServersTable.id, id))
-      .returning();
+    const { teams, ...serverData } = server;
 
-    return updatedServer || null;
+    let updatedServer: McpServer | undefined;
+
+    // Only update server table if there are fields to update
+    if (Object.keys(serverData).length > 0) {
+      [updatedServer] = await db
+        .update(schema.mcpServersTable)
+        .set(serverData)
+        .where(eq(schema.mcpServersTable.id, id))
+        .returning();
+
+      if (!updatedServer) {
+        return null;
+      }
+    } else {
+      // If only updating teams, fetch the existing server
+      const [existingServer] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, id));
+
+      if (!existingServer) {
+        return null;
+      }
+
+      updatedServer = existingServer;
+    }
+
+    // Sync team assignments if teams is provided
+    if (teams !== undefined) {
+      await McpServerTeamModel.syncMcpServerTeams(id, teams);
+    }
+
+    // Fetch current teams
+    const currentTeams = await McpServerTeamModel.getTeamsForMcpServer(id);
+
+    return {
+      ...updatedServer,
+      teams: currentTeams,
+    };
   }
 
   static async delete(id: string): Promise<boolean> {
@@ -78,14 +173,29 @@ class McpServerModel {
       inputSchema: Record<string, unknown>;
     }>
   > {
+    // Get catalog information if this server was installed from a catalog
+    let catalogItem = null;
+    if (mcpServer.catalogId) {
+      const { default: InternalMcpCatalogModel } = await import(
+        "./internal-mcp-catalog"
+      );
+      catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
+    }
+
+    // Load secrets if secretId is present
+    let secrets: Record<string, unknown> = {};
+    if (mcpServer.secretId) {
+      const secretRecord = await SecretModel.findById(mcpServer.secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secret;
+      }
+    }
+
     /**
-     * NOTE: this is just for demo purposes for right now.. should be removed once we have full support here..
-     *
-     * For GitHub MCP server, extract token from metadata and connect
+     * For GitHub MCP server, extract token from secrets and connect
      */
-    if (mcpServer.name === GITHUB_MCP_SERVER_NAME && mcpServer.metadata) {
-      const metadata = mcpServer.metadata;
-      const githubToken = metadata.githubToken as string;
+    if (mcpServer.name === GITHUB_MCP_SERVER_NAME) {
+      const githubToken = secrets.access_token as string | undefined;
 
       if (githubToken) {
         try {
@@ -100,6 +210,32 @@ class McpServerModel {
         } catch (error) {
           console.error(`Failed to get tools from GitHub MCP server:`, error);
         }
+      }
+    }
+
+    /**
+     * For remote servers, connect using the server URL and secrets
+     */
+    if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+      try {
+        const config = mcpClientService.createRemoteServerConfig({
+          name: mcpServer.name,
+          url: catalogItem.serverUrl,
+          secrets,
+        });
+        const tools = await mcpClientService.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to get tools from remote MCP server ${mcpServer.name}:`,
+          error,
+        );
+        throw error;
       }
     }
 
@@ -160,16 +296,55 @@ class McpServerModel {
   }
 
   /**
-   * Validate that an MCP server can be connected to with given metadata
+   * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(
     serverName: string,
-    metadata: McpServerMetadata,
+    catalogId?: string,
+    secretId?: string,
   ): Promise<boolean> {
+    // Load secrets if secretId is provided
+    let secrets: Record<string, unknown> = {};
+    if (secretId) {
+      const secretRecord = await SecretModel.findById(secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secret;
+      }
+    }
+
+    // Special-case validation for GitHub MCP server
     if (serverName === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = metadata.githubToken as string;
-      if (githubToken) {
+      const githubToken = secrets.access_token as string | undefined;
+
+      if (githubToken && typeof githubToken === "string") {
         return await mcpClientService.validateGitHubConnection(githubToken);
+      }
+      return false;
+    }
+
+    // For other remote servers, check if we can connect using catalog info
+    if (catalogId) {
+      try {
+        const { default: InternalMcpCatalogModel } = await import(
+          "./internal-mcp-catalog"
+        );
+        const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+
+        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+          const config = mcpClientService.createRemoteServerConfig({
+            name: serverName,
+            url: catalogItem.serverUrl,
+            secrets,
+          });
+          const tools = await mcpClientService.connectAndGetTools(config);
+          return tools.length > 0;
+        }
+      } catch (error) {
+        console.error(
+          `Validation failed for remote MCP server ${serverName}:`,
+          error,
+        );
+        return false;
       }
     }
 

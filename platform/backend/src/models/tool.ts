@@ -11,7 +11,7 @@ import {
 
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
 const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
@@ -89,7 +89,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,
@@ -143,8 +143,10 @@ class ToolModel {
      * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
      */
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
@@ -179,7 +181,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,
@@ -284,7 +286,9 @@ class ToolModel {
   ): Promise<
     Array<{
       toolName: string;
-      mcpServerInstallationMetadata: Record<string, unknown>;
+      responseModifierTemplate: string | null;
+      mcpServerSecretId: string | null;
+      mcpServerName: string;
     }>
   > {
     if (toolNames.length === 0) {
@@ -294,7 +298,10 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
+        mcpServerSecretId: schema.mcpServersTable.secretId,
+        mcpServerName: schema.mcpServersTable.name,
       })
       .from(schema.toolsTable)
       .innerJoin(

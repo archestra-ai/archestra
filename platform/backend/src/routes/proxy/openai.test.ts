@@ -8,21 +8,14 @@ import { beforeEach, describe, expect, test } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
-import { createTestUser } from "@/test-utils";
 import type { OpenAi } from "@/types";
 import openAiProxyRoutes, { injectTools } from "./openai";
 
 describe("OpenAI injectTools", () => {
-  let userId: string;
   let agentId: string;
 
   beforeEach(async () => {
-    // Create test user and agent
-    userId = await createTestUser();
-    const agent = await AgentModel.create(
-      { name: "Test Agent", usersWithAccess: [] },
-      userId,
-    );
+    const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
     agentId = agent.id;
   });
 

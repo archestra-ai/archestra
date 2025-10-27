@@ -91,6 +91,9 @@ const routePermissionsConfig: Partial<
   [RouteId.GetAgent]: {
     agent: ["read"],
   },
+  [RouteId.GetDefaultAgent]: {
+    agent: ["read"],
+  },
   [RouteId.CreateAgent]: {
     agent: ["create"],
   },
@@ -219,6 +222,30 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.HandleOAuthCallback]: {
     mcpServer: ["create"],
+  },
+  [RouteId.GetTeams]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeam]: {
+    team: ["read"],
+  },
+  [RouteId.CreateTeam]: {
+    team: ["create"],
+  },
+  [RouteId.UpdateTeam]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeam]: {
+    team: ["delete"],
+  },
+  [RouteId.GetTeamMembers]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamMember]: {
+    team: ["update"],
   },
 };
 

@@ -17,9 +17,19 @@ export const SelectMcpServerSchema = createSelectSchema(
   {
     metadata: McpServerMetadataSchema,
   },
-);
-export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable);
-export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable);
+).extend({
+  teams: z.array(z.string()).optional(),
+});
+export const InsertMcpServerSchema = createInsertSchema(
+  schema.mcpServersTable,
+).extend({
+  teams: z.array(z.string()).optional(),
+});
+export const UpdateMcpServerSchema = createUpdateSchema(
+  schema.mcpServersTable,
+).extend({
+  teams: z.array(z.string()).optional(),
+});
 
 export type McpServer = z.infer<typeof SelectMcpServerSchema>;
 export type InsertMcpServer = z.infer<typeof InsertMcpServerSchema>;

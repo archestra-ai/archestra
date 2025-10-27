@@ -22,6 +22,6 @@ export function generateMockAgents(
     isDemo: randomBool(), // Randomly mark some as demo
     createdAt: new Date(),
     updatedAt: new Date(),
-    usersWithAccess: [],
+    teams: [],
   }));
 }

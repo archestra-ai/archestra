@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -8,7 +9,9 @@ import {
   createAgent,
   deleteAgent,
   type GetAgentsResponses,
+  type GetDefaultAgentResponses,
   getAgents,
+  getDefaultAgent,
   type UpdateAgentData,
   updateAgent,
 } from "@/lib/clients/api";
@@ -19,6 +22,16 @@ export function useAgents(params?: {
   return useSuspenseQuery({
     queryKey: ["agents"],
     queryFn: async () => (await getAgents()).data ?? null,
+    initialData: params?.initialData,
+  });
+}
+
+export function useDefaultAgent(params?: {
+  initialData?: GetDefaultAgentResponses["200"];
+}) {
+  return useQuery({
+    queryKey: ["agents", "default"],
+    queryFn: async () => (await getDefaultAgent()).data ?? null,
     initialData: params?.initialData,
   });
 }

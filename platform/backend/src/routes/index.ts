@@ -13,4 +13,5 @@ export { default as oauthRoutes } from "./oauth";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";
 export { default as openAiProxyRoutes } from "./proxy/openai";
+export { default as teamRoutes } from "./team";
 export { default as toolRoutes } from "./tool";

@@ -199,6 +199,7 @@ export function InternalMCPCatalog({
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
+        teams: [],
       });
       setInstallingItemId(null);
     },
@@ -209,12 +210,14 @@ export function InternalMCPCatalog({
     async (
       catalogItem: GetInternalMcpCatalogResponses["200"][number],
       metadata: Record<string, unknown>,
+      teams: string[],
     ) => {
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
         metadata,
+        teams,
       });
       setInstallingItemId(null);
     },

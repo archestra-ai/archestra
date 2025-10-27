@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
+import { ResponseModifierEditor } from "./response-modifier-editor";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
@@ -117,6 +118,7 @@ export function ToolDetailsDialog({
               <ToolCallPolicies agentTool={agentTool} />
               <ToolResultPolicies agentTool={agentTool} />
             </div>
+            <ResponseModifierEditor agentTool={agentTool} />
           </div>
         </div>
       </DialogContent>

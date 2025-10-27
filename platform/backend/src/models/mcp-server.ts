@@ -1,5 +1,5 @@
 import { GITHUB_MCP_SERVER_NAME } from "@shared";
-import { eq, isNull } from "drizzle-orm";
+import { eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import mcpClientService from "@/services/mcp-client";
 import type {
@@ -8,28 +8,93 @@ import type {
   McpServerMetadata,
   UpdateMcpServer,
 } from "@/types";
+import McpServerTeamModel from "./mcp-server-team";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
+    const { teams, ...serverData } = server;
+
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
-      .values(server)
+      .values(serverData)
       .returning();
 
-    return createdServer;
+    // Assign teams to the MCP server if provided
+    if (teams && teams.length > 0) {
+      await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
+    }
+
+    return {
+      ...createdServer,
+      teams: teams || [],
+    };
   }
 
-  static async findAll(): Promise<McpServer[]> {
-    return await db.select().from(schema.mcpServersTable);
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<McpServer[]> {
+    let query = db.select().from(schema.mcpServersTable).$dynamic();
+
+    // Apply access control filtering for non-admins
+    if (userId && !isAdmin) {
+      const accessibleMcpServerIds =
+        await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+
+      if (accessibleMcpServerIds.length === 0) {
+        return [];
+      }
+
+      query = query.where(
+        inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
+      );
+    }
+
+    const servers = await query;
+
+    // Populate teams for each MCP server
+    const serversWithTeams: McpServer[] = await Promise.all(
+      servers.map(async (server) => ({
+        ...server,
+        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
+      })),
+    );
+
+    return serversWithTeams;
   }
 
-  static async findById(id: string): Promise<McpServer | null> {
+  static async findById(
+    id: string,
+    userId?: string,
+    isAdmin?: boolean,
+  ): Promise<McpServer | null> {
+    // Check access control for non-admins
+    if (userId && !isAdmin) {
+      const hasAccess = await McpServerTeamModel.userHasMcpServerAccess(
+        userId,
+        id,
+        false,
+      );
+      if (!hasAccess) {
+        return null;
+      }
+    }
+
     const [server] = await db
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
 
-    return server || null;
+    if (!server) {
+      return null;
+    }
+
+    const teams = await McpServerTeamModel.getTeamsForMcpServer(id);
+
+    return {
+      ...server,
+      teams,
+    };
   }
 
   static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
@@ -51,13 +116,47 @@ class McpServerModel {
     id: string,
     server: Partial<UpdateMcpServer>,
   ): Promise<McpServer | null> {
-    const [updatedServer] = await db
-      .update(schema.mcpServersTable)
-      .set(server)
-      .where(eq(schema.mcpServersTable.id, id))
-      .returning();
+    const { teams, ...serverData } = server;
 
-    return updatedServer || null;
+    let updatedServer: McpServer | undefined;
+
+    // Only update server table if there are fields to update
+    if (Object.keys(serverData).length > 0) {
+      [updatedServer] = await db
+        .update(schema.mcpServersTable)
+        .set(serverData)
+        .where(eq(schema.mcpServersTable.id, id))
+        .returning();
+
+      if (!updatedServer) {
+        return null;
+      }
+    } else {
+      // If only updating teams, fetch the existing server
+      const [existingServer] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, id));
+
+      if (!existingServer) {
+        return null;
+      }
+
+      updatedServer = existingServer;
+    }
+
+    // Sync team assignments if teams is provided
+    if (teams !== undefined) {
+      await McpServerTeamModel.syncMcpServerTeams(id, teams);
+    }
+
+    // Fetch current teams
+    const currentTeams = await McpServerTeamModel.getTeamsForMcpServer(id);
+
+    return {
+      ...updatedServer,
+      teams: currentTeams,
+    };
   }
 
   static async delete(id: string): Promise<boolean> {

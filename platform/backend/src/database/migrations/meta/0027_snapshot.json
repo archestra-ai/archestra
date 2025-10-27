@@ -1,5 +1,5 @@
 {
-  "id": "403a5137-c031-47c0-80d6-9ed505aab0b9",
+  "id": "ea3a0cde-3082-44d4-a0d6-6abd3c66f421",
   "prevId": "b7db1d48-3afc-4e15-923c-0c52ecef05ef",
   "version": "7",
   "dialect": "postgresql",
@@ -107,6 +107,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'untrusted'"
+        },
+        "response_modifier_template": {
+          "name": "response_modifier_template",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1018,12 +1024,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1073,37 +1073,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'[]'::jsonb"
-        },
-        "server_type": {
-          "name": "server_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "server_url": {
-          "name": "server_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "docs_url": {
-          "name": "docs_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_config": {
-          "name": "user_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
-        },
-        "oauth_config": {
-          "name": "oauth_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",

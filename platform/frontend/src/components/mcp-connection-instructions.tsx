@@ -10,7 +10,7 @@ import config from "@/lib/config";
 const { displayProxyUrl: apiBaseUrl } = config.api;
 
 interface McpConnectionInstructionsProps {
-  agentId?: string;
+  agentId: string;
 }
 
 export function McpConnectionInstructions({
@@ -19,16 +19,19 @@ export function McpConnectionInstructions({
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
 
-  const mcpUrl = agentId
-    ? `${apiBaseUrl}/mcp/${agentId}`
-    : `${apiBaseUrl}/mcp/:agentId`;
+  const mcpUrl = `${apiBaseUrl}/mcp`;
+  const token = agentId;
+
+  const httpExample = `${mcpUrl}\nAuthorization: Bearer ${token}`;
 
   const mcpConfig = JSON.stringify(
     {
       mcpServers: {
-        archestra: {
-          type: "streamable-http",
+        default_archestra_agent: {
           url: mcpUrl,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
       },
     },
@@ -37,11 +40,11 @@ export function McpConnectionInstructions({
   );
 
   const handleCopyUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(mcpUrl);
+    await navigator.clipboard.writeText(httpExample);
     setCopiedUrl(true);
-    toast.success("MCP URL copied to clipboard");
+    toast.success("MCP configuration copied to clipboard");
     setTimeout(() => setCopiedUrl(false), 2000);
-  }, [mcpUrl]);
+  }, [httpExample]);
 
   const handleCopyConfig = useCallback(async () => {
     await navigator.clipboard.writeText(mcpConfig);
@@ -52,15 +55,27 @@ export function McpConnectionInstructions({
 
   return (
     <div className="space-y-3">
-      <div className="bg-muted rounded-md p-3 flex items-center justify-between">
-        <CodeText className="text-sm">{mcpUrl}</CodeText>
-        <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
-          {copiedUrl ? (
-            <Check className="h-4 w-4 text-green-500" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
-        </Button>
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          MCP Gateway configuration URL:
+        </p>
+        <div className="bg-muted rounded-md p-3 relative">
+          <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+            <code>{httpExample}</code>
+          </pre>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2"
+            onClick={handleCopyUrl}
+          >
+            {copiedUrl ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2">

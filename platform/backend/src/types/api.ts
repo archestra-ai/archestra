@@ -96,6 +96,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
+  GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 
@@ -128,6 +129,16 @@ export const RouteId = {
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",
+
+  // Team Routes
+  GetTeams: "getTeams",
+  CreateTeam: "createTeam",
+  GetTeam: "getTeam",
+  UpdateTeam: "updateTeam",
+  DeleteTeam: "deleteTeam",
+  GetTeamMembers: "getTeamMembers",
+  AddTeamMember: "addTeamMember",
+  RemoveTeamMember: "removeTeamMember",
 
   // Tool Routes
   GetTools: "getTools",

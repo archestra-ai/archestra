@@ -1,6 +1,6 @@
 {
   "name": "@shared",
-  "version": "1.0.0",
+  "version": "0.0.12",
   "description": "",
   "type": "module",
   "private": true,

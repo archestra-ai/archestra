@@ -1,8 +1,9 @@
 "use client";
 
 import { E2eTestId } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plug, Plus, Trash2, Wrench, X } from "lucide-react";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { LoadingSpinner } from "@/components/loading";
@@ -55,8 +56,8 @@ import {
   useDeleteAgent,
   useUpdateAgent,
 } from "@/lib/agent.query";
-import { useCurrentOrgMembers } from "@/lib/auth.query";
 import type { GetAgentsResponses } from "@/lib/clients/api";
+import { getTeams } from "@/lib/clients/api/sdk.gen";
 import { useFeatureFlag } from "@/lib/features.hook";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
@@ -76,52 +77,52 @@ export default function AgentsPage({
   );
 }
 
-function AgentMembersBadges({
-  usersWithAccess,
-  orgMembers,
+function AgentTeamsBadges({
+  teamIds,
+  teams,
 }: {
-  usersWithAccess: string[];
-  orgMembers:
-    | Array<{ user: { id: string; name: string; email: string } }>
+  teamIds: string[];
+  teams:
+    | Array<{ id: string; name: string; description: string | null }>
     | undefined;
 }) {
-  const MAX_USERS_TO_SHOW = 3;
-  if (!orgMembers || usersWithAccess.length === 0) {
+  const MAX_TEAMS_TO_SHOW = 3;
+  if (!teams || teamIds.length === 0) {
     return <span className="text-sm text-muted-foreground">None</span>;
   }
 
-  const getUserById = (userId: string) => {
-    return orgMembers.find((member) => member.user.id === userId)?.user;
+  const getTeamById = (teamId: string) => {
+    return teams.find((team) => team.id === teamId);
   };
 
-  const visibleUsers = usersWithAccess.slice(0, MAX_USERS_TO_SHOW);
-  const remainingUsers = usersWithAccess.slice(MAX_USERS_TO_SHOW);
+  const visibleTeams = teamIds.slice(0, MAX_TEAMS_TO_SHOW);
+  const remainingTeams = teamIds.slice(MAX_TEAMS_TO_SHOW);
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {visibleUsers.map((userId) => {
-        const user = getUserById(userId);
+      {visibleTeams.map((teamId) => {
+        const team = getTeamById(teamId);
         return (
-          <Badge key={userId} variant="secondary" className="text-xs">
-            {user?.email || userId}
+          <Badge key={teamId} variant="secondary" className="text-xs">
+            {team?.name || teamId}
           </Badge>
         );
       })}
-      {remainingUsers.length > 0 && (
+      {remainingTeams.length > 0 && (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="text-xs text-muted-foreground cursor-help">
-                +{remainingUsers.length} more
+                +{remainingTeams.length} more
               </span>
             </TooltipTrigger>
             <TooltipContent>
               <div className="flex flex-col gap-1">
-                {remainingUsers.map((userId) => {
-                  const user = getUserById(userId);
+                {remainingTeams.map((teamId) => {
+                  const team = getTeamById(teamId);
                   return (
-                    <div key={userId} className="text-xs">
-                      {user?.email || userId}
+                    <div key={teamId} className="text-xs">
+                      {team?.name || teamId}
                     </div>
                   );
                 })}
@@ -136,7 +137,13 @@ function AgentMembersBadges({
 
 function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const { data: agents } = useAgents({ initialData });
-  const { data: orgMembers } = useCurrentOrgMembers();
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await getTeams();
+      return data || [];
+    },
+  });
   const mcpRegistryEnabled = useFeatureFlag("mcp_registry");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
@@ -149,7 +156,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
     name: string;
-    usersWithAccess: string[];
+    teams: string[];
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -207,7 +214,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                     <TableHead>Name</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Connected Tools</TableHead>
-                    <TableHead>Members</TableHead>
+                    <TableHead>Teams</TableHead>
                     <WithPermission permissions={["agent:delete"]}>
                       <TableHead className="text-right">Actions</TableHead>
                     </WithPermission>
@@ -217,7 +224,17 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                   {agents.map((agent) => (
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">
-                        {agent.name}
+                        <div className="flex items-center gap-2">
+                          {agent.name}
+                          {agent.isDefault && (
+                            <Badge
+                              variant="outline"
+                              className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30 text-xs font-bold"
+                            >
+                              DEFAULT
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {new Date(agent.createdAt).toLocaleDateString("en-US", {
@@ -228,9 +245,9 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                       </TableCell>
                       <TableCell>{agent.tools.length}</TableCell>
                       <TableCell>
-                        <AgentMembersBadges
-                          usersWithAccess={agent.usersWithAccess || []}
-                          orgMembers={orgMembers}
+                        <AgentTeamsBadges
+                          teamIds={agent.teams || []}
+                          teams={teams}
                         />
                       </TableCell>
                       <WithPermission permissions={["agent:delete"]}>
@@ -283,8 +300,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
                                       setEditingAgent({
                                         id: agent.id,
                                         name: agent.name,
-                                        usersWithAccess:
-                                          agent.usersWithAccess || [],
+                                        teams: agent.teams || [],
                                       })
                                     }
                                   >
@@ -370,50 +386,48 @@ function CreateAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
-  const { data: orgMembers } = useCurrentOrgMembers();
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const response = await getTeams();
+      return response.data || [];
+    },
+  });
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
     name: string;
   } | null>(null);
   const createAgent = useCreateAgent();
 
-  const handleAddUser = useCallback(
-    (userId: string) => {
-      if (userId && !assignedUserIds.includes(userId)) {
-        setAssignedUserIds([...assignedUserIds, userId]);
-        setSelectedUserId("");
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
       }
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const handleRemoveUser = useCallback(
-    (userId: string) => {
-      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const getAdminMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter((member) => member.role === "admin");
-  }, [orgMembers]);
+  const getUnassignedTeams = useCallback(() => {
+    if (!teams) return [];
+    return teams.filter((team) => !assignedTeamIds.includes(team.id));
+  }, [teams, assignedTeamIds]);
 
-  const getUnassignedMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter(
-      (member) =>
-        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
-    );
-  }, [orgMembers, assignedUserIds]);
-
-  const getUserById = useCallback(
-    (userId: string) => {
-      return orgMembers?.find((member) => member.user.id === userId)?.user;
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
     },
-    [orgMembers],
+    [teams],
   );
 
   const handleSubmit = useCallback(
@@ -427,7 +441,7 @@ function CreateAgentDialog({
       try {
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
-          usersWithAccess: assignedUserIds,
+          teams: assignedTeamIds,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -438,28 +452,16 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedUserIds, createAgent],
+    [name, assignedTeamIds, createAgent],
   );
 
   const handleClose = useCallback(() => {
     setName("");
-    setAssignedUserIds([]);
-    setSelectedUserId("");
+    setAssignedTeamIds([]);
+    setSelectedTeamId("");
     setCreatedAgent(null);
     onOpenChange(false);
   }, [onOpenChange]);
-
-  const adminMemberIds = useMemo(() => {
-    return getAdminMembers().map((member) => member.user.id);
-  }, [getAdminMembers]);
-
-  /**
-   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
-   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
-   */
-  const filteredAssignedUserIds = useMemo(() => {
-    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
-  }, [assignedUserIds, adminMemberIds]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -492,55 +494,42 @@ function CreateAgentDialog({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Members with access</Label>
+                  <Label>Team Access</Label>
                   <p className="text-sm text-muted-foreground">
-                    Admin users have access to all agents.
+                    Assign teams to grant their members access to this agent.
                   </p>
-                  <Select value={selectedUserId} onValueChange={handleAddUser}>
-                    <SelectTrigger id="assign-user">
-                      <SelectValue placeholder="Select a member to assign" />
+                  <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                    <SelectTrigger id="assign-team">
+                      <SelectValue placeholder="Select a team to assign" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getUnassignedMembers().length === 0 ? (
+                      {getUnassignedTeams().length === 0 ? (
                         <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          All members are already assigned
+                          All teams are already assigned
                         </div>
                       ) : (
-                        getUnassignedMembers().map((member) => (
-                          <SelectItem
-                            key={member.user.id}
-                            value={member.user.id}
-                          >
-                            {member.user.name} ({member.user.email})
+                        getUnassignedTeams().map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-                  {getAdminMembers().length > 0 ||
-                  filteredAssignedUserIds.length > 0 ? (
+                  {assignedTeamIds.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {getAdminMembers().map((member) => (
-                        <Badge
-                          key={member.user.id}
-                          variant="outline"
-                          className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
-                        >
-                          <span>{member.user.email} (Admin)</span>
-                        </Badge>
-                      ))}
-                      {filteredAssignedUserIds.map((userId) => {
-                        const user = getUserById(userId);
+                      {assignedTeamIds.map((teamId) => {
+                        const team = getTeamById(teamId);
                         return (
                           <Badge
-                            key={userId}
+                            key={teamId}
                             variant="secondary"
                             className="flex items-center gap-1 pr-1"
                           >
-                            <span>{user?.email || userId}</span>
+                            <span>{team?.name || teamId}</span>
                             <button
                               type="button"
-                              onClick={() => handleRemoveUser(userId)}
+                              onClick={() => handleRemoveTeam(teamId)}
                               className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                             >
                               <X className="h-3 w-3" />
@@ -551,7 +540,7 @@ function CreateAgentDialog({
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No members assigned yet
+                      No teams assigned yet. Admins have access to all agents.
                     </p>
                   )}
                 </div>
@@ -573,10 +562,10 @@ function CreateAgentDialog({
                 How to connect "{createdAgent.name}" to Archestra
               </DialogTitle>
             </DialogHeader>
-            <div className="py-4">
+            <div className="overflow-y-auto py-4 flex-1">
               <AgentConnectionTabs agentId={createdAgent.id} />
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               <Button
                 type="button"
                 onClick={handleClose}
@@ -597,33 +586,39 @@ function EditAgentDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string; usersWithAccess: string[] };
+  agent: { id: string; name: string; teams: string[] };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState(agent.name);
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(
-    agent.usersWithAccess || [],
+  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
+    agent.teams || [],
   );
-  const { data: orgMembers } = useCurrentOrgMembers();
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const response = await getTeams();
+      return response.data || [];
+    },
+  });
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
 
-  const handleAddUser = useCallback(
-    (userId: string) => {
-      if (userId && !assignedUserIds.includes(userId)) {
-        setAssignedUserIds([...assignedUserIds, userId]);
-        setSelectedUserId("");
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
       }
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
-  const handleRemoveUser = useCallback(
-    (userId: string) => {
-      setAssignedUserIds(assignedUserIds.filter((id) => id !== userId));
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
     },
-    [assignedUserIds],
+    [assignedTeamIds],
   );
 
   const handleSubmit = useCallback(
@@ -639,7 +634,7 @@ function EditAgentDialog({
           id: agent.id,
           data: {
             name: name.trim(),
-            usersWithAccess: assignedUserIds,
+            teams: assignedTeamIds,
           },
         });
         toast.success("Agent updated successfully");
@@ -648,40 +643,20 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedUserIds, updateAgent, onOpenChange],
+    [agent.id, name, assignedTeamIds, updateAgent, onOpenChange],
   );
 
-  const getAdminMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter((member) => member.role === "admin");
-  }, [orgMembers]);
+  const getUnassignedTeams = useCallback(() => {
+    if (!teams) return [];
+    return teams.filter((team) => !assignedTeamIds.includes(team.id));
+  }, [teams, assignedTeamIds]);
 
-  const getUnassignedMembers = useCallback(() => {
-    if (!orgMembers) return [];
-    return orgMembers.filter(
-      (member) =>
-        member.role !== "admin" && !assignedUserIds.includes(member.user.id),
-    );
-  }, [orgMembers, assignedUserIds]);
-
-  const getUserById = useCallback(
-    (userId: string) => {
-      return orgMembers?.find((member) => member.user.id === userId)?.user;
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
     },
-    [orgMembers],
+    [teams],
   );
-
-  const adminMemberIds = useMemo(() => {
-    return getAdminMembers().map((member) => member.user.id);
-  }, [getAdminMembers]);
-
-  /**
-   * NOTE: this is a bit of a quick hack to not show admin members in the assigned users list
-   * (since they have access to all agents and right now the backend returns ids for ALL users that have access)
-   */
-  const filteredAssignedUserIds = useMemo(() => {
-    return assignedUserIds.filter((userId) => !adminMemberIds.includes(userId));
-  }, [assignedUserIds, adminMemberIds]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -692,7 +667,7 @@ function EditAgentDialog({
         <DialogHeader>
           <DialogTitle>Edit agent</DialogTitle>
           <DialogDescription>
-            Update the agent's name and assign organization members.
+            Update the agent's name and assign teams.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -712,52 +687,42 @@ function EditAgentDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Members with access</Label>
+              <Label>Team Access</Label>
               <p className="text-sm text-muted-foreground">
-                Admin users have access to all agents.
+                Assign teams to grant their members access to this agent.
               </p>
-              <Select value={selectedUserId} onValueChange={handleAddUser}>
-                <SelectTrigger id="assign-user">
-                  <SelectValue placeholder="Select a member to assign" />
+              <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                <SelectTrigger id="assign-team">
+                  <SelectValue placeholder="Select a team to assign" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getUnassignedMembers().length === 0 ? (
+                  {getUnassignedTeams().length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      All members are already assigned
+                      All teams are already assigned
                     </div>
                   ) : (
-                    getUnassignedMembers().map((member) => (
-                      <SelectItem key={member.user.id} value={member.user.id}>
-                        {member.user.name} ({member.user.email})
+                    getUnassignedTeams().map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
-              {getAdminMembers().length > 0 ||
-              filteredAssignedUserIds.length > 0 ? (
+              {assignedTeamIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {getAdminMembers().map((member) => (
-                    <Badge
-                      key={member.user.id}
-                      variant="outline"
-                      className="flex items-center gap-1 bg-blue-300/10 text-blue-300"
-                    >
-                      <span>{member.user.email} (Admin)</span>
-                    </Badge>
-                  ))}
-                  {filteredAssignedUserIds.map((userId) => {
-                    const user = getUserById(userId);
+                  {assignedTeamIds.map((teamId) => {
+                    const team = getTeamById(teamId);
                     return (
                       <Badge
-                        key={userId}
+                        key={teamId}
                         variant="secondary"
                         className="flex items-center gap-1 pr-1"
                       >
-                        <span>{user?.email || userId}</span>
+                        <span>{team?.name || teamId}</span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveUser(userId)}
+                          onClick={() => handleRemoveTeam(teamId)}
                           className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                         >
                           <X className="h-3 w-3" />
@@ -768,7 +733,7 @@ function EditAgentDialog({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No members assigned yet
+                  No teams assigned yet. Admins have access to all agents.
                 </p>
               )}
             </div>

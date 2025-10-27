@@ -28,6 +28,16 @@ export const auth = betterAuth({
         admin: adminRole,
         member: memberRole,
       },
+      features: {
+        team: {
+          enabled: true,
+          ac,
+          roles: {
+            admin: adminRole,
+            member: memberRole,
+          },
+        },
+      },
     }),
     admin(),
     apiKey({
@@ -67,6 +77,8 @@ export const auth = betterAuth({
       member: schema.member,
       invitation: schema.invitation,
       account: schema.account,
+      team: schema.team,
+      teamMember: schema.teamMember,
     },
   }),
 

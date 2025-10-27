@@ -322,6 +322,62 @@ class ToolModel {
 
     return mcpTools;
   }
+
+  /**
+   * Get all tools for a specific MCP server with their assignment counts and assigned agents
+   */
+  static async findByMcpServerId(mcpServerId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      createdAt: Date;
+      assignedAgentCount: number;
+      assignedAgents: Array<{ id: string; name: string }>;
+    }>
+  > {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    // For each tool, get assigned agents
+    const toolsWithAgents = await Promise.all(
+      tools.map(async (tool) => {
+        const assignments = await db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            agentName: schema.agentsTable.name,
+          })
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentToolsTable.toolId, tool.id));
+
+        return {
+          ...tool,
+          parameters: tool.parameters ?? {},
+          assignedAgentCount: assignments.length,
+          assignedAgents: assignments.map((a) => ({
+            id: a.agentId,
+            name: a.agentName,
+          })),
+        };
+      }),
+    );
+
+    return toolsWithAgents;
+  }
 }
 
 export default ToolModel;

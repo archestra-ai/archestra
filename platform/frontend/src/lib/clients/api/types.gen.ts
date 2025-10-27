@@ -5017,6 +5017,60 @@ export type GetMcpServerResponses = {
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
 
+export type GetMcpServerToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/tools';
+};
+
+export type GetMcpServerToolsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerToolsError = GetMcpServerToolsErrors[keyof GetMcpServerToolsErrors];
+
+export type GetMcpServerToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        parameters: {
+            [key: string]: unknown;
+        };
+        createdAt: string;
+        assignedAgentCount: number;
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+        }>;
+    }>;
+};
+
+export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
 export type InitiateOAuthData = {
     body: {
         catalogId: string;

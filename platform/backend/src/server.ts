@@ -1,3 +1,6 @@
+// Import tracing first to ensure auto-instrumentation works properly
+import "./tracing";
+
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";

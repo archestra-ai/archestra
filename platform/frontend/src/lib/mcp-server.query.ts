@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import {
   deleteMcpServer,
   type GetMcpServersResponses,
   getMcpServers,
+  getMcpServerTools,
   type InstallMcpServerData,
   installMcpServer,
 } from "@/lib/clients/api";
@@ -29,12 +31,18 @@ export function useInstallMcpServer() {
       const { data: installedServer } = await installMcpServer({ body: data });
       return installedServer;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (installedServer, variables) => {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server installation creates new tools
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      // Invalidate the specific MCP server's tools query
+      if (installedServer) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-servers", installedServer.id, "tools"],
+        });
+      }
       toast.success(`Successfully installed ${variables.name}`);
     },
     onError: (error, variables) => {
@@ -63,5 +71,22 @@ export function useDeleteMcpServer() {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
     },
+  });
+}
+
+export function useMcpServerTools(mcpServerId: string | null) {
+  return useQuery({
+    queryKey: ["mcp-servers", mcpServerId, "tools"],
+    queryFn: async () => {
+      if (!mcpServerId) return [];
+      try {
+        const response = await getMcpServerTools({ path: { id: mcpServerId } });
+        return response.data ?? [];
+      } catch (error) {
+        console.error("Failed to fetch MCP server tools:", error);
+        return [];
+      }
+    },
+    enabled: !!mcpServerId,
   });
 }

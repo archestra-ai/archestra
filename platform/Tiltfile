@@ -48,6 +48,124 @@ helm_remote(
 
 k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 
+# Jaeger for distributed tracing UI
+helm_remote(
+  'jaeger',
+  repo_url='https://jaegertracing.github.io/helm-charts',
+  namespace='archestra-dev',
+  create_namespace=False,
+  set=[
+    'provisionDataStore.cassandra=false',
+    'allInOne.enabled=true',
+    'storage.type=memory',
+    'agent.enabled=false',
+    'collector.enabled=false',
+    'query.enabled=false'
+  ]
+)
+
+k8s_resource('jaeger', port_forwards=['16686:16686'], labels=['observability'])
+
+# OpenTelemetry Collector
+k8s_yaml(blob("""
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: archestra-dev
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+
+      resource:
+        attributes:
+          - key: deployment.environment
+            value: development
+            action: upsert
+
+    exporters:
+      otlp/jaeger:
+        endpoint: jaeger-collector:4317
+        tls:
+          insecure: true
+
+      debug:
+        verbosity: detailed
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [otlp/jaeger, debug]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: archestra-dev
+spec:
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  selector:
+    app: otel-collector
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: archestra-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:latest
+        args:
+          - "--config=/etc/otel-collector-config.yaml"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otel-collector-config.yaml
+          subPath: otel-collector-config.yaml
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+        - containerPort: 4318
+          name: otlp-http
+      volumes:
+      - name: config
+        configMap:
+          name: otel-collector-config
+"""
+))
+
+k8s_resource('otel-collector', port_forwards=['4317:4317', '4318:4318'], labels=['observability'])
+
 # Database cleanup button (manual trigger only, for development)
 local_resource(
   'db-clean',

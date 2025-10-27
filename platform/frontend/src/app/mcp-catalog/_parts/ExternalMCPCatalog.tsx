@@ -59,16 +59,17 @@ export function ExternalMCPCatalog({
 
   const handleAddToCatalog = async (server: ArchestraMcpServerManifest) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)
-    const rewrittenOauth = server.oauth_config
-      ? {
-          ...server.oauth_config,
-          redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
-            u === "http://localhost:8080/oauth/callback"
-              ? `${window.location.origin}/oauth-callback`
-              : u,
-          ),
-        }
-      : undefined;
+    const rewrittenOauth =
+      server.oauth_config && !server.oauth_config.requires_proxy
+        ? {
+            ...server.oauth_config,
+            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
+              u === "http://localhost:8080/oauth/callback"
+                ? `${window.location.origin}/oauth-callback`
+                : u,
+            ),
+          }
+        : undefined;
 
     await createMutation.mutateAsync({
       label: server.display_name || server.name,

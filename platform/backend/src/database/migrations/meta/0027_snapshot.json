@@ -1,5 +1,5 @@
 {
-  "id": "46beb60a-2bc9-4612-8211-6d3644b32631",
+  "id": "403a5137-c031-47c0-80d6-9ed505aab0b9",
   "prevId": "b7db1d48-3afc-4e15-923c-0c52ecef05ef",
   "version": "7",
   "dialect": "postgresql",
@@ -1018,6 +1018,12 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1092,6 +1098,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'{}'::jsonb"
+        },
+        "oauth_config": {
+          "name": "oauth_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

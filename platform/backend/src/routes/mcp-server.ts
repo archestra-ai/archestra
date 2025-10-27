@@ -164,7 +164,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // If accessToken is provided (PAT flow), create a secret for it
         if (accessToken && !secretId) {
           const secret = await SecretModel.create({
-            secrets: {
+            secret: {
               access_token: accessToken,
             },
           });

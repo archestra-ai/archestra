@@ -1369,8 +1369,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "secrets": {
-          "name": "secrets",
+        "secret": {
+          "name": "secret",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,

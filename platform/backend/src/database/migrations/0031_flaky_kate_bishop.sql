@@ -1,6 +1,6 @@
 CREATE TABLE "secret" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"secrets" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"secret" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );

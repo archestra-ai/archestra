@@ -69,9 +69,9 @@ class McpClientService {
     let accessToken: string | undefined;
     if (firstTool.mcpServerSecretId) {
       const secret = await SecretModel.findById(firstTool.mcpServerSecretId);
-      if (secret?.secrets) {
+      if (secret?.secret) {
         // All tokens (OAuth and PAT) are stored as access_token
-        accessToken = secret.secrets.access_token as string | undefined;
+        accessToken = secret.secret.access_token as string | undefined;
       }
     }
 

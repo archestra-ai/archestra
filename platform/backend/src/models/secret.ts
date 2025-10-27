@@ -3,17 +3,17 @@ import db, { schema } from "@/database";
 
 export interface Secret {
   id: string;
-  secrets: Record<string, unknown>;
+  secret: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface CreateSecretInput {
-  secrets: Record<string, unknown>;
+  secret: Record<string, unknown>;
 }
 
 export interface UpdateSecretInput {
-  secrets: Record<string, unknown>;
+  secret: Record<string, unknown>;
 }
 
 class SecretModel {
@@ -24,7 +24,7 @@ class SecretModel {
     const [secret] = await db
       .insert(schema.secretsTable)
       .values({
-        secrets: input.secrets,
+        secret: input.secret,
       })
       .returning();
 
@@ -53,7 +53,7 @@ class SecretModel {
     const [updatedSecret] = await db
       .update(schema.secretsTable)
       .set({
-        secrets: input.secrets,
+        secret: input.secret,
       })
       .where(eq(schema.secretsTable.id, id))
       .returning();

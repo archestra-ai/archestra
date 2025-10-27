@@ -37,7 +37,7 @@ describe("McpClientService", () => {
 
     // Create secret with access token
     const secret = await SecretModel.create({
-      secrets: {
+      secret: {
         access_token: "test-github-token-123",
       },
     });

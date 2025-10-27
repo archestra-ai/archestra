@@ -3,7 +3,7 @@ import { jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 /**
  * Secrets table - stores sensitive credentials for MCP servers
  *
- * The secrets column stores authentication data in flexible JSON format:
+ * The secret column stores authentication data in flexible JSON format:
  * - For OAuth: { "access_token": "...", "refresh_token": "...", "expires_in": ..., "token_type": "Bearer" }
  * - For Personal Access Tokens: { "access_token": "token_value" }
  *
@@ -11,7 +11,7 @@ import { jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
  */
 const secretTable = pgTable("secret", {
   id: uuid("id").primaryKey().defaultRandom(),
-  secrets: jsonb("secrets").notNull().default({}),
+  secret: jsonb("secret").notNull().default({}),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

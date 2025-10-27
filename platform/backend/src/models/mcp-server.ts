@@ -187,7 +187,7 @@ class McpServerModel {
     if (mcpServer.secretId) {
       const secretRecord = await SecretModel.findById(mcpServer.secretId);
       if (secretRecord) {
-        secrets = secretRecord.secrets;
+        secrets = secretRecord.secret;
       }
     }
 
@@ -308,7 +308,7 @@ class McpServerModel {
     if (secretId) {
       const secretRecord = await SecretModel.findById(secretId);
       if (secretRecord) {
-        secrets = secretRecord.secrets;
+        secrets = secretRecord.secret;
       }
     }
 

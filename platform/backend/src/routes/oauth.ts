@@ -710,7 +710,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Create secret entry with the OAuth tokens
         const secret = await SecretModel.create({
-          secrets: {
+          secret: {
             access_token: tokenData.access_token,
             ...(tokenData.refresh_token && {
               refresh_token: tokenData.refresh_token,

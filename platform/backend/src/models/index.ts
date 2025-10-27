@@ -8,6 +8,7 @@ export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as McpServerModel } from "./mcp-server";
 export { default as McpServerTeamModel } from "./mcp-server-team";
 export { default as OrganizationModel } from "./organization";
+export { default as SecretModel } from "./secret";
 export { default as TeamModel } from "./team";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";

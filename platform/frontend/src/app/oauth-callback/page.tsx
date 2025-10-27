@@ -73,18 +73,13 @@ export default function OAuthCallbackPage() {
           );
         }
 
-        const { catalogId, name, accessToken, refreshToken, expiresIn } =
-          await response.json();
+        const { catalogId, name, secretId } = await response.json();
 
-        // Install the MCP server with the OAuth tokens
+        // Install the MCP server with the secret reference
         await installMutation.mutateAsync({
           name,
           catalogId,
-          metadata: {
-            accessToken,
-            refreshToken,
-            expiresIn,
-          },
+          secretId,
         });
 
         // Redirect back to MCP catalog immediately

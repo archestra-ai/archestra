@@ -30,7 +30,7 @@ interface GitHubInstallDialogProps {
   onClose: () => void;
   onInstall: (
     catalogItem: GetInternalMcpCatalogResponses["200"][number],
-    metadata: Record<string, unknown>,
+    accessToken: string,
     teams: string[],
   ) => Promise<void>;
   catalogItem: GetInternalMcpCatalogResponses["200"][number] | null;
@@ -91,11 +91,7 @@ export function GitHubInstallDialog({
     }
 
     try {
-      await onInstall(
-        catalogItem,
-        { githubToken: githubToken.trim() },
-        assignedTeamIds,
-      );
+      await onInstall(catalogItem, githubToken.trim(), assignedTeamIds);
       setGithubToken("");
       setAssignedTeamIds([]);
       setSelectedTeamId("");

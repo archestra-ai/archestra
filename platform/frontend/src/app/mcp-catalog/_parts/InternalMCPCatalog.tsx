@@ -209,14 +209,14 @@ export function InternalMCPCatalog({
   const handleGitHubInstall = useCallback(
     async (
       catalogItem: GetInternalMcpCatalogResponses["200"][number],
-      metadata: Record<string, unknown>,
+      accessToken: string,
       teams: string[],
     ) => {
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        metadata,
+        accessToken,
         teams,
       });
       setInstallingItemId(null);
@@ -225,15 +225,11 @@ export function InternalMCPCatalog({
   );
 
   const handleRemoteServerInstall = useCallback(
-    async (
-      catalogItem: GetInternalMcpCatalogResponses["200"][number],
-      metadata: Record<string, unknown>,
-    ) => {
+    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
       setInstallingItemId(catalogItem.id);
       await installMutation.mutateAsync({
         name: catalogItem.name,
         catalogId: catalogItem.id,
-        metadata,
       });
       setInstallingItemId(null);
     },

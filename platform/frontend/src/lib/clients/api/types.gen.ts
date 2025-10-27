@@ -4853,9 +4853,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -4868,11 +4866,10 @@ export type InstallMcpServerData = {
     body: {
         name: string;
         catalogId?: string | null;
-        metadata?: string | number | boolean | null | {
-            [key: string]: unknown;
-        } | Array<unknown>;
+        secretId?: string;
         teams?: Array<string>;
         agentIds?: Array<string>;
+        accessToken?: string;
     };
     path?: never;
     query?: never;
@@ -4910,9 +4907,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -5013,9 +5008,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         catalogId: string | null;
-        metadata: {
-            [key: string]: unknown;
-        };
+        secretId: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -5122,6 +5115,7 @@ export type HandleOAuthCallbackResponses = {
         accessToken: string;
         refreshToken?: string;
         expiresIn?: number;
+        secretId: string;
     };
 };
 

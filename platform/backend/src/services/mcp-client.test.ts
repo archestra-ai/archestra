@@ -37,7 +37,6 @@ describe("McpClientService", () => {
     // Create MCP server for testing
     const mcpServer = await McpServerModel.create({
       name: "github-mcp-server",
-      metadata: { githubToken: "test-token" },
     });
     mcpServerId = mcpServer.id;
 

@@ -16,6 +16,7 @@ export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerTeamTable } from "./mcp-server-team";
 export { default as organizationsTable } from "./organization";
+export { default as secretsTable } from "./secret";
 export { team, teamMember } from "./team";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import { InternalMcpCatalogModel, SecretModel } from "@/models";
 import { ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 
 /**
@@ -274,7 +274,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const { catalogId, serverId } = request.body;
+        const { catalogId } = request.body;
 
         // Get catalog item to retrieve OAuth configuration
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
@@ -336,28 +336,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Client ID is empty, checking for cached credentials or performing dynamic registration",
           );
 
-          // Check if server exists and has cached credentials
-          if (serverId) {
-            const server = await McpServerModel.findById(serverId);
-
-            if (server?.metadata?.oauthClientInfo) {
-              fastify.log.info(
-                "Using cached OAuth client credentials from server metadata",
-              );
-              clientId = (
-                server.metadata.oauthClientInfo as {
-                  client_id: string;
-                  client_secret?: string;
-                }
-              ).client_id;
-              clientSecret = (
-                server.metadata.oauthClientInfo as {
-                  client_id: string;
-                  client_secret?: string;
-                }
-              ).client_secret;
-            }
-          }
+          // Note: We no longer cache OAuth client credentials
+          // If needed, servers will perform dynamic registration again
 
           // If still no client credentials, use a default public client identifier
           // This supports PKCE-only flows where the server doesn't require
@@ -483,20 +463,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               { client_id: clientId },
               "Dynamic registration successful",
             );
-
-            // If we have a serverId, cache the client credentials
-            if (serverId) {
-              await McpServerModel.update(serverId, {
-                metadata: {
-                  ...((await McpServerModel.findById(serverId))?.metadata ||
-                    {}),
-                  oauthClientInfo: {
-                    client_id: clientId,
-                    client_secret: clientSecret,
-                  },
-                },
-              });
-            }
           } catch (error) {
             fastify.log.warn(
               {
@@ -573,6 +539,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             accessToken: z.string(),
             refreshToken: z.string().optional(),
             expiresIn: z.number().optional(),
+            secretId: UuidIdSchema,
           }),
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -744,6 +711,18 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tokenData = await tokenResponse.json();
         }
 
+        // Create secret entry with the OAuth tokens
+        const secret = await SecretModel.create({
+          secrets: {
+            access_token: tokenData.access_token,
+            ...(tokenData.refresh_token && {
+              refresh_token: tokenData.refresh_token,
+            }),
+            ...(tokenData.expires_in && { expires_in: tokenData.expires_in }),
+            token_type: "Bearer",
+          },
+        });
+
         // Clean up used state
         oauthStateStore.delete(state);
 
@@ -754,6 +733,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           expiresIn: tokenData.expires_in,
+          secretId: secret.id,
         });
       } catch (error) {
         fastify.log.error(error);

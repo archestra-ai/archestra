@@ -2,13 +2,9 @@ import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import { eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import mcpClientService from "@/services/mcp-client";
-import type {
-  InsertMcpServer,
-  McpServer,
-  McpServerMetadata,
-  UpdateMcpServer,
-} from "@/types";
+import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import McpServerTeamModel from "./mcp-server-team";
+import SecretModel from "./secret";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -186,14 +182,20 @@ class McpServerModel {
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
+    // Load secrets if secretId is present
+    let secrets: Record<string, unknown> = {};
+    if (mcpServer.secretId) {
+      const secretRecord = await SecretModel.findById(mcpServer.secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secrets;
+      }
+    }
+
     /**
-     * NOTE: this is just for demo purposes for right now.. should be removed once we have full support here..
-     *
-     * For GitHub MCP server, extract token from metadata and connect
+     * For GitHub MCP server, extract token from secrets and connect
      */
-    if (mcpServer.name === GITHUB_MCP_SERVER_NAME && mcpServer.metadata) {
-      const metadata = mcpServer.metadata;
-      const githubToken = metadata.githubToken as string;
+    if (mcpServer.name === GITHUB_MCP_SERVER_NAME) {
+      const githubToken = secrets.access_token as string | undefined;
 
       if (githubToken) {
         try {
@@ -212,14 +214,14 @@ class McpServerModel {
     }
 
     /**
-     * For remote servers, connect using the server URL and metadata
+     * For remote servers, connect using the server URL and secrets
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
       try {
         const config = mcpClientService.createRemoteServerConfig({
           name: mcpServer.name,
           url: catalogItem.serverUrl,
-          metadata: mcpServer.metadata || {},
+          secrets,
         });
         const tools = await mcpClientService.connectAndGetTools(config);
         // Transform to ensure description is always a string
@@ -294,16 +296,26 @@ class McpServerModel {
   }
 
   /**
-   * Validate that an MCP server can be connected to with given metadata
+   * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(
     serverName: string,
-    metadata: McpServerMetadata,
     catalogId?: string,
+    secretId?: string,
   ): Promise<boolean> {
-    // Special-case validation for GitHub MCP server using a PAT
+    // Load secrets if secretId is provided
+    let secrets: Record<string, unknown> = {};
+    if (secretId) {
+      const secretRecord = await SecretModel.findById(secretId);
+      if (secretRecord) {
+        secrets = secretRecord.secrets;
+      }
+    }
+
+    // Special-case validation for GitHub MCP server
     if (serverName === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = metadata.githubToken as string;
+      const githubToken = secrets.access_token as string | undefined;
+
       if (githubToken && typeof githubToken === "string") {
         return await mcpClientService.validateGitHubConnection(githubToken);
       }
@@ -322,7 +334,7 @@ class McpServerModel {
           const config = mcpClientService.createRemoteServerConfig({
             name: serverName,
             url: catalogItem.serverUrl,
-            metadata,
+            secrets,
           });
           const tools = await mcpClientService.connectAndGetTools(config);
           return tools.length > 0;

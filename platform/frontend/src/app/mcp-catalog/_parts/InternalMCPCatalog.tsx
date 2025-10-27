@@ -71,7 +71,7 @@ function InternalServerCard({
               </p>
             )}
             <div className="flex items-center gap-2">
-              {item.oauthConfig && (
+              {!item.oauthConfig?.requires_proxy && (
                 <Badge variant="secondary" className="text-xs">
                   OAuth
                 </Badge>

@@ -287,7 +287,7 @@ function ServerCard({
                 {server.category}
               </Badge>
             )}
-            {server.oauth_config && (
+            {!server.oauth_config?.requires_proxy && (
               <Badge variant="secondary" className="text-xs">
                 OAuth
               </Badge>

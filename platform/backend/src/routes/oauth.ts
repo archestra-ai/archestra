@@ -331,18 +331,15 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Check if dynamic registration is needed
-        if (!clientId || clientId === "") {
+        if (!clientId) {
           fastify.log.info(
             "Client ID is empty, checking for cached credentials or performing dynamic registration",
           );
 
-          // Note: We no longer cache OAuth client credentials
-          // If needed, servers will perform dynamic registration again
-
           // If still no client credentials, use a default public client identifier
           // This supports PKCE-only flows where the server doesn't require
           // pre-registered client credentials
-          if (!clientId || clientId === "") {
+          if (!clientId) {
             fastify.log.info(
               "No client credentials found, using default public client identifier for PKCE flow",
             );

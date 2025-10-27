@@ -329,11 +329,8 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
-        mcpServerInstallationMetadata: {
-          githubToken: "test-github-token-123",
-          url: "https://api.githubcopilot.com/mcp/",
-          headers: { Authorization: "Bearer test-github-token-123" },
-        },
+        mcpServerName: "test-github-server",
+        mcpServerSecretId: null,
         responseModifierTemplate: null,
       });
     });
@@ -499,14 +496,6 @@ describe("ToolModel", () => {
       );
 
       expect(result).toHaveLength(2);
-
-      const _githubResult = result.find(
-        (r) => r.toolName === "github_list_issues",
-      );
-      const _otherResult = result.find((r) => r.toolName === "other_tool");
-
-      // Metadata has been removed - these assertions are no longer valid
-      // TODO: Update test to verify secrets are properly loaded
     });
   });
 });

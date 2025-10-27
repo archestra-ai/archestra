@@ -247,6 +247,27 @@ const routePermissionsConfig: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["update"],
   },
+  [RouteId.GetMcpServerInstallationRequests]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.GetMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.CreateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["create"],
+  },
+  [RouteId.UpdateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.ApproveMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeclineMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeleteMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["delete"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

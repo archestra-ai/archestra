@@ -25,13 +25,16 @@ import type {
   GetInternalMcpCatalogResponses,
   GetMcpServersResponses,
 } from "@/lib/clients/api";
+import { useRole } from "@/lib/auth.hook";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
+import { RequestInstallDialog } from "./request-install-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
@@ -44,18 +47,24 @@ function InternalServerCard({
   item,
   installed,
   isInstalling,
+  isRequesting,
   onInstall,
   onUninstall,
+  onRequest,
   onEdit,
   onDelete,
+  isAdmin,
 }: {
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
   isInstalling: boolean;
+  isRequesting: boolean;
   onInstall: () => void;
   onUninstall: () => void;
+  onRequest: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  isAdmin: boolean;
 }) {
   return (
     <Card className="flex flex-col relative pt-4">
@@ -113,7 +122,7 @@ function InternalServerCard({
           >
             Uninstall
           </Button>
-        ) : (
+        ) : isAdmin ? (
           <Button
             onClick={onInstall}
             disabled={isInstalling}
@@ -122,6 +131,17 @@ function InternalServerCard({
           >
             <Download className="mr-2 h-4 w-4" />
             {isInstalling ? "Installing..." : "Install"}
+          </Button>
+        ) : (
+          <Button
+            onClick={onRequest}
+            disabled={isRequesting}
+            size="sm"
+            variant="outline"
+            className="w-full"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {isRequesting ? "Requesting..." : "Request to add"}
           </Button>
         )}
       </CardContent>
@@ -136,11 +156,14 @@ export function InternalMCPCatalog({
   initialData?: GetInternalMcpCatalogResponses["200"];
   installedServers?: GetMcpServersResponses["200"];
 }) {
+  const role = useRole();
+  const isAdmin = role === "admin";
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
   const installMutation = useInstallMcpServer();
+  const requestMutation = useCreateMcpServerInstallationRequest();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<
@@ -154,10 +177,12 @@ export function InternalMCPCatalog({
     name: string;
   } | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
+  const [requestingItemId, setRequestingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
+  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
     GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
@@ -268,6 +293,29 @@ export function InternalMCPCatalog({
     }
   }, [selectedCatalogItem]);
 
+  const handleRequest = useCallback(
+    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
+      setSelectedCatalogItem(catalogItem);
+      setIsRequestDialogOpen(true);
+    },
+    [],
+  );
+
+  const handleRequestSubmit = useCallback(
+    async (
+      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      requestNotes: string,
+    ) => {
+      setRequestingItemId(catalogItem.id);
+      await requestMutation.mutateAsync({
+        catalogId: catalogItem.id,
+        requestNotes,
+      });
+      setRequestingItemId(null);
+    },
+    [requestMutation],
+  );
+
   const getInstallationCount = useCallback(
     (catalogId: string) => {
       return (
@@ -358,6 +406,7 @@ export function InternalMCPCatalog({
               item={itemWithLabel}
               installed={!!installedServer}
               isInstalling={installingItemId === item.id}
+              isRequesting={requestingItemId === item.id}
               onInstall={() => handleInstall(item)}
               onUninstall={() => {
                 if (installedServer) {
@@ -367,8 +416,10 @@ export function InternalMCPCatalog({
                   );
                 }
               }}
+              onRequest={() => handleRequest(item)}
               onEdit={() => setEditingItem(item)}
               onDelete={() => setDeletingItem(item)}
+              isAdmin={isAdmin}
             />
           );
         })}
@@ -440,6 +491,17 @@ export function InternalMCPCatalog({
       <UninstallServerDialog
         server={uninstallingServer}
         onClose={() => setUninstallingServer(null)}
+      />
+
+      <RequestInstallDialog
+        isOpen={isRequestDialogOpen}
+        onClose={() => {
+          setIsRequestDialogOpen(false);
+          setSelectedCatalogItem(null);
+        }}
+        onRequest={handleRequestSubmit}
+        catalogItem={selectedCatalogItem}
+        isRequesting={requestMutation.isPending}
       />
     </div>
   );

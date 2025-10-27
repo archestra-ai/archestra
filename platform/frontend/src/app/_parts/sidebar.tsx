@@ -13,6 +13,7 @@ import {
   FileJson2,
   Github,
   Info,
+  Inbox,
   LogIn,
   type LucideIcon,
   MessagesSquare,
@@ -84,6 +85,13 @@ const getNavigationItems = (
             title: "MCP Registry",
             url: "/mcp-catalog",
             icon: Router,
+            subItems: [
+              {
+                title: "Installation Requests",
+                url: "/mcp-catalog/installation-requests",
+                icon: Inbox,
+              },
+            ],
           },
           ...(role === "admin"
             ? [

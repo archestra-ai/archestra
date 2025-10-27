@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRole } from "@/lib/auth.hook";
 import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
 import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
@@ -21,6 +22,7 @@ import {
   type ServerType,
 } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
+import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
 export function ExternalMCPCatalog({
@@ -31,6 +33,10 @@ export function ExternalMCPCatalog({
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
     useState<ArchestraMcpServerManifest | null>(null);
+  const [requestServer, setRequestServer] = useState<{
+    server: ArchestraMcpServerManifest;
+    catalogId: string;
+  } | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
     category: SelectedCategory;
@@ -38,6 +44,8 @@ export function ExternalMCPCatalog({
     type: "remote",
     category: "all",
   });
+
+  const userRole = useRole();
 
   // Get catalog items for filtering (with live updates)
   const { data: catalogItems } = useInternalMcpCatalog({
@@ -85,6 +93,43 @@ export function ExternalMCPCatalog({
       userConfig: server.user_config,
       oauthConfig: rewrittenOauth,
     });
+  };
+
+  const handleRequestInstallation = async (
+    server: ArchestraMcpServerManifest
+  ) => {
+    // First, add to catalog to get catalogId
+    const rewrittenOauth =
+      server.oauth_config && !server.oauth_config.requires_proxy
+        ? {
+            ...server.oauth_config,
+            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
+              u === "http://localhost:8080/oauth/callback"
+                ? `${window.location.origin}/oauth-callback`
+                : u,
+            ),
+          }
+        : undefined;
+
+    const catalogItem = await createMutation.mutateAsync({
+      label: server.display_name || server.name,
+      name: server.name,
+      version: undefined,
+      serverType: server.server.type,
+      serverUrl:
+        server.server.type === "remote" ? server.server.url : undefined,
+      docsUrl:
+        server.server.type === "remote"
+          ? (server.server.docs_url ?? undefined)
+          : undefined,
+      userConfig: server.user_config,
+      oauthConfig: rewrittenOauth,
+    });
+
+    // Open the request dialog with the catalog ID
+    if (catalogItem?.id) {
+      setRequestServer({ server, catalogId: catalogItem.id });
+    }
   };
 
   // Flatten all pages into a single array of servers
@@ -207,9 +252,11 @@ export function ExternalMCPCatalog({
                       key={`${server.name}-${index}`}
                       server={server}
                       onAddToCatalog={handleAddToCatalog}
+                      onRequestInstallation={handleRequestInstallation}
                       isAdding={createMutation.isPending}
                       onOpenReadme={setReadmeServer}
                       isInCatalog={catalogServerNames.has(server.name)}
+                      userRole={userRole}
                     />
                   ))}
                 </div>
@@ -244,6 +291,13 @@ export function ExternalMCPCatalog({
           server={readmeServer}
           onClose={() => setReadmeServer(null)}
         />
+
+        {/* Request Installation Dialog */}
+        <RequestInstallationDialog
+          server={requestServer?.server ?? null}
+          catalogId={requestServer?.catalogId ?? null}
+          onClose={() => setRequestServer(null)}
+        />
       </div>
     </div>
   );
@@ -253,16 +307,21 @@ export function ExternalMCPCatalog({
 function ServerCard({
   server,
   onAddToCatalog,
+  onRequestInstallation,
   isAdding,
   onOpenReadme,
   isInCatalog,
+  userRole,
 }: {
   server: ArchestraMcpServerManifest;
   onAddToCatalog: (server: ArchestraMcpServerManifest) => void;
+  onRequestInstallation: (server: ArchestraMcpServerManifest) => void;
   isAdding: boolean;
   onOpenReadme: (server: ArchestraMcpServerManifest) => void;
   isInCatalog: boolean;
+  userRole: "admin" | "member";
 }) {
+  const isAdmin = userRole === "admin";
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -354,12 +413,18 @@ function ServerCard({
             )}
           </div>
           <Button
-            onClick={() => onAddToCatalog(server)}
+            onClick={() =>
+              isAdmin ? onAddToCatalog(server) : onRequestInstallation(server)
+            }
             disabled={isAdding || isInCatalog}
             size="sm"
             className="w-full"
           >
-            {isInCatalog ? "Added" : "Add to Your Registry"}
+            {isInCatalog
+              ? "Added"
+              : isAdmin
+                ? "Add to Your Registry"
+                : "Request to add to internal registry"}
           </Button>
         </div>
       </CardContent>

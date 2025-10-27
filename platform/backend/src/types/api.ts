@@ -127,6 +127,16 @@ export const RouteId = {
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
 
+  // MCP Server Installation Request Routes
+  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
+  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
+  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
+  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
+  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
+  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
+  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
+  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
+
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",

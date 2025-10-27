@@ -277,6 +277,30 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
   },
+  [RouteId.GetMcpServerInstallationRequests]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.CreateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["create"],
+  },
+  [RouteId.GetMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.UpdateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.ApproveMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeclineMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.AddMcpServerInstallationRequestNote]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeleteMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["delete"],
+  },
   [RouteId.InitiateOAuth]: {
     mcpServer: ["create"],
   },

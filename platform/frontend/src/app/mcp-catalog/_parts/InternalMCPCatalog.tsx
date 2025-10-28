@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +31,10 @@ import type {
 } from "@/lib/clients/api";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
+  useDeleteMcpServer,
   useInstallMcpServer,
   useMcpServers,
   useMcpServerTools,
-  useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -183,7 +184,7 @@ export function InternalMCPCatalog({
     initialData: initialInstalledServers,
   });
   const installMutation = useInstallMcpServer();
-  const reinstallMutation = useReinstallMcpServer();
+  const deleteMutation = useDeleteMcpServer();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<
@@ -429,16 +430,23 @@ export function InternalMCPCatalog({
 
   const handleReinstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
+      // Get the installed server to get its ID (not catalog ID)
       const installedServer = getInstalledServer(catalogItem.id);
-      if (!installedServer) return;
+      if (!installedServer) {
+        toast.error("Server not found, cannot reinstall");
+        return;
+      }
 
-      await reinstallMutation.mutateAsync({
-        serverId: installedServer.id,
-        serverName: catalogItem.name,
-        catalogId: catalogItem.id,
+      // Delete the installed server using its server ID
+      await deleteMutation.mutateAsync({
+        id: installedServer.id,
+        name: catalogItem.name,
       });
+
+      // Then reinstall
+      await handleInstall(catalogItem);
     },
-    [getInstalledServer, reinstallMutation],
+    [handleInstall, deleteMutation, getInstalledServer],
   );
 
   const filteredCatalogItems = useMemo(() => {
@@ -507,7 +515,7 @@ export function InternalMCPCatalog({
               item={itemWithLabel}
               installed={!!installedServer}
               isInstalling={
-                installingItemId === item.id || reinstallMutation.isPending
+                installingItemId === item.id || installMutation.isPending
               }
               needsReinstall={installedServer?.reinstallRequired ?? false}
               onInstall={() => handleInstall(item)}
@@ -677,7 +685,7 @@ export function InternalMCPCatalog({
         serverName={
           catalogItemForReinstall?.label || catalogItemForReinstall?.name || ""
         }
-        isReinstalling={reinstallMutation.isPending}
+        isReinstalling={installMutation.isPending}
       />
     </div>
   );

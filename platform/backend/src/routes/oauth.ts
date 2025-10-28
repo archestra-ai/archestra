@@ -335,17 +335,6 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           fastify.log.info(
             "Client ID is empty, checking for cached credentials or performing dynamic registration",
           );
-
-          // If still no client credentials, use a default public client identifier
-          // This supports PKCE-only flows where the server doesn't require
-          // pre-registered client credentials
-          if (!clientId) {
-            fastify.log.info(
-              "No client credentials found, using default public client identifier for PKCE flow",
-            );
-            clientId = "archestra-platform-public-client";
-            // No client_secret for public clients
-          }
         }
 
         // Discover authorization server metadata to get the correct authorization endpoint
@@ -433,10 +422,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // If we don't have client credentials and registration endpoint is available, try dynamic registration
-        if (
-          (!clientId || clientId === "archestra-platform-public-client") &&
-          registrationEndpoint
-        ) {
+        if (!clientId && registrationEndpoint) {
           try {
             fastify.log.info(
               { registrationEndpoint },

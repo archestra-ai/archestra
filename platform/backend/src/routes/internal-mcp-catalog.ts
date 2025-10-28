@@ -192,7 +192,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               value === null ||
               value === undefined ||
               value === "" ||
-              key === "name",
+              ["name", "description"].includes(key),
           );
         };
 

@@ -116,8 +116,7 @@ export function transformFormToApiData(
     data.oauthConfig = {
       name: values.label, // Use label as OAuth provider name
       server_url: values.serverUrl, // Use serverUrl as OAuth server URL
-      client_id:
-        values.oauthConfig.client_id || "archestra-platform-public-client",
+      client_id: values.oauthConfig.client_id || "",
       client_secret: values.oauthConfig.client_secret || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,

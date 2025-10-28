@@ -74,50 +74,6 @@ export function useDeleteMcpServer() {
   });
 }
 
-export function useReinstallMcpServer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: {
-      serverId: string;
-      serverName: string;
-      catalogId: string;
-    }) => {
-      // First uninstall the server
-      await deleteMcpServer({ path: { id: data.serverId } });
-
-      // Wait a bit for the uninstall to complete
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Then reinstall it
-      const { data: installedServer } = await installMcpServer({
-        body: {
-          name: data.serverName,
-          catalogId: data.catalogId,
-          teams: [],
-        },
-      });
-
-      return installedServer;
-    },
-    onSuccess: (installedServer, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      queryClient.invalidateQueries({ queryKey: ["tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      if (installedServer) {
-        queryClient.invalidateQueries({
-          queryKey: ["mcp-servers", installedServer.id, "tools"],
-        });
-      }
-      toast.success(`Successfully reinstalled ${variables.serverName}`);
-    },
-    onError: (error, variables) => {
-      console.error("Reinstall error:", error);
-      toast.error(`Failed to reinstall ${variables.serverName}`);
-    },
-  });
-}
-
 export function useMcpServerTools(mcpServerId: string | null) {
   return useQuery({
     queryKey: ["mcp-servers", mcpServerId, "tools"],

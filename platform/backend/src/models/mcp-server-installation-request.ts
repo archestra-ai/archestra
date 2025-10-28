@@ -58,25 +58,33 @@ class McpServerInstallationRequestModel {
       .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
   }
 
-  static async findByCatalogId(
-    catalogId: string,
+  static async findByExternalCatalogId(
+    externalCatalogId: string,
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
       .from(schema.mcpServerInstallationRequestTable)
-      .where(eq(schema.mcpServerInstallationRequestTable.catalogId, catalogId))
+      .where(
+        eq(
+          schema.mcpServerInstallationRequestTable.externalCatalogId,
+          externalCatalogId,
+        ),
+      )
       .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt));
   }
 
-  static async findPendingByCatalogId(
-    catalogId: string,
+  static async findPendingByExternalCatalogId(
+    externalCatalogId: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [request] = await db
       .select()
       .from(schema.mcpServerInstallationRequestTable)
       .where(
         and(
-          eq(schema.mcpServerInstallationRequestTable.catalogId, catalogId),
+          eq(
+            schema.mcpServerInstallationRequestTable.externalCatalogId,
+            externalCatalogId,
+          ),
           eq(schema.mcpServerInstallationRequestTable.status, "pending"),
         ),
       )
@@ -162,7 +170,7 @@ class McpServerInstallationRequestModel {
     const updatedNotes = [...(currentRequest.notes || []), newNote];
 
     // Update the request with the new notes array
-    return await McpServerInstallationRequestModel.update(id, {
+    return McpServerInstallationRequestModel.update(id, {
       notes: updatedNotes,
     });
   }

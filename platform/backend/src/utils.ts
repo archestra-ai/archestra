@@ -2,20 +2,12 @@ import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { auth } from "@/auth";
 import db, { schema } from "@/database";
+import type { ErrorResponse } from "@/types";
 
 export function prepareErrorResponse(
-  message: string,
-  request: FastifyRequest,
-  data?: object,
-) {
-  return {
-    message,
-    request: {
-      method: request.method,
-      url: request.url,
-    },
-    data,
-  };
+  error: ErrorResponse["error"],
+): ErrorResponse {
+  return { error };
 }
 
 /**

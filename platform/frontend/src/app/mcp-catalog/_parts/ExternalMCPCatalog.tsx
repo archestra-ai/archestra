@@ -33,10 +33,8 @@ export function ExternalMCPCatalog({
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
     useState<ArchestraMcpServerManifest | null>(null);
-  const [requestServer, setRequestServer] = useState<{
-    server: ArchestraMcpServerManifest;
-    catalogId: string;
-  } | null>(null);
+  const [requestServer, setRequestServer] =
+    useState<ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
     category: SelectedCategory;
@@ -98,38 +96,8 @@ export function ExternalMCPCatalog({
   const handleRequestInstallation = async (
     server: ArchestraMcpServerManifest,
   ) => {
-    // First, add to catalog to get catalogId
-    const rewrittenOauth =
-      server.oauth_config && !server.oauth_config.requires_proxy
-        ? {
-            ...server.oauth_config,
-            redirect_uris: server.oauth_config.redirect_uris?.map((u) =>
-              u === "http://localhost:8080/oauth/callback"
-                ? `${window.location.origin}/oauth-callback`
-                : u,
-            ),
-          }
-        : undefined;
-
-    const catalogItem = await createMutation.mutateAsync({
-      label: server.display_name || server.name,
-      name: server.name,
-      version: undefined,
-      serverType: server.server.type,
-      serverUrl:
-        server.server.type === "remote" ? server.server.url : undefined,
-      docsUrl:
-        server.server.type === "remote"
-          ? (server.server.docs_url ?? undefined)
-          : undefined,
-      userConfig: server.user_config,
-      oauthConfig: rewrittenOauth,
-    });
-
-    // Open the request dialog with the catalog ID
-    if (catalogItem?.id) {
-      setRequestServer({ server, catalogId: catalogItem.id });
-    }
+    // Just open the request dialog with the server data
+    setRequestServer(server);
   };
 
   // Flatten all pages into a single array of servers
@@ -294,8 +262,7 @@ export function ExternalMCPCatalog({
 
         {/* Request Installation Dialog */}
         <RequestInstallationDialog
-          server={requestServer?.server ?? null}
-          catalogId={requestServer?.catalogId ?? null}
+          server={requestServer}
           onClose={() => setRequestServer(null)}
         />
       </div>

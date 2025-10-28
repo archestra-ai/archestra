@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useRole } from "@/lib/auth.hook";
 import type {
   GetInternalMcpCatalogResponses,
   GetMcpServersResponses,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
+import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import { GitHubInstallDialog } from "./github-install-dialog";
@@ -164,8 +166,12 @@ export function InternalMCPCatalog({
     initialData: initialInstalledServers,
   });
   const installMutation = useInstallMcpServer();
+  const userRole = useRole();
+  const isAdmin = userRole === "admin";
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
+    useState(false);
   const [editingItem, setEditingItem] = useState<
     GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
@@ -398,9 +404,17 @@ export function InternalMCPCatalog({
             MCP Servers from this registry can be assigned to your agents.
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
+        <Button
+          onClick={() =>
+            isAdmin
+              ? setIsCreateDialogOpen(true)
+              : setIsCustomRequestDialogOpen(true)
+          }
+        >
           <Plus className="mr-2 h-4 w-4" />
-          Add MCP server using config
+          {isAdmin
+            ? "Add MCP server using config"
+            : "Request to add custom MCP Server"}
         </Button>
       </div>
       <div className="relative">
@@ -459,6 +473,11 @@ export function InternalMCPCatalog({
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
+      />
+
+      <CustomServerRequestDialog
+        isOpen={isCustomRequestDialogOpen}
+        onClose={() => setIsCustomRequestDialogOpen(false)}
       />
 
       <EditCatalogDialog

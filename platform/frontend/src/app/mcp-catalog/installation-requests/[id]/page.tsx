@@ -148,9 +148,7 @@ export default function InstallationRequestDetailPage({
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Main Content */}
         <div className="md:col-span-2 space-y-6">
-          {/* Request Details */}
           <Card>
             <CardHeader>
               <CardTitle>Request Details</CardTitle>
@@ -159,7 +157,7 @@ export default function InstallationRequestDetailPage({
               <div>
                 <p className="text-sm font-medium mb-1">Catalog ID</p>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {request.catalogId}
+                  {request.externalCatalogId}
                 </p>
               </div>
 
@@ -211,7 +209,6 @@ export default function InstallationRequestDetailPage({
             </CardContent>
           </Card>
 
-          {/* Admin Actions */}
           {isAdmin && isPending && (
             <Card>
               <CardHeader>
@@ -306,13 +303,11 @@ export default function InstallationRequestDetailPage({
             </Card>
           )}
 
-          {/* Timeline / Notes */}
           <Card>
             <CardHeader>
               <CardTitle>Timeline & Notes</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Add Note */}
               <div className="space-y-2">
                 <Textarea
                   placeholder="Add a note or comment..."
@@ -336,7 +331,6 @@ export default function InstallationRequestDetailPage({
 
               <Separator />
 
-              {/* Notes List */}
               {request.notes && request.notes.length > 0 ? (
                 <div className="space-y-4">
                   {[...request.notes]
@@ -374,7 +368,6 @@ export default function InstallationRequestDetailPage({
           </Card>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
           <Card>
             <CardHeader>

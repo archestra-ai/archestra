@@ -1,5 +1,5 @@
 {
-  "id": "7d28d5da-fea8-4ee6-8c41-afbe5fbb321c",
+  "id": "334212e1-a566-47bd-9098-e560333ad16d",
   "prevId": "20162388-064b-4739-b54e-67b1b7f60c0a",
   "version": "7",
   "dialect": "postgresql",
@@ -1152,11 +1152,11 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "catalog_id": {
-          "name": "catalog_id",
-          "type": "uuid",
+        "external_catalog_id": {
+          "name": "external_catalog_id",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "requested_by": {
           "name": "requested_by",
@@ -1176,6 +1176,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "custom_server_config": {
+          "name": "custom_server_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'null'::jsonb"
         },
         "admin_response": {
           "name": "admin_response",
@@ -1219,19 +1226,6 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "mcp_server_installation_request_catalog_id_internal_mcp_catalog_id_fk": {
-          "name": "mcp_server_installation_request_catalog_id_internal_mcp_catalog_id_fk",
-          "tableFrom": "mcp_server_installation_request",
-          "tableTo": "internal_mcp_catalog",
-          "columnsFrom": [
-            "catalog_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "mcp_server_installation_request_requested_by_user_id_fk": {
           "name": "mcp_server_installation_request_requested_by_user_id_fk",
           "tableFrom": "mcp_server_installation_request",

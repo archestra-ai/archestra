@@ -4856,10 +4856,46 @@ export type GetMcpServerInstallationRequestsResponses = {
      */
     200: Array<{
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -4879,8 +4915,44 @@ export type GetMcpServerInstallationRequestsResponse = GetMcpServerInstallationR
 
 export type CreateMcpServerInstallationRequestData = {
     body: {
-        catalogId: string;
+        externalCatalogId?: string | null;
         requestReason?: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
     };
     path?: never;
     query?: never;
@@ -4925,10 +4997,46 @@ export type CreateMcpServerInstallationRequestResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -5063,10 +5171,46 @@ export type GetMcpServerInstallationRequestResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -5088,6 +5232,42 @@ export type UpdateMcpServerInstallationRequestData = {
     body?: {
         status?: 'pending' | 'approved' | 'declined';
         requestReason?: string | null;
+        customServerConfig?: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse?: string | null;
         reviewedBy?: string | null;
         reviewedAt?: unknown;
@@ -5153,10 +5333,46 @@ export type UpdateMcpServerInstallationRequestResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -5232,10 +5448,46 @@ export type ApproveMcpServerInstallationRequestResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -5311,10 +5563,46 @@ export type DeclineMcpServerInstallationRequestResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;
@@ -5390,10 +5678,46 @@ export type AddMcpServerInstallationRequestNoteResponses = {
      */
     200: {
         id: string;
-        catalogId: string;
+        externalCatalogId: string | null;
         requestedBy: string;
         status: string;
         requestReason: string | null;
+        customServerConfig: {
+            type: 'remote';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: string;
+            serverUrl?: string;
+            docsUrl?: string;
+            userConfig?: {
+                [key: string]: unknown;
+            };
+            oauthConfig?: {
+                name: string;
+                server_url: string;
+                auth_server_url?: string;
+                resource_metadata_url?: string;
+                client_id: string;
+                client_secret?: string;
+                redirect_uris: Array<string>;
+                scopes: Array<string>;
+                description?: string;
+                well_known_url?: string;
+                default_scopes: Array<string>;
+                supports_resource_metadata: boolean;
+                generic_oauth?: boolean;
+                token_endpoint?: string;
+                access_token_env_var?: string;
+                requires_proxy?: boolean;
+                provider_name?: string;
+                browser_auth?: boolean;
+                streamable_http_url?: string;
+                streamable_http_port?: number;
+            };
+        } | {
+            type: 'local';
+        } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
         reviewedAt: string | null;

@@ -18,22 +18,21 @@ import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installa
 
 export function RequestInstallationDialog({
   server,
-  catalogId,
   onClose,
 }: {
   server: ArchestraMcpServerManifest | null;
-  catalogId: string | null;
   onClose: () => void;
 }) {
   const [requestReason, setRequestReason] = useState("");
   const createRequest = useCreateMcpServerInstallationRequest();
 
   const handleSubmit = async () => {
-    if (!catalogId) return;
+    if (!server) return;
 
     await createRequest.mutateAsync({
-      catalogId,
+      externalCatalogId: server.name,
       requestReason,
+      customServerConfig: null,
     });
 
     setRequestReason("");
@@ -98,7 +97,7 @@ export function RequestInstallationDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={createRequest.isPending || !catalogId}
+            disabled={createRequest.isPending || !server}
           >
             {createRequest.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

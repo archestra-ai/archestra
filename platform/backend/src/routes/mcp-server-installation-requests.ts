@@ -121,20 +121,25 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           });
         }
 
-        // Check if there's already a pending request for this catalog item
-        const existingRequest =
-          await McpServerInstallationRequestModel.findPendingByCatalogId(
-            request.body.catalogId,
+        // Check if there's already a pending request for this external catalog item
+        if (request.body.externalCatalogId) {
+          const existingExternalRequests =
+            await McpServerInstallationRequestModel.findAll();
+          const duplicateRequest = existingExternalRequests.find(
+            (req) =>
+              req.status === "pending" &&
+              req.externalCatalogId === request.body.externalCatalogId,
           );
 
-        if (existingRequest) {
-          return reply.status(400).send({
-            error: {
-              message:
-                "A pending installation request already exists for this MCP server",
-              type: "bad_request",
-            },
-          });
+          if (duplicateRequest) {
+            return reply.status(400).send({
+              error: {
+                message:
+                  "A pending installation request already exists for this external MCP server",
+                type: "bad_request",
+              },
+            });
+          }
         }
 
         const newRequest = await McpServerInstallationRequestModel.create({
@@ -239,7 +244,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           id: true,
           createdAt: true,
           updatedAt: true,
-          catalogId: true,
+          externalCatalogId: true,
           requestedBy: true,
         }).partial(),
         response: {

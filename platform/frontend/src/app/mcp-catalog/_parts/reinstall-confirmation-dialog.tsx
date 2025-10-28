@@ -31,19 +31,16 @@ export function ReinstallConfirmationDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Reinstall Required</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="py-4">
             The configuration for <strong>{serverName}</strong> has been
             updated. The server needs to be reinstalled for the changes to take
             effect.
+            <p className="text-sm text-muted-foreground">
+              Reinstalling will uninstall the current server instance and
+              install it again with the updated configuration.
+            </p>
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
-          <p className="text-sm text-muted-foreground">
-            Reinstalling will uninstall the current server instance and install
-            it again with the updated configuration. This process may take a few
-            moments.
-          </p>
-        </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isReinstalling}>
             Skip for Now

@@ -317,7 +317,7 @@ function ServerCard({
           </p>
         )}
 
-        <div className="flex flex-col gap-2 mt-auto pt-3">
+        <div className="flex flex-col gap-2 mt-auto pt-3 justify-end">
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"

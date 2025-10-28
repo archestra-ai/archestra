@@ -122,7 +122,7 @@ function InternalServerCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col pt-3 gap-2">
+      <CardContent className="flex-1 flex flex-col pt-3 gap-2 justify-end">
         {installed ? (
           <>
             {needsReinstall && (

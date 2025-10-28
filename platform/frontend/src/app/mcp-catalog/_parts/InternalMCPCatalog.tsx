@@ -33,6 +33,7 @@ import {
   useInstallMcpServer,
   useMcpServers,
   useMcpServerTools,
+  useReinstallMcpServer,
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -181,6 +182,7 @@ export function InternalMCPCatalog({
     initialData: initialInstalledServers,
   });
   const installMutation = useInstallMcpServer();
+  const reinstallMutation = useReinstallMcpServer();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<
@@ -224,9 +226,6 @@ export function InternalMCPCatalog({
       createdAt: string;
     }>
   >([]);
-  const [reinstallingServerId, setReinstallingServerId] = useState<
-    string | null
-  >(null);
   const [showReinstallDialog, setShowReinstallDialog] = useState(false);
   const [catalogItemForReinstall, setCatalogItemForReinstall] = useState<
     GetInternalMcpCatalogResponses["200"][number] | null
@@ -432,24 +431,13 @@ export function InternalMCPCatalog({
       const installedServer = getInstalledServer(catalogItem.id);
       if (!installedServer) return;
 
-      try {
-        setReinstallingServerId(installedServer.id);
-
-        // First uninstall the server
-        await fetch(`/api/mcp_server/${installedServer.id}`, {
-          method: "DELETE",
-        });
-
-        // Wait a bit for the uninstall to complete
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // Then reinstall it (reinstallRequired will be false by default for new installation)
-        await handleInstall(catalogItem);
-      } finally {
-        setReinstallingServerId(null);
-      }
+      await reinstallMutation.mutateAsync({
+        serverId: installedServer.id,
+        serverName: catalogItem.name,
+        catalogId: catalogItem.id,
+      });
     },
-    [getInstalledServer, handleInstall],
+    [getInstalledServer, reinstallMutation],
   );
 
   const filteredCatalogItems = useMemo(() => {
@@ -518,8 +506,7 @@ export function InternalMCPCatalog({
               item={itemWithLabel}
               installed={!!installedServer}
               isInstalling={
-                installingItemId === item.id ||
-                reinstallingServerId === installedServer?.id
+                installingItemId === item.id || reinstallMutation.isPending
               }
               needsReinstall={installedServer?.reinstallRequired ?? false}
               onInstall={() => handleInstall(item)}
@@ -689,10 +676,7 @@ export function InternalMCPCatalog({
         serverName={
           catalogItemForReinstall?.label || catalogItemForReinstall?.name || ""
         }
-        isReinstalling={
-          reinstallingServerId ===
-          getInstalledServer(catalogItemForReinstall?.id || "")?.id
-        }
+        isReinstalling={reinstallMutation.isPending}
       />
     </div>
   );

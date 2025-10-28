@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertInternalMcpCatalogSchema,
@@ -181,11 +181,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           request.body.serverUrl !== originalCatalogItem.serverUrl;
 
         if (nameChanged || urlChanged) {
-          // Import McpServerModel here to avoid circular dependencies
-          const { default: McpServerModel } = await import(
-            "@/models/mcp-server"
-          );
-
           // Find all servers installed from this catalog item
           const installedServers = await McpServerModel.findByCatalogId(
             request.params.id,

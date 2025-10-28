@@ -10,7 +10,13 @@ const archestraCatalogConfig = await defineConfig({
     indexFile: true,
     tsConfigPath: './tsconfig.json',
     format: 'biome',
-  }
+  },
+  plugins: [
+    {
+      name: '@hey-api/client-fetch',
+      runtimeConfigPath: './custom-client',
+    },
+  ],
 });
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

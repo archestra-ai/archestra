@@ -156,11 +156,26 @@ class McpServerModel {
   }
 
   static async delete(id: string): Promise<boolean> {
+    // First, get the MCP server to find its associated secret
+    const mcpServer = await McpServerModel.findById(id);
+
+    if (!mcpServer) {
+      return false;
+    }
+
+    // Delete the MCP server
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
 
-    return result.rowCount !== null && result.rowCount > 0;
+    const deleted = result.rowCount !== null && result.rowCount > 0;
+
+    // If the MCP server was deleted and it had an associated secret, delete the secret
+    if (deleted && mcpServer.secretId) {
+      await SecretModel.delete(mcpServer.secretId);
+    }
+
+    return deleted;
   }
 
   /**

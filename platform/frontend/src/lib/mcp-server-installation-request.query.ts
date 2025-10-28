@@ -1,169 +1,43 @@
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-  useQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  addMcpServerInstallationRequestNote,
+  approveMcpServerInstallationRequest,
+  type CreateMcpServerInstallationRequestData,
+  createMcpServerInstallationRequest,
+  declineMcpServerInstallationRequest,
+  deleteMcpServerInstallationRequest,
+  type GetMcpServerInstallationRequestResponses,
+  getMcpServerInstallationRequest,
+  getMcpServerInstallationRequests,
+} from "@/lib/clients/api";
 
-// Types for the installation request (matching backend types)
-export type McpServerInstallationRequest = {
-  id: string;
-  catalogId: string;
-  requestedBy: string;
-  status: "pending" | "approved" | "declined";
-  requestReason?: string;
-  adminResponse?: string;
-  reviewedBy?: string;
-  reviewedAt?: Date;
-  notes: Array<{
-    id: string;
-    userId: string;
-    userName: string;
-    content: string;
-    createdAt: string;
-  }> | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type McpServerInstallationRequest =
+  GetMcpServerInstallationRequestResponses["200"];
 
-// API client functions (will be auto-generated later, defining manually for now)
-async function getMcpServerInstallationRequests(params?: {
-  status?: "pending" | "approved" | "declined";
-}) {
-  const queryParams = new URLSearchParams();
-  if (params?.status) {
-    queryParams.append("status", params.status);
-  }
-  const response = await fetch(
-    `/api/mcp_server_installation_requests?${queryParams.toString()}`,
-    {
-      credentials: "include",
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to fetch installation requests");
-  }
-  return response.json();
-}
-
-async function getMcpServerInstallationRequest(id: string) {
-  const response = await fetch(`/api/mcp_server_installation_requests/${id}`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to fetch installation request");
-  }
-  return response.json();
-}
-
-async function createMcpServerInstallationRequest(data: {
-  catalogId: string;
-  requestReason?: string;
-}) {
-  const response = await fetch("/api/mcp_server_installation_requests", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Failed to create request");
-  }
-  return response.json();
-}
-
-async function approveMcpServerInstallationRequest(
-  id: string,
-  adminResponse?: string
-) {
-  const response = await fetch(
-    `/api/mcp_server_installation_requests/${id}/approve`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ adminResponse }),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to approve request");
-  }
-  return response.json();
-}
-
-async function declineMcpServerInstallationRequest(
-  id: string,
-  adminResponse?: string
-) {
-  const response = await fetch(
-    `/api/mcp_server_installation_requests/${id}/decline`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ adminResponse }),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to decline request");
-  }
-  return response.json();
-}
-
-async function addMcpServerInstallationRequestNote(
-  id: string,
-  content: string
-) {
-  const response = await fetch(
-    `/api/mcp_server_installation_requests/${id}/notes`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ content }),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to add note");
-  }
-  return response.json();
-}
-
-async function deleteMcpServerInstallationRequest(id: string) {
-  const response = await fetch(`/api/mcp_server_installation_requests/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to delete request");
-  }
-  return response.json();
-}
-
-// Query hooks
 export function useMcpServerInstallationRequests(params?: {
   status?: "pending" | "approved" | "declined";
 }) {
   return useQuery({
     queryKey: ["mcp-server-installation-requests", params?.status],
-    queryFn: () => getMcpServerInstallationRequests(params),
+    queryFn: async () => {
+      const response = await getMcpServerInstallationRequests({
+        query: params?.status ? { status: params.status } : undefined,
+      });
+      return response.data ?? null;
+    },
   });
 }
 
 export function useMcpServerInstallationRequest(id: string) {
   return useQuery({
     queryKey: ["mcp-server-installation-request", id],
-    queryFn: () => getMcpServerInstallationRequest(id),
+    queryFn: async () => {
+      const response = await getMcpServerInstallationRequest({
+        path: { id },
+      });
+      return response.data ?? null;
+    },
     enabled: !!id,
   });
 }
@@ -171,7 +45,14 @@ export function useMcpServerInstallationRequest(id: string) {
 export function useCreateMcpServerInstallationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createMcpServerInstallationRequest,
+    mutationFn: async (
+      data: CreateMcpServerInstallationRequestData["body"],
+    ) => {
+      const response = await createMcpServerInstallationRequest({
+        body: data,
+      });
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-requests"],
@@ -188,13 +69,19 @@ export function useCreateMcpServerInstallationRequest() {
 export function useApproveMcpServerInstallationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       id,
       adminResponse,
     }: {
       id: string;
       adminResponse?: string;
-    }) => approveMcpServerInstallationRequest(id, adminResponse),
+    }) => {
+      const response = await approveMcpServerInstallationRequest({
+        path: { id },
+        body: adminResponse ? { adminResponse } : {},
+      });
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-requests"],
@@ -214,13 +101,19 @@ export function useApproveMcpServerInstallationRequest() {
 export function useDeclineMcpServerInstallationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       id,
       adminResponse,
     }: {
       id: string;
       adminResponse?: string;
-    }) => declineMcpServerInstallationRequest(id, adminResponse),
+    }) => {
+      const response = await declineMcpServerInstallationRequest({
+        path: { id },
+        body: adminResponse ? { adminResponse } : {},
+      });
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-requests"],
@@ -240,8 +133,13 @@ export function useDeclineMcpServerInstallationRequest() {
 export function useAddMcpServerInstallationRequestNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, content }: { id: string; content: string }) =>
-      addMcpServerInstallationRequestNote(id, content),
+    mutationFn: async ({ id, content }: { id: string; content: string }) => {
+      const response = await addMcpServerInstallationRequestNote({
+        path: { id },
+        body: { content },
+      });
+      return response.data;
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-request", variables.id],
@@ -258,7 +156,12 @@ export function useAddMcpServerInstallationRequestNote() {
 export function useDeleteMcpServerInstallationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: deleteMcpServerInstallationRequest,
+    mutationFn: async (id: string) => {
+      const response = await deleteMcpServerInstallationRequest({
+        path: { id },
+      });
+      return response.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["mcp-server-installation-requests"],

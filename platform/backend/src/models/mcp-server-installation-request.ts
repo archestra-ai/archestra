@@ -1,17 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { randomUUID } from "crypto";
 import db, { schema } from "@/database";
 import type {
   InsertMcpServerInstallationRequest,
   McpServerInstallationRequest,
+  McpServerInstallationRequestStatus,
   UpdateMcpServerInstallationRequest,
 } from "@/types";
 
-type RequestStatus = "pending" | "approved" | "declined";
-
 class McpServerInstallationRequestModel {
   static async create(
-    request: InsertMcpServerInstallationRequest
+    request: InsertMcpServerInstallationRequest,
   ): Promise<McpServerInstallationRequest> {
     const [createdRequest] = await db
       .insert(schema.mcpServerInstallationRequestTable)
@@ -29,7 +28,7 @@ class McpServerInstallationRequestModel {
   }
 
   static async findById(
-    id: string
+    id: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [request] = await db
       .select()
@@ -40,7 +39,7 @@ class McpServerInstallationRequestModel {
   }
 
   static async findByStatus(
-    status: RequestStatus
+    status: McpServerInstallationRequestStatus,
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
@@ -50,7 +49,7 @@ class McpServerInstallationRequestModel {
   }
 
   static async findByRequestedBy(
-    userId: string
+    userId: string,
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
@@ -60,7 +59,7 @@ class McpServerInstallationRequestModel {
   }
 
   static async findByCatalogId(
-    catalogId: string
+    catalogId: string,
   ): Promise<McpServerInstallationRequest[]> {
     return await db
       .select()
@@ -70,7 +69,7 @@ class McpServerInstallationRequestModel {
   }
 
   static async findPendingByCatalogId(
-    catalogId: string
+    catalogId: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [request] = await db
       .select()
@@ -78,8 +77,8 @@ class McpServerInstallationRequestModel {
       .where(
         and(
           eq(schema.mcpServerInstallationRequestTable.catalogId, catalogId),
-          eq(schema.mcpServerInstallationRequestTable.status, "pending")
-        )
+          eq(schema.mcpServerInstallationRequestTable.status, "pending"),
+        ),
       )
       .orderBy(desc(schema.mcpServerInstallationRequestTable.createdAt))
       .limit(1);
@@ -89,7 +88,7 @@ class McpServerInstallationRequestModel {
 
   static async update(
     id: string,
-    request: Partial<UpdateMcpServerInstallationRequest>
+    request: Partial<UpdateMcpServerInstallationRequest>,
   ): Promise<McpServerInstallationRequest | null> {
     const [updatedRequest] = await db
       .update(schema.mcpServerInstallationRequestTable)
@@ -103,7 +102,7 @@ class McpServerInstallationRequestModel {
   static async approve(
     id: string,
     reviewedBy: string,
-    adminResponse?: string
+    adminResponse?: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [updatedRequest] = await db
       .update(schema.mcpServerInstallationRequestTable)
@@ -122,7 +121,7 @@ class McpServerInstallationRequestModel {
   static async decline(
     id: string,
     reviewedBy: string,
-    adminResponse?: string
+    adminResponse?: string,
   ): Promise<McpServerInstallationRequest | null> {
     const [updatedRequest] = await db
       .update(schema.mcpServerInstallationRequestTable)
@@ -142,10 +141,10 @@ class McpServerInstallationRequestModel {
     id: string,
     userId: string,
     userName: string,
-    content: string
+    content: string,
   ): Promise<McpServerInstallationRequest | null> {
     // First, get the current request
-    const currentRequest = await this.findById(id);
+    const currentRequest = await McpServerInstallationRequestModel.findById(id);
     if (!currentRequest) {
       return null;
     }
@@ -163,7 +162,9 @@ class McpServerInstallationRequestModel {
     const updatedNotes = [...(currentRequest.notes || []), newNote];
 
     // Update the request with the new notes array
-    return await this.update(id, { notes: updatedNotes });
+    return await McpServerInstallationRequestModel.update(id, {
+      notes: updatedNotes,
+    });
   }
 
   static async delete(id: string): Promise<boolean> {

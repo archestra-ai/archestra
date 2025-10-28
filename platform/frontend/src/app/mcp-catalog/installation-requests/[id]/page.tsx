@@ -1,6 +1,13 @@
 "use client";
 
-import { ArrowLeft, CheckCircle, Clock, Loader2, Send, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Clock,
+  Loader2,
+  Send,
+  XCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { use, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +123,7 @@ export default function InstallationRequestDetailPage({
     },
   };
 
-  const status = statusConfig[request.status];
+  const status = statusConfig[request.status as keyof typeof statusConfig];
   const StatusIcon = status.icon;
   const isPending = request.status === "pending";
 
@@ -336,7 +343,7 @@ export default function InstallationRequestDetailPage({
                     .sort(
                       (a, b) =>
                         new Date(b.createdAt).getTime() -
-                        new Date(a.createdAt).getTime()
+                        new Date(a.createdAt).getTime(),
                     )
                     .map((note) => (
                       <div key={note.id} className="space-y-1">

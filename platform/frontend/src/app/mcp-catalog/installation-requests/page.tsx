@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Clock, Loader2, XCircle } from "lucide-react";
+import { CheckCircle, Clock, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ export default function InstallationRequestsPage() {
   const isAdmin = userRole === "admin";
 
   const { data: requests, isLoading } = useMcpServerInstallationRequests(
-    statusFilter === "all" ? undefined : { status: statusFilter }
+    statusFilter === "all" ? undefined : { status: statusFilter },
   );
 
   return (
@@ -64,27 +64,25 @@ export default function InstallationRequestsPage() {
         <TabsContent value={statusFilter} className="space-y-4">
           {isLoading ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i}>
-                  <CardHeader>
-                    <Skeleton className="h-6 w-3/4" />
-                    <Skeleton className="h-4 w-1/2 mt-2" />
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-full mt-2" />
-                  </CardContent>
-                </Card>
-              ))}
+              {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
+                (id) => (
+                  <Card key={id}>
+                    <CardHeader>
+                      <Skeleton className="h-6 w-3/4" />
+                      <Skeleton className="h-4 w-1/2 mt-2" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-full mt-2" />
+                    </CardContent>
+                  </Card>
+                ),
+              )}
             </div>
           ) : requests && requests.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {requests.map((request) => (
-                <RequestCard
-                  key={request.id}
-                  request={request}
-                  isAdmin={isAdmin}
-                />
+                <RequestCard key={request.id} request={request} />
               ))}
             </div>
           ) : (
@@ -102,13 +100,7 @@ export default function InstallationRequestsPage() {
   );
 }
 
-function RequestCard({
-  request,
-  isAdmin,
-}: {
-  request: McpServerInstallationRequest;
-  isAdmin: boolean;
-}) {
+function RequestCard({ request }: { request: McpServerInstallationRequest }) {
   const statusConfig = {
     pending: {
       icon: Clock,
@@ -127,7 +119,7 @@ function RequestCard({
     },
   };
 
-  const status = statusConfig[request.status];
+  const status = statusConfig[request.status as keyof typeof statusConfig];
   const StatusIcon = status.icon;
 
   return (
@@ -135,9 +127,7 @@ function RequestCard({
       <Card className="hover:shadow-md transition-shadow cursor-pointer">
         <CardHeader>
           <div className="flex items-start justify-between">
-            <CardTitle className="text-lg">
-              Installation Request
-            </CardTitle>
+            <CardTitle className="text-lg">Installation Request</CardTitle>
             <Badge variant="outline" className={status.color}>
               <StatusIcon className="h-3 w-3 mr-1" />
               {status.label}
@@ -164,9 +154,7 @@ function RequestCard({
 
           {request.status !== "pending" && request.adminResponse && (
             <div>
-              <p className="text-sm font-medium mb-1">
-                Admin Response
-              </p>
+              <p className="text-sm font-medium mb-1">Admin Response</p>
               <p className="text-sm text-muted-foreground line-clamp-2">
                 {request.adminResponse}
               </p>

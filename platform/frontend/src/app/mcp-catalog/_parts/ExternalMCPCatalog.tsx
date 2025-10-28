@@ -96,7 +96,7 @@ export function ExternalMCPCatalog({
   };
 
   const handleRequestInstallation = async (
-    server: ArchestraMcpServerManifest
+    server: ArchestraMcpServerManifest,
   ) => {
     // First, add to catalog to get catalogId
     const rewrittenOauth =

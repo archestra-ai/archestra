@@ -6,7 +6,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-const McpServerInstallationRequestStatusSchema = z.enum([
+export const McpServerInstallationRequestStatusSchema = z.enum([
   "pending",
   "approved",
   "declined",

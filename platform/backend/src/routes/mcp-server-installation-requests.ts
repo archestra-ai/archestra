@@ -1,11 +1,13 @@
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { McpServerInstallationRequestModel } from "@/models";
 import {
   ErrorResponseSchema,
   InsertMcpServerInstallationRequestSchema,
+  type McpServerInstallationRequest,
+  McpServerInstallationRequestStatusSchema,
   RouteId,
   SelectMcpServerInstallationRequestSchema,
   UpdateMcpServerInstallationRequestSchema,
@@ -14,9 +16,8 @@ import {
 import { getUserFromRequest } from "@/utils";
 
 const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
-  fastify
+  fastify,
 ) => {
-  // Get all installation requests
   fastify.get(
     "/api/mcp_server_installation_requests",
     {
@@ -25,10 +26,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         description: "Get all MCP server installation requests",
         tags: ["MCP Server Installation Requests"],
         querystring: z.object({
-          status: z
-            .enum(["pending", "approved", "declined"])
-            .optional()
-            .describe("Filter by status"),
+          status:
+            McpServerInstallationRequestStatusSchema.optional().describe(
+              "Filter by status",
+            ),
         }),
         response: {
           200: z.array(SelectMcpServerInstallationRequestSchema),
@@ -52,16 +53,16 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
         const { status } = request.query;
 
-        // Admins can see all requests
-        // Non-admins can only see their own requests
-        let requests;
+        // Admins can see all requests, non-admins can only see their own requests
+        let requests: McpServerInstallationRequest[];
         if (user.isAdmin) {
           requests = status
             ? await McpServerInstallationRequestModel.findByStatus(status)
             : await McpServerInstallationRequestModel.findAll();
         } else {
-          requests =
-            await McpServerInstallationRequestModel.findByRequestedBy(user.id);
+          requests = await McpServerInstallationRequestModel.findByRequestedBy(
+            user.id,
+          );
           if (status) {
             requests = requests.filter((r) => r.status === status);
           }
@@ -78,10 +79,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Create a new installation request
   fastify.post(
     "/api/mcp_server_installation_requests",
     {
@@ -124,7 +124,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         // Check if there's already a pending request for this catalog item
         const existingRequest =
           await McpServerInstallationRequestModel.findPendingByCatalogId(
-            request.body.catalogId
+            request.body.catalogId,
           );
 
         if (existingRequest) {
@@ -153,10 +153,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Get a single installation request by ID
   fastify.get(
     "/api/mcp_server_installation_requests/:id",
     {
@@ -222,10 +221,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Update an installation request (admin only for approval/decline)
   fastify.patch(
     "/api/mcp_server_installation_requests/:id",
     {
@@ -297,10 +295,19 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
         const updatedRequest = await McpServerInstallationRequestModel.update(
           request.params.id,
-          request.body
+          request.body,
         );
 
-        return reply.send(updatedRequest!);
+        if (!updatedRequest) {
+          return reply.status(404).send({
+            error: {
+              message: "Installation request not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send(updatedRequest);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -311,10 +318,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Approve an installation request (admin only)
   fastify.post(
     "/api/mcp_server_installation_requests/:id/approve",
     {
@@ -374,10 +380,19 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         const updatedRequest = await McpServerInstallationRequestModel.approve(
           request.params.id,
           user.id,
-          request.body.adminResponse
+          request.body.adminResponse,
         );
 
-        return reply.send(updatedRequest!);
+        if (!updatedRequest) {
+          return reply.status(404).send({
+            error: {
+              message: "Installation request not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send(updatedRequest);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -388,10 +403,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Decline an installation request (admin only)
   fastify.post(
     "/api/mcp_server_installation_requests/:id/decline",
     {
@@ -451,10 +465,19 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         const updatedRequest = await McpServerInstallationRequestModel.decline(
           request.params.id,
           user.id,
-          request.body.adminResponse
+          request.body.adminResponse,
         );
 
-        return reply.send(updatedRequest!);
+        if (!updatedRequest) {
+          return reply.status(404).send({
+            error: {
+              message: "Installation request not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send(updatedRequest);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -465,10 +488,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Add a note to an installation request
   fastify.post(
     "/api/mcp_server_installation_requests/:id/notes",
     {
@@ -532,15 +554,23 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           .from(schema.usersTable)
           .where(eq(schema.usersTable.id, user.id));
 
-        const updatedRequest =
-          await McpServerInstallationRequestModel.addNote(
-            request.params.id,
-            user.id,
-            userData?.name || "Unknown User",
-            request.body.content
-          );
+        const updatedRequest = await McpServerInstallationRequestModel.addNote(
+          request.params.id,
+          user.id,
+          userData.name,
+          request.body.content,
+        );
 
-        return reply.send(updatedRequest!);
+        if (!updatedRequest) {
+          return reply.status(404).send({
+            error: {
+              message: "Installation request not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send(updatedRequest);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -551,10 +581,9 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 
-  // Delete an installation request
   fastify.delete(
     "/api/mcp_server_installation_requests/:id",
     {
@@ -597,7 +626,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
         }
 
         const success = await McpServerInstallationRequestModel.delete(
-          request.params.id
+          request.params.id,
         );
 
         if (!success) {
@@ -620,7 +649,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           },
         });
       }
-    }
+    },
   );
 };
 

@@ -29,8 +29,9 @@ export function useInstallMcpServer() {
       const { data: installedServer } = await installMcpServer({ body: data });
       return installedServer;
     },
-    onSuccess: (installedServer, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+    onSuccess: async (installedServer, variables) => {
+      // Refetch instead of just invalidating to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server installation creates new tools
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
@@ -57,8 +58,9 @@ export function useDeleteMcpServer() {
       const response = await deleteMcpServer({ path: { id: data.id } });
       return response.data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+    onSuccess: async (_, variables) => {
+      // Refetch instead of just invalidating to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server deletion cascades to tools
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
@@ -68,6 +70,58 @@ export function useDeleteMcpServer() {
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
+    },
+  });
+}
+
+export function useRevokeUserMcpServerAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      serverId,
+      userId,
+    }: {
+      serverId: string;
+      userId: string;
+    }) => {
+      await archestraApiSdk.revokeUserMcpServerAccess({
+        path: { id: serverId, userId },
+      });
+    },
+    onSuccess: async () => {
+      // Refetch instead of just invalidating to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      toast.success("User access revoked successfully");
+    },
+    onError: (error) => {
+      console.error("Error revoking user access:", error);
+      toast.error("Failed to revoke user access");
+    },
+  });
+}
+
+export function useRevokeTeamMcpServerAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      serverId,
+      teamId,
+    }: {
+      serverId: string;
+      teamId: string;
+    }) => {
+      await archestraApiSdk.revokeTeamMcpServerAccess({
+        path: { id: serverId, teamId },
+      });
+    },
+    onSuccess: async () => {
+      // Refetch instead of just invalidating to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      toast.success("Team access revoked successfully");
+    },
+    onError: (error) => {
+      console.error("Error revoking team access:", error);
+      toast.error("Failed to revoke team access");
     },
   });
 }

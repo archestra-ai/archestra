@@ -1,20 +1,28 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Info } from "lucide-react";
+import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useTeams } from "@/lib/team.query";
 
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
@@ -22,11 +30,13 @@ interface RemoteServerInstallDialogProps {
   onInstall: (
     catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
     metadata: Record<string, unknown>,
+    teams: string[],
   ) => Promise<void>;
   catalogItem:
     | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]
     | null;
   isInstalling: boolean;
+  isTeamMode?: boolean;
 }
 
 export function RemoteServerInstallDialog({
@@ -35,8 +45,42 @@ export function RemoteServerInstallDialog({
   onInstall,
   catalogItem,
   isInstalling,
+  isTeamMode = false,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+
+  const { data: teams } = useTeams();
+
+  const handleAddTeam = useCallback(
+    (teamId: string) => {
+      if (teamId && !assignedTeamIds.includes(teamId)) {
+        setAssignedTeamIds([...assignedTeamIds, teamId]);
+        setSelectedTeamId("");
+      }
+    },
+    [assignedTeamIds],
+  );
+
+  const handleRemoveTeam = useCallback(
+    (teamId: string) => {
+      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
+    },
+    [assignedTeamIds],
+  );
+
+  const getUnassignedTeams = useCallback(() => {
+    if (!teams) return [];
+    return teams.filter((team) => !assignedTeamIds.includes(team.id));
+  }, [teams, assignedTeamIds]);
+
+  const getTeamById = useCallback(
+    (teamId: string) => {
+      return teams?.find((team) => team.id === teamId);
+    },
+    [teams],
+  );
 
   const handleInstall = useCallback(async () => {
     if (!catalogItem) {
@@ -90,16 +134,20 @@ export function RemoteServerInstallDialog({
         }
       }
 
-      await onInstall(catalogItem, metadata);
+      await onInstall(catalogItem, metadata, assignedTeamIds);
       setConfigValues({});
+      setAssignedTeamIds([]);
+      setSelectedTeamId("");
       onClose();
     } catch (_error) {
       // Error handling is done in the parent component
     }
-  }, [catalogItem, configValues, onInstall, onClose]);
+  }, [catalogItem, configValues, assignedTeamIds, onInstall, onClose]);
 
   const handleClose = useCallback(() => {
     setConfigValues({});
+    setAssignedTeamIds([]);
+    setSelectedTeamId("");
     onClose();
   }, [onClose]);
 
@@ -129,22 +177,103 @@ export function RemoteServerInstallDialog({
   const hasOAuth = !!catalogItem.oauthConfig;
 
   // Check if all required fields are filled
-  const isValid = Object.entries(userConfig)
-    .filter(([_, config]) => config.required)
-    .every(([fieldName, _]) => configValues[fieldName]?.trim());
+  const isValid =
+    Object.entries(userConfig)
+      .filter(([_, config]) => config.required)
+      .every(([fieldName, _]) => configValues[fieldName]?.trim()) &&
+    (!isTeamMode || assignedTeamIds.length > 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Install {catalogItem.name}</DialogTitle>
-          <DialogDescription>
-            {catalogItem.description ||
-              "Configure this remote MCP server for installation."}
-          </DialogDescription>
+          <DialogTitle className="flex items-center justify-between gap-2">
+            <div className="flex items-end gap-2">
+              {isTeamMode ? (
+                <Building2 className="h-5 w-5" />
+              ) : (
+                <User className="h-5 w-5" />
+              )}
+              <span>
+                {isTeamMode ? "Team" : "Personal"} Authentication
+                <span className="text-muted-foreground ml-2 font-normal">
+                  {catalogItem.label}
+                </span>
+              </span>
+            </div>
+            {hasOAuth && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                OAuth
+              </Badge>
+            )}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-6 py-4">
+          {isTeamMode && (
+            <>
+              <Alert className="mb-2">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Admin only: You are configuring shared credentials
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid gap-2">
+                <Label htmlFor="assign-team">
+                  Select Teams <span className="text-destructive">*</span>
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Choose which teams will have access to this authentication.
+                </p>
+                <Select value={selectedTeamId} onValueChange={handleAddTeam}>
+                  <SelectTrigger id="assign-team">
+                    <SelectValue placeholder="Select a team to assign" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getUnassignedTeams().length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        All teams are already assigned
+                      </div>
+                    ) : (
+                      getUnassignedTeams().map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {assignedTeamIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {assignedTeamIds.map((teamId) => {
+                      const team = getTeamById(teamId);
+                      return (
+                        <Badge
+                          key={teamId}
+                          variant="secondary"
+                          className="flex items-center gap-1 pr-1"
+                        >
+                          <span>{team?.name || teamId}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveTeam(teamId)}
+                            className="h-auto p-0.5 ml-1 hover:bg-destructive/20"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
+
           {hasOAuth && (
             <Alert>
               <Info className="h-4 w-4" />
@@ -201,11 +330,11 @@ export function RemoteServerInstallDialog({
                     max={config.max}
                   />
                 )}
-                {config.description && (
+                {/* {config.description && (
                   <p className="text-sm text-muted-foreground">
                     {config.description}
                   </p>
-                )}
+                )} */}
               </div>
             ))
           ) : !hasOAuth ? (

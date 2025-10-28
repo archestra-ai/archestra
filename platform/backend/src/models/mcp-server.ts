@@ -3,11 +3,12 @@ import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import McpServerTeamModel from "./mcp-server-team";
+import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
-    const { teams, ...serverData } = server;
+    const { teams, userId, ...serverData } = server;
 
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
@@ -19,9 +20,15 @@ class McpServerModel {
       await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
     }
 
+    // Assign user to the MCP server if provided (personal auth)
+    if (userId) {
+      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+    }
+
     return {
       ...createdServer,
       teams: teams || [],
+      users: userId ? [userId] : [],
     };
   }
 
@@ -33,8 +40,18 @@ class McpServerModel {
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleMcpServerIds =
+      // Get MCP servers accessible through team membership
+      const teamAccessibleMcpServerIds =
         await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+
+      // Get MCP servers with personal access
+      const personalMcpServerIds =
+        await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+
+      // Combine both lists
+      const accessibleMcpServerIds = [
+        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+      ];
 
       if (accessibleMcpServerIds.length === 0) {
         return [];
@@ -47,15 +64,26 @@ class McpServerModel {
 
     const servers = await query;
 
-    // Populate teams for each MCP server
-    const serversWithTeams: McpServer[] = await Promise.all(
-      servers.map(async (server) => ({
-        ...server,
-        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
-      })),
+    // Populate teams and user details for each MCP server
+    const serversWithRelations: McpServer[] = await Promise.all(
+      servers.map(async (server) => {
+        const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
+          server.id,
+        );
+        const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
+          server.id,
+        );
+        return {
+          ...server,
+          teams: teamDetails.map((t) => t.teamId),
+          users: userDetails.map((u) => u.userId),
+          userDetails,
+          teamDetails,
+        };
+      }),
     );
 
-    return serversWithTeams;
+    return serversWithRelations;
   }
 
   static async findById(
@@ -65,12 +93,15 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-admins
     if (userId && !isAdmin) {
-      const hasAccess = await McpServerTeamModel.userHasMcpServerAccess(
+      const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
         userId,
         id,
         false,
       );
-      if (!hasAccess) {
+      const hasPersonalAccess =
+        await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
+
+      if (!hasTeamAccess && !hasPersonalAccess) {
         return null;
       }
     }
@@ -84,11 +115,15 @@ class McpServerModel {
       return null;
     }
 
-    const teams = await McpServerTeamModel.getTeamsForMcpServer(id);
+    const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(id);
+    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
 
     return {
       ...server,
-      teams,
+      teams: teamDetails.map((t) => t.teamId),
+      users: userDetails.map((u) => u.userId),
+      userDetails,
+      teamDetails,
     };
   }
 

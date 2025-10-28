@@ -2,14 +2,15 @@
 
 import type { archestraApiTypes } from "@shared";
 import {
-  Download,
-  Eye,
+  Building2,
   MoreVertical,
   Pencil,
   Plus,
   RefreshCw,
   Search,
   Trash2,
+  User,
+  Wrench,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useRole } from "@/lib/auth.hook";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
@@ -38,7 +40,10 @@ import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
+import { ManageTeamsDialog } from "./manage-teams-dialog";
+import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
+import { NoAuthInstallDialog } from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
@@ -55,23 +60,49 @@ function InternalServerCard({
   isInstalling,
   needsReinstall,
   onInstall,
+  onInstallTeam,
+  onInstallNoAuth,
   onUninstall,
   onReinstall,
   onEdit,
   onDelete,
   onViewTools,
+  onManageUsers,
+  onManageTeams,
+  userCount,
+  teamsCount,
+  toolsAssignedCount,
+  toolsDiscoveredCount,
+  isCurrentUserAuthenticated,
+  isAdmin,
 }: {
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
   isInstalling: boolean;
   needsReinstall: boolean;
   onInstall: () => void;
+  onInstallTeam: () => void;
+  onInstallNoAuth: () => void;
   onUninstall: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onViewTools?: () => void;
+  onManageUsers?: () => void;
+  onManageTeams?: () => void;
+  userCount?: number;
+  teamsCount?: number;
+  toolsAssignedCount?: number;
+  toolsDiscoveredCount?: number;
+  isCurrentUserAuthenticated?: boolean;
+  isAdmin: boolean;
 }) {
+  // Check if authentication is required
+  const requiresAuth = !!(
+    (item.userConfig && Object.keys(item.userConfig).length > 0) ||
+    item.oauthConfig
+  );
+
   return (
     <Card className="flex flex-col relative pt-4">
       <CardHeader>
@@ -92,6 +123,14 @@ function InternalServerCard({
                 </Badge>
               )}
               <TransportBadges isRemote={item.serverType === "remote"} />
+              {!requiresAuth && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-green-700 text-white"
+                >
+                  No auth required
+                </Badge>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
@@ -119,7 +158,100 @@ function InternalServerCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col pt-3 gap-2 justify-end">
+      <CardContent className="flex-1 flex flex-col gap-2 justify-end">
+        {installed &&
+          ((userCount !== undefined && userCount > 0) ||
+            (teamsCount !== undefined && teamsCount > 0) ||
+            (toolsAssignedCount !== undefined &&
+              toolsDiscoveredCount !== undefined)) && (
+            <div className="bg-muted/50 rounded-md mb-2 overflow-hidden">
+              {userCount !== undefined && userCount > 0 && (
+                <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      User credentials:{" "}
+                      <span className="font-medium text-foreground">
+                        {userCount}
+                      </span>
+                      {isCurrentUserAuthenticated && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
+                        >
+                          You
+                        </Badge>
+                      )}
+                    </span>
+                  </div>
+                  {isAdmin && onManageUsers && (
+                    <Button
+                      onClick={onManageUsers}
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                    >
+                      Manage
+                    </Button>
+                  )}
+                </div>
+              )}
+              {teamsCount !== undefined && teamsCount > 0 && (
+                <div
+                  className={`flex items-center justify-between px-3 py-2 text-sm ${
+                    toolsAssignedCount !== undefined &&
+                    toolsDiscoveredCount !== undefined
+                      ? "border-b border-muted"
+                      : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      Team credentials:{" "}
+                      <span className="font-medium text-foreground">
+                        {teamsCount}
+                      </span>
+                    </span>
+                  </div>
+                  {isAdmin && onManageTeams && (
+                    <Button
+                      onClick={onManageTeams}
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                    >
+                      Manage
+                    </Button>
+                  )}
+                </div>
+              )}
+              {toolsAssignedCount !== undefined &&
+                toolsDiscoveredCount !== undefined && (
+                  <div className="flex items-center justify-between px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        Tools assigned / discovered:{" "}
+                        <span className="font-medium text-foreground">
+                          {toolsAssignedCount} / {toolsDiscoveredCount}
+                        </span>
+                      </span>
+                    </div>
+                    {onViewTools && (
+                      <Button
+                        onClick={onViewTools}
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                      >
+                        Manage
+                      </Button>
+                    )}
+                  </div>
+                )}
+            </div>
+          )}
         {installed ? (
           <>
             {needsReinstall && (
@@ -134,17 +266,32 @@ function InternalServerCard({
                 {isInstalling ? "Reinstalling..." : "Reinstall Required"}
               </Button>
             )}
-            {onViewTools && (
+            {requiresAuth && !isCurrentUserAuthenticated && (
               <Button
-                onClick={onViewTools}
+                onClick={onInstall}
+                disabled={isInstalling}
                 size="sm"
                 variant="outline"
                 className="w-full"
               >
-                <Eye className="mr-2 h-4 w-4" />
-                View Tools
+                <User className="mr-2 h-4 w-4" />
+                {isInstalling ? "Adding..." : "Add Personal Auth"}
               </Button>
             )}
+            {requiresAuth &&
+              isAdmin &&
+              (teamsCount === undefined || teamsCount === 0) && (
+                <Button
+                  onClick={onInstallTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? "Adding..." : "Add Team Auth"}
+                </Button>
+              )}
             <Button
               onClick={onUninstall}
               size="sm"
@@ -153,19 +300,121 @@ function InternalServerCard({
               Uninstall
             </Button>
           </>
+        ) : requiresAuth ? (
+          <div className="flex gap-2">
+            <Button
+              onClick={onInstall}
+              disabled={isInstalling}
+              size="sm"
+              variant="outline"
+              className="flex-1"
+            >
+              <User className="mr-2 h-4 w-4" />
+              {isInstalling ? "Adding..." : "Add Personal Auth"}
+            </Button>
+            {isAdmin && (
+              <Button
+                onClick={onInstallTeam}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="flex-1"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? "Adding..." : "Add Team Auth"}
+              </Button>
+            )}
+          </div>
         ) : (
           <Button
-            onClick={onInstall}
+            onClick={onInstallNoAuth}
             disabled={isInstalling}
             size="sm"
+            variant="outline"
             className="w-full"
           >
-            <Download className="mr-2 h-4 w-4" />
-            {isInstalling ? "Installing..." : "Install"}
+            {isInstalling ? "Installing..." : "Install directly"}
           </Button>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Wrapper component that fetches tools and computes counts
+function InternalServerCardWithTools({
+  item,
+  installedServer,
+  installingItemId,
+  installMutationPending,
+  onInstall,
+  onInstallTeam,
+  onInstallNoAuth,
+  onUninstall,
+  onReinstall,
+  onEdit,
+  onDelete,
+  onViewTools,
+  onManageUsers,
+  onManageTeams,
+  isAdmin,
+}: {
+  item: CatalogItemWithOptionalLabel;
+  installedServer:
+    | archestraApiTypes.GetMcpServersResponses["200"][number]
+    | undefined;
+  installingItemId: string | null;
+  installMutationPending: boolean;
+  onInstall: () => void;
+  onInstallTeam: () => void;
+  onInstallNoAuth: () => void;
+  onUninstall: () => void;
+  onReinstall: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onViewTools?: () => void;
+  onManageUsers?: () => void;
+  onManageTeams?: () => void;
+  isAdmin: boolean;
+}) {
+  const { data: tools } = useMcpServerTools(installedServer?.id ?? null);
+  const session = authClient.useSession();
+  const currentUserId = session.data?.user?.id;
+
+  const toolsDiscoveredCount = tools?.length ?? 0;
+  const toolsAssignedCount = useMemo(() => {
+    if (!tools) return 0;
+    return tools.filter((tool) => tool.assignedAgentCount > 0).length;
+  }, [tools]);
+
+  const isCurrentUserAuthenticated = useMemo(() => {
+    if (!currentUserId || !installedServer?.users) return false;
+    return installedServer.users.includes(currentUserId);
+  }, [currentUserId, installedServer?.users]);
+
+  return (
+    <InternalServerCard
+      item={item}
+      installed={!!installedServer}
+      isInstalling={installingItemId === item.id || installMutationPending}
+      needsReinstall={installedServer?.reinstallRequired ?? false}
+      onInstall={onInstall}
+      onInstallTeam={onInstallTeam}
+      onInstallNoAuth={onInstallNoAuth}
+      onUninstall={onUninstall}
+      onReinstall={onReinstall}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      onViewTools={onViewTools}
+      onManageUsers={onManageUsers}
+      onManageTeams={onManageTeams}
+      userCount={installedServer?.users?.length ?? 0}
+      teamsCount={installedServer?.teams?.length ?? 0}
+      toolsAssignedCount={toolsAssignedCount}
+      toolsDiscoveredCount={toolsDiscoveredCount}
+      isCurrentUserAuthenticated={isCurrentUserAuthenticated}
+      isAdmin={isAdmin}
+    />
   );
 }
 
@@ -232,6 +481,19 @@ export function InternalMCPCatalog({
   const [catalogItemForReinstall, setCatalogItemForReinstall] = useState<
     archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
+  const [isTeamMode, setIsTeamMode] = useState(false);
+  const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
+  const [noAuthCatalogItem, setNoAuthCatalogItem] = useState<
+    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
+  >(null);
+  const [managingUsersState, setManagingUsersState] = useState<{
+    serverId: string;
+    label: string;
+  } | null>(null);
+  const [managingTeamsState, setManagingTeamsState] = useState<{
+    server: archestraApiTypes.GetMcpServersResponses["200"][number];
+    label: string;
+  } | null>(null);
 
   const toolsDialogServer = useMemo(() => {
     return installedServers?.find(
@@ -239,13 +501,23 @@ export function InternalMCPCatalog({
     );
   }, [installedServers, toolsDialogServerId]);
 
+  const managingUsersServer = useMemo(() => {
+    if (!managingUsersState) return null;
+    return installedServers?.find(
+      (server) => server.id === managingUsersState.serverId,
+    );
+  }, [installedServers, managingUsersState]);
+
   const { data: toolsDialogTools, isLoading: isLoadingToolsDialogTools } =
     useMcpServerTools(toolsDialogServerId);
 
   const handleInstall = useCallback(
     async (
       catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+      teamMode = false,
     ) => {
+      setIsTeamMode(teamMode);
+
       // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
       if (
         catalogItem.serverType === "remote" &&
@@ -270,13 +542,52 @@ export function InternalMCPCatalog({
         await installMutation.mutateAsync({
           name: catalogItem.name,
           catalogId: catalogItem.id,
-          teams: [],
+          teams: [], // TODO: will be populated from team selector in dialogs
         });
       } finally {
         setInstallingItemId(null);
       }
     },
     [installMutation],
+  );
+
+  const handleInstallTeam = useCallback(
+    async (
+      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+    ) => {
+      await handleInstall(catalogItem, true);
+    },
+    [handleInstall],
+  );
+
+  const handleInstallNoAuth = useCallback(
+    (
+      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+    ) => {
+      setNoAuthCatalogItem(catalogItem);
+      setIsNoAuthDialogOpen(true);
+    },
+    [],
+  );
+
+  const handleNoAuthConfirm = useCallback(
+    async (teams: string[] = []) => {
+      if (!noAuthCatalogItem) return;
+
+      try {
+        setInstallingItemId(noAuthCatalogItem.id);
+        await installMutation.mutateAsync({
+          name: noAuthCatalogItem.name,
+          catalogId: noAuthCatalogItem.id,
+          teams,
+        });
+        setIsNoAuthDialogOpen(false);
+        setNoAuthCatalogItem(null);
+      } finally {
+        setInstallingItemId(null);
+      }
+    },
+    [noAuthCatalogItem, installMutation],
   );
 
   const _handleGitHubInstall = useCallback(
@@ -304,6 +615,7 @@ export function InternalMCPCatalog({
     async (
       catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
       metadata?: Record<string, unknown>,
+      teams: string[] = [],
     ) => {
       try {
         setInstallingItemId(catalogItem.id);
@@ -318,6 +630,7 @@ export function InternalMCPCatalog({
           name: catalogItem.name,
           catalogId: catalogItem.id,
           ...(accessToken && { accessToken }),
+          teams,
         });
       } finally {
         setInstallingItemId(null);
@@ -326,37 +639,41 @@ export function InternalMCPCatalog({
     [installMutation],
   );
 
-  const handleOAuthConfirm = useCallback(async () => {
-    if (!selectedCatalogItem) return;
+  const handleOAuthConfirm = useCallback(
+    async (teams: string[] = []) => {
+      if (!selectedCatalogItem) return;
 
-    try {
-      // Call backend to initiate OAuth flow
-      const response = await fetch("/api/oauth/initiate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          catalogId: selectedCatalogItem.id,
-        }),
-      });
+      try {
+        // Call backend to initiate OAuth flow
+        const response = await fetch("/api/oauth/initiate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            catalogId: selectedCatalogItem.id,
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error("Failed to initiate OAuth flow");
+        if (!response.ok) {
+          throw new Error("Failed to initiate OAuth flow");
+        }
+
+        const { authorizationUrl, state } = await response.json();
+
+        // Store state and teams in session storage for the callback
+        sessionStorage.setItem("oauth_state", state);
+        sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+        sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
+
+        // Redirect to OAuth provider
+        window.location.href = authorizationUrl;
+      } catch {
+        // TODO: Show error toast
       }
-
-      const { authorizationUrl, state } = await response.json();
-
-      // Store state in session storage for the callback
-      sessionStorage.setItem("oauth_state", state);
-      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
-
-      // Redirect to OAuth provider
-      window.location.href = authorizationUrl;
-    } catch {
-      // TODO: Show error toast
-    }
-  }, [selectedCatalogItem]);
+    },
+    [selectedCatalogItem],
+  );
 
   const getInstallationCount = useCallback(
     (catalogId: string) => {
@@ -371,6 +688,83 @@ export function InternalMCPCatalog({
   const getInstalledServer = useCallback(
     (catalogId: string) => {
       return installedServers?.find((server) => server.catalogId === catalogId);
+    },
+    [installedServers],
+  );
+
+  // Aggregate all installations of the same catalog item
+  const getAggregatedInstallation = useCallback(
+    (catalogId: string) => {
+      const servers = installedServers?.filter(
+        (server) => server.catalogId === catalogId,
+      );
+
+      if (!servers || servers.length === 0) return undefined;
+
+      // If only one server, return it as-is
+      if (servers.length === 1) return servers[0];
+
+      // Use the first server with users as the base, or just first server
+      const baseServer =
+        servers.find((s) => s.users && s.users.length > 0) || servers[0];
+
+      // Aggregate multiple servers
+      const aggregated = { ...baseServer };
+
+      // Combine all unique users
+      const allUsers = new Set<string>();
+      const allUserDetails: Array<{
+        userId: string;
+        email: string;
+        createdAt: string;
+      }> = [];
+
+      for (const server of servers) {
+        if (server.users) {
+          for (const userId of server.users) {
+            allUsers.add(userId);
+          }
+        }
+        if (server.userDetails) {
+          for (const userDetail of server.userDetails) {
+            // Only add if not already present
+            if (!allUserDetails.some((ud) => ud.userId === userDetail.userId)) {
+              allUserDetails.push(userDetail);
+            }
+          }
+        }
+      }
+
+      // Combine all unique teams
+      const allTeams = new Set<string>();
+      const allTeamDetails: Array<{
+        teamId: string;
+        name: string;
+        createdAt: string;
+      }> = [];
+
+      for (const server of servers) {
+        if (server.teams) {
+          for (const teamId of server.teams) {
+            allTeams.add(teamId);
+          }
+        }
+        if (server.teamDetails) {
+          for (const teamDetail of server.teamDetails) {
+            // Only add if not already present
+            if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
+              allTeamDetails.push(teamDetail);
+            }
+          }
+        }
+      }
+
+      aggregated.users = Array.from(allUsers);
+      aggregated.userDetails = allUserDetails;
+      aggregated.teams = Array.from(allTeams);
+      aggregated.teamDetails = allTeamDetails;
+
+      return aggregated;
     },
     [installedServers],
   );
@@ -499,19 +893,19 @@ export function InternalMCPCatalog({
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filteredCatalogItems?.map((item) => {
-          const installedServer = getInstalledServer(item.id);
+          const installedServer = getAggregatedInstallation(item.id);
           const itemWithLabel = item as CatalogItemWithOptionalLabel;
 
           return (
-            <InternalServerCard
+            <InternalServerCardWithTools
               key={item.id}
               item={itemWithLabel}
-              installed={!!installedServer}
-              isInstalling={
-                installingItemId === item.id || installMutation.isPending
-              }
-              needsReinstall={installedServer?.reinstallRequired ?? false}
-              onInstall={() => handleInstall(item)}
+              installedServer={installedServer}
+              installingItemId={installingItemId}
+              installMutationPending={installMutation.isPending}
+              onInstall={() => handleInstall(item, false)}
+              onInstallTeam={() => handleInstallTeam(item)}
+              onInstallNoAuth={() => handleInstallNoAuth(item)}
               onUninstall={() => {
                 if (installedServer) {
                   handleUninstallClick(
@@ -528,6 +922,25 @@ export function InternalMCPCatalog({
                   ? () => setToolsDialogServerId(installedServer.id)
                   : undefined
               }
+              onManageUsers={
+                installedServer
+                  ? () =>
+                      setManagingUsersState({
+                        serverId: installedServer.id,
+                        label: itemWithLabel.label || itemWithLabel.name,
+                      })
+                  : undefined
+              }
+              onManageTeams={
+                installedServer
+                  ? () =>
+                      setManagingTeamsState({
+                        server: installedServer,
+                        label: itemWithLabel.label || itemWithLabel.name,
+                      })
+                  : undefined
+              }
+              isAdmin={isAdmin}
             />
           );
         })}
@@ -574,21 +987,25 @@ export function InternalMCPCatalog({
         onClose={() => {
           setIsRemoteServerDialogOpen(false);
           setSelectedCatalogItem(null);
+          setIsTeamMode(false);
         }}
         onInstall={handleRemoteServerInstall}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
+        isTeamMode={isTeamMode}
       />
 
       <OAuthConfirmationDialog
         open={isOAuthDialogOpen}
         onOpenChange={setIsOAuthDialogOpen}
-        serverName={selectedCatalogItem?.name || ""}
+        serverName={selectedCatalogItem?.label || ""}
         onConfirm={handleOAuthConfirm}
         onCancel={() => {
           setIsOAuthDialogOpen(false);
           setSelectedCatalogItem(null);
+          setIsTeamMode(false);
         }}
+        isTeamMode={isTeamMode}
       />
 
       <UninstallServerDialog
@@ -673,6 +1090,32 @@ export function InternalMCPCatalog({
           catalogItemForReinstall?.label || catalogItemForReinstall?.name || ""
         }
         isReinstalling={installMutation.isPending}
+      />
+
+      <NoAuthInstallDialog
+        isOpen={isNoAuthDialogOpen}
+        onClose={() => {
+          setIsNoAuthDialogOpen(false);
+          setNoAuthCatalogItem(null);
+        }}
+        onInstall={handleNoAuthConfirm}
+        catalogItem={noAuthCatalogItem}
+        isInstalling={installMutation.isPending}
+        isAdmin={isAdmin}
+      />
+
+      <ManageUsersDialog
+        isOpen={!!managingUsersState}
+        onClose={() => setManagingUsersState(null)}
+        server={managingUsersServer}
+        label={managingUsersState?.label}
+      />
+
+      <ManageTeamsDialog
+        isOpen={!!managingTeamsState}
+        onClose={() => setManagingTeamsState(null)}
+        server={managingTeamsState?.server}
+        label={managingTeamsState?.label}
       />
     </div>
   );

@@ -5778,6 +5778,17 @@ export type GetMcpServersResponses = {
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     }>;
 };
 
@@ -5790,6 +5801,7 @@ export type InstallMcpServerData = {
         secretId?: string;
         reinstallRequired?: boolean;
         teams?: Array<string>;
+        userId?: string;
         agentIds?: Array<string>;
         accessToken?: string;
     };
@@ -5803,6 +5815,15 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
         error: string | {
             message: string;
             type: string;
@@ -5834,6 +5855,17 @@ export type InstallMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -5936,6 +5968,17 @@ export type GetMcpServerResponses = {
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -5994,6 +6037,112 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
+export type RevokeUserMcpServerAccessData = {
+    body?: never;
+    path: {
+        id: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/user/{userId}';
+};
+
+export type RevokeUserMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
+
+export type RevokeUserMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
+
+export type RevokeTeamMcpServerAccessData = {
+    body?: never;
+    path: {
+        id: string;
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/team/{teamId}';
+};
+
+export type RevokeTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
+
+export type RevokeTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
 
 export type InitiateOAuthData = {
     body: {

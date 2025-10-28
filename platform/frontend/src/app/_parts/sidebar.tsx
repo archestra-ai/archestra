@@ -11,7 +11,6 @@ import {
   Bot,
   Bug,
   ClipboardList,
-  FileJson2,
   Github,
   Info,
   LogIn,
@@ -22,6 +21,7 @@ import {
   ShieldCheck,
   Slack,
   Star,
+  Wrench,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -79,7 +79,7 @@ const getNavigationItems = (
           {
             title: "Tools",
             url: "/tools",
-            icon: FileJson2,
+            icon: Wrench,
           },
           {
             title: "MCP Registry",

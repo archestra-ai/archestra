@@ -679,6 +679,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             method: "POST",
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json",
             },
             body: new URLSearchParams({
               grant_type: "authorization_code",

@@ -9,7 +9,7 @@ const mcpServerTable = pgTable("mcp_server", {
     onDelete: "set null",
   }),
   secretId: uuid("secret_id").references(() => secretTable.id, {
-    onDelete: "set null",
+    onDelete: "cascade",
   }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })

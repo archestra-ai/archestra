@@ -4815,6 +4815,602 @@ export type PostV1McpResponses = {
     200: unknown;
 };
 
+export type GetMcpServerInstallationRequestsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by status
+         */
+        status?: 'pending' | 'approved' | 'declined';
+    };
+    url: '/api/mcp_server_installation_requests';
+};
+
+export type GetMcpServerInstallationRequestsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerInstallationRequestsError = GetMcpServerInstallationRequestsErrors[keyof GetMcpServerInstallationRequestsErrors];
+
+export type GetMcpServerInstallationRequestsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetMcpServerInstallationRequestsResponse = GetMcpServerInstallationRequestsResponses[keyof GetMcpServerInstallationRequestsResponses];
+
+export type CreateMcpServerInstallationRequestData = {
+    body: {
+        catalogId: string;
+        requestReason?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server_installation_requests';
+};
+
+export type CreateMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateMcpServerInstallationRequestError = CreateMcpServerInstallationRequestErrors[keyof CreateMcpServerInstallationRequestErrors];
+
+export type CreateMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateMcpServerInstallationRequestResponse = CreateMcpServerInstallationRequestResponses[keyof CreateMcpServerInstallationRequestResponses];
+
+export type DeleteMcpServerInstallationRequestData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}';
+};
+
+export type DeleteMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteMcpServerInstallationRequestError = DeleteMcpServerInstallationRequestErrors[keyof DeleteMcpServerInstallationRequestErrors];
+
+export type DeleteMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteMcpServerInstallationRequestResponse = DeleteMcpServerInstallationRequestResponses[keyof DeleteMcpServerInstallationRequestResponses];
+
+export type GetMcpServerInstallationRequestData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}';
+};
+
+export type GetMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerInstallationRequestError = GetMcpServerInstallationRequestErrors[keyof GetMcpServerInstallationRequestErrors];
+
+export type GetMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetMcpServerInstallationRequestResponse = GetMcpServerInstallationRequestResponses[keyof GetMcpServerInstallationRequestResponses];
+
+export type UpdateMcpServerInstallationRequestData = {
+    body?: {
+        status?: 'pending' | 'approved' | 'declined';
+        requestReason?: string | null;
+        adminResponse?: string | null;
+        reviewedBy?: string | null;
+        reviewedAt?: unknown;
+        notes?: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}';
+};
+
+export type UpdateMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateMcpServerInstallationRequestError = UpdateMcpServerInstallationRequestErrors[keyof UpdateMcpServerInstallationRequestErrors];
+
+export type UpdateMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateMcpServerInstallationRequestResponse = UpdateMcpServerInstallationRequestResponses[keyof UpdateMcpServerInstallationRequestResponses];
+
+export type ApproveMcpServerInstallationRequestData = {
+    body?: {
+        adminResponse?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}/approve';
+};
+
+export type ApproveMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type ApproveMcpServerInstallationRequestError = ApproveMcpServerInstallationRequestErrors[keyof ApproveMcpServerInstallationRequestErrors];
+
+export type ApproveMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type ApproveMcpServerInstallationRequestResponse = ApproveMcpServerInstallationRequestResponses[keyof ApproveMcpServerInstallationRequestResponses];
+
+export type DeclineMcpServerInstallationRequestData = {
+    body?: {
+        adminResponse?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}/decline';
+};
+
+export type DeclineMcpServerInstallationRequestErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeclineMcpServerInstallationRequestError = DeclineMcpServerInstallationRequestErrors[keyof DeclineMcpServerInstallationRequestErrors];
+
+export type DeclineMcpServerInstallationRequestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type DeclineMcpServerInstallationRequestResponse = DeclineMcpServerInstallationRequestResponses[keyof DeclineMcpServerInstallationRequestResponses];
+
+export type AddMcpServerInstallationRequestNoteData = {
+    body: {
+        content: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server_installation_requests/{id}/notes';
+};
+
+export type AddMcpServerInstallationRequestNoteErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type AddMcpServerInstallationRequestNoteError = AddMcpServerInstallationRequestNoteErrors[keyof AddMcpServerInstallationRequestNoteErrors];
+
+export type AddMcpServerInstallationRequestNoteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        requestedBy: string;
+        status: string;
+        requestReason: string | null;
+        adminResponse: string | null;
+        reviewedBy: string | null;
+        reviewedAt: string | null;
+        notes: Array<{
+            id: string;
+            userId: string;
+            userName: string;
+            content: string;
+            createdAt: string;
+        }> | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallationRequestNoteResponses[keyof AddMcpServerInstallationRequestNoteResponses];
+
 export type GetMcpServersData = {
     body?: never;
     path?: never;

@@ -110,4 +110,11 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Admin-only team CRUD operations via `/api/teams/*` routes
 - Members can read teams and access team-assigned agents/MCP servers
 
+**MCP Server Installation Requests**:
+
+- Members can request MCP servers from external catalog
+- Admins approve/decline requests with optional messages
+- Prevents duplicate pending requests for same catalog item
+- Full timeline and notes functionality for collaboration
+
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

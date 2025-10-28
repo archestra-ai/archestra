@@ -1,7 +1,7 @@
 import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import { eq, inArray, isNull } from "drizzle-orm";
+import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
-import mcpClientService from "@/services/mcp-client";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import McpServerTeamModel from "./mcp-server-team";
 import SecretModel from "./secret";
@@ -214,8 +214,8 @@ class McpServerModel {
 
       if (githubToken) {
         try {
-          const config = mcpClientService.createGitHubConfig(githubToken);
-          const tools = await mcpClientService.connectAndGetTools(config);
+          const config = mcpClient.createGitHubConfig(githubToken);
+          const tools = await mcpClient.connectAndGetTools(config);
           // Transform to ensure description is always a string
           return tools.map((tool) => ({
             name: tool.name,
@@ -233,12 +233,12 @@ class McpServerModel {
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
       try {
-        const config = mcpClientService.createRemoteServerConfig({
+        const config = mcpClient.createRemoteServerConfig({
           name: mcpServer.name,
           url: catalogItem.serverUrl,
           secrets,
         });
-        const tools = await mcpClientService.connectAndGetTools(config);
+        const tools = await mcpClient.connectAndGetTools(config);
         // Transform to ensure description is always a string
         return tools.map((tool) => ({
           name: tool.name,
@@ -332,7 +332,7 @@ class McpServerModel {
       const githubToken = secrets.access_token as string | undefined;
 
       if (githubToken && typeof githubToken === "string") {
-        return await mcpClientService.validateGitHubConnection(githubToken);
+        return await mcpClient.validateGitHubConnection(githubToken);
       }
       return false;
     }
@@ -346,12 +346,12 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClientService.createRemoteServerConfig({
+          const config = mcpClient.createRemoteServerConfig({
             name: serverName,
             url: catalogItem.serverUrl,
             secrets,
           });
-          const tools = await mcpClientService.connectAndGetTools(config);
+          const tools = await mcpClient.connectAndGetTools(config);
           return tools.length > 0;
         }
       } catch (error) {

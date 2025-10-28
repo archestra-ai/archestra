@@ -6,7 +6,7 @@ import {
   SecretModel,
   ToolModel,
 } from "@/models";
-import mcpClientService from "./mcp-client";
+import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
 const mockCallTool = vi.fn();
@@ -26,7 +26,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: vi.fn(),
 }));
 
-describe("McpClientService", () => {
+describe("McpClient", () => {
   let agentId: string;
   let mcpServerId: string;
 
@@ -58,7 +58,7 @@ describe("McpClientService", () => {
 
   describe("executeToolCalls", () => {
     test("returns empty array when no tool calls provided", async () => {
-      const result = await mcpClientService.executeToolCalls([], agentId);
+      const result = await mcpClient.executeToolCalls([], agentId);
       expect(result).toEqual([]);
     });
 
@@ -71,10 +71,7 @@ describe("McpClientService", () => {
         },
       ];
 
-      const result = await mcpClientService.executeToolCalls(
-        toolCalls,
-        agentId,
-      );
+      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
       expect(result).toEqual([]);
     });
 
@@ -101,10 +98,7 @@ describe("McpClientService", () => {
         },
       ];
 
-      const result = await mcpClientService.executeToolCalls(
-        toolCalls,
-        agentId,
-      );
+      const result = await mcpClient.executeToolCalls(toolCalls, agentId);
 
       // Should return empty since no MCP tools with GitHub tokens exist
       expect(result).toEqual([]);
@@ -146,10 +140,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]).toEqual({
@@ -192,10 +183,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]).toEqual({
@@ -243,10 +231,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]).toEqual({
@@ -288,10 +273,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]?.content).toEqual([
@@ -328,10 +310,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         // Should fall back to original content when template fails
         expect(results).toHaveLength(1);
@@ -370,10 +349,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]?.content).toEqual([
@@ -409,10 +385,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(1);
         expect(results[0]).toEqual({
@@ -473,10 +446,7 @@ describe("McpClientService", () => {
           },
         ];
 
-        const results = await mcpClientService.executeToolCalls(
-          toolCalls,
-          agentId,
-        );
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
 
         expect(results).toHaveLength(2);
         expect(results[0]).toEqual({
@@ -496,7 +466,7 @@ describe("McpClientService", () => {
   describe("GitHub configuration", () => {
     test("creates correct GitHub config", () => {
       const token = "test-token";
-      const config = mcpClientService.createGitHubConfig(token);
+      const config = mcpClient.createGitHubConfig(token);
 
       expect(config).toEqual({
         id: "github-mcp-server",

@@ -10,7 +10,7 @@ import type {
   McpServerConfig,
 } from "@/types";
 
-class McpClientService {
+class McpClient {
   private clients = new Map<string, Client>();
   private activeConnections = new Map<string, Client>();
 
@@ -361,20 +361,20 @@ class McpClientService {
 }
 
 // Singleton instance
-const mcpClientService = new McpClientService();
-export default mcpClientService;
+const mcpClient = new McpClient();
+export default mcpClient;
 
 // Clean up connections on process exit
 process.on("exit", () => {
-  mcpClientService.disconnectAll().catch(console.error);
+  mcpClient.disconnectAll().catch(console.error);
 });
 
 process.on("SIGINT", () => {
-  mcpClientService.disconnectAll().catch(console.error);
+  mcpClient.disconnectAll().catch(console.error);
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
-  mcpClientService.disconnectAll().catch(console.error);
+  mcpClient.disconnectAll().catch(console.error);
   process.exit(0);
 });

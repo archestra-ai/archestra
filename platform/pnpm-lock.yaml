@@ -126,6 +126,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.3.11
         version: 0.3.11
+      '@hey-api/openapi-ts':
+        specifier: ^0.86.2
+        version: 0.86.7(typescript@5.9.3)
       '@types/lodash':
         specifier: ^4.17.20
         version: 4.17.20

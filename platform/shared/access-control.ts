@@ -71,7 +71,7 @@ export const memberRole = ac.newRole({
   dualLlmResult: ["read"],
   internalMcpCatalog: ["read"],
   mcpServer: ["read"],
-  mcpServerInstallationRequest: ["create", "read"],
+  mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
 });
 

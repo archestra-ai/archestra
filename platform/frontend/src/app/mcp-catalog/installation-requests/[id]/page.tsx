@@ -128,75 +128,61 @@ export default function InstallationRequestDetailPage({
   const isPending = request.status === "pending";
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
-      <div className="mb-6">
-        <Link href="/mcp-catalog/installation-requests">
-          <Button variant="ghost" size="sm" className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Requests
-          </Button>
-        </Link>
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Installation Request
-          </h1>
-          <Badge variant="outline" className={status.color}>
-            <StatusIcon className="h-4 w-4 mr-2" />
-            {status.label}
-          </Badge>
+    <div className="w-full h-full">
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <div className="flex items-center gap-4 mb-2">
+            <Link href="/mcp-catalog/installation-requests">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Installation Request
+            </h1>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground ml-14">
+              Review and manage this installation request
+            </p>
+            <Badge variant="outline" className={status.color}>
+              <StatusIcon className="h-4 w-4 mr-2" />
+              {status.label}
+            </Badge>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Request Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm font-medium mb-1">Catalog ID</p>
-                <p className="text-sm text-muted-foreground font-mono">
-                  {request.externalCatalogId}
-                </p>
-              </div>
-
-              {request.requestReason && (
+      <div className="max-w-5xl mx-auto px-8 py-8">
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="md:col-span-2 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Request Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm font-medium mb-1">Reason for Request</p>
-                  <p className="text-sm text-muted-foreground">
-                    {request.requestReason}
+                  <p className="text-sm font-medium mb-1">Catalog ID</p>
+                  <p className="text-sm text-muted-foreground font-mono">
+                    {request.externalCatalogId}
                   </p>
                 </div>
-              )}
 
-              <div>
-                <p className="text-sm font-medium mb-1">Requested</p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(request.createdAt).toLocaleString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+                {request.requestReason && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">
+                      Reason for Request
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {request.requestReason}
+                    </p>
+                  </div>
+                )}
 
-              {request.adminResponse && (
                 <div>
-                  <p className="text-sm font-medium mb-1">Admin Response</p>
+                  <p className="text-sm font-medium mb-1">Requested</p>
                   <p className="text-sm text-muted-foreground">
-                    {request.adminResponse}
-                  </p>
-                </div>
-              )}
-
-              {request.reviewedAt && (
-                <div>
-                  <p className="text-sm font-medium mb-1">Reviewed</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(request.reviewedAt).toLocaleString("en-US", {
+                    {new Date(request.createdAt).toLocaleString("en-US", {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
@@ -205,202 +191,231 @@ export default function InstallationRequestDetailPage({
                     })}
                   </p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {isAdmin && isPending && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Admin Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!showApprovalForm && !showDeclineForm && (
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() => setShowApprovalForm(true)}
-                      className="flex-1"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Approve Request
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => setShowDeclineForm(true)}
-                      className="flex-1"
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Decline Request
-                    </Button>
+                {request.adminResponse && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Admin Response</p>
+                    <p className="text-sm text-muted-foreground">
+                      {request.adminResponse}
+                    </p>
                   </div>
                 )}
 
-                {showApprovalForm && (
-                  <div className="space-y-3">
-                    <Textarea
-                      placeholder="Optional message to the requester..."
-                      value={adminResponse}
-                      onChange={(e) => setAdminResponse(e.target.value)}
-                      rows={3}
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleApprove}
-                        disabled={approveMutation.isPending}
-                        className="flex-1"
-                      >
-                        {approveMutation.isPending && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Confirm Approval
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowApprovalForm(false);
-                          setAdminResponse("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {showDeclineForm && (
-                  <div className="space-y-3">
-                    <Textarea
-                      placeholder="Reason for declining (optional)..."
-                      value={adminResponse}
-                      onChange={(e) => setAdminResponse(e.target.value)}
-                      rows={3}
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        variant="destructive"
-                        onClick={handleDecline}
-                        disabled={declineMutation.isPending}
-                        className="flex-1"
-                      >
-                        {declineMutation.isPending && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Confirm Decline
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowDeclineForm(false);
-                          setAdminResponse("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
+                {request.reviewedAt && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Reviewed</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(request.reviewedAt).toLocaleString("en-US", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Timeline & Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Textarea
-                  placeholder="Add a note or comment..."
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  rows={3}
-                />
-                <Button
-                  onClick={handleAddNote}
-                  disabled={addNoteMutation.isPending || !newNote.trim()}
-                  size="sm"
-                >
-                  {addNoteMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="mr-2 h-4 w-4" />
+            {isAdmin && isPending && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Admin Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!showApprovalForm && !showDeclineForm && (
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => setShowApprovalForm(true)}
+                        className="flex-1"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Approve Request
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => setShowDeclineForm(true)}
+                        className="flex-1"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Decline Request
+                      </Button>
+                    </div>
                   )}
-                  Add Note
-                </Button>
-              </div>
 
-              <Separator />
+                  {showApprovalForm && (
+                    <div className="space-y-3">
+                      <Textarea
+                        placeholder="Optional message to the requester..."
+                        value={adminResponse}
+                        onChange={(e) => setAdminResponse(e.target.value)}
+                        rows={3}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleApprove}
+                          disabled={approveMutation.isPending}
+                          className="flex-1"
+                        >
+                          {approveMutation.isPending && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Confirm Approval
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowApprovalForm(false);
+                            setAdminResponse("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
-              {request.notes && request.notes.length > 0 ? (
-                <div className="space-y-4">
-                  {[...request.notes]
-                    .sort(
-                      (a, b) =>
-                        new Date(b.createdAt).getTime() -
-                        new Date(a.createdAt).getTime(),
-                    )
-                    .map((note) => (
-                      <div key={note.id} className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium">{note.userName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(note.createdAt).toLocaleString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                  {showDeclineForm && (
+                    <div className="space-y-3">
+                      <Textarea
+                        placeholder="Reason for declining (optional)..."
+                        value={adminResponse}
+                        onChange={(e) => setAdminResponse(e.target.value)}
+                        rows={3}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          onClick={handleDecline}
+                          disabled={declineMutation.isPending}
+                          className="flex-1"
+                        >
+                          {declineMutation.isPending && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Confirm Decline
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowDeclineForm(false);
+                            setAdminResponse("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Timeline & Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Add a note or comment..."
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    rows={3}
+                  />
+                  <Button
+                    onClick={handleAddNote}
+                    disabled={addNoteMutation.isPending || !newNote.trim()}
+                    size="sm"
+                  >
+                    {addNoteMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Add Note
+                  </Button>
+                </div>
+
+                <Separator />
+
+                {request.notes && request.notes.length > 0 ? (
+                  <div className="space-y-4">
+                    {[...request.notes]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAt).getTime() -
+                          new Date(a.createdAt).getTime(),
+                      )
+                      .map((note) => (
+                        <div key={note.id} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">
+                              {note.userName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(note.createdAt).toLocaleString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {note.content}
                           </p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {note.content}
-                        </p>
-                      </div>
-                    ))}
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No notes yet
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Badge variant="outline" className={`${status.color} text-sm`}>
+                  <StatusIcon className="h-4 w-4 mr-2" />
+                  {status.label}
+                </Badge>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <p className="font-medium mb-1">Request ID</p>
+                  <p className="text-muted-foreground font-mono text-xs break-all">
+                    {request.id}
+                  </p>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No notes yet
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Badge variant="outline" className={`${status.color} text-sm`}>
-                <StatusIcon className="h-4 w-4 mr-2" />
-                {status.label}
-              </Badge>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="font-medium mb-1">Request ID</p>
-                <p className="text-muted-foreground font-mono text-xs break-all">
-                  {request.id}
-                </p>
-              </div>
-              <Separator />
-              <div>
-                <p className="font-medium mb-1">Notes</p>
-                <p className="text-muted-foreground">
-                  {request.notes?.length || 0} total
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                <Separator />
+                <div>
+                  <p className="font-medium mb-1">Notes</p>
+                  <p className="text-muted-foreground">
+                    {request.notes?.length || 0} total
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

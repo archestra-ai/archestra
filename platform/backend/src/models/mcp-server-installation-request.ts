@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
+import { getMcpServer } from "@/clients/archestra-catalog";
 import db, { schema } from "@/database";
 import type {
   InsertMcpServerInstallationRequest,
@@ -7,6 +8,7 @@ import type {
   McpServerInstallationRequestStatus,
   UpdateMcpServerInstallationRequest,
 } from "@/types";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 class McpServerInstallationRequestModel {
   static async create(
@@ -112,6 +114,70 @@ class McpServerInstallationRequestModel {
     reviewedBy: string,
     adminResponse?: string,
   ): Promise<McpServerInstallationRequest | null> {
+    // First, get the current request to check status and get data
+    const currentRequest = await McpServerInstallationRequestModel.findById(id);
+    if (!currentRequest) {
+      return null;
+    }
+
+    // Short-circuit if already approved
+    if (currentRequest.status === "approved") {
+      return currentRequest;
+    }
+
+    // Create internal catalog item based on request type
+    try {
+      if (currentRequest.externalCatalogId) {
+        // External catalog request - fetch from Archestra catalog
+        const externalServerResponse = await getMcpServer({
+          path: { name: currentRequest.externalCatalogId },
+        });
+
+        if (externalServerResponse.data) {
+          const externalServer = externalServerResponse.data;
+
+          // Create internal catalog item from external server data
+          await InternalMcpCatalogModel.create({
+            label: externalServer.display_name || externalServer.name,
+            name: externalServer.name,
+            version: undefined,
+            serverType: externalServer.server.type,
+            serverUrl:
+              externalServer.server.type === "remote"
+                ? externalServer.server.url
+                : undefined,
+            docsUrl:
+              externalServer.server.type === "remote"
+                ? externalServer.server.docs_url
+                : undefined,
+            userConfig: externalServer.user_config,
+            oauthConfig: externalServer.oauth_config,
+          });
+        }
+      } else if (
+        currentRequest.customServerConfig &&
+        currentRequest.customServerConfig.type === "remote"
+      ) {
+        // Custom server request - use provided config
+        const config = currentRequest.customServerConfig;
+
+        await InternalMcpCatalogModel.create({
+          label: config.label,
+          name: config.name,
+          version: config.version,
+          serverType: "remote",
+          serverUrl: config.serverUrl,
+          docsUrl: config.docsUrl,
+          userConfig: config.userConfig,
+          oauthConfig: config.oauthConfig,
+        });
+      }
+    } catch (error) {
+      // Log the error but still approve the request - admin can handle catalog creation manually
+      console.error("Failed to create catalog item during approval:", error);
+    }
+
+    // Update the request status
     const [updatedRequest] = await db
       .update(schema.mcpServerInstallationRequestTable)
       .set({

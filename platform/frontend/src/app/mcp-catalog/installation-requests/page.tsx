@@ -26,76 +26,80 @@ export default function InstallationRequestsPage() {
   );
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          MCP Server Installation Requests
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          {isAdmin
-            ? "Review and manage installation requests from your team members"
-            : "View your installation requests and their status"}
-        </p>
+    <div className="w-full h-full">
+      <div className="border-b border-border bg-card/30">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <h1 className="text-2xl font-semibold tracking-tight mb-2">
+            MCP Server Installation Requests
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {isAdmin
+              ? "Review and manage installation requests from your team members"
+              : "View your installation requests and their status"}
+          </p>
+        </div>
       </div>
 
-      <Tabs
-        value={statusFilter}
-        onValueChange={(v) =>
-          setStatusFilter(v as "all" | "pending" | "approved" | "declined")
-        }
-        className="space-y-4"
-      >
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="pending">
-            <Clock className="h-4 w-4 mr-1" />
-            Pending
-          </TabsTrigger>
-          <TabsTrigger value="approved">
-            <CheckCircle className="h-4 w-4 mr-1" />
-            Approved
-          </TabsTrigger>
-          <TabsTrigger value="declined">
-            <XCircle className="h-4 w-4 mr-1" />
-            Declined
-          </TabsTrigger>
-        </TabsList>
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        <Tabs
+          value={statusFilter}
+          onValueChange={(v) =>
+            setStatusFilter(v as "all" | "pending" | "approved" | "declined")
+          }
+          className="space-y-4"
+        >
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="pending">
+              <Clock className="h-4 w-4 mr-1" />
+              Pending
+            </TabsTrigger>
+            <TabsTrigger value="approved">
+              <CheckCircle className="h-4 w-4 mr-1" />
+              Approved
+            </TabsTrigger>
+            <TabsTrigger value="declined">
+              <XCircle className="h-4 w-4 mr-1" />
+              Declined
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value={statusFilter} className="space-y-4">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
-                (id) => (
-                  <Card key={id}>
-                    <CardHeader>
-                      <Skeleton className="h-6 w-3/4" />
-                      <Skeleton className="h-4 w-1/2 mt-2" />
-                    </CardHeader>
-                    <CardContent>
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-full mt-2" />
-                    </CardContent>
-                  </Card>
-                ),
-              )}
-            </div>
-          ) : requests && requests.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {requests.map((request) => (
-                <RequestCard key={request.id} request={request} />
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground text-center">
-                  No installation requests found
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+          <TabsContent value={statusFilter} className="space-y-4">
+            {isLoading ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
+                  (id) => (
+                    <Card key={id}>
+                      <CardHeader>
+                        <Skeleton className="h-6 w-3/4" />
+                        <Skeleton className="h-4 w-1/2 mt-2" />
+                      </CardHeader>
+                      <CardContent>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full mt-2" />
+                      </CardContent>
+                    </Card>
+                  ),
+                )}
+              </div>
+            ) : requests && requests.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {requests.map((request) => (
+                  <RequestCard key={request.id} request={request} />
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <p className="text-muted-foreground text-center">
+                    No installation requests found
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

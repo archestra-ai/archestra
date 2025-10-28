@@ -5,8 +5,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRole } from "@/lib/auth.hook";
 import {
@@ -66,28 +74,68 @@ export default function InstallationRequestsPage() {
 
           <TabsContent value={statusFilter} className="space-y-4">
             {isLoading ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {["skeleton-1", "skeleton-2", "skeleton-3", "skeleton-4"].map(
-                  (id) => (
-                    <Card key={id}>
-                      <CardHeader>
-                        <Skeleton className="h-6 w-3/4" />
-                        <Skeleton className="h-4 w-1/2 mt-2" />
-                      </CardHeader>
-                      <CardContent>
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-full mt-2" />
-                      </CardContent>
-                    </Card>
-                  ),
-                )}
-              </div>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Request</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Requested</TableHead>
+                        <TableHead className="w-24">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[
+                        "skeleton-1",
+                        "skeleton-2",
+                        "skeleton-3",
+                        "skeleton-4",
+                      ].map((id) => (
+                        <TableRow key={id}>
+                          <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-6 w-16" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-48" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-24" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-8 w-16" />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             ) : requests && requests.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {requests.map((request) => (
-                  <RequestCard key={request.id} request={request} />
-                ))}
-              </div>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Request</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Requested</TableHead>
+                        <TableHead className="w-24">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {requests.map((request) => (
+                        <RequestRow key={request.id} request={request} />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             ) : (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -104,7 +152,7 @@ export default function InstallationRequestsPage() {
   );
 }
 
-function RequestCard({ request }: { request: McpServerInstallationRequest }) {
+function RequestRow({ request }: { request: McpServerInstallationRequest }) {
   const statusConfig = {
     pending: {
       icon: Clock,
@@ -127,58 +175,60 @@ function RequestCard({ request }: { request: McpServerInstallationRequest }) {
   const StatusIcon = status.icon;
 
   return (
-    <Link href={`/mcp-catalog/installation-requests/${request.id}`}>
-      <Card className="hover:shadow-md transition-shadow cursor-pointer">
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <CardTitle className="text-lg">Installation Request</CardTitle>
-            <Badge variant="outline" className={status.color}>
-              <StatusIcon className="h-3 w-3 mr-1" />
-              {status.label}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Requested{" "}
-            {new Date(request.createdAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {request.requestReason && (
-            <div>
-              <p className="text-sm font-medium mb-1">Reason</p>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {request.requestReason}
-              </p>
-            </div>
-          )}
-
-          {request.status !== "pending" && request.adminResponse && (
-            <div>
-              <p className="text-sm font-medium mb-1">Admin Response</p>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {request.adminResponse}
-              </p>
-            </div>
-          )}
-
-          {request.notes && request.notes.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {request.notes.length}{" "}
-              {request.notes.length === 1 ? "note" : "notes"}
+    <TableRow className="cursor-pointer hover:bg-muted/50">
+      <TableCell>
+        <div className="space-y-1">
+          <p className="font-medium">Installation Request</p>
+          {request.externalCatalogId && (
+            <p className="text-xs text-muted-foreground font-mono">
+              External: {request.externalCatalogId}
             </p>
           )}
-
-          <div className="flex items-center justify-between pt-2">
-            <Button variant="outline" size="sm" asChild>
-              <span>View Details</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+          {request.customServerConfig && (
+            <p className="text-xs text-muted-foreground">
+              Custom:{" "}
+              {request.customServerConfig.type === "remote"
+                ? request.customServerConfig.name
+                : "Local Server"}
+            </p>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline" className={status.color}>
+          <StatusIcon className="h-3 w-3 mr-1" />
+          {status.label}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <div className="max-w-xs">
+          {request.requestReason ? (
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {request.requestReason}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              No reason provided
+            </p>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <p className="text-sm text-muted-foreground">
+          {new Date(request.createdAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })}
+        </p>
+      </TableCell>
+      <TableCell>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/mcp-catalog/installation-requests/${request.id}`}>
+            View
+          </Link>
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }

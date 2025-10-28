@@ -1,4 +1,8 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type {
+  McpServerInstallationRequestNote,
+  McpServerInstallationRequestStatus,
+} from "@/types";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import usersTable from "./user";
 
@@ -17,7 +21,7 @@ const mcpServerInstallationRequestTable = pgTable(
         onDelete: "cascade",
       }),
     status: text("status")
-      .$type<"pending" | "approved" | "declined">()
+      .$type<McpServerInstallationRequestStatus>()
       .notNull()
       .default("pending"),
     requestReason: text("request_reason"),
@@ -27,24 +31,14 @@ const mcpServerInstallationRequestTable = pgTable(
     }),
     reviewedAt: timestamp("reviewed_at", { mode: "date" }),
     notes: jsonb("notes")
-      .$type<
-        Array<{
-          id: string;
-          userId: string;
-          userName: string;
-          content: string;
-          createdAt: string;
-        }>
-      >()
+      .$type<Array<McpServerInstallationRequestNote>>()
       .default([]),
-    createdAt: timestamp("created_at", { mode: "date" })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-  }
+  },
 );
 
 export default mcpServerInstallationRequestTable;

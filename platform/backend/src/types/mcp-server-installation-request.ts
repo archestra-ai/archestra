@@ -6,8 +6,13 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-// Define Zod schema for notes JSONB field
-const NoteSchema = z.object({
+const McpServerInstallationRequestStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "declined",
+]);
+
+const McpServerInstallationRequestNoteSchema = z.object({
   id: z.string(),
   userId: z.string(),
   userName: z.string(),
@@ -16,24 +21,31 @@ const NoteSchema = z.object({
 });
 
 export const SelectMcpServerInstallationRequestSchema = createSelectSchema(
-  schema.mcpServerInstallationRequestTable
+  schema.mcpServerInstallationRequestTable,
 ).extend({
-  notes: z.array(NoteSchema).nullable(),
+  notes: z.array(McpServerInstallationRequestNoteSchema).nullable(),
 });
 
 export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
-  schema.mcpServerInstallationRequestTable
+  schema.mcpServerInstallationRequestTable,
 ).extend({
-  notes: z.array(NoteSchema).nullable().optional(),
-  status: z.enum(["pending", "approved", "declined"]).optional(),
+  notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
+  status: McpServerInstallationRequestStatusSchema.optional(),
 });
 
 export const UpdateMcpServerInstallationRequestSchema = createUpdateSchema(
-  schema.mcpServerInstallationRequestTable
+  schema.mcpServerInstallationRequestTable,
 ).extend({
-  notes: z.array(NoteSchema).nullable().optional(),
-  status: z.enum(["pending", "approved", "declined"]).optional(),
+  notes: z.array(McpServerInstallationRequestNoteSchema).nullable().optional(),
+  status: McpServerInstallationRequestStatusSchema.optional(),
 });
+
+export type McpServerInstallationRequestStatus = z.infer<
+  typeof McpServerInstallationRequestStatusSchema
+>;
+export type McpServerInstallationRequestNote = z.infer<
+  typeof McpServerInstallationRequestNoteSchema
+>;
 
 export type McpServerInstallationRequest = z.infer<
   typeof SelectMcpServerInstallationRequestSchema

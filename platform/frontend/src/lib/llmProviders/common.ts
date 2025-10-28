@@ -1,12 +1,10 @@
+import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type {
-  GetDualLlmResultsByInteractionResponses,
-  GetInteractionsResponses,
-} from "@/lib/clients/api";
 
-export type Interaction = GetInteractionsResponses["200"]["data"][number];
+export type Interaction =
+  archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
 export type DualLlmResult =
-  GetDualLlmResultsByInteractionResponses["200"][number];
+  archestraApiTypes.GetDualLlmResultsByInteractionResponses["200"][number];
 
 export interface RefusalInfo {
   toolName?: string;

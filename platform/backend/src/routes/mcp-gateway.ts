@@ -8,9 +8,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { ToolModel } from "@/models";
-import mcpClientService from "@/services/mcp-client";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -94,18 +94,15 @@ async function createAgentServer(
         // Generate a unique ID for this tool call
         const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-        // Create CommonToolCall for McpClientService
+        // Create CommonToolCall for McpClient
         const toolCall: CommonToolCall = {
           id: toolCallId,
           name,
           arguments: args || {},
         };
 
-        // Execute the tool call via McpClientService
-        const results = await mcpClientService.executeToolCalls(
-          [toolCall],
-          agentId,
-        );
+        // Execute the tool call via McpClient
+        const results = await mcpClient.executeToolCalls([toolCall], agentId);
 
         if (results.length === 0) {
           throw {

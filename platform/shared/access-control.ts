@@ -16,6 +16,7 @@ export type Resource =
   | "invitation"
   | "internalMcpCatalog"
   | "mcpServer"
+  | "mcpServerInstallationRequest"
   | "team"
 
 /**
@@ -44,6 +45,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   invitation: ["create"],
   internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "update", "delete"],
+  mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   team: ["create", "read", "update", "delete"],
 };
 
@@ -58,6 +60,7 @@ export const adminRole = ac.newRole({
 // - full access to tools, policies, interactions
 // - read-only access to dual LLM configs and results
 // - read-only access to MCP catalog and servers
+// - can create and read MCP server installation requests
 // - read-only access to teams
 export const memberRole = ac.newRole({
   agent: ["read"],
@@ -68,6 +71,7 @@ export const memberRole = ac.newRole({
   dualLlmResult: ["read"],
   internalMcpCatalog: ["read"],
   mcpServer: ["read"],
+  mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
 });
 

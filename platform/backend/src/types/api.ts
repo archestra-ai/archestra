@@ -11,6 +11,7 @@ export const ErrorResponseSchema = z.object({
     }),
   ]),
 });
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 /**
  * Pagination query parameters schema
@@ -126,6 +127,16 @@ export const RouteId = {
   GetMcpServerTools: "getMcpServerTools",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+
+  // MCP Server Installation Request Routes
+  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
+  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
+  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
+  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
+  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
+  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
+  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
+  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
 
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",

@@ -1,8 +1,10 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { type GetHealthResponses, getHealth } from "@/lib/clients/api";
+
+const { getHealth } = archestraApiSdk;
 
 export function useHealth(params?: {
-  initialData?: GetHealthResponses["200"];
+  initialData?: archestraApiTypes.GetHealthResponses["200"];
 }) {
   return useQuery({
     queryKey: ["health"],

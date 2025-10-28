@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import type { archestraApiTypes } from "@shared";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,66 +9,109 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import {
+  McpCatalogForm,
+  type McpCatalogFormValues,
+  transformCatalogItemToFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form";
 
 interface EditCatalogDialogProps {
-  item: GetInternalMcpCatalogResponses["200"][number] | null;
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
+  onReinstallRequired: (
+    catalogId: string,
+    updatedData: { name?: string; serverUrl?: string },
+  ) => void;
 }
 
-export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
-  const [itemName, setItemName] = useState("");
+export function EditCatalogDialog({
+  item,
+  onClose,
+  onReinstallRequired,
+}: EditCatalogDialogProps) {
   const updateMutation = useUpdateInternalMcpCatalogItem();
-
-  // Sync item name when item changes
-  useEffect(() => {
-    if (item) {
-      setItemName(item.name);
-    }
-  }, [item]);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleClose = () => {
     onClose();
-    setItemName("");
   };
 
-  const handleSubmit = async () => {
+  const requiresReinstall = (values: McpCatalogFormValues): boolean => {
+    if (!item) return false;
+
+    const originalValues = transformCatalogItemToFormValues(item);
+
+    // Name, serverUrl, and authentication changes require reinstall
+    if (values.name !== originalValues.name) return true;
+    if (values.serverUrl !== originalValues.serverUrl) return true;
+    if (values.authMethod !== originalValues.authMethod) return true;
+
+    // Check OAuth config changes (deep comparison)
+    if (
+      JSON.stringify(values.oauthConfig) !==
+      JSON.stringify(originalValues.oauthConfig)
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const onSubmit = async (values: McpCatalogFormValues) => {
     if (!item) return;
+
+    const apiData = transformFormToApiData(values);
+
+    // Update the catalog item
     await updateMutation.mutateAsync({
       id: item.id,
-      data: { name: itemName },
+      data: apiData,
     });
+
+    const needsReinstall = requiresReinstall(values);
+
+    // Close the edit dialog first
     handleClose();
+
+    // Then notify parent about reinstall requirement with updated data
+    if (needsReinstall) {
+      onReinstallRequired(item.id, {
+        name: values.name,
+        serverUrl: values.serverUrl,
+      });
+    }
   };
 
   return (
     <Dialog open={!!item} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Catalog Item</DialogTitle>
-          <DialogDescription>Update the catalog item name.</DialogDescription>
+          <DialogTitle>Edit MCP Server</DialogTitle>
+          <DialogDescription>
+            Update the configuration for this MCP server.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="edit-name">Name</Label>
-          <Input
-            id="edit-name"
-            value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
-            placeholder="Enter server name"
+
+        {item && (
+          <McpCatalogForm
+            mode="edit"
+            initialValues={item}
+            onSubmit={onSubmit}
+            submitButtonRef={submitButtonRef}
           />
-        </div>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} type="button">
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
-            disabled={!itemName.trim() || updateMutation.isPending}
+            onClick={() => submitButtonRef.current?.click()}
+            disabled={updateMutation.isPending}
           >
-            {updateMutation.isPending ? "Updating..." : "Update"}
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

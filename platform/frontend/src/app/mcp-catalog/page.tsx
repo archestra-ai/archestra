@@ -1,11 +1,10 @@
-import type { ErrorExtended } from "@shared";
-import { ServerErrorFallback } from "@/components/error-fallback";
 import {
-  type GetInternalMcpCatalogResponses,
-  type GetMcpServersResponses,
-  getInternalMcpCatalog,
-  getMcpServers,
-} from "@/lib/clients/api";
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ErrorExtended,
+} from "@shared";
+
+import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
 import McpRegistryPage from "./page.client";
 
@@ -13,8 +12,8 @@ export const dynamic = "force-dynamic";
 
 export default async function McpRegistryPageServer() {
   let initialData: {
-    catalog: GetInternalMcpCatalogResponses["200"];
-    servers: GetMcpServersResponses["200"];
+    catalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+    servers: archestraApiTypes.GetMcpServersResponses["200"];
   } = {
     catalog: [],
     servers: [],
@@ -23,8 +22,9 @@ export default async function McpRegistryPageServer() {
   try {
     const headers = await getServerApiHeaders();
     initialData = {
-      catalog: (await getInternalMcpCatalog({ headers })).data || [],
-      servers: (await getMcpServers({ headers })).data || [],
+      catalog:
+        (await archestraApiSdk.getInternalMcpCatalog({ headers })).data || [],
+      servers: (await archestraApiSdk.getMcpServers({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

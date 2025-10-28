@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -16,11 +17,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
-  tool: GetAllAgentToolsResponses["200"][number] | UnassignedToolData | null;
+  tool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"][number]
+    | UnassignedToolData
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

@@ -1,8 +1,8 @@
-import type { GetFeaturesResponses } from "@/lib/clients/api";
+import type { archestraApiTypes } from "@shared";
 import { useFeatures } from "./features.query";
 
 export function useFeatureFlag(
-  flag: keyof GetFeaturesResponses["200"],
+  flag: keyof archestraApiTypes.GetFeaturesResponses["200"],
 ): boolean {
   const { data: features, isLoading } = useFeatures();
 

@@ -10,6 +10,7 @@ import {
   BookOpen,
   Bot,
   Bug,
+  ClipboardList,
   FileJson2,
   Github,
   Info,
@@ -84,6 +85,13 @@ const getNavigationItems = (
             title: "MCP Registry",
             url: "/mcp-catalog",
             icon: Router,
+            subItems: [
+              {
+                title: "Installation Requests",
+                url: "/mcp-catalog/installation-requests",
+                icon: ClipboardList,
+              },
+            ],
           },
           ...(role === "admin"
             ? [

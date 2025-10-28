@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Dual LLM Config**: <http://localhost:3000/dual-llm>
 - **Settings/Teams**: <http://localhost:3000/account/settings>
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
+- **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
@@ -66,7 +67,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers)
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow
 
 **Workspaces**:
 
@@ -108,5 +109,12 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 - Breaking change: `usersWithAccess[]` replaced with `teams[]` in APIs
 - Admin-only team CRUD operations via `/api/teams/*` routes
 - Members can read teams and access team-assigned agents/MCP servers
+
+**MCP Server Installation Requests**:
+
+- Members can request MCP servers from external catalog
+- Admins approve/decline requests with optional messages
+- Prevents duplicate pending requests for same catalog item
+- Full timeline and notes functionality for collaboration
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

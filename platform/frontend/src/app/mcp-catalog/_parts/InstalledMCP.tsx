@@ -1,25 +1,24 @@
 "use client";
 
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { GetMcpServersResponses } from "@/lib/clients/api";
-import { getTeams } from "@/lib/clients/api/sdk.gen";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 export function InstalledMCP({
   initialData,
 }: {
-  initialData?: GetMcpServersResponses["200"];
+  initialData?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
   const { data: servers } = useMcpServers({ initialData });
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await getTeams();
+      const { data } = await archestraApiSdk.getTeams();
       return data;
     },
   });
@@ -27,7 +26,7 @@ export function InstalledMCP({
   const [serverSearchQuery, setServerSearchQuery] = useState("");
 
   const handleDelete = useCallback(
-    async (server: GetMcpServersResponses["200"][number]) => {
+    async (server: archestraApiTypes.GetMcpServersResponses["200"][number]) => {
       await deleteMutation.mutateAsync({
         id: server.id,
         name: server.name,

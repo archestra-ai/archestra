@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 
@@ -11,6 +11,7 @@ const mcpServerTable = pgTable("mcp_server", {
   secretId: uuid("secret_id").references(() => secretTable.id, {
     onDelete: "set null",
   }),
+  reinstallRequired: boolean("reinstall_required").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

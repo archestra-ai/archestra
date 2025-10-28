@@ -1,22 +1,22 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import {
+
+const {
   assignToolToAgent,
-  type GetAllAgentToolsResponses,
   getAgentTools,
   getAllAgentTools,
-  type UpdateAgentToolData,
   unassignToolFromAgent,
   updateAgentTool,
-} from "@/lib/clients/api";
+} = archestraApiSdk;
 
 export function useAllAgentTools({
   initialData,
 }: {
-  initialData?: GetAllAgentToolsResponses["200"];
+  initialData?: archestraApiTypes.GetAllAgentToolsResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["agent-tools"],
@@ -97,7 +97,9 @@ export function useAgentToolPatchMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      updatedAgentTool: UpdateAgentToolData["body"] & { id: string },
+      updatedAgentTool: archestraApiTypes.UpdateAgentToolData["body"] & {
+        id: string;
+      },
     ) => {
       const result = await updateAgentTool({
         body: updatedAgentTool,
@@ -107,26 +109,25 @@ export function useAgentToolPatchMutation() {
     },
     onSuccess: (data) => {
       // Update the cache directly without invalidating
-      queryClient.setQueryData<GetAllAgentToolsResponses["200"]>(
-        ["agent-tools"],
-        (old) => {
-          if (!old || !data) return old;
+      queryClient.setQueryData<
+        archestraApiTypes.GetAllAgentToolsResponses["200"]
+      >(["agent-tools"], (old) => {
+        if (!old || !data) return old;
 
-          // Find and update the agent-tool with the response data
-          const agentToolIndex = old.findIndex((at) => at.id === data.id);
-          if (agentToolIndex === -1) {
-            return old;
-          }
+        // Find and update the agent-tool with the response data
+        const agentToolIndex = old.findIndex((at) => at.id === data.id);
+        if (agentToolIndex === -1) {
+          return old;
+        }
 
-          // Create a new array with the updated agent-tool from the server response
-          const newAgentTools = [...old];
-          newAgentTools[agentToolIndex] = {
-            ...newAgentTools[agentToolIndex],
-            ...data,
-          };
-          return newAgentTools;
-        },
-      );
+        // Create a new array with the updated agent-tool from the server response
+        const newAgentTools = [...old];
+        newAgentTools[agentToolIndex] = {
+          ...newAgentTools[agentToolIndex],
+          ...data,
+        };
+        return newAgentTools;
+      });
     },
   });
 }

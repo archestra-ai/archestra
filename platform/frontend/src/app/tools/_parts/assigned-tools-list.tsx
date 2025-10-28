@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -34,14 +35,13 @@ import {
   useAgentToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { formatDate } from "@/lib/utils";
 
-type AgentToolData = GetAllAgentToolsResponses["200"][number];
+type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
 interface AssignedToolsListProps {

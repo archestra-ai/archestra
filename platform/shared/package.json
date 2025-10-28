@@ -7,7 +7,9 @@
   "exports": {
     ".": "./index.ts"
   },
-  "scripts": {},
+  "scripts": {
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,6 +18,9 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "^0.86.2",
+    "@types/node": "^24",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }
 }

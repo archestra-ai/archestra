@@ -161,6 +161,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Track if we created a new secret (for cleanup on failure)
+        let createdSecretId: string | undefined;
+
         // If accessToken is provided (PAT flow), create a secret for it
         if (accessToken && !secretId) {
           const secret = await SecretModel.create({
@@ -169,6 +172,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
           secretId = secret.id;
+          createdSecretId = secret.id;
         }
 
         // Validate connection if secretId is provided
@@ -180,6 +184,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
 
           if (!isValid) {
+            // Clean up the secret we just created if validation fails
+            if (createdSecretId) {
+              await SecretModel.delete(createdSecretId);
+            }
+
             return reply.status(400).send({
               error: {
                 message:
@@ -196,27 +205,39 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(secretId && { secretId }),
         });
 
-        // Get real tools from the MCP server
-        const tools = await McpServerModel.getToolsFromServer(mcpServer);
+        try {
+          // Get real tools from the MCP server
+          const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
-        // Persist tools in the database with source='mcp_server' and mcpServerId
-        for (const tool of tools) {
-          const createdTool = await ToolModel.create({
-            name: ToolModel.slugifyName(mcpServer.name, tool.name),
-            description: tool.description,
-            parameters: tool.inputSchema,
-            mcpServerId: mcpServer.id,
-          });
+          // Persist tools in the database with source='mcp_server' and mcpServerId
+          for (const tool of tools) {
+            const createdTool = await ToolModel.create({
+              name: ToolModel.slugifyName(mcpServer.name, tool.name),
+              description: tool.description,
+              parameters: tool.inputSchema,
+              mcpServerId: mcpServer.id,
+            });
 
-          // If agentIds were provided, create agent-tool assignments
-          if (agentIds && agentIds.length > 0) {
-            for (const agentId of agentIds) {
-              await AgentToolModel.create(agentId, createdTool.id);
+            // If agentIds were provided, create agent-tool assignments
+            if (agentIds && agentIds.length > 0) {
+              for (const agentId of agentIds) {
+                await AgentToolModel.create(agentId, createdTool.id);
+              }
             }
           }
-        }
 
-        return reply.send(mcpServer);
+          return reply.send(mcpServer);
+        } catch (toolError) {
+          // If fetching/creating tools fails, clean up everything we created
+          await McpServerModel.delete(mcpServer.id);
+
+          // Also clean up the secret if we created one
+          if (createdSecretId) {
+            await SecretModel.delete(createdSecretId);
+          }
+
+          throw toolError;
+        }
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

@@ -286,6 +286,9 @@ const routePermissionsConfig: Partial<
   [RouteId.RevokeUserMcpServerAccess]: {
     mcpServer: ["delete"],
   },
+  [RouteId.RevokeTeamMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
   [RouteId.GetMcpServerInstallationRequests]: {
     mcpServerInstallationRequest: ["read"],
   },

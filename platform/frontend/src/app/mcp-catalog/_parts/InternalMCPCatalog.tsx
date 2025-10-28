@@ -34,6 +34,7 @@ import {
   useInstallMcpServer,
   useMcpServers,
   useMcpServerTools,
+  useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -63,6 +64,7 @@ function InternalServerCard({
   onInstallTeam,
   onInstallNoAuth,
   onUninstall,
+  onRevokeMyAccess,
   onReinstall,
   onEdit,
   onDelete,
@@ -84,6 +86,7 @@ function InternalServerCard({
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
   onUninstall: () => void;
+  onRevokeMyAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -104,7 +107,7 @@ function InternalServerCard({
   );
 
   return (
-    <Card className="flex flex-col relative pt-4">
+    <Card className="flex flex-col relative pt-4 min-w-[350px]">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="min-w-0">
@@ -133,29 +136,31 @@ function InternalServerCard({
               )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {isAdmin && (
+            <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onDelete}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-2 justify-end">
@@ -165,12 +170,12 @@ function InternalServerCard({
             (toolsAssignedCount !== undefined &&
               toolsDiscoveredCount !== undefined)) && (
             <div className="bg-muted/50 rounded-md mb-2 overflow-hidden">
-              {userCount !== undefined && userCount > 0 && (
+              {isAdmin && userCount !== undefined && userCount > 0 && (
                 <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">
-                      User credentials:{" "}
+                      Personal credentials:{" "}
                       <span className="font-medium text-foreground">
                         {userCount}
                       </span>
@@ -184,7 +189,7 @@ function InternalServerCard({
                       )}
                     </span>
                   </div>
-                  {isAdmin && onManageUsers && (
+                  {onManageUsers && (
                     <Button
                       onClick={onManageUsers}
                       size="sm"
@@ -232,9 +237,9 @@ function InternalServerCard({
                     <div className="flex items-center gap-2">
                       <Wrench className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">
-                        Tools assigned / discovered:{" "}
+                        Tools assigned:{" "}
                         <span className="font-medium text-foreground">
-                          {toolsAssignedCount} / {toolsDiscoveredCount}
+                          {toolsAssignedCount} (out of {toolsDiscoveredCount})
                         </span>
                       </span>
                     </div>
@@ -275,7 +280,7 @@ function InternalServerCard({
                 className="w-full"
               >
                 <User className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Add Personal Auth"}
+                {isInstalling ? "Adding..." : "Personal Auth"}
               </Button>
             )}
             {requiresAuth &&
@@ -289,16 +294,27 @@ function InternalServerCard({
                   className="w-full"
                 >
                   <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Adding..." : "Add Team Auth"}
+                  {isInstalling ? "Adding..." : "Team Auth"}
                 </Button>
               )}
-            <Button
-              onClick={onUninstall}
-              size="sm"
-              className="w-full bg-accent text-accent-foreground hover:bg-accent"
-            >
-              Uninstall
-            </Button>
+            {isAdmin && (
+              <Button
+                onClick={onUninstall}
+                size="sm"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              >
+                Uninstall
+              </Button>
+            )}
+            {!isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
+              <Button
+                onClick={onRevokeMyAccess}
+                size="sm"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              >
+                Revoke my access
+              </Button>
+            )}
           </>
         ) : requiresAuth ? (
           <div className="flex gap-2">
@@ -310,7 +326,7 @@ function InternalServerCard({
               className="flex-1"
             >
               <User className="mr-2 h-4 w-4" />
-              {isInstalling ? "Adding..." : "Add Personal Auth"}
+              {isInstalling ? "Adding..." : "Personal Auth"}
             </Button>
             {isAdmin && (
               <Button
@@ -321,7 +337,7 @@ function InternalServerCard({
                 className="flex-1"
               >
                 <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Add Team Auth"}
+                {isInstalling ? "Adding..." : "Team Auth"}
               </Button>
             )}
           </div>
@@ -351,6 +367,7 @@ function InternalServerCardWithTools({
   onInstallTeam,
   onInstallNoAuth,
   onUninstall,
+  onRevokeMyAccess,
   onReinstall,
   onEdit,
   onDelete,
@@ -369,6 +386,7 @@ function InternalServerCardWithTools({
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
   onUninstall: () => void;
+  onRevokeMyAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -402,6 +420,7 @@ function InternalServerCardWithTools({
       onInstallTeam={onInstallTeam}
       onInstallNoAuth={onInstallNoAuth}
       onUninstall={onUninstall}
+      onRevokeMyAccess={onRevokeMyAccess}
       onReinstall={onReinstall}
       onEdit={onEdit}
       onDelete={onDelete}
@@ -433,6 +452,9 @@ export function InternalMCPCatalog({
   const userRole = useRole();
   const isAdmin = userRole === "admin";
   const deleteMutation = useDeleteMcpServer();
+  const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
+  const session = authClient.useSession();
+  const currentUserId = session.data?.user?.id;
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
@@ -487,7 +509,7 @@ export function InternalMCPCatalog({
     archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [managingUsersState, setManagingUsersState] = useState<{
-    serverId: string;
+    server: archestraApiTypes.GetMcpServersResponses["200"][number];
     label: string;
   } | null>(null);
   const [managingTeamsState, setManagingTeamsState] = useState<{
@@ -500,13 +522,6 @@ export function InternalMCPCatalog({
       (server) => server.id === toolsDialogServerId,
     );
   }, [installedServers, toolsDialogServerId]);
-
-  const managingUsersServer = useMemo(() => {
-    if (!managingUsersState) return null;
-    return installedServers?.find(
-      (server) => server.id === managingUsersState.serverId,
-    );
-  }, [installedServers, managingUsersState]);
 
   const { data: toolsDialogTools, isLoading: isLoadingToolsDialogTools } =
     useMcpServerTools(toolsDialogServerId);
@@ -776,6 +791,25 @@ export function InternalMCPCatalog({
     [],
   );
 
+  const handleRevokeMyAccess = useCallback(
+    async (serverId: string) => {
+      if (!currentUserId) {
+        toast.error("User ID not found");
+        return;
+      }
+
+      try {
+        await revokeUserAccessMutation.mutateAsync({
+          serverId,
+          userId: currentUserId,
+        });
+      } catch (error) {
+        console.error("Error revoking access:", error);
+      }
+    },
+    [currentUserId, revokeUserAccessMutation],
+  );
+
   const handleReinstallRequired = useCallback(
     async (
       catalogId: string,
@@ -914,6 +948,11 @@ export function InternalMCPCatalog({
                   );
                 }
               }}
+              onRevokeMyAccess={
+                installedServer
+                  ? () => handleRevokeMyAccess(installedServer.id)
+                  : undefined
+              }
               onReinstall={() => handleReinstall(item)}
               onEdit={() => setEditingItem(item)}
               onDelete={() => setDeletingItem(item)}
@@ -926,7 +965,7 @@ export function InternalMCPCatalog({
                 installedServer
                   ? () =>
                       setManagingUsersState({
-                        serverId: installedServer.id,
+                        server: installedServer,
                         label: itemWithLabel.label || itemWithLabel.name,
                       })
                   : undefined
@@ -1107,7 +1146,7 @@ export function InternalMCPCatalog({
       <ManageUsersDialog
         isOpen={!!managingUsersState}
         onClose={() => setManagingUsersState(null)}
-        server={managingUsersServer}
+        server={managingUsersState?.server}
         label={managingUsersState?.label}
       />
 

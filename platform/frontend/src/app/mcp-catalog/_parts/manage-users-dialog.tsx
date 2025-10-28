@@ -73,7 +73,7 @@ export function ManageUsersDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            User Credentials
+            Personal Credentials
             <span className="text-muted-foreground font-normal">
               {label || server.name}
             </span>

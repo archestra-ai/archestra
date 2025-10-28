@@ -455,12 +455,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Check if the team has access to this server
-        const teams = await McpServerTeamModel.getTeamsForMcpServer(
-          request.params.id,
+        // When there are multiple installations (personal + team auth), we need to find
+        // the actual server that has this team. Check all servers with the same catalogId.
+        if (!mcpServer.catalogId) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server has no catalog ID",
+              type: "not_found",
+            },
+          });
+        }
+
+        const allServersForCatalog = await McpServerModel.findByCatalogId(
+          mcpServer.catalogId,
         );
 
-        if (!teams.includes(request.params.teamId)) {
+        // Find which server actually has this team
+        let targetServerId: string | null = null;
+        for (const server of allServersForCatalog) {
+          const teams = await McpServerTeamModel.getTeamsForMcpServer(
+            server.id,
+          );
+          if (teams.includes(request.params.teamId)) {
+            targetServerId = server.id;
+            break;
+          }
+        }
+
+        if (!targetServerId) {
           return reply.status(404).send({
             error: {
               message: "Team access not found",
@@ -469,19 +491,30 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
+        // Get the target server to check if we should delete it entirely
+        const targetServer = await McpServerModel.findById(targetServerId);
+        if (!targetServer) {
+          return reply.status(404).send({
+            error: {
+              message: "Target server not found",
+              type: "not_found",
+            },
+          });
+        }
+
         // If this is a team-only installation (only one team, no users), delete the entire server
         const isTeamOnlyInstallation =
-          mcpServer.teams?.length === 1 &&
-          mcpServer.teams[0] === request.params.teamId &&
-          (!mcpServer.users || mcpServer.users.length === 0);
+          targetServer.teams?.length === 1 &&
+          targetServer.teams[0] === request.params.teamId &&
+          (!targetServer.users || targetServer.users.length === 0);
 
         if (isTeamOnlyInstallation) {
           // Delete the entire MCP server (which will cascade delete the secret)
-          await McpServerModel.delete(request.params.id);
+          await McpServerModel.delete(targetServerId);
         } else {
           // Otherwise, just remove the team from the junction table
           await McpServerTeamModel.removeTeamFromMcpServer(
-            request.params.id,
+            targetServerId,
             request.params.teamId,
           );
         }

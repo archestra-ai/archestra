@@ -1,11 +1,16 @@
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { type GetToolsResponses, getTools } from "@/lib/clients/api";
-import { client } from "@/lib/clients/api/client.gen";
+
+const { getTools } = archestraApiSdk;
 
 export function useTools({
   initialData,
 }: {
-  initialData?: GetToolsResponses["200"];
+  initialData?: archestraApiTypes.GetToolsResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["tools"],
@@ -17,12 +22,14 @@ export function useTools({
 export function useUnassignedTools({
   initialData,
 }: {
-  initialData?: GetToolsResponses["200"];
+  initialData?: archestraApiTypes.GetToolsResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["tools", "unassigned"],
     queryFn: async () => {
-      const response = await client.get<GetToolsResponses["200"]>({
+      const response = await archestraApiClient.get<
+        archestraApiTypes.GetToolsResponses["200"]
+      >({
         url: "/api/tools/unassigned",
       });
       return response.data ?? null;

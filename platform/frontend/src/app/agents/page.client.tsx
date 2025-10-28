@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plug, Plus, Trash2, Wrench, X } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
@@ -56,14 +56,12 @@ import {
   useDeleteAgent,
   useUpdateAgent,
 } from "@/lib/agent.query";
-import type { GetAgentsResponses } from "@/lib/clients/api";
-import { getTeams } from "@/lib/clients/api/sdk.gen";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 
 export default function AgentsPage({
   initialData,
 }: {
-  initialData: GetAgentsResponses["200"];
+  initialData: archestraApiTypes.GetAgentsResponses["200"];
 }) {
   return (
     <div className="w-full h-full">
@@ -134,12 +132,16 @@ function AgentTeamsBadges({
   );
 }
 
-function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
+function Agents({
+  initialData,
+}: {
+  initialData: archestraApiTypes.GetAgentsResponses["200"];
+}) {
   const { data: agents } = useAgents({ initialData });
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await getTeams();
+      const { data } = await archestraApiSdk.getTeams();
       return data || [];
     },
   });
@@ -150,7 +152,7 @@ function Agents({ initialData }: { initialData: GetAgentsResponses["200"] }) {
     name: string;
   } | null>(null);
   const [assigningToolsAgent, setAssigningToolsAgent] = useState<
-    GetAgentsResponses["200"][number] | null
+    archestraApiTypes.GetAgentsResponses["200"][number] | null
   >(null);
   const [editingAgent, setEditingAgent] = useState<{
     id: string;
@@ -387,7 +389,7 @@ function CreateAgentDialog({
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const response = await getTeams();
+      const response = await archestraApiSdk.getTeams();
       return response.data || [];
     },
   });
@@ -594,7 +596,7 @@ function EditAgentDialog({
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const response = await getTeams();
+      const response = await archestraApiSdk.getTeams();
       return response.data || [];
     },
   });

@@ -1,12 +1,12 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { LoadingSpinner } from "@/components/loading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAllAgentTools } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -22,7 +22,7 @@ import {
   UnassignedToolsList,
 } from "./_parts/unassigned-tools-list";
 
-type AgentToolData = GetAllAgentToolsResponses["200"][number];
+type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 
 export function ToolsPage({ initialData }: { initialData?: AgentToolData[] }) {
   const queryClient = useQueryClient();

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { archestraCatalogSdk } from "@shared";
 import { and, desc, eq } from "drizzle-orm";
-import { getMcpServer } from "@/clients/archestra-catalog";
-import { createClient, createConfig } from "@/clients/archestra-catalog/client";
 import db, { schema } from "@/database";
 import type {
   InsertMcpServerInstallationRequest,
@@ -129,19 +128,7 @@ class McpServerInstallationRequestModel {
     // Create internal catalog item based on request type
     try {
       if (currentRequest.externalCatalogId) {
-        /**
-         * TODO: this is a bit of a hack.. fix this in the openapi-ts config instead
-         *
-         * External catalog request - fetch from Archestra catalog
-         */
-        const archestraClient = createClient(
-          createConfig({
-            baseUrl: "https://www.archestra.ai/mcp-catalog/api",
-          }),
-        );
-
-        const externalServerResponse = await getMcpServer({
-          client: archestraClient,
+        const externalServerResponse = await archestraCatalogSdk.getMcpServer({
           path: { name: currentRequest.externalCatalogId },
         });
 

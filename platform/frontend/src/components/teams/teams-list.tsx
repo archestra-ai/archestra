@@ -1,5 +1,5 @@
 "use client";
-
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { useState } from "react";
@@ -23,15 +23,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  createTeam,
-  deleteTeam,
-  type GetTeamsResponses,
-  getTeams,
-} from "@/lib/clients/api";
 import { TeamMembersDialog } from "./team-members-dialog";
 
-type Team = GetTeamsResponses["200"][number];
+type Team = archestraApiTypes.GetTeamsResponses["200"][number];
 
 export function TeamsList() {
   const queryClient = useQueryClient();
@@ -48,14 +42,14 @@ export function TeamsList() {
   const { data: teams, isLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await getTeams();
+      const { data } = await archestraApiSdk.getTeams();
       return data;
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; description?: string }) => {
-      return await createTeam({
+      return await archestraApiSdk.createTeam({
         body: data,
       });
     },
@@ -73,7 +67,7 @@ export function TeamsList() {
 
   const deleteMutation = useMutation({
     mutationFn: async (teamId: string) => {
-      return await deleteTeam({
+      return await archestraApiSdk.deleteTeam({
         path: { id: teamId },
       });
     },

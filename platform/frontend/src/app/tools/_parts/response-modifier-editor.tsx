@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -21,10 +22,9 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useAgentToolPatchMutation } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 
 interface ResponseModifierEditorProps {
-  agentTool: GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 }
 
 export function ResponseModifierEditor({

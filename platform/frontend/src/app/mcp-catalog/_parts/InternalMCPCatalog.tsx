@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import {
   Download,
@@ -24,10 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useRole } from "@/lib/auth.hook";
-import type {
-  GetInternalMcpCatalogResponses,
-  GetMcpServersResponses,
-} from "@/lib/clients/api";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useInstallMcpServer,
@@ -46,7 +43,7 @@ import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 type CatalogItemWithOptionalLabel =
-  GetInternalMcpCatalogResponses["200"][number] & {
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
     label?: string | null;
   };
 
@@ -158,8 +155,8 @@ export function InternalMCPCatalog({
   initialData,
   installedServers: initialInstalledServers,
 }: {
-  initialData?: GetInternalMcpCatalogResponses["200"];
-  installedServers?: GetMcpServersResponses["200"];
+  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
@@ -173,10 +170,10 @@ export function InternalMCPCatalog({
   const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
     useState(false);
   const [editingItem, setEditingItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
+    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [deletingItem, setDeletingItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
+    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [uninstallingServer, setUninstallingServer] = useState<{
     id: string;
@@ -188,7 +185,7 @@ export function InternalMCPCatalog({
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
-    GetInternalMcpCatalogResponses["200"][number] | null
+    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
   const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
   const [toolsDialogServerId, setToolsDialogServerId] = useState<string | null>(
@@ -224,7 +221,9 @@ export function InternalMCPCatalog({
     useMcpServerTools(toolsDialogServerId);
 
   const handleInstall = useCallback(
-    async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
+    async (
+      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+    ) => {
       /**
        * NOTE: THIS IS ABSOLUTELY TEMPORARY..
        *
@@ -268,7 +267,7 @@ export function InternalMCPCatalog({
 
   const handleGitHubInstall = useCallback(
     async (
-      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
       accessToken: string,
       teams: string[],
     ) => {
@@ -286,7 +285,7 @@ export function InternalMCPCatalog({
 
   const handleRemoteServerInstall = useCallback(
     async (
-      catalogItem: GetInternalMcpCatalogResponses["200"][number],
+      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
       metadata?: Record<string, unknown>,
     ) => {
       setInstallingItemId(catalogItem.id);

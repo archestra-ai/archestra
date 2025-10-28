@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronRightIcon, ChevronUp } from "lucide-react";
 import Link from "next/link";
@@ -9,11 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useAgents } from "@/lib/agent.query";
-import type {
-  GetAgentsResponses,
-  GetInteractionsData,
-  GetInteractionsResponses,
-} from "@/lib/clients/api";
 import { useInteractions } from "@/lib/interaction.query";
 
 import { DynamicInteraction } from "@/lib/interaction.utils";
@@ -21,7 +17,8 @@ import { DynamicInteraction } from "@/lib/interaction.utils";
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../_parts/error-boundary";
 
-type InteractionData = GetInteractionsResponses["200"]["data"][number];
+type InteractionData =
+  archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
@@ -44,8 +41,8 @@ export default function LogsPage({
   initialData,
 }: {
   initialData?: {
-    interactions: GetInteractionsResponses["200"];
-    agents: GetAgentsResponses["200"];
+    interactions: archestraApiTypes.GetInteractionsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
 }) {
   return (
@@ -73,8 +70,8 @@ function LogsTable({
   initialData,
 }: {
   initialData?: {
-    interactions: GetInteractionsResponses["200"];
-    agents: GetAgentsResponses["200"];
+    interactions: archestraApiTypes.GetInteractionsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
 }) {
   const [pagination, setPagination] = useState({
@@ -89,7 +86,9 @@ function LogsTable({
   const sortBy = sorting[0]?.id;
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
   // Map UI column ids to API sort fields
-  const apiSortBy: NonNullable<GetInteractionsData["query"]>["sortBy"] =
+  const apiSortBy: NonNullable<
+    archestraApiTypes.GetInteractionsData["query"]
+  >["sortBy"] =
     sortBy === "agent"
       ? "agentId"
       : sortBy === "request.model"

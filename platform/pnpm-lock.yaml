@@ -396,6 +396,15 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12
     devDependencies:
+      '@hey-api/openapi-ts':
+        specifier: ^0.86.2
+        version: 0.86.7(typescript@5.9.3)
+      '@types/node':
+        specifier: ^24
+        version: 24.9.1
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
       typescript:
         specifier: ^5.9.2
         version: 5.9.3

@@ -1,5 +1,7 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
+import { archestraApiSdk } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -22,18 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
-import { getTeams } from "@/lib/clients/api/sdk.gen";
 
 interface GitHubInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInstall: (
-    catalogItem: GetInternalMcpCatalogResponses["200"][number],
+    catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
     accessToken: string,
     teams: string[],
   ) => Promise<void>;
-  catalogItem: GetInternalMcpCatalogResponses["200"][number] | null;
+  catalogItem:
+    | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]
+    | null;
   isInstalling: boolean;
 }
 
@@ -51,7 +53,7 @@ export function GitHubInstallDialog({
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const response = await getTeams();
+      const response = await archestraApiSdk.getTeams();
       return response.data || [];
     },
   });

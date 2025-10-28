@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { CodeText } from "@/components/code-text";
 import { LoadingSpinner } from "@/components/loading";
@@ -7,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { GetDefaultDualLlmConfigResponses } from "@/lib/clients/api";
 import {
   useDualLlmConfig,
   useUpdateDualLlmConfig,
@@ -17,7 +17,7 @@ import { ErrorBoundary } from "../_parts/error-boundary";
 export function DualLLMPage({
   initialData,
 }: {
-  initialData?: GetDefaultDualLlmConfigResponses["200"];
+  initialData?: archestraApiTypes.GetDefaultDualLlmConfigResponses["200"];
 }) {
   return (
     <div className="w-full h-full">
@@ -33,7 +33,7 @@ export function DualLLMPage({
 function DualLLMContent({
   initialData,
 }: {
-  initialData?: GetDefaultDualLlmConfigResponses["200"];
+  initialData?: archestraApiTypes.GetDefaultDualLlmConfigResponses["200"];
 }) {
   const { data: config } = useDualLlmConfig({ initialData });
   const updateConfig = useUpdateDualLlmConfig();

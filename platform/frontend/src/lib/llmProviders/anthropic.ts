@@ -1,18 +1,17 @@
+import type { archestraApiTypes } from "@shared";
 import type { PartialUIMessage } from "@/components/chatbot-demo";
-import type {
-  AnthropicMessagesRequest,
-  AnthropicMessagesResponse,
-} from "@/lib/clients/api";
 import type { DualLlmResult, Interaction, InteractionUtils } from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
-  private request: AnthropicMessagesRequest;
-  private response: AnthropicMessagesResponse;
+  private request: archestraApiTypes.AnthropicMessagesRequest;
+  private response: archestraApiTypes.AnthropicMessagesResponse;
   modelName: string;
 
   constructor(interaction: Interaction) {
-    this.request = interaction.request as AnthropicMessagesRequest;
-    this.response = interaction.response as AnthropicMessagesResponse;
+    this.request =
+      interaction.request as archestraApiTypes.AnthropicMessagesRequest;
+    this.response =
+      interaction.response as archestraApiTypes.AnthropicMessagesResponse;
     this.modelName = this.request.model;
   }
 
@@ -137,8 +136,11 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
   private mapToUiMessage(
     message:
-      | AnthropicMessagesRequest["messages"][number]
-      | { role: "assistant"; content: AnthropicMessagesResponse["content"] },
+      | archestraApiTypes.AnthropicMessagesRequest["messages"][number]
+      | {
+          role: "assistant";
+          content: archestraApiTypes.AnthropicMessagesResponse["content"];
+        },
     _dualLlmResults?: DualLlmResult[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];

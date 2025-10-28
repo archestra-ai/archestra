@@ -1,9 +1,5 @@
-import {
-  type GetAgentsResponses,
-  type GetInteractionResponse,
-  getAgents,
-  getInteraction,
-} from "@/lib/clients/api";
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
+
 import { getServerApiHeaders } from "@/lib/server-utils";
 import { ChatPage } from "./page.client";
 
@@ -14,8 +10,8 @@ export default async function ChatPageServer({
 }) {
   const id = (await params).id;
   let initialData: {
-    interaction: GetInteractionResponse | undefined;
-    agents: GetAgentsResponses["200"];
+    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   } = {
     interaction: undefined,
     agents: [],
@@ -24,9 +20,12 @@ export default async function ChatPageServer({
     const headers = await getServerApiHeaders();
     initialData = {
       interaction: (
-        await getInteraction({ headers, path: { interactionId: id } })
+        await archestraApiSdk.getInteraction({
+          headers,
+          path: { interactionId: id },
+        })
       ).data,
-      agents: (await getAgents({ headers })).data || [],
+      agents: (await archestraApiSdk.getAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

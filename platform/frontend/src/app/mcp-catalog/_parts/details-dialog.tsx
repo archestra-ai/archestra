@@ -1,6 +1,7 @@
 "use client";
 
 import "highlight.js/styles/github-dark.css";
+import type { archestraCatalogTypes } from "@shared";
 import {
   BookOpen,
   Calendar,
@@ -32,10 +33,9 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
 
 interface DetailsDialogProps {
-  server: ArchestraMcpServerManifest | null;
+  server: archestraCatalogTypes.ArchestraMcpServerManifest | null;
   onClose: () => void;
 }
 

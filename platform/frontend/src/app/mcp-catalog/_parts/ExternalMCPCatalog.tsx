@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes, archestraCatalogTypes } from "@shared";
 import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DebouncedInput } from "@/components/debounced-input";
@@ -9,8 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRole } from "@/lib/auth.hook";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
-import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
 import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
 import {
   useCreateInternalMcpCatalogItem,
@@ -28,13 +27,13 @@ import { TransportBadges } from "./transport-badges";
 export function ExternalMCPCatalog({
   catalogItems: initialCatalogItems,
 }: {
-  catalogItems?: GetInternalMcpCatalogResponses["200"];
+  catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
-    useState<ArchestraMcpServerManifest | null>(null);
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [requestServer, setRequestServer] =
-    useState<ArchestraMcpServerManifest | null>(null);
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
     category: SelectedCategory;
@@ -63,7 +62,9 @@ export function ExternalMCPCatalog({
   // Mutation for adding servers to catalog
   const createMutation = useCreateInternalMcpCatalogItem();
 
-  const handleAddToCatalog = async (server: ArchestraMcpServerManifest) => {
+  const handleAddToCatalog = async (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => {
     // Rewrite redirect URIs to prefer platform callback (port 3000)
     const rewrittenOauth =
       server.oauth_config && !server.oauth_config.requires_proxy
@@ -94,7 +95,7 @@ export function ExternalMCPCatalog({
   };
 
   const handleRequestInstallation = async (
-    server: ArchestraMcpServerManifest,
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => {
     // Just open the request dialog with the server data
     setRequestServer(server);
@@ -280,11 +281,17 @@ function ServerCard({
   isInCatalog,
   userRole,
 }: {
-  server: ArchestraMcpServerManifest;
-  onAddToCatalog: (server: ArchestraMcpServerManifest) => void;
-  onRequestInstallation: (server: ArchestraMcpServerManifest) => void;
+  server: archestraCatalogTypes.ArchestraMcpServerManifest;
+  onAddToCatalog: (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => void;
+  onRequestInstallation: (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => void;
   isAdding: boolean;
-  onOpenReadme: (server: ArchestraMcpServerManifest) => void;
+  onOpenReadme: (
+    server: archestraCatalogTypes.ArchestraMcpServerManifest,
+  ) => void;
   isInCatalog: boolean;
   userRole: "admin" | "member";
 }) {

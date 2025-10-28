@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +11,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface EditCatalogDialogProps {
-  item: GetInternalMcpCatalogResponses["200"][number] | null;
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -14,10 +15,6 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type {
-  GetAgentsResponses,
-  GetInteractionResponse,
-} from "@/lib/clients/api";
 import { useDualLlmResultsByInteraction } from "@/lib/dual-llm-result.query";
 import { useInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
@@ -28,8 +25,8 @@ export function ChatPage({
   id,
 }: {
   initialData?: {
-    interaction: GetInteractionResponse | undefined;
-    agents: GetAgentsResponses["200"];
+    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
   id: string;
 }) {
@@ -49,8 +46,8 @@ function LogDetail({
   id,
 }: {
   initialData?: {
-    interaction: GetInteractionResponse | undefined;
-    agents: GetAgentsResponses["200"];
+    interaction: archestraApiTypes.GetInteractionResponses["200"] | undefined;
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
   id: string;
 }) {

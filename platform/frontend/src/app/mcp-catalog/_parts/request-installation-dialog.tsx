@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraCatalogTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { ArchestraMcpServerManifest } from "@/lib/clients/archestra-catalog";
 import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
 
 export function RequestInstallationDialog({
   server,
   onClose,
 }: {
-  server: ArchestraMcpServerManifest | null;
+  server: archestraCatalogTypes.ArchestraMcpServerManifest | null;
   onClose: () => void;
 }) {
   const [requestReason, setRequestReason] = useState("");

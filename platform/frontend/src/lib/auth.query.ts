@@ -1,7 +1,11 @@
+import {
+  type Action,
+  archestraApiSdk,
+  type Permission,
+  type Resource,
+} from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import type { Action, Permission, Resource } from "../../../shared";
-import { getDefaultCredentialsStatus } from "./clients/api";
 
 /**
  * Fetch current session
@@ -53,7 +57,7 @@ export function useDefaultCredentialsEnabled() {
   return useQuery({
     queryKey: ["auth", "defaultCredentialsEnabled"],
     queryFn: async () => {
-      const { data } = await getDefaultCredentialsStatus();
+      const { data } = await archestraApiSdk.getDefaultCredentialsStatus();
       return data?.enabled ?? false;
     },
     // Refetch when window is focused to catch password changes

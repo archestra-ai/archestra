@@ -1,19 +1,19 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
+
+const {
   addMcpServerInstallationRequestNote,
   approveMcpServerInstallationRequest,
-  type CreateMcpServerInstallationRequestData,
   createMcpServerInstallationRequest,
   declineMcpServerInstallationRequest,
   deleteMcpServerInstallationRequest,
-  type GetMcpServerInstallationRequestResponses,
   getMcpServerInstallationRequest,
   getMcpServerInstallationRequests,
-} from "@/lib/clients/api";
+} = archestraApiSdk;
 
 export type McpServerInstallationRequest =
-  GetMcpServerInstallationRequestResponses["200"];
+  archestraApiTypes.GetMcpServerInstallationRequestResponses["200"];
 
 export function useMcpServerInstallationRequests(params?: {
   status?: "pending" | "approved" | "declined";
@@ -46,7 +46,7 @@ export function useCreateMcpServerInstallationRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: CreateMcpServerInstallationRequestData["body"],
+      data: archestraApiTypes.CreateMcpServerInstallationRequestData["body"],
     ) => {
       const response = await createMcpServerInstallationRequest({
         body: data,

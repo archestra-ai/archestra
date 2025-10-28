@@ -1,10 +1,7 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import Divider from "@/components/divider";
-import type {
-  GetInternalMcpCatalogResponses,
-  GetMcpServersResponses,
-} from "@/lib/clients/api";
 import { ExternalMCPCatalog } from "./_parts/ExternalMCPCatalog";
 import { InternalMCPCatalog } from "./_parts/InternalMCPCatalog";
 
@@ -12,8 +9,8 @@ export default function McpRegistryPage({
   initialData,
 }: {
   initialData: {
-    catalog: GetInternalMcpCatalogResponses["200"];
-    servers: GetMcpServersResponses["200"];
+    catalog: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+    servers: archestraApiTypes.GetMcpServersResponses["200"];
   };
 }) {
   return (

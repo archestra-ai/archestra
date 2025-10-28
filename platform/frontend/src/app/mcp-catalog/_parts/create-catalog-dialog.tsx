@@ -1,12 +1,7 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Info } from "lucide-react";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -15,17 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -34,97 +18,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import {
+  McpCatalogForm,
+  type McpCatalogFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form";
 
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-// Simplified OAuth config schema
-const oauthConfigSchema = z.object({
-  client_id: z.string().optional().or(z.literal("")),
-  client_secret: z.string().optional().or(z.literal("")),
-  redirect_uris: z.string().min(1, "At least one redirect URI is required"),
-  scopes: z.string().optional().or(z.literal("")),
-  supports_resource_metadata: z.boolean(),
-});
-
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  label: z.string().min(1, "Label is required"),
-  serverType: z.enum(["remote", "local"]),
-  serverUrl: z
-    .string()
-    .url("Must be a valid URL")
-    .min(1, "Server URL is required"),
-  authMethod: z.enum(["none", "pat", "oauth"]),
-  oauthConfig: oauthConfigSchema.optional(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
-
-// API data type matching the mutation expected type
-type ApiData = Parameters<
-  ReturnType<typeof useCreateInternalMcpCatalogItem>["mutateAsync"]
->[0];
-
-// Transform function to convert form values to API format
-function transformFormToApiData(values: FormValues): ApiData {
-  const data: ApiData = {
-    name: values.name,
-    serverType: values.serverType,
-  };
-
-  if (values.label) {
-    data.label = values.label;
-  }
-
-  if (values.serverUrl) {
-    data.serverUrl = values.serverUrl;
-  }
-
-  // Handle OAuth configuration
-  if (values.authMethod === "oauth" && values.oauthConfig) {
-    const redirectUrisList = values.oauthConfig.redirect_uris
-      .split(",")
-      .map((uri) => uri.trim())
-      .filter((uri) => uri.length > 0);
-
-    // Default to ["read", "write"] if scopes not provided or empty
-    const scopesList = values.oauthConfig.scopes?.trim()
-      ? values.oauthConfig.scopes
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter((scope) => scope.length > 0)
-      : ["read", "write"];
-
-    data.oauthConfig = {
-      name: values.label, // Use label as OAuth provider name
-      server_url: values.serverUrl, // Use serverUrl as OAuth server URL
-      client_id:
-        values.oauthConfig.client_id || "archestra-platform-public-client",
-      client_secret: values.oauthConfig.client_secret || undefined,
-      redirect_uris: redirectUrisList,
-      scopes: scopesList,
-      default_scopes: ["read", "write"],
-      supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
-    };
-  }
-
-  // Handle PAT configuration
-  if (values.authMethod === "pat") {
-    data.userConfig = {
-      access_token: {
-        type: "string",
-        title: "Access Token",
-        description: "Personal access token for authentication",
-        required: true,
-        sensitive: true,
-      },
-    };
-  }
-
-  return data;
 }
 
 export function CreateCatalogDialog({
@@ -133,37 +35,14 @@ export function CreateCatalogDialog({
 }: CreateCatalogDialogProps) {
   const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
   const createMutation = useCreateInternalMcpCatalogItem();
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      label: "",
-      serverType: "remote",
-      serverUrl: "",
-      authMethod: "none",
-      oauthConfig: {
-        client_id: "",
-        client_secret: "",
-        redirect_uris:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/oauth-callback`
-            : "",
-        scopes: "read, write",
-        supports_resource_metadata: true,
-      },
-    },
-  });
-
-  const authMethod = form.watch("authMethod");
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleClose = () => {
-    form.reset();
     setActiveTab("remote");
     onClose();
   };
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = async (values: McpCatalogFormValues) => {
     const apiData = transformFormToApiData(values);
     await createMutation.mutateAsync(apiData);
     handleClose();
@@ -179,315 +58,54 @@ export function CreateCatalogDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs
-              value={activeTab}
-              onValueChange={(v) => {
-                setActiveTab(v as "remote" | "local");
-                form.setValue("serverType", v as "remote" | "local");
-              }}
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="remote">Remote</TabsTrigger>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger onClick={(e) => e.preventDefault()}>
-                      <TabsTrigger value="local" disabled>
-                        Local
-                      </TabsTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Local MCP Servers will be supported soon</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </TabsList>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v as "remote" | "local");
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="remote">Remote</TabsTrigger>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger onClick={(e) => e.preventDefault()}>
+                  <TabsTrigger value="local" disabled>
+                    Local
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Local MCP Servers will be supported soon</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </TabsList>
 
-              <TabsContent value="remote" className="space-y-4 mt-4">
-                {/* Common Fields */}
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Name <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., github"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Unique identifier for this server
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+          <TabsContent value="remote" className="space-y-4 mt-4">
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              submitButtonRef={submitButtonRef}
+            />
+          </TabsContent>
 
-                  <FormField
-                    control={form.control}
-                    name="label"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Label <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., GitHub MCP Server"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Display name shown in the UI
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+          <TabsContent value="local">
+            <div className="text-center py-8 text-muted-foreground">
+              Local MCP servers will be supported soon
+            </div>
+          </TabsContent>
+        </Tabs>
 
-                  <FormField
-                    control={form.control}
-                    name="serverUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Server URL <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="https://api.example.com/mcp"
-                            className="font-mono"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          The remote MCP server endpoint
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Authentication Section */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <FormLabel>Authentication</FormLabel>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs">
-                            Choose how users will authenticate when installing
-                            this server
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="authMethod"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            value={field.value}
-                            className="space-y-2"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="none" id="auth-none" />
-                              <FormLabel
-                                htmlFor="auth-none"
-                                className="font-normal cursor-pointer"
-                              >
-                                No authentication required
-                              </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="pat" id="auth-pat" />
-                              <FormLabel
-                                htmlFor="auth-pat"
-                                className="font-normal cursor-pointer"
-                              >
-                                Personal Access Token (PAT)
-                              </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="oauth" id="auth-oauth" />
-                              <FormLabel
-                                htmlFor="auth-oauth"
-                                className="font-normal cursor-pointer"
-                              >
-                                OAuth
-                              </FormLabel>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {authMethod === "pat" && (
-                    <div className="bg-muted p-4 rounded-lg">
-                      <p className="text-sm text-muted-foreground">
-                        Users will be prompted to provide their personal access
-                        token when installing this server.
-                      </p>
-                    </div>
-                  )}
-
-                  {authMethod === "oauth" && (
-                    <div className="space-y-4 pl-6 border-l-2">
-                      <FormField
-                        control={form.control}
-                        name="oauthConfig.client_id"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Client ID</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="your-client-id (optional for dynamic registration)"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Leave empty if the server supports dynamic client
-                              registration
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="oauthConfig.client_secret"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Client Secret</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="password"
-                                placeholder="your-client-secret (optional)"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="oauthConfig.redirect_uris"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              Redirect URIs{" "}
-                              <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Comma-separated list of redirect URIs
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="oauthConfig.scopes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Scopes</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="read, write"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Comma-separated list of OAuth scopes (defaults to
-                              read, write)
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="oauthConfig.supports_resource_metadata"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                className="mt-1"
-                              />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                              <FormLabel className="font-normal cursor-pointer">
-                                Supports OAuth Resource Metadata
-                              </FormLabel>
-                              <FormDescription>
-                                Enable if the server publishes OAuth metadata at
-                                /.well-known/oauth-authorization-server for
-                                automatic endpoint discovery
-                              </FormDescription>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="local">
-                <div className="text-center py-8 text-muted-foreground">
-                  Local MCP servers will be supported soon
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={handleClose} type="button">
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || !form.formState.isValid}
-              >
-                {createMutation.isPending ? "Adding..." : "Add Server"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} type="button">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => submitButtonRef.current?.click()}
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? "Adding..." : "Add Server"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -102,6 +102,8 @@ export function useUpdateInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Also invalidate MCP servers to refresh reinstallRequired flags
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {

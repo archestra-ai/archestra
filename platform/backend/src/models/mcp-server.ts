@@ -1,4 +1,3 @@
-import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
@@ -207,28 +206,6 @@ class McpServerModel {
     }
 
     /**
-     * For GitHub MCP server, extract token from secrets and connect
-     */
-    if (mcpServer.name === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = secrets.access_token as string | undefined;
-
-      if (githubToken) {
-        try {
-          const config = mcpClient.createGitHubConfig(githubToken);
-          const tools = await mcpClient.connectAndGetTools(config);
-          // Transform to ensure description is always a string
-          return tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description || `Tool: ${tool.name}`,
-            inputSchema: tool.inputSchema,
-          }));
-        } catch (error) {
-          console.error(`Failed to get tools from GitHub MCP server:`, error);
-        }
-      }
-    }
-
-    /**
      * For remote servers, connect using the server URL and secrets
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
@@ -325,16 +302,6 @@ class McpServerModel {
       if (secretRecord) {
         secrets = secretRecord.secret;
       }
-    }
-
-    // Special-case validation for GitHub MCP server
-    if (serverName === GITHUB_MCP_SERVER_NAME) {
-      const githubToken = secrets.access_token as string | undefined;
-
-      if (githubToken && typeof githubToken === "string") {
-        return await mcpClient.validateGitHubConnection(githubToken);
-      }
-      return false;
     }
 
     // For other remote servers, check if we can connect using catalog info

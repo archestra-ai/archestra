@@ -43,9 +43,18 @@ export function EditCatalogDialog({
 
     const originalValues = transformCatalogItemToFormValues(item);
 
-    // Only name and serverUrl changes require reinstall
+    // Name, serverUrl, and authentication changes require reinstall
     if (values.name !== originalValues.name) return true;
     if (values.serverUrl !== originalValues.serverUrl) return true;
+    if (values.authMethod !== originalValues.authMethod) return true;
+
+    // Check OAuth config changes (deep comparison)
+    if (
+      JSON.stringify(values.oauthConfig) !==
+      JSON.stringify(originalValues.oauthConfig)
+    ) {
+      return true;
+    }
 
     return false;
   };

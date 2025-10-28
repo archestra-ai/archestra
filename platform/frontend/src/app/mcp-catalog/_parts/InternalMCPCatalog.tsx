@@ -130,9 +130,10 @@ function InternalServerCard({
                 size="sm"
                 variant="default"
                 className="w-full"
+                disabled={isInstalling}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Reinstall Required
+                {isInstalling ? "Reinstalling..." : "Reinstall Required"}
               </Button>
             )}
             {onViewTools && (

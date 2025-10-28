@@ -237,7 +237,8 @@ export function McpCatalogForm({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Changes to Name or Server URL will require reinstalling the server
+              Changes to Name, Server URL, or Authentication will require
+              reinstalling the server for the changes to take effect.
             </AlertDescription>
           </Alert>
         )}

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { isEqual, omitBy } from "lodash-es";
 import { z } from "zod";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import {
@@ -173,20 +174,53 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // Check if name or serverUrl changed - if so, mark all installed servers for reinstall
+        // Check if name, serverUrl, or authentication changed
         const nameChanged =
-          request.body.name && request.body.name !== originalCatalogItem.name;
+          "name" in request.body &&
+          request.body.name !== originalCatalogItem.name;
         const urlChanged =
-          request.body.serverUrl &&
+          "serverUrl" in request.body &&
           request.body.serverUrl !== originalCatalogItem.serverUrl;
 
-        if (nameChanged || urlChanged) {
-          // Find all servers installed from this catalog item
+        // For OAuth config, use lodash to normalize and compare
+        // Remove falsy values (null, undefined, empty strings) before comparison
+        const normalizeOAuthConfig = (config: unknown) => {
+          if (!config || typeof config !== "object") return null;
+          return omitBy(
+            config as Record<string, unknown>,
+            (value, key) =>
+              value === null ||
+              value === undefined ||
+              value === "" ||
+              key === "name",
+          );
+        };
+
+        const oauthConfigChanged =
+          "oauthConfig" in request.body &&
+          !isEqual(
+            normalizeOAuthConfig(request.body.oauthConfig),
+            normalizeOAuthConfig(originalCatalogItem.oauthConfig),
+          );
+
+        console.log("Comparing OAuth configs:", {
+          request: normalizeOAuthConfig(request.body.oauthConfig),
+          original: normalizeOAuthConfig(originalCatalogItem.oauthConfig),
+        });
+        console.log(
+          "isEqual:",
+          isEqual(
+            normalizeOAuthConfig(request.body.oauthConfig),
+            normalizeOAuthConfig(originalCatalogItem.oauthConfig),
+          ),
+        );
+
+        // If critical fields changed, mark all installed servers for reinstall
+        if (nameChanged || urlChanged || oauthConfigChanged) {
           const installedServers = await McpServerModel.findByCatalogId(
             request.params.id,
           );
 
-          // Mark each server as needing reinstall
           for (const server of installedServers) {
             await McpServerModel.update(server.id, {
               reinstallRequired: true,

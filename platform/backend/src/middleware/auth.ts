@@ -12,9 +12,12 @@ class AuthMiddleware {
 
     // return 401 if unauthenticated
     if (await this.isUnauthenticated(request)) {
-      return reply
-        .status(401)
-        .send(prepareErrorResponse("Unauthorized", request));
+      return reply.status(401).send(
+        prepareErrorResponse({
+          message: "Unauthenticated",
+          type: "unauthenticated",
+        }),
+      );
     }
 
     // check if authorized
@@ -24,9 +27,12 @@ class AuthMiddleware {
     }
 
     // return 403 if unauthorized
-    return reply
-      .status(403)
-      .send(prepareErrorResponse(error?.message ?? "Forbidden", request));
+    return reply.status(403).send(
+      prepareErrorResponse({
+        message: error?.message ?? "Forbidden",
+        type: "forbidden",
+      }),
+    );
   };
 
   private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
@@ -276,6 +282,30 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.GetMcpServerInstallationRequests]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.CreateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["create"],
+  },
+  [RouteId.GetMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.UpdateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.ApproveMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeclineMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.AddMcpServerInstallationRequestNote]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeleteMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["delete"],
   },
   [RouteId.InitiateOAuth]: {
     mcpServer: ["create"],

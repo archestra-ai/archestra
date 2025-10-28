@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateInternalMcpCatalogItemData, CreateInternalMcpCatalogItemErrors, CreateInternalMcpCatalogItemResponses, CreateTeamData, CreateTeamErrors, CreateTeamResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteInternalMcpCatalogItemData, DeleteInternalMcpCatalogItemErrors, DeleteInternalMcpCatalogItemResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerResponses, DeleteTeamData, DeleteTeamErrors, DeleteTeamResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetAllAgentToolsData, GetAllAgentToolsErrors, GetAllAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetDefaultAgentData, GetDefaultAgentErrors, GetDefaultAgentResponses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetInternalMcpCatalogData, GetInternalMcpCatalogErrors, GetInternalMcpCatalogItemData, GetInternalMcpCatalogItemErrors, GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetMcpServerToolsData, GetMcpServerToolsErrors, GetMcpServerToolsResponses, GetOperatorsData, GetOperatorsResponses, GetTeamData, GetTeamErrors, GetTeamMembersData, GetTeamMembersErrors, GetTeamMembersResponses, GetTeamResponses, GetTeamsData, GetTeamsErrors, GetTeamsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetUnassignedToolsData, GetUnassignedToolsErrors, GetUnassignedToolsResponses, GetV1McpData, GetV1McpErrors, GetV1McpResponses, HandleOAuthCallbackData, HandleOAuthCallbackErrors, HandleOAuthCallbackResponses, InitiateOAuthData, InitiateOAuthErrors, InitiateOAuthResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostV1GeminiByAgentIdModelsByModelGenerateContentData, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentData, PostV1GeminiModelsByModelGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelStreamGenerateContentData, PostV1GeminiModelsByModelStreamGenerateContentErrors, PostV1McpData, PostV1McpResponses, RemoveTeamMemberData, RemoveTeamMemberErrors, RemoveTeamMemberResponses, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateAgentToolData, UpdateAgentToolErrors, UpdateAgentToolResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateInternalMcpCatalogItemData, UpdateInternalMcpCatalogItemErrors, UpdateInternalMcpCatalogItemResponses, UpdateTeamData, UpdateTeamErrors, UpdateTeamResponses, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
+import type { AddMcpServerInstallationRequestNoteData, AddMcpServerInstallationRequestNoteErrors, AddMcpServerInstallationRequestNoteResponses, AddTeamMemberData, AddTeamMemberErrors, AddTeamMemberResponses, AnthropicMessagesWithAgentData, AnthropicMessagesWithAgentErrors, AnthropicMessagesWithAgentResponses, AnthropicMessagesWithDefaultAgentData, AnthropicMessagesWithDefaultAgentErrors, AnthropicMessagesWithDefaultAgentResponses, ApproveMcpServerInstallationRequestData, ApproveMcpServerInstallationRequestErrors, ApproveMcpServerInstallationRequestResponses, AssignToolToAgentData, AssignToolToAgentErrors, AssignToolToAgentResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateDualLlmConfigData, CreateDualLlmConfigErrors, CreateDualLlmConfigResponses, CreateInternalMcpCatalogItemData, CreateInternalMcpCatalogItemErrors, CreateInternalMcpCatalogItemResponses, CreateMcpServerInstallationRequestData, CreateMcpServerInstallationRequestErrors, CreateMcpServerInstallationRequestResponses, CreateTeamData, CreateTeamErrors, CreateTeamResponses, CreateToolInvocationPolicyData, CreateToolInvocationPolicyErrors, CreateToolInvocationPolicyResponses, CreateTrustedDataPolicyData, CreateTrustedDataPolicyErrors, CreateTrustedDataPolicyResponses, DeclineMcpServerInstallationRequestData, DeclineMcpServerInstallationRequestErrors, DeclineMcpServerInstallationRequestResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteDualLlmConfigData, DeleteDualLlmConfigErrors, DeleteDualLlmConfigResponses, DeleteInternalMcpCatalogItemData, DeleteInternalMcpCatalogItemErrors, DeleteInternalMcpCatalogItemResponses, DeleteMcpServerData, DeleteMcpServerErrors, DeleteMcpServerInstallationRequestData, DeleteMcpServerInstallationRequestErrors, DeleteMcpServerInstallationRequestResponses, DeleteMcpServerResponses, DeleteTeamData, DeleteTeamErrors, DeleteTeamResponses, DeleteToolInvocationPolicyData, DeleteToolInvocationPolicyErrors, DeleteToolInvocationPolicyResponses, DeleteTrustedDataPolicyData, DeleteTrustedDataPolicyErrors, DeleteTrustedDataPolicyResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetAgentsData, GetAgentsErrors, GetAgentsResponses, GetAgentToolsData, GetAgentToolsErrors, GetAgentToolsResponses, GetAllAgentToolsData, GetAllAgentToolsErrors, GetAllAgentToolsResponses, GetApiAuthBy__Data, GetApiAuthBy__Responses, GetDefaultAgentData, GetDefaultAgentErrors, GetDefaultAgentResponses, GetDefaultCredentialsStatusData, GetDefaultCredentialsStatusErrors, GetDefaultCredentialsStatusResponses, GetDefaultDualLlmConfigData, GetDefaultDualLlmConfigErrors, GetDefaultDualLlmConfigResponses, GetDualLlmConfigData, GetDualLlmConfigErrors, GetDualLlmConfigResponses, GetDualLlmConfigsData, GetDualLlmConfigsErrors, GetDualLlmConfigsResponses, GetDualLlmResultByToolCallIdData, GetDualLlmResultByToolCallIdErrors, GetDualLlmResultByToolCallIdResponses, GetDualLlmResultsByInteractionData, GetDualLlmResultsByInteractionErrors, GetDualLlmResultsByInteractionResponses, GetFeaturesData, GetFeaturesResponses, GetHealthData, GetHealthResponses, GetInteractionData, GetInteractionErrors, GetInteractionResponses, GetInteractionsData, GetInteractionsErrors, GetInteractionsResponses, GetInternalMcpCatalogData, GetInternalMcpCatalogErrors, GetInternalMcpCatalogItemData, GetInternalMcpCatalogItemErrors, GetInternalMcpCatalogItemResponses, GetInternalMcpCatalogResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerInstallationRequestData, GetMcpServerInstallationRequestErrors, GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestsData, GetMcpServerInstallationRequestsErrors, GetMcpServerInstallationRequestsResponses, GetMcpServerResponses, GetMcpServersData, GetMcpServersErrors, GetMcpServersResponses, GetMcpServerToolsData, GetMcpServerToolsErrors, GetMcpServerToolsResponses, GetOperatorsData, GetOperatorsResponses, GetTeamData, GetTeamErrors, GetTeamMembersData, GetTeamMembersErrors, GetTeamMembersResponses, GetTeamResponses, GetTeamsData, GetTeamsErrors, GetTeamsResponses, GetToolInvocationPoliciesData, GetToolInvocationPoliciesErrors, GetToolInvocationPoliciesResponses, GetToolInvocationPolicyData, GetToolInvocationPolicyErrors, GetToolInvocationPolicyResponses, GetToolsData, GetToolsErrors, GetToolsResponses, GetTrustedDataPoliciesData, GetTrustedDataPoliciesErrors, GetTrustedDataPoliciesResponses, GetTrustedDataPolicyData, GetTrustedDataPolicyErrors, GetTrustedDataPolicyResponses, GetUnassignedToolsData, GetUnassignedToolsErrors, GetUnassignedToolsResponses, GetV1McpData, GetV1McpErrors, GetV1McpResponses, HandleOAuthCallbackData, HandleOAuthCallbackErrors, HandleOAuthCallbackResponses, InitiateOAuthData, InitiateOAuthErrors, InitiateOAuthResponses, InstallMcpServerData, InstallMcpServerErrors, InstallMcpServerResponses, OpenAiChatCompletionsWithAgentData, OpenAiChatCompletionsWithAgentErrors, OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithDefaultAgentData, OpenAiChatCompletionsWithDefaultAgentErrors, OpenAiChatCompletionsWithDefaultAgentResponses, PostApiAuthBy__Data, PostApiAuthBy__Responses, PostV1GeminiByAgentIdModelsByModelGenerateContentData, PostV1GeminiByAgentIdModelsByModelGenerateContentErrors, PostV1GeminiByAgentIdModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentData, PostV1GeminiByAgentIdModelsByModelStreamGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentData, PostV1GeminiModelsByModelGenerateContentErrors, PostV1GeminiModelsByModelGenerateContentResponses, PostV1GeminiModelsByModelStreamGenerateContentData, PostV1GeminiModelsByModelStreamGenerateContentErrors, PostV1McpData, PostV1McpResponses, RemoveTeamMemberData, RemoveTeamMemberErrors, RemoveTeamMemberResponses, UnassignToolFromAgentData, UnassignToolFromAgentErrors, UnassignToolFromAgentResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateAgentToolData, UpdateAgentToolErrors, UpdateAgentToolResponses, UpdateDualLlmConfigData, UpdateDualLlmConfigErrors, UpdateDualLlmConfigResponses, UpdateInternalMcpCatalogItemData, UpdateInternalMcpCatalogItemErrors, UpdateInternalMcpCatalogItemResponses, UpdateMcpServerInstallationRequestData, UpdateMcpServerInstallationRequestErrors, UpdateMcpServerInstallationRequestResponses, UpdateTeamData, UpdateTeamErrors, UpdateTeamResponses, UpdateToolInvocationPolicyData, UpdateToolInvocationPolicyErrors, UpdateToolInvocationPolicyResponses, UpdateTrustedDataPolicyData, UpdateTrustedDataPolicyErrors, UpdateTrustedDataPolicyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -579,6 +579,106 @@ export const postV1Mcp = <ThrowOnError extends boolean = false>(options?: Option
         headers: {
             'Content-Type': 'application/json',
             ...options?.headers
+        }
+    });
+};
+
+/**
+ * Get all MCP server installation requests
+ */
+export const getMcpServerInstallationRequests = <ThrowOnError extends boolean = false>(options?: Options<GetMcpServerInstallationRequestsData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetMcpServerInstallationRequestsResponses, GetMcpServerInstallationRequestsErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests',
+        ...options
+    });
+};
+
+/**
+ * Create a new MCP server installation request
+ */
+export const createMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<CreateMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).post<CreateMcpServerInstallationRequestResponses, CreateMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Delete an MCP server installation request (admin only)
+ */
+export const deleteMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).delete<DeleteMcpServerInstallationRequestResponses, DeleteMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}',
+        ...options
+    });
+};
+
+/**
+ * Get an MCP server installation request by ID
+ */
+export const getMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetMcpServerInstallationRequestResponses, GetMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}',
+        ...options
+    });
+};
+
+/**
+ * Update an MCP server installation request (admin only for approval/decline)
+ */
+export const updateMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<UpdateMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).patch<UpdateMcpServerInstallationRequestResponses, UpdateMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Approve an MCP server installation request (admin only)
+ */
+export const approveMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<ApproveMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).post<ApproveMcpServerInstallationRequestResponses, ApproveMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}/approve',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Decline an MCP server installation request (admin only)
+ */
+export const declineMcpServerInstallationRequest = <ThrowOnError extends boolean = false>(options: Options<DeclineMcpServerInstallationRequestData, ThrowOnError>) => {
+    return (options.client ?? client).post<DeclineMcpServerInstallationRequestResponses, DeclineMcpServerInstallationRequestErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}/decline',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
+    });
+};
+
+/**
+ * Add a note to an MCP server installation request
+ */
+export const addMcpServerInstallationRequestNote = <ThrowOnError extends boolean = false>(options: Options<AddMcpServerInstallationRequestNoteData, ThrowOnError>) => {
+    return (options.client ?? client).post<AddMcpServerInstallationRequestNoteResponses, AddMcpServerInstallationRequestNoteErrors, ThrowOnError>({
+        url: '/api/mcp_server_installation_requests/{id}/notes',
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
         }
     });
 };

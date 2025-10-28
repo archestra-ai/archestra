@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Info } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,16 +15,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInstall: (
-    catalogItem: GetInternalMcpCatalogResponses["200"][number],
+    catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
     metadata: Record<string, unknown>,
   ) => Promise<void>;
-  catalogItem: GetInternalMcpCatalogResponses["200"][number] | null;
+  catalogItem:
+    | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]
+    | null;
   isInstalling: boolean;
 }
 

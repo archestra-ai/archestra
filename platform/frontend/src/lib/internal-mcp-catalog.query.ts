@@ -1,20 +1,20 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
+
+const {
   createInternalMcpCatalogItem,
   deleteInternalMcpCatalogItem,
-  type GetInternalMcpCatalogResponses,
   getInternalMcpCatalog,
-  type UpdateInternalMcpCatalogItemData,
   updateInternalMcpCatalogItem,
-} from "@/lib/clients/api";
+} = archestraApiSdk;
 
 export function useInternalMcpCatalog(params?: {
-  initialData?: GetInternalMcpCatalogResponses["200"];
+  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["mcp-catalog"],
@@ -92,7 +92,7 @@ export function useUpdateInternalMcpCatalogItem() {
       data,
     }: {
       id: string;
-      data: UpdateInternalMcpCatalogItemData["body"];
+      data: archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
     }) => {
       const response = await updateInternalMcpCatalogItem({
         path: { id },
@@ -102,6 +102,8 @@ export function useUpdateInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      // Also invalidate MCP servers to refresh reinstallRequired flags
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {

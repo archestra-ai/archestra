@@ -1,3 +1,4 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
   useQuery,
@@ -5,17 +6,12 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  deleteMcpServer,
-  type GetMcpServersResponses,
-  getMcpServers,
-  getMcpServerTools,
-  type InstallMcpServerData,
-  installMcpServer,
-} from "@/lib/clients/api";
+
+const { deleteMcpServer, getMcpServers, getMcpServerTools, installMcpServer } =
+  archestraApiSdk;
 
 export function useMcpServers(params?: {
-  initialData?: GetMcpServersResponses["200"];
+  initialData?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["mcp-servers"],
@@ -27,7 +23,9 @@ export function useMcpServers(params?: {
 export function useInstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InstallMcpServerData["body"]) => {
+    mutationFn: async (
+      data: archestraApiTypes.InstallMcpServerData["body"],
+    ) => {
       const { data: installedServer } = await installMcpServer({ body: data });
       return installedServer;
     },

@@ -1,9 +1,9 @@
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
+import type { archestraApiTypes } from "@shared";
 
 export function ToolReadonlyDetails({
   agentTool,
 }: {
-  agentTool: GetAllAgentToolsResponses["200"][number];
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 }) {
   const tool = agentTool.tool;
 

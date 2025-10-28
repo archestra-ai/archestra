@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 const archestraApiConfig = await defineConfig({
   input: 'http://localhost:9000/openapi.json',
   output: {
-    path: './src/lib/clients/api',
+    path: './hey-api/clients/api',
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',
@@ -25,7 +25,7 @@ const archestraApiConfig = await defineConfig({
 const archestraCatalogConfig = await defineConfig({
   input: 'https://www.archestra.ai/mcp-catalog/api/docs',
   output: {
-    path: './src/lib/clients/archestra-catalog',
+    path: './hey-api/clients/archestra-catalog',
     clean: false,
     indexFile: true,
     tsConfigPath: './tsconfig.json',

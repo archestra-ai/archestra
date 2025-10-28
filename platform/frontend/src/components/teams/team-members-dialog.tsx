@@ -1,5 +1,6 @@
 "use client";
 
+import { archestraApiSdk } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -21,11 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  addTeamMember,
-  getTeamMembers,
-  removeTeamMember,
-} from "@/lib/clients/api/sdk.gen";
 import { useActiveOrganization } from "@/lib/organization.query";
 
 interface Team {
@@ -52,7 +48,7 @@ export function TeamMembersDialog({
   const { data: teamMembers } = useQuery({
     queryKey: ["teamMembers", team.id],
     queryFn: async () => {
-      const { data } = await getTeamMembers({
+      const { data } = await archestraApiSdk.getTeamMembers({
         path: { id: team.id },
       });
       return data;
@@ -69,7 +65,7 @@ export function TeamMembersDialog({
 
   const addMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return await addTeamMember({
+      return await archestraApiSdk.addTeamMember({
         path: { id: team.id },
         body: {
           userId,
@@ -90,7 +86,7 @@ export function TeamMembersDialog({
 
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return await removeTeamMember({
+      return await archestraApiSdk.removeTeamMember({
         path: { id: team.id, userId },
       });
     },

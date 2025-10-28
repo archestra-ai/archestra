@@ -1,11 +1,12 @@
 import { inArray } from "drizzle-orm";
+import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
-import mcpClientService from "@/services/mcp-client";
 import type { CommonToolCall, CommonToolResult, Tool } from "@/types";
 
 /**
  * Persist tools if present in the request
+ * Skips tools that are already connected to the agent via MCP servers
  */
 export const persistTools = async (
   tools: Array<{
@@ -15,7 +16,21 @@ export const persistTools = async (
   }>,
   agentId: string,
 ) => {
-  for (const { toolName, toolParameters, toolDescription } of tools) {
+  // Get names of all MCP tools already assigned to this agent
+  const mcpToolNames = await ToolModel.getMcpToolNamesByAgent(agentId);
+  const mcpToolNamesSet = new Set(mcpToolNames);
+
+  // Filter out tools that are already available via MCP servers
+  const toolsToAutoDiscover = tools.filter(
+    ({ toolName }) => !mcpToolNamesSet.has(toolName),
+  );
+
+  // Persist only the tools that are not already available via MCP
+  for (const {
+    toolName,
+    toolParameters,
+    toolDescription,
+  } of toolsToAutoDiscover) {
     // Create or get the tool
     const tool = await ToolModel.createToolIfNotExists({
       name: toolName,
@@ -52,4 +67,4 @@ export const executeMcpToolCalls = async (
   toolCalls: CommonToolCall[],
   agentId: string,
 ): Promise<CommonToolResult[]> =>
-  mcpClientService.executeToolCalls(toolCalls, agentId);
+  mcpClient.executeToolCalls(toolCalls, agentId);

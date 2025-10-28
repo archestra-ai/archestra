@@ -1,23 +1,16 @@
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import {
   useMutation,
   useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import {
-  type CreateAgentData,
-  createAgent,
-  deleteAgent,
-  type GetAgentsResponses,
-  type GetDefaultAgentResponses,
-  getAgents,
-  getDefaultAgent,
-  type UpdateAgentData,
-  updateAgent,
-} from "@/lib/clients/api";
+
+const { createAgent, deleteAgent, getAgents, getDefaultAgent, updateAgent } =
+  archestraApiSdk;
 
 export function useAgents(params?: {
-  initialData?: GetAgentsResponses["200"];
+  initialData?: archestraApiTypes.GetAgentsResponses["200"];
 }) {
   return useSuspenseQuery({
     queryKey: ["agents"],
@@ -27,7 +20,7 @@ export function useAgents(params?: {
 }
 
 export function useDefaultAgent(params?: {
-  initialData?: GetDefaultAgentResponses["200"];
+  initialData?: archestraApiTypes.GetDefaultAgentResponses["200"];
 }) {
   return useQuery({
     queryKey: ["agents", "default"],
@@ -39,7 +32,7 @@ export function useDefaultAgent(params?: {
 export function useCreateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateAgentData["body"]) => {
+    mutationFn: async (data: archestraApiTypes.CreateAgentData["body"]) => {
       const response = await createAgent({ body: data });
       return response.data;
     },
@@ -57,7 +50,7 @@ export function useUpdateAgent() {
       data,
     }: {
       id: string;
-      data: UpdateAgentData["body"];
+      data: archestraApiTypes.UpdateAgentData["body"];
     }) => {
       const response = await updateAgent({ path: { id }, body: data });
       return response.data;

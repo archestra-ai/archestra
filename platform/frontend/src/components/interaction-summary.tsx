@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import {
   BrainIcon,
   CalendarDaysIcon,
@@ -11,22 +12,19 @@ import {
 import { type ReactElement, useState } from "react";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
-import type {
-  GetAgentsResponses,
-  GetInteractionsResponses,
-} from "@/lib/clients/api";
 import { useDualLlmResultByToolCallId } from "@/lib/dual-llm-result.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 import { formatDate } from "@/lib/utils";
 
-type InteractionData = GetInteractionsResponses["200"]["data"][number];
+type InteractionData =
+  archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
 
 export function InteractionSummary({
   interaction: dynamicInteraction,
   agent,
 }: {
   interaction: InteractionData;
-  agent?: GetAgentsResponses["200"][number];
+  agent?: archestraApiTypes.GetAgentsResponses["200"][number];
 }) {
   const [agentNameTruncated, _setAgentNameTruncated] = useState(false);
   const [lastMessageTruncated, _setLastMessageTruncated] = useState(false);

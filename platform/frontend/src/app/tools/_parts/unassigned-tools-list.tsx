@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -13,10 +14,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GetToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
 
-type ExtendedTool = GetToolsResponses["200"][number];
+type ExtendedTool = archestraApiTypes.GetToolsResponses["200"][number];
 
 export interface UnassignedToolData {
   id: string;

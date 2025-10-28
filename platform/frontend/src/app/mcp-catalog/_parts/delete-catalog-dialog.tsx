@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,11 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GetInternalMcpCatalogResponses } from "@/lib/clients/api";
 import { useDeleteInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface DeleteCatalogDialogProps {
-  item: GetInternalMcpCatalogResponses["200"][number] | null;
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
   installationCount: number;
 }

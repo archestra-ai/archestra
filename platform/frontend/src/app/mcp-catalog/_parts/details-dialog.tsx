@@ -40,60 +40,64 @@ interface DetailsDialogProps {
 }
 
 // Custom markdown components for GitHub-like styling
+const commonClasses = "max-w-[800px]";
 const markdownComponents: Components = {
   h1: ({ node, ...props }) => (
     <h1
-      className="text-2xl font-semibold text-foreground mt-6 mb-4 pb-2 border-b border-border"
+      className={`text-2xl font-semibold text-foreground mt-6 mb-4 pb-2 border-b border-border ${commonClasses}`}
       {...props}
     />
   ),
   h2: ({ node, ...props }) => (
     <h2
-      className="text-xl font-semibold text-foreground mt-6 mb-4 pb-2 border-b border-border"
+      className={`text-xl font-semibold text-foreground mt-6 mb-4 pb-2 border-b border-border ${commonClasses}`}
       {...props}
     />
   ),
   h3: ({ node, ...props }) => (
     <h3
-      className="text-lg font-semibold text-foreground mt-6 mb-3"
+      className={`text-lg font-semibold text-foreground mt-6 mb-3 ${commonClasses}`}
       {...props}
     />
   ),
   h4: ({ node, ...props }) => (
     <h4
-      className="text-base font-semibold text-foreground mt-4 mb-2"
+      className={`text-base font-semibold text-foreground mt-4 mb-2 ${commonClasses}`}
       {...props}
     />
   ),
   p: ({ node, ...props }) => (
     <p
-      className="text-muted-foreground leading-relaxed mb-2 text-left"
+      className={`text-muted-foreground leading-relaxed mb-2 text-left break-words ${commonClasses}`}
       {...props}
     />
   ),
   a: ({ node, ...props }) => (
-    <a className="inline-block text-primary hover:underline" {...props} />
+    <a
+      className={`inline-block text-primary hover:underline break-all ${commonClasses}`}
+      {...props}
+    />
   ),
   code: ({ node, ...props }) => (
     <code
-      className="bg-muted text-destructive px-1.5 py-0.5 rounded text-sm font-mono"
+      className={`bg-muted text-destructive px-1.5 py-0.5 rounded text-sm font-mono break-words ${commonClasses}`}
       {...props}
     />
   ),
   pre: ({ node, ...props }) => (
     <pre
-      className="bg-muted/50 border rounded-lg p-4 overflow-x-auto text-sm mb-4 text-foreground"
+      className={`bg-muted/50 border rounded-lg p-4 overflow-x-auto text-sm mb-4 text-foreground ${commonClasses}`}
       {...props}
     />
   ),
   blockquote: ({ node, ...props }) => (
     <blockquote
-      className="border-l-4 border-border pl-4 text-muted-foreground italic my-4"
+      className={`border-l-4 border-border pl-4 text-muted-foreground italic my-4 ${commonClasses}`}
       {...props}
     />
   ),
   table: ({ node, ...props }) => (
-    <div className="overflow-x-auto my-6">
+    <div className={`overflow-x-auto my-6 ${commonClasses}`}>
       <table
         className="w-full border-collapse border border-border text-sm"
         {...props}
@@ -111,28 +115,46 @@ const markdownComponents: Components = {
   },
   th: ({ node, ...props }) => (
     <th
-      className="bg-muted font-semibold text-left px-3 py-2 border border-border"
+      className={`bg-muted font-semibold text-left px-3 py-2 border border-border ${commonClasses}`}
       {...props}
     />
   ),
   td: ({ node, ...props }) => (
-    <td className="px-3 py-2 border border-border align-top" {...props} />
+    <td
+      className={`px-3 py-2 border border-border align-top ${commonClasses}`}
+      {...props}
+    />
   ),
   ul: ({ node, ...props }) => (
-    <ul className="list-disc pl-6 mb-4 space-y-1" {...props} />
+    <ul
+      className={`list-disc pl-6 mb-4 space-y-1 ${commonClasses}`}
+      {...props}
+    />
   ),
   ol: ({ node, ...props }) => (
-    <ol className="list-decimal pl-6 mb-4 space-y-1" {...props} />
+    <ol
+      className={`list-decimal pl-6 mb-4 space-y-1 ${commonClasses}`}
+      {...props}
+    />
   ),
   li: ({ node, ...props }) => (
-    <li className="text-muted-foreground" {...props} />
+    <li className={`text-muted-foreground ${commonClasses}`} {...props} />
   ),
   img: ({ node, ...props }) => (
-    <img className="inline-block align-middle mr-1 h-auto" alt="" {...props} />
+    <img
+      className={`inline-block align-middle mr-1 h-auto max-w-full ${commonClasses}`}
+      alt=""
+      {...props}
+    />
   ),
-  hr: ({ node, ...props }) => <hr className="border-border my-8" {...props} />,
+  hr: ({ node, ...props }) => (
+    <hr className={`border-border my-8 ${commonClasses}`} {...props} />
+  ),
   strong: ({ node, ...props }) => (
-    <strong className="font-semibold text-foreground" {...props} />
+    <strong
+      className={`font-semibold text-foreground ${commonClasses}`}
+      {...props}
+    />
   ),
 };
 
@@ -142,7 +164,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {server?.display_name || server?.name || "Server"}
@@ -153,8 +175,8 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
             )}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="h-[60vh] w-full pr-4 py-4">
-          <div className="space-y-6">
+        <ScrollArea className="h-[60vh] w-full py-4">
+          <div className="space-y-6 pr-4">
             {/* Overview Section */}
             <section>
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">

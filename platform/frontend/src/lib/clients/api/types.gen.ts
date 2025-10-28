@@ -4854,6 +4854,7 @@ export type GetMcpServersResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -4867,6 +4868,7 @@ export type InstallMcpServerData = {
         name: string;
         catalogId?: string | null;
         secretId?: string;
+        reinstallRequired?: boolean;
         teams?: Array<string>;
         agentIds?: Array<string>;
         accessToken?: string;
@@ -4908,6 +4910,7 @@ export type InstallMcpServerResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -5009,6 +5012,7 @@ export type GetMcpServerResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;

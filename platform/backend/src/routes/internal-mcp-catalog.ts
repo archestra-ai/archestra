@@ -144,6 +144,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
+        // Get the original catalog item to check if name or serverUrl changed
+        const originalCatalogItem = await InternalMcpCatalogModel.findById(
+          request.params.id,
+        );
+
+        if (!originalCatalogItem) {
+          return reply.status(404).send({
+            error: {
+              message: "Catalog item not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Update the catalog item
         const catalogItem = await InternalMcpCatalogModel.update(
           request.params.id,
           request.body,
@@ -156,6 +171,32 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "not_found",
             },
           });
+        }
+
+        // Check if name or serverUrl changed - if so, mark all installed servers for reinstall
+        const nameChanged =
+          request.body.name && request.body.name !== originalCatalogItem.name;
+        const urlChanged =
+          request.body.serverUrl &&
+          request.body.serverUrl !== originalCatalogItem.serverUrl;
+
+        if (nameChanged || urlChanged) {
+          // Import McpServerModel here to avoid circular dependencies
+          const { default: McpServerModel } = await import(
+            "@/models/mcp-server"
+          );
+
+          // Find all servers installed from this catalog item
+          const installedServers = await McpServerModel.findByCatalogId(
+            request.params.id,
+          );
+
+          // Mark each server as needing reinstall
+          for (const server of installedServers) {
+            await McpServerModel.update(server.id, {
+              reinstallRequired: true,
+            });
+          }
         }
 
         return reply.send(catalogItem);

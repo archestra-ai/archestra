@@ -1,0 +1,68 @@
+"use client";
+
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+interface ReinstallConfirmationDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  serverName: string;
+  isReinstalling: boolean;
+}
+
+export function ReinstallConfirmationDialog({
+  isOpen,
+  onClose,
+  onConfirm,
+  serverName,
+  isReinstalling,
+}: ReinstallConfirmationDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Reinstall Required</DialogTitle>
+          <DialogDescription>
+            The configuration for <strong>{serverName}</strong> has been
+            updated. The server needs to be reinstalled for the changes to take
+            effect.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground">
+            Reinstalling will uninstall the current server instance and install
+            it again with the updated configuration. This process may take a few
+            moments.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isReinstalling}>
+            Skip for Now
+          </Button>
+          <Button onClick={onConfirm} disabled={isReinstalling}>
+            {isReinstalling ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Reinstalling...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reinstall Now
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

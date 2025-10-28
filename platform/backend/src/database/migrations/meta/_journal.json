@@ -232,6 +232,13 @@
       "when": 1761563855511,
       "tag": "0032_serious_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1761643866568,
+      "tag": "0033_keen_tyger_tiger",
+      "breakpoints": true
     }
   ]
 }

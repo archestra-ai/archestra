@@ -203,18 +203,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             normalizeOAuthConfig(originalCatalogItem.oauthConfig),
           );
 
-        console.log("Comparing OAuth configs:", {
-          request: normalizeOAuthConfig(request.body.oauthConfig),
-          original: normalizeOAuthConfig(originalCatalogItem.oauthConfig),
-        });
-        console.log(
-          "isEqual:",
-          isEqual(
-            normalizeOAuthConfig(request.body.oauthConfig),
-            normalizeOAuthConfig(originalCatalogItem.oauthConfig),
-          ),
-        );
-
         // If critical fields changed, mark all installed servers for reinstall
         if (nameChanged || urlChanged || oauthConfigChanged) {
           const installedServers = await McpServerModel.findByCatalogId(

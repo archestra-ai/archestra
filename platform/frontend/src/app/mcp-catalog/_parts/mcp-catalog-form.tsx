@@ -123,10 +123,10 @@ export function transformFormToApiData(
       default_scopes: ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
-  }
-
-  // Handle PAT configuration
-  if (values.authMethod === "pat") {
+    // Clear userConfig when using OAuth
+    data.userConfig = {};
+  } else if (values.authMethod === "pat") {
+    // Handle PAT configuration
     data.userConfig = {
       access_token: {
         type: "string" as const,
@@ -136,6 +136,12 @@ export function transformFormToApiData(
         sensitive: true,
       },
     };
+    // Clear oauthConfig when using PAT
+    data.oauthConfig = undefined;
+  } else {
+    // No authentication - clear both configs
+    data.userConfig = {};
+    data.oauthConfig = undefined;
   }
 
   return data;
@@ -150,6 +156,12 @@ export function transformCatalogItemToFormValues(
   if (item.oauthConfig) {
     authMethod = "oauth";
   } else if (item.userConfig?.access_token) {
+    authMethod = "pat";
+  } else if (
+    // Special case: GitHub server uses PAT but external catalog doesn't define userConfig
+    item.name.includes("githubcopilot") ||
+    item.name.includes("github")
+  ) {
     authMethod = "pat";
   }
 

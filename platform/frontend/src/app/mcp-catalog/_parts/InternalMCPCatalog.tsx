@@ -1,6 +1,5 @@
 "use client";
 
-import { GITHUB_MCP_SERVER_NAME } from "@shared";
 import {
   Download,
   Eye,
@@ -40,7 +39,6 @@ import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
-import { GitHubInstallDialog } from "./github-install-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
@@ -199,7 +197,6 @@ export function InternalMCPCatalog({
   } | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
-  const [isGitHubDialogOpen, setIsGitHubDialogOpen] = useState(false);
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<
@@ -244,25 +241,7 @@ export function InternalMCPCatalog({
 
   const handleInstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
-      /**
-       * NOTE: THIS IS ABSOLUTELY TEMPORARY..
-       *
-       * Check if this is a GitHub MCP server that requires authentication
-       */
-      if (catalogItem.name === GITHUB_MCP_SERVER_NAME) {
-        setSelectedCatalogItem(catalogItem);
-        setIsGitHubDialogOpen(true);
-        return;
-      }
-
-      // Check if this server requires OAuth authentication
-      if (catalogItem.oauthConfig) {
-        setSelectedCatalogItem(catalogItem);
-        setIsOAuthDialogOpen(true);
-        return;
-      }
-
-      // Check if this is a remote server with user configuration
+      // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
       if (
         catalogItem.serverType === "remote" &&
         catalogItem.userConfig &&
@@ -270,6 +249,13 @@ export function InternalMCPCatalog({
       ) {
         setSelectedCatalogItem(catalogItem);
         setIsRemoteServerDialogOpen(true);
+        return;
+      }
+
+      // Check if this server requires OAuth authentication
+      if (catalogItem.oauthConfig) {
+        setSelectedCatalogItem(catalogItem);
+        setIsOAuthDialogOpen(true);
         return;
       }
 
@@ -431,7 +417,9 @@ export function InternalMCPCatalog({
   const handleReinstall = useCallback(
     async (catalogItem: GetInternalMcpCatalogResponses["200"][number]) => {
       // Get the installed server to get its ID (not catalog ID)
-      const installedServer = getInstalledServer(catalogItem.id);
+      const installedServer = installedServers?.find(
+        (server) => server.catalogId === catalogItem.id,
+      );
       if (!installedServer) {
         toast.error("Server not found, cannot reinstall");
         return;
@@ -446,7 +434,7 @@ export function InternalMCPCatalog({
       // Then reinstall
       await handleInstall(catalogItem);
     },
-    [handleInstall, deleteMutation, getInstalledServer],
+    [handleInstall, deleteMutation, installedServers],
   );
 
   const filteredCatalogItems = useMemo(() => {
@@ -470,16 +458,6 @@ export function InternalMCPCatalog({
       return 0;
     });
   }, [catalogItems, catalogSearchQuery, installedServers]);
-
-  // Find installed servers that don't have matching catalog items
-  const _orphanedServers = useMemo(() => {
-    if (!installedServers) return [];
-
-    const catalogIds = new Set(catalogItems?.map((item) => item.id) || []);
-    return installedServers.filter(
-      (server) => server.catalogId && !catalogIds.has(server.catalogId),
-    );
-  }, [installedServers, catalogItems]);
 
   return (
     <div className="space-y-4">
@@ -569,17 +547,6 @@ export function InternalMCPCatalog({
         installationCount={
           deletingItem ? getInstallationCount(deletingItem.id) : 0
         }
-      />
-
-      <GitHubInstallDialog
-        isOpen={isGitHubDialogOpen}
-        onClose={() => {
-          setIsGitHubDialogOpen(false);
-          setSelectedCatalogItem(null);
-        }}
-        onInstall={handleGitHubInstall}
-        catalogItem={selectedCatalogItem}
-        isInstalling={installMutation.isPending}
       />
 
       <RemoteServerInstallDialog

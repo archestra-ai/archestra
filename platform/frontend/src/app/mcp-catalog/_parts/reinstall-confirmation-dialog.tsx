@@ -35,10 +35,10 @@ export function ReinstallConfirmationDialog({
             The configuration for <strong>{serverName}</strong> has been
             updated. The server needs to be reinstalled for the changes to take
             effect.
-            <p className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground block mt-2">
               Reinstalling will uninstall the current server instance and
               install it again with the updated configuration.
-            </p>
+            </span>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

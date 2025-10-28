@@ -1,6 +1,9 @@
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { Resource } from "@opentelemetry/resources";
+import {
+  defaultResource,
+  resourceFromAttributes,
+} from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   ATTR_SERVICE_NAME,
@@ -21,8 +24,8 @@ const traceExporter = new OTLPTraceExporter({
 });
 
 // Create a resource with service information
-const resource = Resource.default().merge(
-  new Resource({
+const resource = defaultResource().merge(
+  resourceFromAttributes({
     [ATTR_SERVICE_NAME]: name,
     [ATTR_SERVICE_VERSION]: version,
   }),

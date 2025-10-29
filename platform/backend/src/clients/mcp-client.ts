@@ -1,14 +1,14 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { InternalMcpCatalogModel, SecretModel, ToolModel } from "@/models";
-import { applyResponseModifierTemplate } from "@/templating";
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { InternalMcpCatalogModel, SecretModel, ToolModel } from '@/models';
+import { applyResponseModifierTemplate } from '@/templating';
 import type {
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
   McpServerConfig,
-} from "@/types";
+} from '@/types';
 
 class McpClient {
   private clients = new Map<string, Client>();
@@ -19,7 +19,7 @@ class McpClient {
    */
   async executeToolCalls(
     toolCalls: CommonToolCall[],
-    agentId: string,
+    agentId: string
   ): Promise<CommonToolResult[]> {
     if (toolCalls.length === 0) {
       return [];
@@ -28,12 +28,12 @@ class McpClient {
     // Get MCP tools assigned to the agent
     const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       toolCalls.map((tc) => tc.name),
-      agentId,
+      agentId
     );
 
     // Filter tool calls to only those that are MCP tools
     const mcpToolCalls = toolCalls.filter((tc) =>
-      mcpTools.some((mt) => mt.toolName === tc.name),
+      mcpTools.some((mt) => mt.toolName === tc.name)
     );
 
     if (mcpToolCalls.length === 0) {
@@ -61,7 +61,7 @@ class McpClient {
         id: tc.id,
         content: null,
         isError: true,
-        error: "No MCP tools found",
+        error: 'No MCP tools found',
       }));
     }
 
@@ -74,16 +74,17 @@ class McpClient {
       }
     }
 
+    // TODO: joey demo
     // Get access token for authentication
-    const accessToken = secrets.access_token as string | undefined;
-    if (!accessToken) {
-      return mcpToolCalls.map((tc) => ({
-        id: tc.id,
-        content: null,
-        isError: true,
-        error: "No access token found for MCP server",
-      }));
-    }
+    // const accessToken = secrets.access_token as string | undefined;
+    // if (!accessToken) {
+    //   return mcpToolCalls.map((tc) => ({
+    //     id: tc.id,
+    //     content: null,
+    //     isError: true,
+    //     error: "No access token found for MCP server",
+    //   }));
+    // }
 
     try {
       let client: Client;
@@ -91,10 +92,10 @@ class McpClient {
       // Determine server type and create appropriate connection
       if (firstTool.mcpServerCatalogId) {
         const catalogItem = await InternalMcpCatalogModel.findById(
-          firstTool.mcpServerCatalogId,
+          firstTool.mcpServerCatalogId
         );
 
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+        if (catalogItem?.serverType === 'remote' && catalogItem.serverUrl) {
           // Generic remote server with catalog info
           const config = this.createRemoteServerConfig({
             name: firstTool.mcpServerName,
@@ -103,7 +104,7 @@ class McpClient {
           });
           client = await this.getOrCreateConnection(
             firstTool.mcpServerCatalogId,
-            config,
+            config
           );
         } else {
           // Fallback to GitHub for unknown server types
@@ -137,12 +138,12 @@ class McpClient {
             try {
               modifiedContent = applyResponseModifierTemplate(
                 template,
-                result.content,
+                result.content
               );
             } catch (error) {
               console.error(
                 `Error applying response modifier template for tool ${toolCall.name}:`,
-                error,
+                error
               );
               // If template fails, use original content
             }
@@ -158,7 +159,7 @@ class McpClient {
             id: toolCall.id,
             content: null,
             isError: true,
-            error: error instanceof Error ? error.message : "Unknown error",
+            error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
@@ -169,7 +170,9 @@ class McpClient {
           id: toolCall.id,
           content: null,
           isError: true,
-          error: `Failed to connect to MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: `Failed to connect to MCP server: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
         });
       }
     }
@@ -184,9 +187,9 @@ class McpClient {
    * Get or create a persistent connection to GitHub MCP server
    */
   private async getOrCreateGitHubConnection(
-    githubToken: string,
+    githubToken: string
   ): Promise<Client> {
-    const serverId = "github-mcp-server";
+    const serverId = 'github-mcp-server';
 
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(serverId);
@@ -204,7 +207,7 @@ class McpClient {
    */
   private async getOrCreateConnection(
     serverId: string,
-    config: McpServerConfig,
+    config: McpServerConfig
   ): Promise<Client> {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(serverId);
@@ -221,14 +224,14 @@ class McpClient {
 
     const client = new Client(
       {
-        name: "archestra-platform",
-        version: "1.0.0",
+        name: 'archestra-platform',
+        version: '1.0.0',
       },
       {
         capabilities: {
           tools: {},
         },
-      },
+      }
     );
 
     await client.connect(transport);
@@ -243,7 +246,7 @@ class McpClient {
    * Connect to an MCP server and return available tools
    */
   async connectAndGetTools(
-    config: McpServerConfig,
+    config: McpServerConfig
   ): Promise<CommonMcpToolDefinition[]> {
     const clientId = `${config.name}-${Date.now()}`;
 
@@ -258,14 +261,14 @@ class McpClient {
       // Create client and connect
       const client = new Client(
         {
-          name: "archestra-platform",
-          version: "1.0.0",
+          name: 'archestra-platform',
+          version: '1.0.0',
         },
         {
           capabilities: {
             tools: {},
           },
-        },
+        }
       );
 
       await client.connect(transport);
@@ -280,7 +283,7 @@ class McpClient {
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema as Record<string, unknown>,
-        }),
+        })
       );
 
       // Close connection (we just needed to get the tools)
@@ -292,8 +295,8 @@ class McpClient {
       await this.disconnect(clientId);
       throw new Error(
         `Failed to connect to MCP server ${config.name}: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
       );
     }
   }
@@ -302,9 +305,9 @@ class McpClient {
    * Create configuration for a GitHub MCP server
    */
   createGitHubConfig = (githubToken: string): McpServerConfig => ({
-    id: "github-mcp-server",
-    name: "github-mcp-server",
-    url: "https://api.githubcopilot.com/mcp/",
+    id: 'github-mcp-server',
+    name: 'github-mcp-server',
+    url: 'https://api.githubcopilot.com/mcp/',
     headers: {
       Authorization: `Bearer ${githubToken}`,
     },
@@ -344,11 +347,11 @@ class McpClient {
   async validateGitHubConnection(githubToken: string): Promise<boolean> {
     try {
       const tools = await this.connectAndGetTools(
-        this.createGitHubConfig(githubToken),
+        this.createGitHubConfig(githubToken)
       );
       return tools.length > 0;
     } catch (error) {
-      console.error("GitHub MCP validation failed:", error);
+      console.error('GitHub MCP validation failed:', error);
       return false;
     }
   }
@@ -373,17 +376,17 @@ class McpClient {
    */
   async disconnectAll(): Promise<void> {
     const disconnectPromises = Array.from(this.clients.keys()).map((clientId) =>
-      this.disconnect(clientId),
+      this.disconnect(clientId)
     );
 
     // Also disconnect active connections
     const activeDisconnectPromises = Array.from(
-      this.activeConnections.values(),
+      this.activeConnections.values()
     ).map(async (client) => {
       try {
         await client.close();
       } catch (error) {
-        console.error("Error closing active MCP connection:", error);
+        console.error('Error closing active MCP connection:', error);
       }
     });
 
@@ -397,16 +400,16 @@ const mcpClient = new McpClient();
 export default mcpClient;
 
 // Clean up connections on process exit
-process.on("exit", () => {
+process.on('exit', () => {
   mcpClient.disconnectAll().catch(console.error);
 });
 
-process.on("SIGINT", () => {
+process.on('SIGINT', () => {
   mcpClient.disconnectAll().catch(console.error);
   process.exit(0);
 });
 
-process.on("SIGTERM", () => {
+process.on('SIGTERM', () => {
   mcpClient.disconnectAll().catch(console.error);
   process.exit(0);
 });

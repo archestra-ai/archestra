@@ -1,7 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { InternalMcpCatalogModel, SecretModel, ToolModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpToolCallModel,
+  SecretModel,
+  ToolModel,
+} from "@/models";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -148,29 +153,74 @@ class McpClient {
             }
           }
 
-          results.push({
+          const toolResult: CommonToolResult = {
             id: toolCall.id,
             content: modifiedContent,
             isError: !!result.isError,
-          });
+          };
+
+          results.push(toolResult);
+
+          // Persist tool call and result to database
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: firstTool.mcpServerName,
+              toolCall,
+              toolResult,
+            });
+          } catch (dbError) {
+            console.error("Failed to persist MCP tool call:", dbError);
+            // Continue execution even if persistence fails
+          }
         } catch (error) {
-          results.push({
+          const toolResult: CommonToolResult = {
             id: toolCall.id,
             content: null,
             isError: true,
             error: error instanceof Error ? error.message : "Unknown error",
-          });
+          };
+
+          results.push(toolResult);
+
+          // Persist failed tool call to database
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName: firstTool.mcpServerName,
+              toolCall,
+              toolResult,
+            });
+          } catch (dbError) {
+            console.error("Failed to persist MCP tool call:", dbError);
+            // Continue execution even if persistence fails
+          }
         }
       }
     } catch (error) {
       // MCP server connection failed - mark all tool calls as failed
       for (const toolCall of mcpToolCalls) {
-        results.push({
+        const toolResult: CommonToolResult = {
           id: toolCall.id,
           content: null,
           isError: true,
           error: `Failed to connect to MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
-        });
+        };
+
+        results.push(toolResult);
+
+        // Persist connection failure to database
+        try {
+          await McpToolCallModel.create({
+            agentId,
+            mcpServerName: firstTool.mcpServerName,
+            toolCall,
+            toolResult,
+          });
+        } catch (dbError) {
+          console.error("Failed to persist MCP tool call:", dbError);
+          // Continue execution even if persistence fails
+        }
       }
     }
 

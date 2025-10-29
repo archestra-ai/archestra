@@ -37,7 +37,7 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   );
 }
 
-export default function LogsPage({
+export default function LlmProxyLogsPage({
   initialData,
 }: {
   initialData?: {
@@ -46,22 +46,10 @@ export default function LogsPage({
   };
 }) {
   return (
-    <div className="flex h-full w-full flex-col">
-      <div className="border-b border-border bg-card/30">
-        <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-          <h1 className="mb-2 text-2xl font-semibold tracking-tight">Logs</h1>
-          <p className="text-sm text-muted-foreground">
-            View all interactions between your agents and LLMs, including
-            requests, responses, and tool invocations.
-          </p>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
-        <ErrorBoundary>
-          <LogsTable initialData={initialData} />
-        </ErrorBoundary>
-      </div>
+    <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
+      <ErrorBoundary>
+        <LogsTable initialData={initialData} />
+      </ErrorBoundary>
     </div>
   );
 }

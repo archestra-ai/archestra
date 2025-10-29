@@ -48,7 +48,6 @@ import { NoAuthInstallDialog } from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
-import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 type CatalogItemWithOptionalLabel =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
@@ -63,7 +62,6 @@ function InternalServerCard({
   onInstall,
   onInstallTeam,
   onInstallNoAuth,
-  onUninstall,
   onRevokeMyAccess,
   onReinstall,
   onEdit,
@@ -85,7 +83,6 @@ function InternalServerCard({
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
-  onUninstall: () => void;
   onRevokeMyAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
@@ -107,7 +104,7 @@ function InternalServerCard({
   );
 
   return (
-    <Card className="flex flex-col relative pt-4 min-w-[350px]">
+    <Card className="flex flex-col relative pt-4 min-w-[380px]">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="min-w-0">
@@ -193,7 +190,7 @@ function InternalServerCard({
                     <Button
                       onClick={onManageUsers}
                       size="sm"
-                      variant="ghost"
+                      variant="link"
                       className="h-7 text-xs"
                     >
                       Manage
@@ -223,7 +220,7 @@ function InternalServerCard({
                     <Button
                       onClick={onManageTeams}
                       size="sm"
-                      variant="ghost"
+                      variant="link"
                       className="h-7 text-xs"
                     >
                       Manage
@@ -247,7 +244,7 @@ function InternalServerCard({
                       <Button
                         onClick={onViewTools}
                         size="sm"
-                        variant="ghost"
+                        variant="link"
                         className="h-7 text-xs"
                       >
                         Manage
@@ -297,15 +294,6 @@ function InternalServerCard({
                   {isInstalling ? "Adding..." : "Team Auth"}
                 </Button>
               )}
-            {isAdmin && (
-              <Button
-                onClick={onUninstall}
-                size="sm"
-                className="w-full bg-accent text-accent-foreground hover:bg-accent"
-              >
-                Uninstall
-              </Button>
-            )}
             {!isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
               <Button
                 onClick={onRevokeMyAccess}
@@ -366,7 +354,6 @@ function InternalServerCardWithTools({
   onInstall,
   onInstallTeam,
   onInstallNoAuth,
-  onUninstall,
   onRevokeMyAccess,
   onReinstall,
   onEdit,
@@ -385,7 +372,6 @@ function InternalServerCardWithTools({
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
-  onUninstall: () => void;
   onRevokeMyAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
@@ -419,7 +405,6 @@ function InternalServerCardWithTools({
       onInstall={onInstall}
       onInstallTeam={onInstallTeam}
       onInstallNoAuth={onInstallNoAuth}
-      onUninstall={onUninstall}
       onRevokeMyAccess={onRevokeMyAccess}
       onReinstall={onReinstall}
       onEdit={onEdit}
@@ -465,10 +450,6 @@ export function InternalMCPCatalog({
   const [deletingItem, setDeletingItem] = useState<
     archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
-  const [uninstallingServer, setUninstallingServer] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
@@ -732,6 +713,7 @@ export function InternalMCPCatalog({
         userId: string;
         email: string;
         createdAt: string;
+        serverId: string; // Track which server this user belongs to
       }> = [];
 
       for (const server of servers) {
@@ -744,7 +726,10 @@ export function InternalMCPCatalog({
           for (const userDetail of server.userDetails) {
             // Only add if not already present
             if (!allUserDetails.some((ud) => ud.userId === userDetail.userId)) {
-              allUserDetails.push(userDetail);
+              allUserDetails.push({
+                ...userDetail,
+                serverId: server.id, // Include the actual server ID
+              });
             }
           }
         }
@@ -756,6 +741,7 @@ export function InternalMCPCatalog({
         teamId: string;
         name: string;
         createdAt: string;
+        serverId: string; // Track which server this team belongs to
       }> = [];
 
       for (const server of servers) {
@@ -768,7 +754,10 @@ export function InternalMCPCatalog({
           for (const teamDetail of server.teamDetails) {
             // Only add if not already present
             if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
-              allTeamDetails.push(teamDetail);
+              allTeamDetails.push({
+                ...teamDetail,
+                serverId: server.id, // Include the actual server ID
+              });
             }
           }
         }
@@ -782,13 +771,6 @@ export function InternalMCPCatalog({
       return aggregated;
     },
     [installedServers],
-  );
-
-  const handleUninstallClick = useCallback(
-    (serverId: string, serverName: string) => {
-      setUninstallingServer({ id: serverId, name: serverName });
-    },
-    [],
   );
 
   const handleRevokeMyAccess = useCallback(
@@ -940,14 +922,6 @@ export function InternalMCPCatalog({
               onInstall={() => handleInstall(item, false)}
               onInstallTeam={() => handleInstallTeam(item)}
               onInstallNoAuth={() => handleInstallNoAuth(item)}
-              onUninstall={() => {
-                if (installedServer) {
-                  handleUninstallClick(
-                    installedServer.id,
-                    installedServer.name,
-                  );
-                }
-              }}
               onRevokeMyAccess={
                 installedServer
                   ? () => handleRevokeMyAccess(installedServer.id)
@@ -1045,11 +1019,6 @@ export function InternalMCPCatalog({
           setIsTeamMode(false);
         }}
         isTeamMode={isTeamMode}
-      />
-
-      <UninstallServerDialog
-        server={uninstallingServer}
-        onClose={() => setUninstallingServer(null)}
       />
 
       <McpToolsDialog

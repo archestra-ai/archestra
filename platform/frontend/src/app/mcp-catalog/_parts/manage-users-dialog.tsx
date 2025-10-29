@@ -23,7 +23,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useRevokeUserMcpServerAccess } from "@/lib/mcp-server.query";
+import {
+  useMcpServers,
+  useRevokeUserMcpServerAccess,
+} from "@/lib/mcp-server.query";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
@@ -44,26 +47,68 @@ export function ManageUsersDialog({
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
+  // Subscribe to live mcp-servers query to get fresh data
+  const { data: allServers } = useMcpServers();
+
+  // Find all servers with the same catalogId and aggregate their user details
   const userDetails = useMemo(() => {
-    return server?.userDetails || [];
-  }, [server]);
+    if (!server?.catalogId || !allServers) return server?.userDetails || [];
+
+    // Find all servers with the same catalogId
+    const serversForCatalog = allServers.filter(
+      (s) => s.catalogId === server.catalogId,
+    );
+
+    // Aggregate user details from all servers
+    const aggregatedUserDetails: Array<{
+      userId: string;
+      email: string;
+      createdAt: string;
+      serverId: string;
+    }> = [];
+
+    for (const srv of serversForCatalog) {
+      if (srv.userDetails) {
+        for (const userDetail of srv.userDetails) {
+          // Only add if not already present
+          if (
+            !aggregatedUserDetails.some((ud) => ud.userId === userDetail.userId)
+          ) {
+            aggregatedUserDetails.push({
+              ...userDetail,
+              serverId: srv.id,
+            });
+          }
+        }
+      }
+    }
+
+    return aggregatedUserDetails;
+  }, [allServers, server?.catalogId, server?.userDetails]);
+
+  // Use the first server for operations that need a server ID
+  const liveServer = useMemo(() => {
+    if (!server?.catalogId || !allServers) return server;
+    return allServers.find((s) => s.catalogId === server.catalogId) || server;
+  }, [allServers, server]);
 
   const revokeAccessMutation = useRevokeUserMcpServerAccess();
 
   const handleRevoke = useCallback(
-    async (userId: string) => {
-      if (!server) return;
+    async (userId: string, serverId?: string) => {
+      if (!liveServer) return;
 
+      // Use the specific serverId if provided (from aggregated userDetails),
+      // otherwise fallback to the liveServer.id
       await revokeAccessMutation.mutateAsync({
-        serverId: server.id,
+        serverId: serverId || liveServer.id,
         userId,
       });
-      onClose();
     },
-    [server, revokeAccessMutation, onClose],
+    [liveServer, revokeAccessMutation],
   );
 
-  if (!server) {
+  if (!liveServer) {
     return null;
   }
 
@@ -75,7 +120,7 @@ export function ManageUsersDialog({
             <User className="h-5 w-5" />
             Personal Credentials
             <span className="text-muted-foreground font-normal">
-              {label || server.name}
+              {label || liveServer.name}
             </span>
           </DialogTitle>
           <DialogDescription>
@@ -95,7 +140,7 @@ export function ManageUsersDialog({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Email</TableHead>
-                    <TableHead>Authenticated</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead className="w-[120px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -120,7 +165,14 @@ export function ManageUsersDialog({
                       </TableCell>
                       <TableCell>
                         <Button
-                          onClick={() => handleRevoke(user.userId)}
+                          onClick={() =>
+                            handleRevoke(
+                              user.userId,
+                              "serverId" in user
+                                ? (user.serverId as string)
+                                : undefined,
+                            )
+                          }
                           disabled={revokeAccessMutation.isPending}
                           size="sm"
                           variant="outline"

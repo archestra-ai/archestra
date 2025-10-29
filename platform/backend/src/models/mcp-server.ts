@@ -10,6 +10,7 @@ class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
     const { teams, userId, ...serverData } = server;
 
+    // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
       .values(serverData)
@@ -36,7 +37,17 @@ class McpServerModel {
     userId?: string,
     isAdmin?: boolean,
   ): Promise<McpServer[]> {
-    let query = db.select().from(schema.mcpServersTable).$dynamic();
+    let query = db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
@@ -62,19 +73,20 @@ class McpServerModel {
       );
     }
 
-    const servers = await query;
+    const results = await query;
 
     // Populate teams and user details for each MCP server
     const serversWithRelations: McpServer[] = await Promise.all(
-      servers.map(async (server) => {
+      results.map(async (result) => {
         const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
-          server.id,
+          result.server.id,
         );
         const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
-          server.id,
+          result.server.id,
         );
         return {
-          ...server,
+          ...result.server,
+          ownerEmail: result.ownerEmail,
           teams: teamDetails.map((t) => t.teamId),
           users: userDetails.map((u) => u.userId),
           userDetails,
@@ -106,12 +118,19 @@ class McpServerModel {
       }
     }
 
-    const [server] = await db
-      .select()
+    const [result] = await db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
       .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
       .where(eq(schema.mcpServersTable.id, id));
 
-    if (!server) {
+    if (!result) {
       return null;
     }
 
@@ -119,7 +138,8 @@ class McpServerModel {
     const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
 
     return {
-      ...server,
+      ...result.server,
+      ownerEmail: result.ownerEmail,
       teams: teamDetails.map((t) => t.teamId),
       users: userDetails.map((u) => u.userId),
       userDetails,

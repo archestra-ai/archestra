@@ -160,9 +160,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        // If teams is empty, this is personal auth - add userId
+        // Set owner_id to current user
+        serverData.ownerId = user.id;
+
+        // Determine auth type and set userId for personal auth
         if (!serverData.teams || serverData.teams.length === 0) {
+          serverData.authType = "personal";
           serverData.userId = user.id;
+        } else {
+          serverData.authType = "team";
         }
 
         // Track if we created a new secret (for cleanup on failure)
@@ -406,6 +412,62 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             request.params.userId,
           );
         }
+
+        return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  // Grant team access to MCP server
+  fastify.post(
+    "/api/mcp_server/:id/teams",
+    {
+      schema: {
+        operationId: RouteId.GrantTeamMcpServerAccess,
+        description: "Grant team(s) access to an MCP server (admin only)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z.object({
+          teamIds: z.array(z.string()).min(1),
+        }),
+        response: {
+          200: z.object({ success: z.boolean() }),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        // Get the MCP server to verify it exists
+        const mcpServer = await McpServerModel.findById(request.params.id);
+
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Assign teams to the MCP server
+        await McpServerTeamModel.assignTeamsToMcpServer(
+          request.params.id,
+          request.body.teamIds,
+        );
 
         return reply.send({ success: true });
       } catch (error) {

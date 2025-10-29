@@ -846,9 +846,9 @@ export type GeminiGenerateContentResponseInput = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -1022,7 +1022,10 @@ export type AnthropicMessagesResponseInput = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
@@ -1867,9 +1870,9 @@ export type GeminiGenerateContentResponse = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -2043,7 +2046,10 @@ export type AnthropicMessagesResponse = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type GetHealthData = {
@@ -2837,7 +2843,7 @@ export type AnthropicMessagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/anthropic/v1/{agentId}/messages';
+    url: '/v1/anthropic/{agentId}/v1/messages';
 };
 
 export type AnthropicMessagesWithAgentErrors = {
@@ -5774,9 +5780,12 @@ export type GetMcpServersResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -5799,6 +5808,8 @@ export type InstallMcpServerData = {
         name: string;
         catalogId?: string | null;
         secretId?: string;
+        ownerId?: string | null;
+        authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
         teams?: Array<string>;
         userId?: string;
@@ -5851,9 +5862,12 @@ export type InstallMcpServerResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -5964,9 +5978,12 @@ export type GetMcpServerResponses = {
         name: string;
         catalogId: string | null;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
         users?: Array<string>;
         userDetails?: Array<{
@@ -6090,6 +6107,60 @@ export type RevokeUserMcpServerAccessResponses = {
 };
 
 export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
+
+export type GrantTeamMcpServerAccessData = {
+    body: {
+        teamIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/teams';
+};
+
+export type GrantTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
+
+export type GrantTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
 
 export type RevokeTeamMcpServerAccessData = {
     body?: never;

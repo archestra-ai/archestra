@@ -9,6 +9,7 @@ import { schema } from "@/database";
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
+  ownerEmail: z.string().nullable().optional(),
   teams: z.array(z.string()).optional(),
   users: z.array(z.string()).optional(),
   userDetails: z

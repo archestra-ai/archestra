@@ -89,13 +89,46 @@ export function useRevokeUserMcpServerAccess() {
       });
     },
     onSuccess: async () => {
-      // Refetch instead of just invalidating to ensure data is fresh
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      // Wait for refetch to complete so UI updates immediately
+      await queryClient.refetchQueries({
+        queryKey: ["mcp-servers"],
+        type: "active",
+      });
       toast.success("User access revoked successfully");
     },
     onError: (error) => {
       console.error("Error revoking user access:", error);
       toast.error("Failed to revoke user access");
+    },
+  });
+}
+
+export function useGrantTeamMcpServerAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      serverId,
+      teamIds,
+    }: {
+      serverId: string;
+      teamIds: string[];
+    }) => {
+      await archestraApiSdk.grantTeamMcpServerAccess({
+        path: { id: serverId },
+        body: { teamIds },
+      });
+    },
+    onSuccess: async () => {
+      // Wait for refetch to complete so UI updates immediately
+      await queryClient.refetchQueries({
+        queryKey: ["mcp-servers"],
+        type: "active",
+      });
+      toast.success("Team access granted successfully");
+    },
+    onError: (error) => {
+      console.error("Error granting team access:", error);
+      toast.error("Failed to grant team access");
     },
   });
 }
@@ -115,8 +148,11 @@ export function useRevokeTeamMcpServerAccess() {
       });
     },
     onSuccess: async () => {
-      // Refetch instead of just invalidating to ensure data is fresh
-      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      // Wait for refetch to complete so UI updates immediately
+      await queryClient.refetchQueries({
+        queryKey: ["mcp-servers"],
+        type: "active",
+      });
       toast.success("Team access revoked successfully");
     },
     onError: (error) => {

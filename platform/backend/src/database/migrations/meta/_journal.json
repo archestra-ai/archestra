@@ -253,6 +253,13 @@
       "when": 1761677022137,
       "tag": "0035_cheerful_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1761748831421,
+      "tag": "0036_aromatic_stingray",
+      "breakpoints": true
     }
   ]
 }

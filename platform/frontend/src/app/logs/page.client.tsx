@@ -9,6 +9,12 @@ import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAgents } from "@/lib/agent.query";
 import { useInteractions } from "@/lib/interaction.query";
 
@@ -19,6 +25,57 @@ import { ErrorBoundary } from "../_parts/error-boundary";
 
 type InteractionData =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];
+
+type ToolBadgeProps = {
+  toolName: string;
+  type: "requested" | "used" | "blocked";
+};
+
+function ToolBadge({ toolName, type }: ToolBadgeProps) {
+  const getVariantAndClasses = () => {
+    switch (type) {
+      case "requested":
+        return {
+          variant: "outline" as const,
+          className: "border-amber-500 text-amber-600 dark:text-amber-400",
+          prefix: "?",
+        };
+      case "used":
+        return {
+          variant: "default" as const,
+          className: "",
+          prefix: "✓",
+        };
+      case "blocked":
+        return {
+          variant: "destructive" as const,
+          className: "",
+          prefix: "✗",
+        };
+    }
+  };
+
+  const { variant, className, prefix } = getVariantAndClasses();
+  const displayText = `${prefix} ${toolName}`;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant={variant}
+            className={`inline-block max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap text-xs cursor-default ${className}`}
+          >
+            {displayText}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{toolName}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
@@ -243,31 +300,25 @@ function LogsTable({
         return (
           <div className="flex flex-wrap gap-1">
             {toolsRequested.map((toolName) => (
-              <Badge
+              <ToolBadge
                 key={`requested-${toolName}`}
-                variant="outline"
-                className="whitespace-nowrap text-xs border-amber-500 text-amber-600 dark:text-amber-400"
-              >
-                ? {toolName}
-              </Badge>
+                toolName={toolName}
+                type="requested"
+              />
             ))}
             {toolsUsed.map((toolName) => (
-              <Badge
+              <ToolBadge
                 key={`used-${toolName}`}
-                variant="default"
-                className="whitespace-nowrap text-xs"
-              >
-                ✓ {toolName}
-              </Badge>
+                toolName={toolName}
+                type="used"
+              />
             ))}
             {toolsBlocked.map((toolName) => (
-              <Badge
+              <ToolBadge
                 key={`blocked-${toolName}`}
-                variant="destructive"
-                className="whitespace-nowrap text-xs"
-              >
-                ✗ {toolName}
-              </Badge>
+                toolName={toolName}
+                type="blocked"
+              />
             ))}
           </div>
         );

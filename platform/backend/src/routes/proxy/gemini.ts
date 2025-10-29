@@ -1,8 +1,9 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import {
-  type Candidate,
   type GenerateContentParameters,
+  type GenerateContentResponse,
   GoogleGenAI,
+  type Part,
 } from "@google/genai";
 import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
@@ -78,6 +79,7 @@ const injectTools = async (
  * the route
  */
 const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // WEIRD FIX : put v1beta at end fix n8n authentication
   const API_PREFIX = `${PROXY_API_PREFIX}/gemini`;
 
   /**
@@ -86,8 +88,29 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://generativelanguage.googleapis.com",
-    prefix: API_PREFIX,
-    rewritePrefix: "/v1beta",
+    prefix: `${API_PREFIX}/v1beta`,
+    rewritePrefix: "/v1",
+    /**
+     * Exclude generateContent and streamGenerateContent routes since we handle them below
+     */
+    preHandler: (request, _reply, next) => {
+      if (
+        request.method === "POST" &&
+        (request.url.includes(":generateContent") ||
+          request.url.includes(":streamGenerateContent"))
+      ) {
+        // Skip proxy for these routes - we handle them below
+        next(new Error("skip"));
+      } else {
+        next();
+      }
+    },
+  });
+
+  await fastify.register(fastifyHttpProxy, {
+    upstream: "https://generativelanguage.googleapis.com",
+    prefix: `${API_PREFIX}/:agentId/v1beta`,
+    rewritePrefix: "/v1",
     /**
      * Exclude generateContent and streamGenerateContent routes since we handle them below
      */
@@ -148,7 +171,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const genAI = getObservableGenAI(
       new GoogleGenAI({
         apiKey: geminiApiKey,
-        httpOptions: { baseUrl: config.llm.gemini.baseUrl },
+        httpOptions: {
+          baseUrl: config.llm.gemini.baseUrl,
+          apiVersion: "v1beta",
+        },
       }),
       resolvedAgentId,
     );
@@ -196,7 +222,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         ],
                         role: "model",
                       },
-                      finishReason: "STOP",
                       index: 0,
                     },
                   ],
@@ -221,7 +246,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         ],
                         role: "model",
                       },
-                      finishReason: "STOP",
                       index: 0,
                     },
                   ],
@@ -249,28 +273,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.header("Content-Type", "text/event-stream");
         reply.header("Cache-Control", "no-cache");
         reply.header("Connection", "keep-alive");
-
-        // Handle streaming response
-        // Log outbound URL we expect the SDK to call (helps debug WireMock path mismatches)
-        try {
-          const outbound = new URL(
-            `/v1beta/models/${modelName}:streamGenerateContent`,
-            config.llm.gemini.baseUrl,
-          );
-          fastify.log.info({
-            msg: "gemini proxy outbound (stream)",
-            outbound: outbound.toString(),
-          });
-        } catch (e) {
-          fastify.log.warn({
-            msg: "failed to compute outbound gemini url (stream)",
-            err: String(e),
-          });
-        }
-
-        // SDK expects a GenerateContentParameters object. processedBody already
-        // contains model and config.tools when mergedTools was provided, so pass
-        // it directly to avoid duplicate keys.
         const result = await genAI.models.generateContentStream(
           processedBody as GenerateContentParameters,
         );
@@ -281,19 +283,19 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: string;
           arguments: string;
         }> = [];
-        const chunks: Array<{ candidates?: Candidate[] }> = [];
-
+        const chunks: GenerateContentResponse[] = [];
+        // Track accumulated parts for building final response
+        const accumulatedParts: Part[] = [];
+        let firstChunk: GenerateContentResponse | null = null;
         for await (const chunk of result) {
           chunks.push(chunk);
+          if (!firstChunk) firstChunk = chunk;
 
           // Accumulate tool calls but don't stream them yet (need to evaluate policies first)
           if (chunk.candidates?.[0]?.content?.parts) {
             for (const part of chunk.candidates[0].content.parts) {
-              if (
-                "functionCall" in part &&
-                part.functionCall &&
-                part.functionCall.name
-              ) {
+              accumulatedParts.push(part);
+              if (part.functionCall?.name) {
                 const toolCallId = utils.adapters.gemini.generateToolCallId(
                   part.functionCall.name,
                 );
@@ -303,7 +305,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   arguments: JSON.stringify(part.functionCall.args || {}),
                 });
               } else {
-                // Stream non-tool content immediately
                 reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
               }
             }
@@ -327,10 +328,31 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             contextIsTrusted,
           );
         }
+        let finalResponse: Gemini.Types.GenerateContentResponse;
 
         if (toolInvocationRefusal) {
           const [_refusalMessage, contentMessage] = toolInvocationRefusal;
-
+          // Create refusal response
+          finalResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: contentMessage,
+                    },
+                  ],
+                  role: "model",
+                },
+                finishReason: "STOP",
+                index: 0,
+              },
+            ],
+            // promptFeedback: firstChunk?.promptFeedback,
+            // usageMetadata: firstChunk?.usageMetadata,
+            modelVersion: firstChunk?.modelVersion || modelName,
+            responseId: firstChunk?.responseId || "unknown",
+          };
           // Stream refusal message
           const refusalChunk = {
             candidates: [
@@ -349,16 +371,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ],
           };
           reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
-
-          // Store the interaction with refusal
-          await InteractionModel.create({
-            agentId: resolvedAgentId,
-            type: "gemini:generateContent",
-            request: body,
-            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-            response: { chunks, refusal: contentMessage } as any,
-          });
         } else if (accumulatedToolCalls.length > 0) {
+          const lastChunkWithToolCalls = chunks.find((c) =>
+            c.candidates?.[0]?.content?.parts?.some((p) => "functionCall" in p),
+          );
+          if (lastChunkWithToolCalls) {
+            reply.raw.write(
+              `data: ${JSON.stringify(lastChunkWithToolCalls)}\n\n`,
+            );
+          }
           // Tool calls are allowed - execute MCP tools
           const commonToolCalls = accumulatedToolCalls.map((tc) => ({
             id: tc.id,
@@ -370,7 +391,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             commonToolCalls,
             resolvedAgentId,
           );
-
           if (mcpResults.length > 0) {
             // Stream the tool calls first
             const lastChunkWithToolCalls = chunks.find((c) =>
@@ -398,16 +418,11 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             }));
 
-            // Make another streaming call with the tool results
-            const modelResponse = chunks
-              .flatMap((c) => c.candidates?.[0]?.content?.parts || [])
-              .filter((p) => "functionCall" in p || "text" in p);
-
             const updatedContents = [
               ...filteredContents,
               {
                 role: "model" as const,
-                parts: modelResponse,
+                parts: accumulatedParts,
               },
               {
                 role: "user" as const,
@@ -419,56 +434,109 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const finalParams = {
               ...processedBody,
               contents: updatedContents,
+              config: {
+                ...processedBody.config,
+                tools: undefined,
+                toolConfig: undefined,
+              },
             } as GenerateContentParameters;
             const finalResult =
               await genAI.models.generateContentStream(finalParams);
 
-            const finalChunks: Array<{ candidates?: Candidate[] }> = [];
+            const finalChunks: GenerateContentResponse[] = [];
+            const finalParts: Part[] = [];
+            let finalFirstChunk: GenerateContentResponse | null = null;
+            let finalLastChunk: GenerateContentResponse | null = null;
+
             for await (const finalChunk of finalResult) {
               finalChunks.push(finalChunk);
+              if (!finalFirstChunk) finalFirstChunk = finalChunk;
+              finalLastChunk = finalChunk;
+
+              if (finalChunk.candidates?.[0]?.content?.parts) {
+                finalParts.push(...finalChunk.candidates[0].content.parts);
+              }
+
               reply.raw.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
             }
 
-            // Store the interaction with final response
-            await InteractionModel.create({
-              agentId: resolvedAgentId,
-              type: "gemini:generateContent",
-              request: body,
-              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-              response: { chunks: finalChunks } as any,
-            });
-          } else {
-            // No MCP results, stream the tool calls
-            const lastChunkWithToolCalls = chunks.find((c) =>
-              c.candidates?.[0]?.content?.parts?.some(
-                (p) => "functionCall" in p,
-              ),
+            // Build final response combining initial and final parts
+            const allParts = [...accumulatedParts, ...finalParts];
+            const restParts = allParts.map(
+              utils.adapters.gemini.sdkPartToRestPart,
             );
-            if (lastChunkWithToolCalls) {
-              reply.raw.write(
-                `data: ${JSON.stringify(lastChunkWithToolCalls)}\n\n`,
-              );
-            }
 
-            // Store the interaction
-            await InteractionModel.create({
-              agentId: resolvedAgentId,
-              type: "gemini:generateContent",
-              request: body,
-              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-              response: { chunks } as any,
-            });
+            finalResponse = {
+              candidates: [
+                {
+                  content: {
+                    parts: restParts,
+                    role: "model",
+                  },
+                  finishReason:
+                    finalLastChunk?.candidates?.[0]?.finishReason ||
+                    ("STOP" as const),
+                  index: 0,
+                },
+              ],
+              modelVersion:
+                (finalFirstChunk || firstChunk)?.modelVersion || modelName,
+              responseId:
+                (finalFirstChunk || firstChunk)?.responseId || "unknown",
+            };
+          } else {
+            // No MCP results - convert accumulated parts to REST format
+            const restParts = accumulatedParts.map(
+              utils.adapters.gemini.sdkPartToRestPart,
+            );
+
+            finalResponse = {
+              candidates: [
+                {
+                  content: {
+                    parts: restParts,
+                    role: "model",
+                  },
+                  finishReason:
+                    chunks[chunks.length - 1]?.candidates?.[0]?.finishReason ||
+                    ("STOP" as const),
+                  index: 0,
+                },
+              ],
+              modelVersion: firstChunk?.modelVersion || modelName,
+              responseId: firstChunk?.responseId || "unknown",
+            };
           }
         } else {
-          // No tool calls, just store the interaction
-          await InteractionModel.create({
-            agentId: resolvedAgentId,
-            type: "gemini:generateContent",
-            request: body,
-            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-            response: { chunks } as any,
-          });
+          // No tool calls - convert accumulated parts to REST format
+          const restParts = accumulatedParts.map(
+            utils.adapters.gemini.sdkPartToRestPart,
+          );
+
+          finalResponse = {
+            candidates: [
+              {
+                content: {
+                  parts: restParts,
+                  role: "model",
+                },
+                finishReason:
+                  chunks[chunks.length - 1]?.candidates?.[0]?.finishReason ||
+                  ("STOP" as const),
+                index: 0,
+              },
+            ],
+            modelVersion: firstChunk?.modelVersion || modelName,
+            responseId: firstChunk?.responseId || "unknown",
+          };
         }
+        // Store the complete interaction with REST schema format
+        await InteractionModel.create({
+          agentId: resolvedAgentId,
+          type: "gemini:generateContent",
+          request: body,
+          response: finalResponse,
+        });
 
         reply.raw.write("data: [DONE]\n\n");
         reply.raw.end();
@@ -487,7 +555,6 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .map((p) => p.functionCall) || []),
           );
         }
-
         // Evaluate tool invocation policies
         let toolInvocationRefusal: [string, string] | null = null;
         if (toolCalls.length > 0) {
@@ -514,7 +581,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const [_refusalMessage, contentMessage] = toolInvocationRefusal;
 
           // Create refusal response in Gemini format
-          const refusalResponse = {
+          const refusalResponse: Gemini.Types.GenerateContentResponse = {
             candidates: [
               {
                 content: {
@@ -525,10 +592,12 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ],
                   role: "model",
                 },
-                finishReason: "STOP",
+                finishReason: "STOP" as const,
                 index: 0,
               },
             ],
+            modelVersion: response.modelVersion || modelName,
+            responseId: "blocked",
           };
 
           // Store the interaction with refusal
@@ -536,8 +605,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentId: resolvedAgentId,
             type: "gemini:generateContent",
             request: body,
-            // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-            response: refusalResponse as any,
+            response: refusalResponse,
           });
 
           return reply.send(refusalResponse);
@@ -553,12 +621,10 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: tc.name,
               arguments: tc.args || {},
             }));
-
           const mcpResults = await utils.tools.executeMcpToolCalls(
             commonToolCalls,
             resolvedAgentId,
           );
-
           if (mcpResults.length > 0) {
             // Convert MCP results to Gemini format
             const toolResultParts = mcpResults.map((result) => ({
@@ -595,29 +661,39 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const finalResponse =
               await genAI.models.generateContent(finalParams);
 
+            // Convert SDK response to REST format
+            const restResponse =
+              utils.adapters.gemini.sdkResponseToRestResponse(
+                finalResponse,
+                modelName,
+              );
+
             // Store the interaction with final response
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "gemini:generateContent",
               request: body,
-              // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-              response: finalResponse as any,
+              response: restResponse,
             });
 
-            return reply.send(finalResponse);
+            return reply.send(restResponse);
           }
         }
 
-        // Store the complete interaction
+        // Convert SDK response to REST format and store
+        const restResponse = utils.adapters.gemini.sdkResponseToRestResponse(
+          response,
+          modelName,
+        );
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "gemini:generateContent",
           request: body,
-          // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
-          response: response as any,
+          response: restResponse,
         });
 
-        return reply.send(response);
+        return reply.send(restResponse);
       }
     } catch (error) {
       fastify.log.error(error);
@@ -661,7 +737,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
+    `${API_PREFIX}/v1beta/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent

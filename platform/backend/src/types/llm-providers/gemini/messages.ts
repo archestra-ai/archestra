@@ -206,7 +206,7 @@ const TextPartTopLevel = z.object({
 const InlineDataPartTopLevel = z.object({
   ...BasePartFields,
   inlineData: z.object({
-    mimeType: z.string(),
+    mimeType: z.string().optional(),
     data: z.string(),
   }),
   metadata: PartMetadataSchema,

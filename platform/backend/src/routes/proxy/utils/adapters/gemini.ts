@@ -1,4 +1,13 @@
-import type { GenerateContentParameters } from "@google/genai";
+import {
+  Behavior,
+  type Candidate,
+  type GenerateContentConfig,
+  type GenerateContentParameters,
+  type GenerateContentResponse,
+  type HarmCategory,
+  type HarmProbability,
+  type Part,
+} from "@google/genai";
 import type { Gemini } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
@@ -148,34 +157,24 @@ export function restToSdkGenerateContentParams(
   model: string,
   mergedTools?: Gemini.Types.Tool[] | undefined,
 ): GenerateContentParameters {
-  const params: Record<string, unknown> = {};
+  // Build a partial params object and cast at the end. Use Partial<> to keep
+  // strong typing while allowing incremental population.
+  const params: Partial<GenerateContentParameters> = {
+    model,
+    contents: [],
+    config: {} as GenerateContentConfig,
+  };
 
-  // Required model param for SDK calls
-  params.model = model;
-
-  // Convert contents to array format expected by SDK
   if (Array.isArray(body.contents)) {
-    // REST-style array or from applyUpdates - use as-is
-    params.contents = body.contents;
+    params.contents = body.contents as GenerateContentParameters["contents"];
   } else {
-    params.contents = [];
+    params.contents = [] as GenerateContentParameters["contents"];
   }
 
-  // Handle tools - SDK expects them at top level, not under config
-  if (mergedTools && mergedTools.length > 0) {
-    params.tools = mergedTools;
-  }
-
-  // Handle systemInstruction at top level
-  if (body.systemInstruction) {
-    params.systemInstruction = body.systemInstruction;
-  }
-
-  // Handle generationConfig - SDK expects it at top level
   if (body.generationConfig) {
-    params.generationConfig = body.generationConfig;
+    params.config =
+      body.generationConfig as GenerateContentParameters["config"];
   } else {
-    // Build generationConfig from individual parameters if present
     const generationConfig: Record<string, unknown> = {};
     const configKeys = [
       "temperature",
@@ -186,30 +185,48 @@ export function restToSdkGenerateContentParams(
       "stopSequences",
     ];
     for (const k of configKeys) {
-      const val = (body as unknown as Record<string, unknown>)[k];
+      const val = (body as Record<string, unknown>)[k];
       if (val !== undefined) generationConfig[k] = val;
     }
     if (Object.keys(generationConfig).length > 0) {
-      params.config = generationConfig;
+      params.config = generationConfig as GenerateContentParameters["config"];
     }
   }
+  if (mergedTools && mergedTools.length > 0) {
+    const sdkTools = mergedTools.map((t) => {
+      const functionDeclarations = t.functionDeclarations?.map((fd) => {
+        const mappedBehavior = fd.behavior
+          ? (Behavior as Record<string, Behavior>)[fd.behavior]
+          : undefined;
+        return {
+          name: fd.name,
+          description: fd.description,
+          behavior: mappedBehavior,
+          parameters: fd.parameters,
+          parametersJsonSchema: fd.parametersJsonSchema,
+          response: fd.response,
+          responseJsonSchema: fd.responseJsonSchema,
+        };
+      });
 
-  // Handle safetySettings at top level
-  if (body.safetySettings) {
-    params.safetySettings = body.safetySettings;
+      return {
+        ...t,
+        functionDeclarations,
+      } as unknown as Record<string, unknown>;
+    });
+
+    if (params.config === undefined) {
+      params.config = {} as GenerateContentConfig;
+    }
+    params.config.tools = sdkTools;
   }
 
-  // Handle toolConfig at top level
-  if (body.toolConfig) {
-    params.toolConfig = body.toolConfig;
+  if (body.systemInstruction) {
+    // todo : handle systemInstruction
   }
+  console.log("converted to sdk", params);
 
-  // Handle cachedContent
-  if (body.cachedContent) {
-    params.cachedContent = body.cachedContent;
-  }
-
-  return params as unknown as GenerateContentParameters;
+  return params as GenerateContentParameters;
 }
 
 type GeminiUsage = Pick<
@@ -222,4 +239,191 @@ export function getUsageTokens(usage: GeminiUsage) {
     input: usage.promptTokenCount,
     output: usage.candidatesTokenCount,
   };
+}
+export function sdkPartToRestPart(sdkPart: Part): Gemini.Types.MessagePart {
+  // Text part
+  if (sdkPart.text !== undefined) {
+    return {
+      text: sdkPart.text,
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Function call part
+  if (sdkPart.functionCall !== undefined) {
+    return {
+      functionCall: {
+        name: sdkPart.functionCall.name ?? "unknown_function",
+        id: sdkPart.functionCall.id,
+        args: sdkPart.functionCall.args,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Function response part
+  if (sdkPart.functionResponse !== undefined) {
+    return {
+      functionResponse: {
+        name: sdkPart.functionResponse.name ?? "unknown_function",
+        id: sdkPart.functionResponse.id,
+        response: sdkPart.functionResponse.response || {},
+        willContinue: sdkPart.functionResponse.willContinue,
+        scheduling: sdkPart.functionResponse.scheduling,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Inline data part
+  if (sdkPart.inlineData !== undefined) {
+    return {
+      inlineData: {
+        mimeType: sdkPart.inlineData.mimeType,
+        data: sdkPart.inlineData.data ?? "unknown_data",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // File data part
+  if (sdkPart.fileData !== undefined) {
+    return {
+      fileData: {
+        mimeType: sdkPart.fileData.mimeType ?? "",
+        fileUri: sdkPart.fileData.fileUri ?? "",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Executable code part
+  if (sdkPart.executableCode !== undefined) {
+    return {
+      language:
+        sdkPart.executableCode.language || ("LANGUAGE_UNSPECIFIED" as const),
+      executableCode: {
+        code: sdkPart.executableCode.code ?? "",
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Code execution result part
+  if (sdkPart.codeExecutionResult !== undefined) {
+    return {
+      codeExecutionResult: {
+        outcome:
+          sdkPart.codeExecutionResult.outcome ||
+          ("OUTCOME_UNSPECIFIED" as const),
+        output: sdkPart.codeExecutionResult.output,
+      },
+      thought: sdkPart.thought,
+      thoughtSignature: sdkPart.thoughtSignature,
+      metadata: sdkPart.videoMetadata,
+    };
+  }
+
+  // Fallback - return text part with empty text
+  return {
+    text: "",
+  };
+}
+
+/**
+ * Convert SDK Candidate format to REST API Candidate format
+ */
+export function sdkCandidateToRestCandidate(
+  sdkCandidate: Candidate,
+): Gemini.Types.Candidate {
+  return {
+    content: {
+      role: sdkCandidate.content?.role || "model",
+      parts: sdkCandidate.content?.parts?.map(sdkPartToRestPart) || [],
+    },
+    finishReason: sdkCandidate.finishReason,
+    safetyRatings: sdkCandidate.safetyRatings
+      ?.filter(
+        (
+          rating,
+        ): rating is {
+          category: HarmCategory;
+          probability: HarmProbability;
+          blocked?: boolean;
+        } => rating.category !== undefined && rating.probability !== undefined,
+      )
+      .map((rating) => ({
+        category: rating.category,
+        probability: rating.probability,
+        blocked: rating.blocked,
+      })) as Gemini.Types.Candidate["safetyRatings"],
+    citationMetadata: sdkCandidate.citationMetadata?.citations
+      ? ({
+          citationSources: sdkCandidate.citationMetadata.citations.map(
+            (source) => ({
+              startIndex: source.startIndex,
+              endIndex: source.endIndex,
+              uri: source.uri,
+              license: source.license,
+            }),
+          ),
+        } as Gemini.Types.Candidate["citationMetadata"])
+      : undefined,
+    tokenCount: sdkCandidate.tokenCount,
+    groundingMetadata: sdkCandidate.groundingMetadata,
+    avgLogprobs: sdkCandidate.avgLogprobs,
+    logprobsResult: sdkCandidate.logprobsResult,
+    index: sdkCandidate.index ?? 0,
+    finishMessage: sdkCandidate.finishMessage,
+  } as Gemini.Types.Candidate;
+}
+
+/**
+ * Convert SDK GenerateContentResponse to REST API GenerateContentResponse
+ */
+export function sdkResponseToRestResponse(
+  sdkResponse: GenerateContentResponse,
+  modelName: string,
+): Gemini.Types.GenerateContentResponse {
+  return {
+    candidates: sdkResponse.candidates?.map(sdkCandidateToRestCandidate) || [],
+    promptFeedback: sdkResponse.promptFeedback
+      ? {
+          blockReason: sdkResponse.promptFeedback.blockReason,
+          safetyRatings:
+            sdkResponse.promptFeedback.safetyRatings
+              ?.filter(
+                (
+                  rating,
+                ): rating is {
+                  category: HarmCategory;
+                  probability: HarmProbability;
+                  blocked?: boolean;
+                } =>
+                  rating.category !== undefined &&
+                  rating.probability !== undefined,
+              )
+              .map((rating) => ({
+                category: rating.category,
+                probability: rating.probability,
+                blocked: rating.blocked,
+              })) || [],
+        }
+      : undefined,
+    usageMetadata: sdkResponse.usageMetadata,
+    modelVersion: sdkResponse.modelVersion || modelName,
+    responseId: sdkResponse.responseId || "unknown",
+  } as Gemini.Types.GenerateContentResponse;
 }

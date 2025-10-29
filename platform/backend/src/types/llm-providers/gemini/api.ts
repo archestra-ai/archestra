@@ -283,6 +283,7 @@ export const GenerateContentResponseSchema = z
       .string()
       .optional()
       .describe("The model version used to generate the response."),
+    responseId: z.string().optional().describe("The unique response ID."),
   })
   .describe(`
 Response from the model supporting multiple candidate responses.

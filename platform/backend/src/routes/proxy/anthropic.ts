@@ -57,27 +57,34 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const MESSAGES_SUFFIX = "/messages";
 
   /**
-   * Register HTTP proxy for all Anthropic routes EXCEPT messages
-   * Messages are handled specially below (with agent support)
-   * Other routes are proxied directly without agent context
-   * Examples:
-   * - /v1/anthropic/v1/models -> https://api.anthropic.com/v1/models
-   * - /v1/anthropic/models -> https://api.anthropic.com/models
+   * Register HTTP proxy for Anthropic routes
+   * Handles both patterns:
+   * - /v1/anthropic/:agentId/* -> https://api.anthropic.com/v1/* (agentId stripped if UUID)
+   * - /v1/anthropic/* -> https://api.anthropic.com/v1/* (direct proxy)
+   *
+   * Messages are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.anthropic.com",
-    prefix: API_PREFIX,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
     preHandler: (request, _reply, next) => {
-      // Skip messages route (we handle it specially below with agent support)
-      const isMessagesRoute =
-        request.method === "POST" &&
-        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/));
-
-      if (isMessagesRoute) {
+      // Skip messages route (we handle it specially below with full agent support)
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
         next(new Error("skip"));
         return;
+      }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
+        const remainingPath = uuidMatch[2] || "";
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
       }
 
       next();

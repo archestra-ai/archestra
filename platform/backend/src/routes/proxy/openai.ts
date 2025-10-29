@@ -64,23 +64,37 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_COMPLETIONS_SUFFIX = "chat/completions";
 
   /**
-   * Register HTTP proxy for all OpenAI routes EXCEPT chat/completions
-   * Chat completions are handled specially below (with agent support)
-   * Other routes (like /models) are proxied directly without agent context
-   * Example: /v1/openai/models -> https://api.openai.com/v1/models
+   * Register HTTP proxy for OpenAI routes
+   * Handles both patterns:
+   * - /v1/openai/:agentId/* -> https://api.openai.com/v1/* (agentId stripped if UUID)
+   *  - /v1/openai/* -> https://api.openai.com/v1/* (direct proxy)
+   *
+   * Chat completions are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.openai.com",
-    prefix: API_PREFIX,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
     preHandler: (request, _reply, next) => {
-      // Skip chat/completions (we handle it specially below with agent support)
+      // Skip chat/completions (we handle it specially below with full agent support)
       if (
         request.method === "POST" &&
         request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
         next(new Error("skip"));
         return;
+      }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/openai/:uuid/path -> /v1/openai/path
+        const remainingPath = uuidMatch[2] || "";
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
       }
 
       next();

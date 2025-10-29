@@ -144,15 +144,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { authorization: openAiApiKey } = headers;
-
-    fastify.log.info(`Resolved agent ID: ${resolvedAgentId}`);
-    fastify.log.info(`Headers: ${JSON.stringify(headers)}`);
-    fastify.log.info(
-      `OpenAI API key ("Authorization" header): ${openAiApiKey}`,
-    );
-    fastify.log.info(`Tools: ${JSON.stringify(tools)}`);
-    fastify.log.info(`Downstream URL: ${config.llm.openai.baseUrl}`);
-
     const openAiClient = config.benchmark.mockMode
       ? (new MockOpenAIClient() as unknown as OpenAIProvider)
       : new OpenAIProvider({

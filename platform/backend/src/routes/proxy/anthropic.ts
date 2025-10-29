@@ -83,20 +83,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   /**
-   * Register HTTP proxy for agent-specific routes EXCEPT messages routes
-   * This allows using /v1/anthropic/v1/:agentId/ as a base URL for Anthropic API calls
-   * Example: /v1/anthropic/v1/:agentId/models -> https://api.anthropic.com/v1/models
+   * Register HTTP proxy for n8n-style agent routes EXCEPT messages routes
+   * This handles n8n's URL format: /v1/anthropic/:agentId/v1/...
+   * Example: /v1/anthropic/:agentId/v1/models -> https://api.anthropic.com/v1/models
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.anthropic.com",
-    prefix: `${API_PREFIX}/v1/:agentId`,
+    prefix: `${API_PREFIX}/:agentId`,
     rewritePrefix: "/v1",
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format with agent ID
+      // Support n8n URL format with agent ID
       const isMessagesRoute =
         request.method === "POST" &&
-        request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/);
+        request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/);
 
       if (isMessagesRoute) {
         // Skip proxy for this route - we handle it below
@@ -632,13 +634,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   fastify.post(
-    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/:agentId/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
-        description: "Send a message to Anthropic using a specific agent",
+        description:
+          "Send a message to Anthropic using a specific agent (n8n URL format)",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,

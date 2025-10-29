@@ -112,7 +112,7 @@ export function applyUpdates(
  * Generate a consistent tool call ID for function responses that don't have one
  * This is needed because Gemini's function responses may not always have an ID
  */
-function generateToolCallId(functionName: string): string {
+export function generateToolCallId(functionName: string): string {
   // Use a simple deterministic approach for now
   // In practice, this might need to be more sophisticated
   return `gemini-tool-${functionName}-${Date.now()}`;

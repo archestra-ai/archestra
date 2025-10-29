@@ -215,11 +215,9 @@ export class GeminiDualLlmClient implements DualLlmClient {
 
     // Extract text from the response
     const firstCandidate = response.candidates?.[0];
-    if (!firstCandidate?.content?.parts?.[0]) {
-      return "";
-    }
 
-    return firstCandidate.content.parts[0] as string;
+    const textBlock = firstCandidate?.content?.parts?.find((p) => p.text && p.text !== "");
+    return textBlock && textBlock.text ? textBlock.text.trim() : "";
   }
 
   async chatWithSchema<T>(
@@ -252,7 +250,7 @@ export class GeminiDualLlmClient implements DualLlmClient {
       },
     });
 
-    const content = response.candidates?.[0].content?.parts?.[0] as string;
+    const content = response.candidates?.[0].content?.parts?.find((p) => p.text && p.text !== "")?.text || "";
     return JSON.parse(content) as T;
   }
 }

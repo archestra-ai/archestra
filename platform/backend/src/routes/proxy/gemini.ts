@@ -280,7 +280,9 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 part.functionCall &&
                 part.functionCall.name
               ) {
-                const toolCallId = `gemini-tool-${part.functionCall.name}-${Date.now()}`;
+                const toolCallId = utils.adapters.gemini.generateToolCallId(
+                  part.functionCall.name,
+                );
                 accumulatedToolCalls.push({
                   id: toolCallId,
                   name: part.functionCall.name,

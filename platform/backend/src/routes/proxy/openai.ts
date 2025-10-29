@@ -6,6 +6,7 @@ import OpenAIProvider from "openai";
 import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
+import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
 import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
@@ -148,6 +149,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
+          fetch: getObservableFetch("openai", resolvedAgentId),
         });
 
     try {
@@ -256,6 +258,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 messages: filteredMessages,
                 tools: mergedTools.length > 0 ? mergedTools : undefined,
                 stream: true,
+                stream_options: { include_usage: true },
               });
               llmSpan.end();
               return response;
@@ -280,9 +283,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [];
         const chunks: OpenAIProvider.Chat.Completions.ChatCompletionChunk[] =
           [];
+        let usageTokens: { input?: number; output?: number } | undefined;
 
         for await (const chunk of streamingResponse) {
           chunks.push(chunk);
+
+          // Capture usage information if present
+          if (chunk.usage) {
+            usageTokens = utils.adapters.openai.getUsageTokens(chunk.usage);
+          }
           const delta = chunk.choices[0]?.delta;
           const finishReason = chunk.choices[0]?.finish_reason;
 
@@ -479,6 +488,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             }
           }
+        }
+
+        // Report token usage metrics for streaming
+        if (usageTokens) {
+          reportLLMTokens(
+            "openai",
+            resolvedAgentId,
+            usageTokens.input,
+            usageTokens.output,
+          );
         }
 
         // Store the complete interaction

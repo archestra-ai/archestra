@@ -6,6 +6,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
+import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
 import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
@@ -142,9 +143,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { "x-api-key": anthropicApiKey } = headers;
+
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
+      fetch: getObservableFetch("anthropic", resolvedAgentId),
     });
 
     try {
@@ -397,6 +400,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const messageStartEvent = events.find(
           (e) => e.type === "message_start",
         ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
+
+        // Report token usage metrics for streaming
+        const usage = messageStartEvent?.message.usage;
+        if (usage) {
+          const { input, output } =
+            utils.adapters.anthropic.getUsageTokens(usage);
+          reportLLMTokens("anthropic", resolvedAgentId, input, output);
+        }
 
         // Store the complete interaction
         await InteractionModel.create({

@@ -63,6 +63,11 @@ export const MessagesRequestSchema = z.object({
   top_p: z.number().optional(),
 });
 
+export const UsageSchema = z.object({
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+});
+
 export const MessagesResponseSchema = z.object({
   id: z.string(),
   content: z.array(MessageContentBlockSchema),
@@ -71,7 +76,7 @@ export const MessagesResponseSchema = z.object({
   stop_reason: z.any().nullable(),
   stop_sequence: z.string().nullable(),
   type: z.enum(["message"]),
-  usage: z.any(),
+  usage: UsageSchema,
 });
 
 export const MessagesHeadersSchema = z

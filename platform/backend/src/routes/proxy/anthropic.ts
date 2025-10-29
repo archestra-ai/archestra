@@ -57,55 +57,30 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const MESSAGES_SUFFIX = "/messages";
 
   /**
-   * Register HTTP proxy for all Anthropic API routes EXCEPT messages routes
-   * This will proxy routes like /v1/anthropic/models to https://api.anthropic.com/v1/models
+   * Register HTTP proxy for all Anthropic routes EXCEPT messages
+   * Messages are handled specially below (with agent support)
+   * Other routes are proxied directly without agent context
+   * Examples:
+   * - /v1/anthropic/v1/models -> https://api.anthropic.com/v1/models
+   * - /v1/anthropic/models -> https://api.anthropic.com/models
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.anthropic.com",
     prefix: API_PREFIX,
     rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format:
-      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
+      // Skip messages route (we handle it specially below with agent support)
       const isMessagesRoute =
         request.method === "POST" &&
         (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
+          request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/));
 
       if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
         next(new Error("skip"));
-      } else {
-        next();
+        return;
       }
-    },
-  });
 
-  /**
-   * Register HTTP proxy for n8n-style agent routes EXCEPT messages routes
-   * This handles n8n's URL format: /v1/anthropic/:agentId/v1/...
-   * Example: /v1/anthropic/:agentId/v1/models -> https://api.anthropic.com/v1/models
-   *
-   * NOTE: this is really only needed for n8n compatibility...
-   */
-  await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
-    prefix: `${API_PREFIX}/:agentId`,
-    rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
-    preHandler: (request, _reply, next) => {
-      // Support n8n URL format with agent ID
-      const isMessagesRoute =
-        request.method === "POST" &&
-        request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/);
-
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
-        next(new Error("skip"));
-      } else {
-        next();
-      }
+      next();
     },
   });
 

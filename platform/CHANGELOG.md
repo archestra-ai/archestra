@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.0.13](https://github.com/archestra-ai/archestra/compare/platform-v0.0.12...platform-v0.0.13) (2025-10-29)
+
+
+### Features
+
+* add Archestra MCP server ([fb33e9d](https://github.com/archestra-ai/archestra/commit/fb33e9dcd3058ab13c76313b1581c3400c889879))
+* add OpenTelemetry distributed tracing with Jaeger ([#830](https://github.com/archestra-ai/archestra/issues/830)) ([c0f2adc](https://github.com/archestra-ai/archestra/commit/c0f2adc292e9338cc891f3f455e9d8ad50db0def))
+* add team support ([#819](https://github.com/archestra-ai/archestra/issues/819)) ([f83159f](https://github.com/archestra-ai/archestra/commit/f83159f2d19cdd7051922b546a1f4d2208eea2b3))
+* add tooltip w/ description for unassigned mcp server tools + expand client searching functionality ([1de5ebc](https://github.com/archestra-ai/archestra/commit/1de5ebc9b4dae50f1bb46d893fd6c460d9eff39d))
+* assign tools from mcp server cards ([#829](https://github.com/archestra-ai/archestra/issues/829)) ([e834e6a](https://github.com/archestra-ai/archestra/commit/e834e6ac557f6dfa704d12495d5e6fcaa26e0f73))
+* basic backend observability with fastify-metrics ([#811](https://github.com/archestra-ai/archestra/issues/811)) ([b81670f](https://github.com/archestra-ai/archestra/commit/b81670fa45e9aa8837d5f56be4468df48760e582))
+* basic mcp gateway ([#787](https://github.com/archestra-ai/archestra/issues/787)) ([e231c70](https://github.com/archestra-ai/archestra/commit/e231c70dacc63b3a8f110563c531552b4d66368f))
+* edit and reinstall mcp server ([#837](https://github.com/archestra-ai/archestra/issues/837)) ([532bef3](https://github.com/archestra-ai/archestra/commit/532bef3cdbc6b2a45e0253897f2aef9018f8fabc))
+* enhance default credentials handling and UI updates ([7fc1482](https://github.com/archestra-ai/archestra/commit/7fc148248d3091655cc5d3493994271554f0cb95))
+* enhance default credentials handling and UI updates ([#775](https://github.com/archestra-ai/archestra/issues/775)) ([7fc1482](https://github.com/archestra-ai/archestra/commit/7fc148248d3091655cc5d3493994271554f0cb95))
+* implement adding custom servers ([#828](https://github.com/archestra-ai/archestra/issues/828)) ([5072e98](https://github.com/archestra-ai/archestra/commit/5072e98294816ab543e9d9262942a2958dca23fa))
+* inject MCP tools @ LLM-proxy level ([#774](https://github.com/archestra-ai/archestra/issues/774)) ([0338069](https://github.com/archestra-ai/archestra/commit/0338069de0237af98242307a25893d4523d758f4))
+* install remote MCP servers ([#801](https://github.com/archestra-ai/archestra/issues/801)) ([b2ebb94](https://github.com/archestra-ai/archestra/commit/b2ebb940558cd1f765d79f555aee278f24bfcc55))
+* LLM observability ([#824](https://github.com/archestra-ai/archestra/issues/824)) ([8bd1b8d](https://github.com/archestra-ai/archestra/commit/8bd1b8dd92b4541e3ba9d1f35caa9c775695adcf))
+* mcp catalog/gateway basic CRUD (behind feature flag) ([#755](https://github.com/archestra-ai/archestra/issues/755)) ([6117eef](https://github.com/archestra-ai/archestra/commit/6117eef34c16ef063d22b36fdc609fc326e63bc9))
+* MCP gateway ([#768](https://github.com/archestra-ai/archestra/issues/768)) ([992b9d2](https://github.com/archestra-ai/archestra/commit/992b9d230958d22794e83cbb93531c323adbff51))
+* MCP Gateway authentication ([#818](https://github.com/archestra-ai/archestra/issues/818)) ([5e0a410](https://github.com/archestra-ai/archestra/commit/5e0a410f27e81acc660b5361cb769943048bd502))
+* mcp gateway MVP ([#758](https://github.com/archestra-ai/archestra/issues/758)) ([9bedfa8](https://github.com/archestra-ai/archestra/commit/9bedfa86326c412e5f84ea185dc968af42566330))
+* MCP Response Modifier template (handlebars) ([#813](https://github.com/archestra-ai/archestra/issues/813)) ([057bb9a](https://github.com/archestra-ai/archestra/commit/057bb9a61af72a97212edb755a667e6c79dca355))
+* mcp server installation requests workflow ([#834](https://github.com/archestra-ai/archestra/issues/834)) ([f5d3440](https://github.com/archestra-ai/archestra/commit/f5d34401dbe051ed3a85a3546f81c94d0ce4f69c))
+* prepare openapi-spec for go codegen (for Terraform provider) ([#822](https://github.com/archestra-ai/archestra/issues/822)) ([5d4ad7e](https://github.com/archestra-ai/archestra/commit/5d4ad7ee91a5269bf21c3530123df3dfef3bc3d3))
+* remote tool execution (non-streaming only atm) ([#785](https://github.com/archestra-ai/archestra/issues/785)) ([2b92743](https://github.com/archestra-ai/archestra/commit/2b92743d3b7d2f22b1b868cfd39a9f96a4c49e55))
+* show current version in UI ([#821](https://github.com/archestra-ai/archestra/issues/821)) ([aed6399](https://github.com/archestra-ai/archestra/commit/aed63996c08398ac404900c49f580c31ac8e0660))
+* support remote mcp tool execution for openai streaming mode ([bb9df64](https://github.com/archestra-ai/archestra/commit/bb9df6494746bc00641454a2228020a4149cd6f4))
+* support streaming for anthropic ([#772](https://github.com/archestra-ai/archestra/issues/772)) ([27aaaf1](https://github.com/archestra-ai/archestra/commit/27aaaf19885330612b10a5b1c59f99831845f2ac))
+
+
+### Bug Fixes
+
+* add v1 prefix to mcp and proxy all llm requests via agent ([#806](https://github.com/archestra-ai/archestra/issues/806)) ([3f0efc4](https://github.com/archestra-ai/archestra/commit/3f0efc42a8357f5824d77aa0bf3a4cc8a1229753))
+* anthropic streaming linting ([3a5eb6b](https://github.com/archestra-ai/archestra/commit/3a5eb6b133a931461e5686431d6136d0dfa9ce42))
+* don't autodiscover tools from mcp gateway ([#841](https://github.com/archestra-ai/archestra/issues/841)) ([b60dc79](https://github.com/archestra-ai/archestra/commit/b60dc7941b1fc8e66dee7226ea709e0b75fecdbf))
+* few bug fixes ([#759](https://github.com/archestra-ai/archestra/issues/759)) ([b672765](https://github.com/archestra-ai/archestra/commit/b672765701f9aa732f183eb7e25d3d98899ab5a1))
+* fix mcp dialog layout ([#840](https://github.com/archestra-ai/archestra/issues/840)) ([680271b](https://github.com/archestra-ai/archestra/commit/680271b42a72c05c1cdb700f8c903937a8006596))
+* fix url color, tools bulk actions ux, How it works layout ([#764](https://github.com/archestra-ai/archestra/issues/764)) ([a05a1c6](https://github.com/archestra-ai/archestra/commit/a05a1c6a0da6d458298be3b47cca36948e8dcbea))
+* flickering menu ([#784](https://github.com/archestra-ai/archestra/issues/784)) ([e5edfa1](https://github.com/archestra-ai/archestra/commit/e5edfa1f7f3ab7b637c37ceffe3367ed58e3ecc7))
+* improve streaming ([#765](https://github.com/archestra-ai/archestra/issues/765)) ([8227a0e](https://github.com/archestra-ai/archestra/commit/8227a0e466f914931d73f8cea6c969d5c0c20983))
+* interactive mode when running command db:generate from root dir ([#792](https://github.com/archestra-ai/archestra/issues/792)) ([0d8111e](https://github.com/archestra-ai/archestra/commit/0d8111eba906deff842abe8bb99b559c67b1dadc))
+* issues w/ api key authentication ([#826](https://github.com/archestra-ai/archestra/issues/826)) ([e70d1b3](https://github.com/archestra-ai/archestra/commit/e70d1b353dee102612e4d26f429d2322780f73c6))
+* oauth with github via client id/secret ([#842](https://github.com/archestra-ai/archestra/issues/842)) ([1fba136](https://github.com/archestra-ai/archestra/commit/1fba13636eb6eeccf1cfee67ec703c8d6b47e2df))
+* OpenWebUI streaming mode support ([#790](https://github.com/archestra-ai/archestra/issues/790)) ([f8e8913](https://github.com/archestra-ai/archestra/commit/f8e8913bbf982447f6f9766900983f8425bd217e))
+* Polish MCP catalog texts ([#802](https://github.com/archestra-ai/archestra/issues/802)) ([8baa483](https://github.com/archestra-ai/archestra/commit/8baa483ca69d22ed07979dd27f69cfb263fc9128))
+* return default OpenAI url ([#807](https://github.com/archestra-ai/archestra/issues/807)) ([db2102f](https://github.com/archestra-ai/archestra/commit/db2102f2cf27e06a43b78f79b946819415679d49))
+* tiny text update ([#797](https://github.com/archestra-ai/archestra/issues/797)) ([84ab5ad](https://github.com/archestra-ai/archestra/commit/84ab5ad3c0e044b259da6aa185a697aa9c872e22))
+* tool execution ([#845](https://github.com/archestra-ai/archestra/issues/845)) ([de0a5ce](https://github.com/archestra-ai/archestra/commit/de0a5cef0e641bdd414db5794c22ec8f94dc08eb))
+* use mcp server sdk for gateway ([#808](https://github.com/archestra-ai/archestra/issues/808)) ([454c505](https://github.com/archestra-ai/archestra/commit/454c5058c92927d149eaea58144393ecd129ce17))
+* when installing mcp server, "refetch" available tools ([#798](https://github.com/archestra-ai/archestra/issues/798)) ([e87242c](https://github.com/archestra-ai/archestra/commit/e87242cdee0a9c1983bb59d7315994c6eca9c3cf))
+
+
+### Dependencies
+
+* **platform:** bump @types/node from 20.19.19 to 24.9.1 in /platform ([#780](https://github.com/archestra-ai/archestra/issues/780)) ([42b4962](https://github.com/archestra-ai/archestra/commit/42b4962512c814d1742db90106b33980052652cf))
+* **platform:** bump next from 15.5.4 to 16.0.0 in /platform ([#832](https://github.com/archestra-ai/archestra/issues/832)) ([98e98ea](https://github.com/archestra-ai/archestra/commit/98e98ea78ee3a3a96166c30033381708a671b16d))
+* **platform:** bump react-markdown from 9.1.0 to 10.1.0 in /platform ([#779](https://github.com/archestra-ai/archestra/issues/779)) ([02268fc](https://github.com/archestra-ai/archestra/commit/02268fc12b1fecc57ee1ba2c7f1f85b7af86bfae))
+* **platform:** bump the platform-dependencies group across 1 directory with 5 updates ([#833](https://github.com/archestra-ai/archestra/issues/833)) ([7edae24](https://github.com/archestra-ai/archestra/commit/7edae24c02a3abe992f1038873aa476fe2fa2c5d))
+* **platform:** bump the platform-dependencies group in /platform with 25 updates ([#778](https://github.com/archestra-ai/archestra/issues/778)) ([46eb5e4](https://github.com/archestra-ai/archestra/commit/46eb5e46454e0306fb74e638293363e03c3126ed))
+* **platform:** bump vitest from 3.2.4 to 4.0.1 in /platform ([#782](https://github.com/archestra-ai/archestra/issues/782)) ([91773ec](https://github.com/archestra-ai/archestra/commit/91773ecaea3c3eaadbf8248f5f547d1ee464c226))
+
 ## [0.0.12](https://github.com/archestra-ai/archestra/compare/platform-v0.0.11...platform-v0.0.12) (2025-10-20)
 
 

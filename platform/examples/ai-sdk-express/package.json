@@ -7,7 +7,6 @@
     "type-check": "tsc --build"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.24",
     "@ai-sdk/openai": "^2.0.30",
     "ai": "^5.0.44",
     "dotenv": "16.4.5",

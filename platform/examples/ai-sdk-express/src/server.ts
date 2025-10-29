@@ -1,4 +1,3 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { type CoreMessage, stepCountIs, streamText, tool } from "ai";
 import "dotenv/config";
@@ -13,9 +12,6 @@ const rl = readline.createInterface({
 
 const conversationHistory: CoreMessage[] = [];
 
-// Default to OpenAI, can be changed via user input
-let currentProvider: "openai" | "gemini" = "openai";
-
 async function chat(userMessage: string) {
   conversationHistory.push({
     role: "user",
@@ -27,18 +23,8 @@ async function chat(userMessage: string) {
     baseURL: "http://localhost:9000/v1/openai", // point requests to Archestra Platform
   }).chat; // Archestra supports Chat Completions API
 
-  const customGemini = createGoogleGenerativeAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "http://localhost:9000/v1/gemini", // point requests to Archestra Platform
-  }).chat; // Archestra supports Chat Completions API
-
-  const model =
-    currentProvider === "openai"
-      ? customOpenAI("gpt-4o-mini")
-      : customGemini("gemini-2.5-flash");
-
   const result = streamText({
-    model,
+    model: customOpenAI("gpt-4o"),
     messages: conversationHistory,
     stopWhen: stepCountIs(5),
     tools: {
@@ -77,24 +63,9 @@ function promptUser() {
     const message = input.trim();
 
     if (message.toLowerCase() === "exit" || message.toLowerCase() === "quit") {
-      process.stdout.write("Goodbye!\n");
+      console.log("Goodbye!");
       rl.close();
       process.exit(0);
-    }
-
-    // Switch provider
-    if (message === "1") {
-      currentProvider = "openai";
-      process.stdout.write(`\n[Switched to OpenAI]\n\n`);
-      promptUser();
-      return;
-    }
-
-    if (message === "2") {
-      currentProvider = "gemini";
-      process.stdout.write(`\n[Switched to Gemini]\n\n`);
-      promptUser();
-      return;
     }
 
     if (message) {
@@ -105,9 +76,7 @@ function promptUser() {
   });
 }
 
-process.stdout.write(
-  'CLI Chat started. Type "exit" or "quit" to end the conversation.\n' +
-    'Type "1" for OpenAI or "2" for Gemini to switch providers.\n' +
-    `Current provider: ${currentProvider.toUpperCase()}\n\n`,
+console.log(
+  'CLI Chat started. Type "exit" or "quit" to end the conversation.\n',
 );
 promptUser();

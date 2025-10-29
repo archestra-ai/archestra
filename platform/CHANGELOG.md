@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.14](https://github.com/archestra-ai/archestra/compare/platform-v0.0.13...platform-v0.0.14) (2025-10-29)
+
+
+### Bug Fixes
+
+* n8n llm proxy anthropic routing when using specific agent id ([#846](https://github.com/archestra-ai/archestra/issues/846)) ([5fe42dc](https://github.com/archestra-ai/archestra/commit/5fe42dc21107eae763f97e262cdf8f13045695e6))
+
 ## [0.0.13](https://github.com/archestra-ai/archestra/compare/platform-v0.0.12...platform-v0.0.13) (2025-10-29)
 
 

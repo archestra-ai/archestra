@@ -53,20 +53,41 @@ class ToolModel {
 
     // If tool already exists (conflict), fetch it
     if (!createdTool) {
+      // Build where clause based on which fields are set
+      let whereClause: ReturnType<typeof and>;
+
+      if (tool.agentId && tool.mcpServerId) {
+        // Both agentId and mcpServerId set (shouldn't happen but handle it)
+        whereClause = and(
+          eq(schema.toolsTable.agentId, tool.agentId),
+          eq(schema.toolsTable.mcpServerId, tool.mcpServerId),
+          eq(schema.toolsTable.name, tool.name),
+        );
+      } else if (tool.agentId) {
+        // Agent-specific tool (proxy-sniffed)
+        whereClause = and(
+          eq(schema.toolsTable.agentId, tool.agentId),
+          eq(schema.toolsTable.name, tool.name),
+        );
+      } else if (tool.mcpServerId) {
+        // MCP tool
+        whereClause = and(
+          eq(schema.toolsTable.mcpServerId, tool.mcpServerId),
+          eq(schema.toolsTable.name, tool.name),
+        );
+      } else {
+        // Neither set (shouldn't happen but handle it)
+        whereClause = and(
+          isNull(schema.toolsTable.agentId),
+          isNull(schema.toolsTable.mcpServerId),
+          eq(schema.toolsTable.name, tool.name),
+        );
+      }
+
       const [existingTool] = await db
         .select()
         .from(schema.toolsTable)
-        .where(
-          tool.agentId
-            ? and(
-                eq(schema.toolsTable.agentId, tool.agentId),
-                eq(schema.toolsTable.name, tool.name),
-              )
-            : and(
-                isNull(schema.toolsTable.agentId),
-                eq(schema.toolsTable.name, tool.name),
-              ),
-        );
+        .where(whereClause);
       return existingTool;
     }
 

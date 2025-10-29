@@ -34,7 +34,10 @@ const toolsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [unique().on(table.agentId, table.name)],
+  (table) => [
+    unique().on(table.agentId, table.name),
+    unique().on(table.mcpServerId, table.name),
+  ],
 );
 
 export default toolsTable;

@@ -1,0 +1,1 @@
+ALTER TABLE "tools" ADD CONSTRAINT "tools_mcp_server_id_name_unique" UNIQUE("mcp_server_id","name");

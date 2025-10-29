@@ -40,6 +40,9 @@ jobs:
   platform-e2e-tests:
     name: Platform e2e Tests
     runs-on: ubuntu-latest
+    env:
+      OPENAI_BASE_URL: http://wiremock:8080/v1
+      ANTHROPIC_BASE_URL: http://wiremock:8080
     steps:
       - name: Checkout repository
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -68,6 +71,9 @@ jobs:
           tags: archestra/platform:ci-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            OPENAI_BASE_URL=http://wiremock:8080/v1
+            ANTHROPIC_BASE_URL=http://wiremock:8080
 
       - name: Start platform with docker compose
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
@@ -115,6 +121,9 @@ jobs:
 
           echo "=== PostgreSQL Container Logs ==="
           docker logs archestra-platform-test-postgresql
+
+          echo "=== WireMock Container Logs ==="
+          docker logs archestra-platform-test-wiremock
 
           echo "=== All Container Stats ==="
 

@@ -25,6 +25,7 @@ namespace Gemini {
     export type GenerateContentResponse = z.infer<
       typeof GeminiAPI.GenerateContentResponseSchema
     >;
+    export type UsageMetadata = z.infer<typeof Gemini.API.UsageMetadataSchema>;
 
     export type Candidate = z.infer<typeof GeminiAPI.CandidateSchema>;
     export type SystemInstruction = z.infer<

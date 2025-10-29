@@ -331,6 +331,7 @@ describe("ToolModel", () => {
         toolName: "github_mcp_server__list_issues",
         mcpServerName: "test-github-server",
         mcpServerSecretId: null,
+        mcpServerCatalogId: null,
         responseModifierTemplate: null,
       });
     });

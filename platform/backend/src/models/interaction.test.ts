@@ -1,6 +1,11 @@
-import { createTestAdmin, createTestUser } from "@/test-utils";
+import {
+  createTestAdmin,
+  createTestOrganization,
+  createTestUser,
+} from "@/test-utils";
 import AgentModel from "./agent";
 import InteractionModel from "./interaction";
+import TeamModel from "./team";
 
 describe("InteractionModel", () => {
   let agentId: string;
@@ -9,7 +14,7 @@ describe("InteractionModel", () => {
     // Create test agent
     const agent = await AgentModel.create({
       name: "Test Agent",
-      usersWithAccess: [],
+      teams: [],
     });
     agentId = agent.id;
   });
@@ -159,7 +164,7 @@ describe("InteractionModel", () => {
       // Create another agent
       const otherAgent = await AgentModel.create({
         name: "Other Agent",
-        usersWithAccess: [],
+        teams: [],
       });
 
       // Create interactions for both agents
@@ -226,18 +231,18 @@ describe("InteractionModel", () => {
 
   describe("Access Control", () => {
     test("admin can see all interactions", async () => {
-      const user1Id = await createTestUser();
-      const user2Id = await createTestUser();
+      const _user1Id = await createTestUser();
+      const _user2Id = await createTestUser();
       const adminId = await createTestAdmin();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
-      const agent2 = await AgentModel.create(
-        { name: "Agent 2", usersWithAccess: [] },
-        user2Id,
-      );
+      const agent1 = await AgentModel.create({
+        name: "Agent 1",
+        teams: [],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Agent 2",
+        teams: [],
+      });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -272,15 +277,33 @@ describe("InteractionModel", () => {
     test("member only sees interactions for accessible agents", async () => {
       const user1Id = await createTestUser();
       const user2Id = await createTestUser();
+      const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
-      const agent2 = await AgentModel.create(
-        { name: "Agent 2", usersWithAccess: [] },
-        user2Id,
-      );
+      // Create teams and add users
+      const team1 = await TeamModel.create({
+        name: "Team 1",
+        organizationId: orgId,
+        createdBy: adminId,
+      });
+      await TeamModel.addMember(team1.id, user1Id);
+
+      const team2 = await TeamModel.create({
+        name: "Team 2",
+        organizationId: orgId,
+        createdBy: adminId,
+      });
+      await TeamModel.addMember(team2.id, user2Id);
+
+      // Create agents with team assignments
+      const agent1 = await AgentModel.create({
+        name: "Agent 1",
+        teams: [team1.id],
+      });
+      const agent2 = await AgentModel.create({
+        name: "Agent 2",
+        teams: [team2.id],
+      });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -314,13 +337,10 @@ describe("InteractionModel", () => {
     });
 
     test("member with no access sees no interactions", async () => {
-      const user1Id = await createTestUser();
+      const _user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
-      const agent1 = await AgentModel.create(
-        { name: "Agent 1", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent1 = await AgentModel.create({ name: "Agent 1", teams: [] });
 
       await InteractionModel.create({
         agentId: agent1.id,
@@ -340,13 +360,10 @@ describe("InteractionModel", () => {
     });
 
     test("findById returns interaction for admin", async () => {
-      const user1Id = await createTestUser();
+      const _user1Id = await createTestUser();
       const adminId = await createTestAdmin();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,
@@ -372,11 +389,21 @@ describe("InteractionModel", () => {
 
     test("findById returns interaction for user with agent access", async () => {
       const user1Id = await createTestUser();
+      const adminId = await createTestAdmin();
+      const orgId = await createTestOrganization();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      // Create team and add user
+      const team = await TeamModel.create({
+        name: "Test Team",
+        organizationId: orgId,
+        createdBy: adminId,
+      });
+      await TeamModel.addMember(team.id, user1Id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+      });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,
@@ -401,13 +428,10 @@ describe("InteractionModel", () => {
     });
 
     test("findById returns null for user without agent access", async () => {
-      const user1Id = await createTestUser();
+      const _user1Id = await createTestUser();
       const user2Id = await createTestUser();
 
-      const agent = await AgentModel.create(
-        { name: "Test Agent", usersWithAccess: [] },
-        user1Id,
-      );
+      const agent = await AgentModel.create({ name: "Test Agent", teams: [] });
 
       const interaction = await InteractionModel.create({
         agentId: agent.id,

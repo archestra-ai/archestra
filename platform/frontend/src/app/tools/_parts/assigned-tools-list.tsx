@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -34,14 +35,13 @@ import {
   useAgentToolPatchMutation,
   useUnassignTool,
 } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import {
   useToolInvocationPolicies,
   useToolResultPolicies,
 } from "@/lib/policy.query";
 import { formatDate } from "@/lib/utils";
 
-type AgentToolData = GetAllAgentToolsResponses["200"][number];
+type AgentToolData = archestraApiTypes.GetAllAgentToolsResponses["200"][number];
 type ToolResultTreatment = AgentToolData["toolResultTreatment"];
 
 interface AssignedToolsListProps {
@@ -338,12 +338,15 @@ export function AssignedToolsList({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="default" className="bg-indigo-500">
-                      MCP Server
+                    <Badge
+                      variant="default"
+                      className="bg-indigo-500 max-w-[120px]"
+                    >
+                      <span className="truncate">{mcpServerName}</span>
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{mcpServerName}</p>
+                    <p>MCP Server: {mcpServerName}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -358,7 +361,7 @@ export function AssignedToolsList({
                     variant="secondary"
                     className="bg-amber-700 text-white"
                   >
-                    Intercepted
+                    LLM Proxy
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>

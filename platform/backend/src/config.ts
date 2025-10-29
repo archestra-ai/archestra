@@ -103,7 +103,7 @@ export default {
     name: "Archestra Platform API",
     version: packageJson.version,
     corsOrigins: getCorsOrigins(),
-    authHeaderName: "X-Archestra-API-Key",
+    apiKeyAuthorizationHeaderName: "Authorization",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
@@ -135,7 +135,10 @@ export default {
     },
   },
   features: {
-    mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+    /**
+     * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:
+     * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
+     */
   },
   debug: isDevelopment,
   production: isProduction,

@@ -11,6 +11,7 @@ export const ErrorResponseSchema = z.object({
     }),
   ]),
 });
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 /**
  * Pagination query parameters schema
@@ -96,6 +97,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   CreateAgent: "createAgent",
   GetAgent: "getAgent",
+  GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
 
@@ -122,8 +124,33 @@ export const RouteId = {
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
+  GetMcpServerTools: "getMcpServerTools",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+
+  // MCP Server Installation Request Routes
+  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
+  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
+  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
+  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
+  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
+  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
+  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
+  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
+
+  // OAuth Routes
+  InitiateOAuth: "initiateOAuth",
+  HandleOAuthCallback: "handleOAuthCallback",
+
+  // Team Routes
+  GetTeams: "getTeams",
+  CreateTeam: "createTeam",
+  GetTeam: "getTeam",
+  UpdateTeam: "updateTeam",
+  DeleteTeam: "deleteTeam",
+  GetTeamMembers: "getTeamMembers",
+  AddTeamMember: "addTeamMember",
+  RemoveTeamMember: "removeTeamMember",
 
   // Tool Routes
   GetTools: "getTools",

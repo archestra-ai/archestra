@@ -1,3 +1,6 @@
+// Import tracing first to ensure auto-instrumentation works properly
+import "./tracing";
+
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
@@ -12,7 +15,6 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import { authMiddleware } from "@/middleware/auth";
-import { requestMetrics } from "@/middleware/metrics";
 import {
   Anthropic,
   Gemini,
@@ -24,7 +26,14 @@ import { seedDatabase } from "./database/seed";
 import * as routes from "./routes";
 
 const {
-  api: { port, name, version, host, corsOrigins, authHeaderName },
+  api: {
+    port,
+    name,
+    version,
+    host,
+    corsOrigins,
+    apiKeyAuthorizationHeaderName,
+  },
 } = config;
 
 const fastify = Fastify({
@@ -76,7 +85,6 @@ const start = async () => {
     await seedDatabase();
 
     await fastify.register(metricsPlugin, { endpoint: "/metrics" });
-    fastify.addHook("onRequest", requestMetrics.handle);
 
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {
@@ -84,10 +92,9 @@ const start = async () => {
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
-        "Authorization",
         "X-Requested-With",
         "Cookie",
-        authHeaderName,
+        apiKeyAuthorizationHeaderName,
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
@@ -108,6 +115,13 @@ const start = async () => {
           version,
         },
       },
+
+      /**
+       * basically we use this hide untagged option to NOT include fastify-http-proxy routes in the OpenAPI spec
+       * (ex. we use this in several spots, as of this writing, under ./routes/proxy/)
+       */
+      hideUntagged: true,
+
       /**
        * https://github.com/turkerdev/fastify-type-provider-zod?tab=readme-ov-file#how-to-use-together-with-fastifyswagger
        */
@@ -120,10 +134,26 @@ const start = async () => {
 
     // Register routes
     fastify.get("/openapi.json", async () => fastify.swagger());
-    fastify.get("/health", async () => ({
-      status: name,
-      version,
-    }));
+    fastify.get(
+      "/health",
+      {
+        schema: {
+          tags: ["health"],
+          response: {
+            200: z.object({
+              name: z.string(),
+              status: z.string(),
+              version: z.string(),
+            }),
+          },
+        },
+      },
+      async () => ({
+        name,
+        status: "ok",
+        version,
+      }),
+    );
 
     fastify.addHook("preHandler", authMiddleware.handle);
 

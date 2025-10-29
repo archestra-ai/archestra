@@ -4,11 +4,13 @@ import {
   type GenerateContentParameters,
   GoogleGenAI,
 } from "@google/genai";
+import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
+import { getObservableGenAI } from "@/models/llm-metrics";
 import { ErrorResponseSchema, Gemini, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
@@ -115,6 +117,13 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       body.tools = [body.tools];
     }
     const tools = Array.isArray(body.tools) ? body.tools : [];
+    // Add OpenTelemetry span attribute for filtering in Jaeger
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute("route.category", "llm-proxy");
+      span.setAttribute("llm.provider", "gemini");
+    }
+
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -136,10 +145,15 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { "x-goog-api-key": geminiApiKey } = headers;
-    const genAI = new GoogleGenAI({
-      apiKey: geminiApiKey,
-      httpOptions: { baseUrl: config.llm.gemini.baseUrl },
-    });
+    const genAI = getObservableGenAI(
+      new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: { baseUrl: config.llm.gemini.baseUrl },
+      }),
+      resolvedAgentId,
+    );
+
+    // Use the model from the URL path or default to gemini-pro
     const modelName = model || "gemini-2.5-pro";
 
     try {
@@ -658,7 +672,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini (default agent)",
         summary: "Generate content using Gemini",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
@@ -694,7 +708,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Stream generated content using Gemini (default agent)",
         summary: "Stream generated content using Gemini",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           model: z.string().describe("The model to use"),
         }),
@@ -730,7 +744,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         description: "Generate content using Gemini with specific agent",
         summary: "Generate content using Gemini (specific agent)",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),
@@ -768,7 +782,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Stream generated content using Gemini with specific agent",
         summary: "Stream generated content using Gemini (specific agent)",
-        tags: ["Proxy"],
+        tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,
           model: z.string().describe("The model to use"),

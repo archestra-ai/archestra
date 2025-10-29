@@ -1,11 +1,10 @@
-import type { ErrorExtended } from "@shared";
-import { ServerErrorFallback } from "@/components/error-fallback";
 import {
-  type GetAgentsResponses,
-  type GetInteractionsResponses,
-  getAgents,
-  getInteractions,
-} from "@/lib/clients/api";
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ErrorExtended,
+} from "@shared";
+
+import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
 import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
 import LogsPage from "./page.client";
@@ -14,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 export default async function LogsPageServer() {
   let initialData: {
-    interactions: GetInteractionsResponses["200"];
-    agents: GetAgentsResponses["200"];
+    interactions: archestraApiTypes.GetInteractionsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   } = {
     interactions: {
       data: [],
@@ -34,7 +33,7 @@ export default async function LogsPageServer() {
     const headers = await getServerApiHeaders();
     initialData = {
       interactions: (
-        await getInteractions({
+        await archestraApiSdk.getInteractions({
           headers,
           query: {
             limit: DEFAULT_TABLE_LIMIT,
@@ -54,7 +53,7 @@ export default async function LogsPageServer() {
           hasPrev: false,
         },
       },
-      agents: (await getAgents({ headers })).data || [],
+      agents: (await archestraApiSdk.getAgents({ headers })).data || [],
     };
   } catch (error) {
     console.error(error);

@@ -1,10 +1,12 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import fastifyHttpProxy from "@fastify/http-proxy";
+import { trace } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
+import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
 import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
@@ -81,20 +83,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   });
 
   /**
-   * Register HTTP proxy for agent-specific routes EXCEPT messages routes
-   * This allows using /v1/anthropic/v1/:agentId/ as a base URL for Anthropic API calls
-   * Example: /v1/anthropic/v1/:agentId/models -> https://api.anthropic.com/v1/models
+   * Register HTTP proxy for n8n-style agent routes EXCEPT messages routes
+   * This handles n8n's URL format: /v1/anthropic/:agentId/v1/...
+   * Example: /v1/anthropic/:agentId/v1/models -> https://api.anthropic.com/v1/models
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.anthropic.com",
-    prefix: `${API_PREFIX}/v1/:agentId`,
+    prefix: `${API_PREFIX}/:agentId`,
     rewritePrefix: "/v1",
     // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format with agent ID
+      // Support n8n URL format with agent ID
       const isMessagesRoute =
         request.method === "POST" &&
-        request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/);
+        request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/);
 
       if (isMessagesRoute) {
         // Skip proxy for this route - we handle it below
@@ -111,6 +115,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
+    // Add OpenTelemetry span attribute for filtering in Jaeger
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute("route.category", "llm-proxy");
+      span.setAttribute("llm.provider", "anthropic");
+    }
+
     const { tools, stream } = body;
 
     let resolvedAgentId: string;
@@ -134,9 +145,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { "x-api-key": anthropicApiKey } = headers;
+
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
+      fetch: getObservableFetch("anthropic", resolvedAgentId),
     });
 
     try {
@@ -227,12 +240,32 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (stream) {
-        // Handle streaming response
-        const messageStream = anthropicClient.messages.stream({
-          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-          ...(body as any),
-          messages: filteredMessages,
-        });
+        // Handle streaming response with span to measure LLM call duration
+        const tracer = trace.getTracer("archestra");
+        const messageStream = await tracer.startActiveSpan(
+          "anthropic.messages",
+          {
+            attributes: {
+              "llm.model": body.model,
+              "llm.stream": true,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const stream = anthropicClient.messages.stream({
+                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                ...(body as any),
+                messages: filteredMessages,
+              });
+              llmSpan.end();
+              return stream;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
+        );
 
         // Accumulate tool calls and track content for persistence
         let accumulatedText = "";
@@ -370,6 +403,14 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (e) => e.type === "message_start",
         ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
 
+        // Report token usage metrics for streaming
+        const usage = messageStartEvent?.message.usage;
+        if (usage) {
+          const { input, output } =
+            utils.adapters.anthropic.getUsageTokens(usage);
+          reportLLMTokens("anthropic", resolvedAgentId, input, output);
+        }
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
@@ -408,14 +449,34 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.raw.end();
         return reply;
       } else {
-        // Non-streaming response
-        let response = await anthropicClient.messages.create({
-          // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-          ...(body as any),
-          messages: filteredMessages,
-          tools: mergedTools.length > 0 ? mergedTools : undefined,
-          stream: false,
-        });
+        // Non-streaming response with span to measure LLM call duration
+        const tracer = trace.getTracer("archestra");
+        let response = await tracer.startActiveSpan(
+          "anthropic.messages",
+          {
+            attributes: {
+              "llm.model": body.model,
+              "llm.stream": false,
+            },
+          },
+          async (llmSpan) => {
+            try {
+              const response = await anthropicClient.messages.create({
+                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                ...(body as any),
+                messages: filteredMessages,
+                tools: mergedTools.length > 0 ? mergedTools : undefined,
+                stream: false,
+              });
+              llmSpan.end();
+              return response;
+            } catch (error) {
+              llmSpan.recordException(error as Error);
+              llmSpan.end();
+              throw error;
+            }
+          },
+        );
 
         const toolCalls = response.content.filter(
           (content) => content.type === "tool_use",
@@ -481,13 +542,33 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ];
 
               // Make final call with tool results
-              const finalResponse = await anthropicClient.messages.create({
-                // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
-                ...(body as any),
-                messages: updatedMessages,
-                tools: mergedTools.length > 0 ? mergedTools : undefined,
-                stream: false,
-              });
+              const finalResponse = await tracer.startActiveSpan(
+                "anthropic.messages.continuation",
+                {
+                  attributes: {
+                    "llm.model": body.model,
+                    "llm.stream": false,
+                    "llm.continuation": true,
+                  },
+                },
+                async (continuationSpan) => {
+                  try {
+                    const response = await anthropicClient.messages.create({
+                      // biome-ignore lint/suspicious/noExplicitAny: Anthropic still WIP
+                      ...(body as any),
+                      messages: updatedMessages,
+                      tools: mergedTools.length > 0 ? mergedTools : undefined,
+                      stream: false,
+                    });
+                    continuationSpan.end();
+                    return response;
+                  } catch (error) {
+                    continuationSpan.recordException(error as Error);
+                    continuationSpan.end();
+                    throw error;
+                  }
+                },
+              );
 
               // Update the response with the final LLM response
               response = finalResponse;
@@ -553,13 +634,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   fastify.post(
-    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/:agentId/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
-        description: "Send a message to Anthropic using a specific agent",
+        description:
+          "Send a message to Anthropic using a specific agent (n8n URL format)",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,

@@ -202,3 +202,11 @@ export function toolResultsToMessages(results: CommonToolResult[]): Array<{
     },
   ];
 }
+
+/** Returns input and output usage tokens */
+export function getUsageTokens(usage: Anthropic.Types.Usage) {
+  return {
+    input: usage.input_tokens,
+    output: usage.output_tokens,
+  };
+}

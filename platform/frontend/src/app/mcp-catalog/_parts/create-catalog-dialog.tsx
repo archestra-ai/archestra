@@ -1,4 +1,6 @@
-import { useState } from "react";
+"use client";
+
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,9 +10,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
+import {
+  McpCatalogForm,
+  type McpCatalogFormValues,
+  transformFormToApiData,
+} from "./mcp-catalog-form";
 
 interface CreateCatalogDialogProps {
   isOpen: boolean;
@@ -21,46 +33,77 @@ export function CreateCatalogDialog({
   isOpen,
   onClose,
 }: CreateCatalogDialogProps) {
-  const [itemName, setItemName] = useState("");
+  const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
   const createMutation = useCreateInternalMcpCatalogItem();
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleClose = () => {
+    setActiveTab("remote");
     onClose();
-    setItemName("");
   };
 
-  const handleSubmit = async () => {
-    await createMutation.mutateAsync({ name: itemName });
+  const onSubmit = async (values: McpCatalogFormValues) => {
+    const apiData = transformFormToApiData(values);
+    await createMutation.mutateAsync(apiData);
     handleClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Catalog Item</DialogTitle>
+          <DialogTitle>Add MCP Server Using Config</DialogTitle>
           <DialogDescription>
-            Add a new MCP server to the catalog.
+            Add a new MCP server to your private registry.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="name">Name</Label>
-          <Input
-            id="name"
-            value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
-            placeholder="Enter server name"
-          />
-        </div>
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v as "remote" | "local");
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="remote">Remote</TabsTrigger>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger onClick={(e) => e.preventDefault()}>
+                  <TabsTrigger value="local" disabled>
+                    Local
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Local MCP Servers will be supported soon</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </TabsList>
+
+          <TabsContent value="remote" className="space-y-4 mt-4">
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              submitButtonRef={submitButtonRef}
+            />
+          </TabsContent>
+
+          <TabsContent value="local">
+            <div className="text-center py-8 text-muted-foreground">
+              Local MCP servers will be supported soon
+            </div>
+          </TabsContent>
+        </Tabs>
+
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} type="button">
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
-            disabled={!itemName.trim() || createMutation.isPending}
+            onClick={() => submitButtonRef.current?.click()}
+            disabled={createMutation.isPending}
           >
-            {createMutation.isPending ? "Creating..." : "Create"}
+            {createMutation.isPending ? "Adding..." : "Add Server"}
           </Button>
         </DialogFooter>
       </DialogContent>

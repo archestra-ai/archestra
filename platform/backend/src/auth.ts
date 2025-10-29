@@ -9,7 +9,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 
 const {
-  api: { authHeaderName },
+  api: { apiKeyAuthorizationHeaderName },
   baseURL,
   production,
   auth: { secret, cookieDomain, trustedOrigins },
@@ -28,11 +28,21 @@ export const auth = betterAuth({
         admin: adminRole,
         member: memberRole,
       },
+      features: {
+        team: {
+          enabled: true,
+          ac,
+          roles: {
+            admin: adminRole,
+            member: memberRole,
+          },
+        },
+      },
     }),
     admin(),
     apiKey({
-      // enableSessionForAPIKeys: true,
-      apiKeyHeaders: [authHeaderName],
+      enableSessionForAPIKeys: true,
+      apiKeyHeaders: [apiKeyAuthorizationHeaderName],
       defaultPrefix: "archestra_",
       rateLimit: {
         enabled: false,
@@ -67,6 +77,8 @@ export const auth = betterAuth({
       member: schema.member,
       invitation: schema.invitation,
       account: schema.account,
+      team: schema.team,
+      teamMember: schema.teamMember,
     },
   }),
 

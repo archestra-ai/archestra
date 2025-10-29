@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -13,14 +14,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import { formatDate } from "@/lib/utils";
+import { ResponseModifierEditor } from "./response-modifier-editor";
 import { ToolCallPolicies } from "./tool-call-policies";
 import { ToolReadonlyDetails } from "./tool-readonly-details";
 import { ToolResultPolicies } from "./tool-result-policies";
 
 interface ToolDetailsDialogProps {
-  agentTool: GetAllAgentToolsResponses["200"][number] | null;
+  agentTool: archestraApiTypes.GetAllAgentToolsResponses["200"][number] | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -117,6 +118,7 @@ export function ToolDetailsDialog({
               <ToolCallPolicies agentTool={agentTool} />
               <ToolResultPolicies agentTool={agentTool} />
             </div>
+            <ResponseModifierEditor agentTool={agentTool} />
           </div>
         </div>
       </DialogContent>

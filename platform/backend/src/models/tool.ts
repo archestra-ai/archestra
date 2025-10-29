@@ -11,7 +11,7 @@ import {
 
 import db, { schema } from "@/database";
 import type { ExtendedTool, InsertTool, Tool } from "@/types";
-import AgentAccessControlModel from "./agent-access-control";
+import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 
 const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
@@ -89,7 +89,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,
@@ -143,8 +143,10 @@ class ToolModel {
      * they have access to, plus all "MCP tools" (tools that are not assigned to any agent).
      */
     if (userId && !isAdmin) {
-      const accessibleAgentIds =
-        await AgentAccessControlModel.getUserAccessibleAgentIds(userId);
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        false,
+      );
 
       const mcpServerSourceClause = isNotNull(schema.toolsTable.mcpServerId);
 
@@ -179,7 +181,7 @@ class ToolModel {
 
     // Check access control for non-admins
     if (tool.agentId && userId && !isAdmin) {
-      const hasAccess = await AgentAccessControlModel.userHasAgentAccess(
+      const hasAccess = await AgentTeamModel.userHasAgentAccess(
         userId,
         tool.agentId,
         false,
@@ -276,6 +278,30 @@ class ToolModel {
   }
 
   /**
+   * Get names of all MCP tools assigned to an agent
+   * Used to prevent autodiscovery of tools already available via MCP servers
+   */
+  static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
+    const mcpTools = await db
+      .select({
+        name: schema.toolsTable.name,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+        ),
+      );
+
+    return mcpTools.map((tool) => tool.name);
+  }
+
+  /**
    * Get MCP tools assigned to an agent
    */
   static async getMcpToolsAssignedToAgent(
@@ -284,7 +310,10 @@ class ToolModel {
   ): Promise<
     Array<{
       toolName: string;
-      mcpServerInstallationMetadata: Record<string, unknown>;
+      responseModifierTemplate: string | null;
+      mcpServerSecretId: string | null;
+      mcpServerName: string;
+      mcpServerCatalogId: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -294,7 +323,11 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
-        mcpServerInstallationMetadata: schema.mcpServersTable.metadata,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
+        mcpServerSecretId: schema.mcpServersTable.secretId,
+        mcpServerName: schema.mcpServersTable.name,
+        mcpServerCatalogId: schema.mcpServersTable.catalogId,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -314,6 +347,62 @@ class ToolModel {
       );
 
     return mcpTools;
+  }
+
+  /**
+   * Get all tools for a specific MCP server with their assignment counts and assigned agents
+   */
+  static async findByMcpServerId(mcpServerId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      parameters: Record<string, unknown>;
+      createdAt: Date;
+      assignedAgentCount: number;
+      assignedAgents: Array<{ id: string; name: string }>;
+    }>
+  > {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        parameters: schema.toolsTable.parameters,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.mcpServerId, mcpServerId))
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    // For each tool, get assigned agents
+    const toolsWithAgents = await Promise.all(
+      tools.map(async (tool) => {
+        const assignments = await db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            agentName: schema.agentsTable.name,
+          })
+          .from(schema.agentToolsTable)
+          .innerJoin(
+            schema.agentsTable,
+            eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          )
+          .where(eq(schema.agentToolsTable.toolId, tool.id));
+
+        return {
+          ...tool,
+          parameters: tool.parameters ?? {},
+          assignedAgentCount: assignments.length,
+          assignedAgents: assignments.map((a) => ({
+            id: a.agentId,
+            name: a.agentName,
+          })),
+        };
+      }),
+    );
+
+    return toolsWithAgents;
   }
 }
 

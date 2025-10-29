@@ -1,23 +1,32 @@
 "use client";
 
+import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { GetMcpServersResponses } from "@/lib/clients/api";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp-server.query";
 
 export function InstalledMCP({
   initialData,
 }: {
-  initialData?: GetMcpServersResponses["200"];
+  initialData?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
   const { data: servers } = useMcpServers({ initialData });
+  const { data: teams } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await archestraApiSdk.getTeams();
+      return data;
+    },
+  });
   const deleteMutation = useDeleteMcpServer();
   const [serverSearchQuery, setServerSearchQuery] = useState("");
 
   const handleDelete = useCallback(
-    async (server: GetMcpServersResponses["200"][number]) => {
+    async (server: archestraApiTypes.GetMcpServersResponses["200"][number]) => {
       await deleteMutation.mutateAsync({
         id: server.id,
         name: server.name,
@@ -55,6 +64,25 @@ export function InstalledMCP({
               <p className="text-sm text-muted-foreground">
                 Installed: {new Date(server.createdAt).toLocaleDateString()}
               </p>
+              {server.teams && server.teams.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground mb-1">Teams:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {server.teams.map((teamId) => {
+                      const team = teams?.find((t) => t.id === teamId);
+                      return (
+                        <Badge
+                          key={teamId}
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          {team?.name || teamId}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             <Button
               onClick={() => handleDelete(server)}

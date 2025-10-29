@@ -7,12 +7,13 @@ import {
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleUser, Users } from "lucide-react";
+import { CircleUser, Shield, Users } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { InvitationsList } from "@/components/invitations-list";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner } from "@/components/loading";
+import { TeamsList } from "@/components/teams/teams-list";
 import {
   Card,
   CardContent,
@@ -119,17 +120,23 @@ function SettingsContent() {
       </div>
       <Tabs defaultValue="account">
         <TabsList
-          className={`grid ${showMembersTab ? "grid-cols-2" : "grid-cols-1"}`}
+          className={`grid ${showMembersTab ? "grid-cols-3" : "grid-cols-1"}`}
         >
           <TabsTrigger value="account" className="flex items-center gap-2">
             <CircleUser className="h-4 w-4" />
             Your Account
           </TabsTrigger>
           {showMembersTab && (
-            <TabsTrigger value="members" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Members
-            </TabsTrigger>
+            <>
+              <TabsTrigger value="members" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Members
+              </TabsTrigger>
+              <TabsTrigger value="teams" className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                Teams
+              </TabsTrigger>
+            </>
           )}
         </TabsList>
         <div className="max-w-3xl">
@@ -141,7 +148,12 @@ function SettingsContent() {
             </div>
           </TabsContent>
           {showMembersTab && (
-            <TabsContent value="members">{members}</TabsContent>
+            <>
+              <TabsContent value="members">{members}</TabsContent>
+              <TabsContent value="teams">
+                <TeamsList />
+              </TabsContent>
+            </>
           )}
         </div>
       </Tabs>

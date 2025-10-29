@@ -1,6 +1,11 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { AgentToolModel, McpServerModel, ToolModel } from "@/models";
+import {
+  AgentToolModel,
+  McpServerModel,
+  SecretModel,
+  ToolModel,
+} from "@/models";
 import {
   ErrorResponseSchema,
   InsertMcpServerSchema,
@@ -8,6 +13,7 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
+import { getUserFromRequest } from "@/utils";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -19,13 +25,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         response: {
           200: z.array(SelectMcpServerSchema),
+          401: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
-        return reply.send(await McpServerModel.findAll());
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        return reply.send(await McpServerModel.findAll(user.id, user.isAdmin));
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -51,6 +69,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: SelectMcpServerSchema,
+          401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -58,7 +77,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const server = await McpServerModel.findById(request.params.id);
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const server = await McpServerModel.findById(
+          request.params.id,
+          user.id,
+          user.isAdmin,
+        );
 
         if (!server) {
           return reply.status(404).send({
@@ -96,6 +130,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           updatedAt: true,
         }).extend({
           agentIds: z.array(UuidIdSchema).optional(),
+          secretId: UuidIdSchema.optional(),
+          // For PAT tokens (like GitHub), send the token directly
+          // and we'll create a secret for it
+          accessToken: z.string().optional(),
         }),
         response: {
           200: SelectMcpServerSchema,
@@ -106,19 +144,51 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       try {
-        const { agentIds, ...serverData } = request.body;
+        let { agentIds, secretId, accessToken, ...serverData } = request.body;
 
-        // Validate metadata if provided (for servers that require authentication)
-        if (
-          serverData.metadata &&
-          Object.keys(serverData.metadata).length > 0
-        ) {
+        // Check if this MCP server is already installed (prevent duplicates)
+        if (serverData.catalogId) {
+          const existingServers = await McpServerModel.findByCatalogId(
+            serverData.catalogId,
+          );
+          if (existingServers.length > 0) {
+            return reply.status(400).send({
+              error: {
+                message: "This MCP server is already installed",
+                type: "validation_error",
+              },
+            });
+          }
+        }
+
+        // Track if we created a new secret (for cleanup on failure)
+        let createdSecretId: string | undefined;
+
+        // If accessToken is provided (PAT flow), create a secret for it
+        if (accessToken && !secretId) {
+          const secret = await SecretModel.create({
+            secret: {
+              access_token: accessToken,
+            },
+          });
+          secretId = secret.id;
+          createdSecretId = secret.id;
+        }
+
+        // Validate connection if secretId is provided
+        if (secretId) {
           const isValid = await McpServerModel.validateConnection(
             serverData.name,
-            serverData.metadata,
+            serverData.catalogId ?? undefined,
+            secretId,
           );
 
           if (!isValid) {
+            // Clean up the secret we just created if validation fails
+            if (createdSecretId) {
+              await SecretModel.delete(createdSecretId);
+            }
+
             return reply.status(400).send({
               error: {
                 message:
@@ -129,30 +199,45 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Create the MCP server
-        const mcpServer = await McpServerModel.create(serverData);
+        // Create the MCP server with optional secret reference
+        const mcpServer = await McpServerModel.create({
+          ...serverData,
+          ...(secretId && { secretId }),
+        });
 
-        // Get real tools from the MCP server
-        const tools = await McpServerModel.getToolsFromServer(mcpServer);
+        try {
+          // Get real tools from the MCP server
+          const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
-        // Persist tools in the database with source='mcp_server' and mcpServerId
-        for (const tool of tools) {
-          const createdTool = await ToolModel.create({
-            name: ToolModel.slugifyName(mcpServer.name, tool.name),
-            description: tool.description,
-            parameters: tool.inputSchema,
-            mcpServerId: mcpServer.id,
-          });
+          // Persist tools in the database with source='mcp_server' and mcpServerId
+          for (const tool of tools) {
+            const createdTool = await ToolModel.create({
+              name: ToolModel.slugifyName(mcpServer.name, tool.name),
+              description: tool.description,
+              parameters: tool.inputSchema,
+              mcpServerId: mcpServer.id,
+            });
 
-          // If agentIds were provided, create agent-tool assignments
-          if (agentIds && agentIds.length > 0) {
-            for (const agentId of agentIds) {
-              await AgentToolModel.create(agentId, createdTool.id);
+            // If agentIds were provided, create agent-tool assignments
+            if (agentIds && agentIds.length > 0) {
+              for (const agentId of agentIds) {
+                await AgentToolModel.create(agentId, createdTool.id);
+              }
             }
           }
-        }
 
-        return reply.send(mcpServer);
+          return reply.send(mcpServer);
+        } catch (toolError) {
+          // If fetching/creating tools fails, clean up everything we created
+          await McpServerModel.delete(mcpServer.id);
+
+          // Also clean up the secret if we created one
+          if (createdSecretId) {
+            await SecretModel.delete(createdSecretId);
+          }
+
+          throw toolError;
+        }
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({
@@ -188,6 +273,55 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({
           success: await McpServerModel.delete(request.params.id),
         });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id/tools",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerTools,
+        description: "Get all tools for an MCP server",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              description: z.string().nullable(),
+              parameters: z.record(z.string(), z.any()),
+              createdAt: z.coerce.date(),
+              assignedAgentCount: z.number(),
+              assignedAgents: z.array(
+                z.object({
+                  id: z.string(),
+                  name: z.string(),
+                }),
+              ),
+            }),
+          ),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const tools = await ToolModel.findByMcpServerId(request.params.id);
+        return reply.send(tools);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

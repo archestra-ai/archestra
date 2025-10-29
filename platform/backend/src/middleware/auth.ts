@@ -12,19 +12,27 @@ class AuthMiddleware {
 
     // return 401 if unauthenticated
     if (await this.isUnauthenticated(request)) {
-      return reply
-        .status(401)
-        .send(prepareErrorResponse("Unauthorized", request));
+      return reply.status(401).send(
+        prepareErrorResponse({
+          message: "Unauthenticated",
+          type: "unauthenticated",
+        }),
+      );
     }
 
     // check if authorized
-    const permissionsStatus = await this.requiredPermissionsStatus(request);
-    if ("success" in permissionsStatus && permissionsStatus.success) {
+    const { success, error } = await this.requiredPermissionsStatus(request);
+    if (success) {
       return;
     }
 
     // return 403 if unauthorized
-    return reply.status(403).send(prepareErrorResponse("Forbidden", request));
+    return reply.status(403).send(
+      prepareErrorResponse({
+        message: error?.message ?? "Forbidden",
+        type: "forbidden",
+      }),
+    );
   };
 
   private shouldSkipAuthCheck = ({ url, method }: FastifyRequest) => {
@@ -52,26 +60,81 @@ class AuthMiddleware {
 
   private isUnauthenticated = async (request: FastifyRequest) => {
     const headers = new Headers(request.headers as HeadersInit);
-    const session = await auth.api.getSession({
-      headers,
-      query: { disableCookieCache: true },
-    });
-    return !session;
+
+    try {
+      const session = await auth.api.getSession({
+        headers,
+        query: { disableCookieCache: true },
+      });
+
+      if (session) return false;
+    } catch (_error) {
+      /**
+       * If getSession fails (e.g., "No active organization"), try API key verification
+       */
+      const authHeader = headers.get("authorization");
+      if (authHeader) {
+        try {
+          const { valid } = await auth.api.verifyApiKey({
+            body: { key: authHeader },
+          });
+
+          return !valid;
+        } catch (_apiKeyError) {
+          // API key verification failed, return unauthenticated
+          return true;
+        }
+      }
+    }
+
+    return true;
   };
 
-  private requiredPermissionsStatus = async (request: FastifyRequest) => {
+  private requiredPermissionsStatus = async (
+    request: FastifyRequest,
+  ): Promise<{ success: boolean; error: Error | null }> => {
     const routeId = request.routeOptions.schema?.operationId as
       | RouteId
       | undefined;
     if (!routeId) {
-      return { error: "Forbidden" };
+      return {
+        success: false,
+        error: new Error("Forbidden, routeId not found"),
+      };
     }
-    return await auth.api.hasPermission({
-      headers: new Headers(request.headers as HeadersInit),
-      body: {
-        permissions: routePermissionsConfig[routeId] ?? {},
-      },
-    });
+
+    try {
+      return await auth.api.hasPermission({
+        headers: new Headers(request.headers as HeadersInit),
+        body: {
+          permissions: routePermissionsConfig[routeId] ?? {},
+        },
+      });
+    } catch (_error) {
+      /**
+       * Handle API key sessions that don't have organization context
+       * API keys have all permissions by default (see auth config)
+       */
+      const headers = new Headers(request.headers as HeadersInit);
+      const authHeader = headers.get("authorization");
+
+      if (authHeader) {
+        try {
+          // Verify if this is a valid API key
+          const apiKeyResult = await auth.api.verifyApiKey({
+            body: { key: authHeader },
+          });
+          if (apiKeyResult?.valid) {
+            // API keys have all permissions, so allow the request
+            return { success: true, error: null };
+          }
+        } catch (_apiKeyError) {
+          // Not a valid API key, return original error
+          return { success: false, error: new Error("Invalid API key") };
+        }
+      }
+      return { success: false, error: new Error("No API key provided") };
+    }
   };
 }
 
@@ -89,6 +152,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
   },
   [RouteId.GetAgent]: {
+    agent: ["read"],
+  },
+  [RouteId.GetDefaultAgent]: {
     agent: ["read"],
   },
   [RouteId.CreateAgent]: {
@@ -208,11 +274,68 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpServer]: {
     mcpServer: ["read"],
   },
+  [RouteId.GetMcpServerTools]: {
+    mcpServer: ["read"],
+  },
   [RouteId.InstallMcpServer]: {
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
     mcpServer: ["delete"],
+  },
+  [RouteId.GetMcpServerInstallationRequests]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.CreateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["create"],
+  },
+  [RouteId.GetMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["read"],
+  },
+  [RouteId.UpdateMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.ApproveMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeclineMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.AddMcpServerInstallationRequestNote]: {
+    mcpServerInstallationRequest: ["update"],
+  },
+  [RouteId.DeleteMcpServerInstallationRequest]: {
+    mcpServerInstallationRequest: ["delete"],
+  },
+  [RouteId.InitiateOAuth]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.HandleOAuthCallback]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.GetTeams]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeam]: {
+    team: ["read"],
+  },
+  [RouteId.CreateTeam]: {
+    team: ["create"],
+  },
+  [RouteId.UpdateTeam]: {
+    team: ["update"],
+  },
+  [RouteId.DeleteTeam]: {
+    team: ["delete"],
+  },
+  [RouteId.GetTeamMembers]: {
+    team: ["read"],
+  },
+  [RouteId.AddTeamMember]: {
+    team: ["update"],
+  },
+  [RouteId.RemoveTeamMember]: {
+    team: ["update"],
   },
 };
 

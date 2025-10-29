@@ -9,14 +9,14 @@ import { SelectToolSchema } from "./tool";
 
 export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),
-  usersWithAccess: z.array(z.string()),
+  teams: z.array(z.string()),
 });
 export const InsertAgentSchema = createInsertSchema(schema.agentsTable).extend({
-  usersWithAccess: z.array(z.string()),
+  teams: z.array(z.string()),
 });
 
 export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable).extend({
-  usersWithAccess: z.array(z.string()),
+  teams: z.array(z.string()),
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

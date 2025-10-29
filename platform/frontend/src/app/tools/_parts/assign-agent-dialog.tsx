@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -16,11 +17,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAgents } from "@/lib/agent.query";
 import { useAssignTool } from "@/lib/agent-tools.query";
-import type { GetAllAgentToolsResponses } from "@/lib/clients/api";
 import type { UnassignedToolData } from "./unassigned-tools-list";
 
 interface AssignAgentDialogProps {
-  tool: GetAllAgentToolsResponses["200"][number] | UnassignedToolData | null;
+  tool:
+    | archestraApiTypes.GetAllAgentToolsResponses["200"][number]
+    | UnassignedToolData
+    | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -45,24 +48,60 @@ export function AssignAgentDialog({
   const handleAssign = useCallback(async () => {
     if (!tool || selectedAgentIds.length === 0) return;
 
-    try {
-      await Promise.all(
-        selectedAgentIds.map((agentId) =>
-          assignMutation.mutateAsync({ agentId, toolId: tool.tool.id }),
-        ),
+    // Helper function to check if an error is a duplicate key error
+    const isDuplicateError = (error: unknown): boolean => {
+      if (!error) return false;
+      const errorStr = JSON.stringify(error).toLowerCase();
+      return (
+        errorStr.includes("duplicate key") ||
+        errorStr.includes("agent_tools_agent_id_tool_id_unique") ||
+        errorStr.includes("already assigned")
       );
+    };
 
-      toast.success(
-        `Successfully assigned ${tool.tool.name} to ${selectedAgentIds.length} agent${selectedAgentIds.length !== 1 ? "s" : ""}`,
+    const results = await Promise.allSettled(
+      selectedAgentIds.map((agentId) =>
+        assignMutation.mutateAsync({ agentId, toolId: tool.tool.id }),
+      ),
+    );
+
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const totalAttempted = results.length;
+
+    // Check if failures are due to duplicates
+    const duplicates = results.filter(
+      (r) => r.status === "rejected" && isDuplicateError(r.reason),
+    ).length;
+
+    const actualFailures = failed - duplicates;
+
+    if (succeeded > 0) {
+      if (duplicates > 0 && actualFailures === 0) {
+        toast.success(
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}. ${duplicates} ${duplicates === 1 ? "was" : "were"} already assigned.`,
+        );
+      } else if (actualFailures > 0) {
+        toast.warning(
+          `Assigned ${tool.tool.name} to ${succeeded} of ${totalAttempted} agent${totalAttempted !== 1 ? "s" : ""}. ${actualFailures} failed.`,
+        );
+      } else {
+        toast.success(
+          `Successfully assigned ${tool.tool.name} to ${succeeded} agent${succeeded !== 1 ? "s" : ""}`,
+        );
+      }
+    } else if (duplicates === failed) {
+      toast.info(
+        `${tool.tool.name} is already assigned to all selected agents`,
       );
-
-      setSelectedAgentIds([]);
-      setSearchQuery("");
-      onOpenChange(false);
-    } catch (error) {
+    } else {
       toast.error(`Failed to assign ${tool.tool.name}`);
-      console.error("Assignment error:", error);
+      console.error("Assignment errors:", results);
     }
+
+    setSelectedAgentIds([]);
+    setSearchQuery("");
+    onOpenChange(false);
   }, [tool, selectedAgentIds, assignMutation, onOpenChange]);
 
   const toggleAgent = useCallback((agentId: string) => {

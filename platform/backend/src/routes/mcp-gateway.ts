@@ -8,9 +8,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { ToolModel } from "@/models";
-import mcpClientService from "@/services/mcp-client";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
 /**
@@ -94,18 +94,15 @@ async function createAgentServer(
         // Generate a unique ID for this tool call
         const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-        // Create CommonToolCall for McpClientService
+        // Create CommonToolCall for McpClient
         const toolCall: CommonToolCall = {
           id: toolCallId,
           name,
           arguments: args || {},
         };
 
-        // Execute the tool call via McpClientService
-        const results = await mcpClientService.executeToolCalls(
-          [toolCall],
-          agentId,
-        );
+        // Execute the tool call via McpClient
+        const results = await mcpClient.executeToolCalls([toolCall], agentId);
 
         if (results.length === 0) {
           throw {
@@ -179,21 +176,41 @@ function createTransport(
 }
 
 /**
+ * Extract and validate agent ID from Authorization header bearer token
+ */
+function extractAgentIdFromAuth(authHeader: string | undefined): string | null {
+  if (!authHeader) {
+    return null;
+  }
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1];
+
+  // Validate that the token is a valid UUID (agent ID)
+  try {
+    const parsed = UuidIdSchema.parse(token);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fastify route plugin for MCP gateway
  */
 const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const { endpoint: endpointPrefix } = config.mcpGateway;
-  const endpoint = `${endpointPrefix}/:agentId`;
-  const params = z.object({
-    agentId: UuidIdSchema,
-  });
+  const { endpoint } = config.mcpGateway;
 
   // GET endpoint for server discovery
   fastify.get(
     endpoint,
     {
       schema: {
-        params,
+        tags: ["mcp-gateway"],
         response: {
           200: z.object({
             name: z.string(),
@@ -204,15 +221,32 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               tools: z.boolean(),
             }),
           }),
+          401: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
     async (request, reply) => {
+      const agentId = extractAgentIdFromAuth(
+        request.headers.authorization as string | undefined,
+      );
+
+      if (!agentId) {
+        reply.status(401);
+        return {
+          error: "Unauthorized",
+          message:
+            "Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+        };
+      }
+
       reply.type("application/json");
       return {
-        name: `archestra-agent-${request.params.agentId}`,
+        name: `archestra-agent-${agentId}`,
         version: config.api.version,
-        agentId: request.params.agentId,
+        agentId,
         transport: "http",
         capabilities: {
           tools: true,
@@ -226,13 +260,28 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     endpoint,
     {
       schema: {
-        params,
+        tags: ["mcp-gateway"],
         // Accept any JSON body - will be validated by MCP SDK
         body: z.record(z.string(), z.unknown()),
       },
     },
     async (request, reply) => {
-      const { agentId } = request.params;
+      const agentId = extractAgentIdFromAuth(
+        request.headers.authorization as string | undefined,
+      );
+
+      if (!agentId) {
+        reply.status(401);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message:
+              "Unauthorized: Missing or invalid Authorization header. Expected: Bearer <agent-id>",
+          },
+          id: null,
+        };
+      }
       const sessionId = request.headers["mcp-session-id"] as string | undefined;
       const isInitialize =
         typeof request.body?.method === "string" &&

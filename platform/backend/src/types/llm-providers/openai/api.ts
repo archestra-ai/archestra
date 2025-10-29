@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MessageParamSchema, ToolCallSchema } from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
-const ChatCompletionUsageSchema = z
+export const ChatCompletionUsageSchema = z
   .object({
     completion_tokens: z.number(),
     prompt_tokens: z.number(),

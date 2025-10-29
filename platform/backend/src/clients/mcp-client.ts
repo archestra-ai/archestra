@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { SecretModel, ToolModel } from "@/models";
+import { InternalMcpCatalogModel, SecretModel, ToolModel } from "@/models";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -15,7 +15,7 @@ class McpClient {
   private activeConnections = new Map<string, Client>();
 
   /**
-   * Execute tool calls against their assigned MCP servers (GitHub-only for now)
+   * Execute tool calls against their assigned MCP servers
    */
   async executeToolCalls(
     toolCalls: CommonToolCall[],
@@ -66,15 +66,16 @@ class McpClient {
     }
 
     // Load secrets from the secrets table
-    let accessToken: string | undefined;
+    let secrets: Record<string, unknown> = {};
     if (firstTool.mcpServerSecretId) {
       const secret = await SecretModel.findById(firstTool.mcpServerSecretId);
       if (secret?.secret) {
-        // All tokens (OAuth and PAT) are stored as access_token
-        accessToken = secret.secret.access_token as string | undefined;
+        secrets = secret.secret;
       }
     }
 
+    // Get access token for authentication
+    const accessToken = secrets.access_token as string | undefined;
     if (!accessToken) {
       return mcpToolCalls.map((tc) => ({
         id: tc.id,
@@ -85,13 +86,44 @@ class McpClient {
     }
 
     try {
-      const client = await this.getOrCreateGitHubConnection(accessToken);
+      let client: Client;
+
+      // Determine server type and create appropriate connection
+      if (firstTool.mcpServerCatalogId) {
+        const catalogItem = await InternalMcpCatalogModel.findById(
+          firstTool.mcpServerCatalogId,
+        );
+
+        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+          // Generic remote server with catalog info
+          const config = this.createRemoteServerConfig({
+            name: firstTool.mcpServerName,
+            url: catalogItem.serverUrl,
+            secrets,
+          });
+          client = await this.getOrCreateConnection(
+            firstTool.mcpServerCatalogId,
+            config,
+          );
+        } else {
+          // Fallback to GitHub for unknown server types
+          client = await this.getOrCreateGitHubConnection(accessToken);
+        }
+      } else {
+        // No catalog ID - assume GitHub for backward compatibility
+        client = await this.getOrCreateGitHubConnection(accessToken);
+      }
 
       // Execute each MCP tool call
       for (const toolCall of mcpToolCalls) {
         try {
           // Strip the server prefix from tool name for MCP server call
-          const mcpToolName = ToolModel.unslugifyName(toolCall.name);
+          // Tool name format: <server-name>__<native-tool-name>
+          // Example: githubcopilot__remote-mcp__search_issues -> search_issues
+          const serverPrefix = `${firstTool.mcpServerName}__`;
+          const mcpToolName = toolCall.name.startsWith(serverPrefix)
+            ? toolCall.name.substring(serverPrefix.length)
+            : toolCall.name;
 
           const result = await client.callTool({
             name: mcpToolName,

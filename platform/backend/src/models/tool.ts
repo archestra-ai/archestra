@@ -299,6 +299,30 @@ class ToolModel {
   }
 
   /**
+   * Get names of all MCP tools assigned to an agent
+   * Used to prevent autodiscovery of tools already available via MCP servers
+   */
+  static async getMcpToolNamesByAgent(agentId: string): Promise<string[]> {
+    const mcpTools = await db
+      .select({
+        name: schema.toolsTable.name,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          isNotNull(schema.toolsTable.mcpServerId), // Only MCP tools
+        ),
+      );
+
+    return mcpTools.map((tool) => tool.name);
+  }
+
+  /**
    * Get MCP tools assigned to an agent
    */
   static async getMcpToolsAssignedToAgent(
@@ -310,6 +334,7 @@ class ToolModel {
       responseModifierTemplate: string | null;
       mcpServerSecretId: string | null;
       mcpServerName: string;
+      mcpServerCatalogId: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -323,6 +348,7 @@ class ToolModel {
           schema.agentToolsTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
+        mcpServerCatalogId: schema.mcpServersTable.catalogId,
       })
       .from(schema.toolsTable)
       .innerJoin(

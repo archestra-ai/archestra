@@ -1,5 +1,5 @@
 {
-  "id": "64382850-9f1b-4f0c-b08d-9032b77adf5a",
+  "id": "64a52bb1-6894-4297-8417-752ccd7ee6f4",
   "prevId": "7a032594-0306-45eb-b5c6-d1f54e0f6469",
   "version": "7",
   "dialect": "postgresql",
@@ -1091,7 +1091,7 @@
           "name": "server_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "server_url": {
           "name": "server_url",
@@ -1102,6 +1102,12 @@
         "docs_url": {
           "name": "docs_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "local_config": {
+          "name": "local_config",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -1326,73 +1332,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.mcp_server_user": {
-      "name": "mcp_server_user",
-      "schema": "",
-      "columns": {
-        "mcp_server_id": {
-          "name": "mcp_server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "mcp_server_user_mcp_server_id_mcp_server_id_fk": {
-          "name": "mcp_server_user_mcp_server_id_mcp_server_id_fk",
-          "tableFrom": "mcp_server_user",
-          "tableTo": "mcp_server",
-          "columnsFrom": [
-            "mcp_server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mcp_server_user_user_id_user_id_fk": {
-          "name": "mcp_server_user_user_id_user_id_fk",
-          "tableFrom": "mcp_server_user",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "mcp_server_user_mcp_server_id_user_id_pk": {
-          "name": "mcp_server_user_mcp_server_id_user_id_pk",
-          "columns": [
-            "mcp_server_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.mcp_server": {
       "name": "mcp_server",
       "schema": "",
@@ -1414,7 +1353,7 @@
           "name": "catalog_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "secret_id": {
           "name": "secret_id",
@@ -1428,6 +1367,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "local_installation_status": {
+          "name": "local_installation_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "local_installation_error": {
+          "name": "local_installation_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

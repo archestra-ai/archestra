@@ -4296,9 +4296,17 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4358,9 +4366,17 @@ export type CreateInternalMcpCatalogItemData = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote';
+        serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4437,9 +4453,17 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4578,9 +4602,17 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4643,6 +4675,14 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4730,9 +4770,17 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+            dockerImage?: string;
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4907,6 +4955,18 @@ export type GetMcpServerInstallationRequestsResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -4964,6 +5024,18 @@ export type CreateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
     };
     path?: never;
@@ -5048,6 +5120,18 @@ export type CreateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5222,6 +5306,18 @@ export type GetMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5279,6 +5375,18 @@ export type UpdateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse?: string | null;
         reviewedBy?: string | null;
@@ -5384,6 +5492,18 @@ export type UpdateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5499,6 +5619,18 @@ export type ApproveMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5614,6 +5746,18 @@ export type DeclineMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5729,6 +5873,18 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+                dockerImage?: string;
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5786,11 +5942,13 @@ export type GetMcpServersResponses = {
     200: Array<{
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -5814,11 +5972,13 @@ export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersRe
 export type InstallMcpServerData = {
     body: {
         name: string;
-        catalogId?: string | null;
+        catalogId: string;
         secretId?: string;
         ownerId?: string | null;
         authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
+        localInstallationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError?: string | null;
         teams?: Array<string>;
         userId?: string;
         agentIds?: Array<string>;
@@ -5877,11 +6037,13 @@ export type InstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -5993,11 +6155,13 @@ export type GetMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         ownerEmail?: string | null;
@@ -6017,6 +6181,50 @@ export type GetMcpServerResponses = {
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type GetMcpServerInstallationStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/installation-status';
+};
+
+export type GetMcpServerInstallationStatusErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerInstallationStatusError = GetMcpServerInstallationStatusErrors[keyof GetMcpServerInstallationStatusErrors];
+
+export type GetMcpServerInstallationStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
+    };
+};
+
+export type GetMcpServerInstallationStatusResponse = GetMcpServerInstallationStatusResponses[keyof GetMcpServerInstallationStatusResponses];
 
 export type GetMcpServerToolsData = {
     body?: never;
@@ -6071,6 +6279,96 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
+export type GetMcpServerLogsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        lines?: number;
+    };
+    url: '/mcp_proxy/{id}/logs';
+};
+
+export type GetMcpServerLogsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerLogsError = GetMcpServerLogsErrors[keyof GetMcpServerLogsErrors];
+
+export type GetMcpServerLogsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        logs: string;
+        containerName: string;
+    };
+};
+
+export type GetMcpServerLogsResponse = GetMcpServerLogsResponses[keyof GetMcpServerLogsResponses];
+
+export type RestartMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/restart';
+};
+
+export type RestartMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RestartMcpServerError = RestartMcpServerErrors[keyof RestartMcpServerErrors];
+
+export type RestartMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        message: string;
+    };
+};
+
+export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
 export type RevokeUserMcpServerAccessData = {
     body?: never;

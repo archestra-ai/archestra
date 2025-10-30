@@ -180,23 +180,30 @@ class McpServerInstallationRequestModel {
             oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
           });
         }
-      } else if (
-        currentRequest.customServerConfig &&
-        currentRequest.customServerConfig.type === "remote"
-      ) {
+      } else if (currentRequest.customServerConfig) {
         // Custom server request - use provided config
         const customConfig = currentRequest.customServerConfig;
 
-        await InternalMcpCatalogModel.create({
-          label: customConfig.label,
-          name: customConfig.name,
-          version: customConfig.version,
-          serverType: "remote",
-          serverUrl: customConfig.serverUrl,
-          docsUrl: customConfig.docsUrl,
-          userConfig: customConfig.userConfig,
-          oauthConfig: rewriteOAuthRedirectUris(customConfig.oauthConfig),
-        });
+        if (customConfig.type === "remote") {
+          await InternalMcpCatalogModel.create({
+            label: customConfig.label,
+            name: customConfig.name,
+            version: customConfig.version,
+            serverType: "remote",
+            serverUrl: customConfig.serverUrl,
+            docsUrl: customConfig.docsUrl,
+            userConfig: customConfig.userConfig,
+            oauthConfig: rewriteOAuthRedirectUris(customConfig.oauthConfig),
+          });
+        } else if (customConfig.type === "local") {
+          await InternalMcpCatalogModel.create({
+            label: customConfig.label,
+            name: customConfig.name,
+            version: customConfig.version,
+            serverType: "local",
+            localConfig: customConfig.localConfig,
+          });
+        }
       }
     } catch (error) {
       // Log the error but still approve the request - admin can handle catalog creation manually

@@ -14,6 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
 import {
   Anthropic,
@@ -44,6 +45,7 @@ const fastify = Fastify({
         colorize: true,
         translateTime: "HH:MM:ss Z",
         ignore: "pid,hostname",
+        singleLine: true,
       },
     },
   },
@@ -83,6 +85,32 @@ const start = async () => {
   try {
     // Seed database with demo data
     await seedDatabase();
+
+    // Initialize MCP Server Runtime (K8s-based)
+    try {
+      // Set up callbacks for runtime initialization
+      McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
+        fastify.log.info("MCP Server Runtime initialized successfully");
+      };
+
+      McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
+        fastify.log.error(
+          `MCP Server Runtime failed to initialize: ${error.message}`,
+        );
+        // Don't exit the process, allow the server to continue
+        // MCP servers can be started manually later
+      };
+
+      // Start the runtime in the background (non-blocking)
+      McpServerRuntimeManager.start().catch((error) => {
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
+      });
+    } catch (error) {
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      // Continue server startup even if MCP runtime fails
+    }
 
     await fastify.register(metricsPlugin, { endpoint: "/metrics" });
 

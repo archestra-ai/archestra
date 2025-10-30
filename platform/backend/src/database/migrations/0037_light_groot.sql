@@ -1,2 +1,0 @@
-ALTER TABLE "agent_tools" ADD COLUMN "credential_source_mcp_server_id" uuid;--> statement-breakpoint
-ALTER TABLE "agent_tools" ADD CONSTRAINT "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk" FOREIGN KEY ("credential_source_mcp_server_id") REFERENCES "public"."mcp_server"("id") ON DELETE set null ON UPDATE no action;

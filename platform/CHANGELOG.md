@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.0.18](https://github.com/archestra-ai/archestra/compare/platform-v0.0.17...platform-v0.0.18) (2025-10-30)
+
+
+### Bug Fixes
+
+* do not add /v1/ prefix when proxying and rely on OPENAI_BASE_URL ([#860](https://github.com/archestra-ai/archestra/issues/860)) ([dc9faab](https://github.com/archestra-ai/archestra/commit/dc9faabbe1cb531c4a3deb35e8853b722d448c46))
+
+## [0.0.17](https://github.com/archestra-ai/archestra/compare/platform-v0.0.16...platform-v0.0.17) (2025-10-30)
+
+
+### Features
+
+* use custom docker image for local mcp servers ([#858](https://github.com/archestra-ai/archestra/issues/858)) ([341e3fc](https://github.com/archestra-ai/archestra/commit/341e3fc33f741671a60c2ed9d2a8af23c05890f2))
+
+## [0.0.16](https://github.com/archestra-ai/archestra/compare/platform-v0.0.15...platform-v0.0.16) (2025-10-30)
+
+
+### Features
+
+* add more logging and fix proxying to custom provider url ([#857](https://github.com/archestra-ai/archestra/issues/857)) ([c297c0c](https://github.com/archestra-ai/archestra/commit/c297c0c980348be6cc812e6a1608d0ae56e17205))
+* mcp server runtime in k8s ([#854](https://github.com/archestra-ai/archestra/issues/854)) ([f140291](https://github.com/archestra-ai/archestra/commit/f14029159f17d6b52c089ca06b731441db1e2488))
+
+
+### Bug Fixes
+
+* handlebars highlighting in monaco editor ([#855](https://github.com/archestra-ai/archestra/issues/855)) ([e19a163](https://github.com/archestra-ai/archestra/commit/e19a163860b9969205a876869523d6abbe00e21e))
+* small bug in `McpClient` tool execution (when no auth provided) + UI bug on tools table ([#850](https://github.com/archestra-ai/archestra/issues/850)) ([13f3447](https://github.com/archestra-ai/archestra/commit/13f34474bdfc813dd00adc76969a8aefb50c3af0))
+* use correct prefix v1 in proxy llm  ([#851](https://github.com/archestra-ai/archestra/issues/851)) ([374f964](https://github.com/archestra-ai/archestra/commit/374f964102833c1cb40e0d0b63395d748b1f653b))
+
 ## [0.0.15](https://github.com/archestra-ai/archestra/compare/platform-v0.0.14...platform-v0.0.15) (2025-10-29)
 
 

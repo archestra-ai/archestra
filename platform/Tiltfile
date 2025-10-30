@@ -289,23 +289,20 @@ local_resource(
 )
 
 local_resource(
-  'mcp-inspector',
-  serve_env={
-    'DANGEROUSLY_OMIT_AUTH': 'true'
-  },
-  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
-  labels=['dev'],
-  trigger_mode=TRIGGER_MODE_MANUAL,
-  auto_init=False,
-)
-
-local_resource(
   'unit-tests',
   cmd='pnpm test',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
   resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'helm-tests',
+  cmd='cd helm && helm unittest .',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
 )
 
 local_resource(
@@ -342,4 +339,15 @@ local_resource(
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
+)
+
+local_resource(
+  'mcp-inspector',
+  serve_env={
+    'DANGEROUSLY_OMIT_AUTH': 'true'
+  },
+  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
 )

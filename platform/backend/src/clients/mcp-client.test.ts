@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   AgentModel,
   AgentToolModel,
+  InternalMcpCatalogModel,
   McpServerModel,
   SecretModel,
   ToolModel,
@@ -43,9 +44,15 @@ describe("McpClient", () => {
     });
 
     // Create MCP server for testing with secret
+    const catalogItem = await InternalMcpCatalogModel.create({
+      name: "github-mcp-server",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+    });
     const mcpServer = await McpServerModel.create({
       name: "github-mcp-server",
       secretId: secret.id,
+      catalogId: catalogItem.id,
     });
     mcpServerId = mcpServer.id;
 
@@ -459,22 +466,6 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "Template 2: Response 2" }],
           isError: false,
         });
-      });
-    });
-  });
-
-  describe("GitHub configuration", () => {
-    test("creates correct GitHub config", () => {
-      const token = "test-token";
-      const config = mcpClient.createGitHubConfig(token);
-
-      expect(config).toEqual({
-        id: "github-mcp-server",
-        name: "github-mcp-server",
-        url: "https://api.githubcopilot.com/mcp/",
-        headers: {
-          Authorization: "Bearer test-token",
-        },
       });
     });
   });

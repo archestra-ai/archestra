@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,8 +14,18 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
+
+type ServerType =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
 
 export function CustomServerRequestDialog({
   isOpen,
@@ -24,11 +35,15 @@ export function CustomServerRequestDialog({
   onClose: () => void;
 }) {
   const [formData, setFormData] = useState({
+    serverType: "remote" as ServerType,
     label: "",
     name: "",
     version: "",
     serverUrl: "",
     docsUrl: "",
+    command: "",
+    arguments: "",
+    environment: "",
     requestReason: "",
   });
 
@@ -37,29 +52,65 @@ export function CustomServerRequestDialog({
   const handleSubmit = async () => {
     if (!formData.label || !formData.name) return;
 
+    const customServerConfig: NonNullable<
+      archestraApiTypes.CreateMcpServerInstallationRequestData["body"]["customServerConfig"]
+    > =
+      formData.serverType === "remote"
+        ? {
+            type: "remote" as const,
+            label: formData.label,
+            name: formData.name,
+            version: formData.version || undefined,
+            serverType: "remote" as const,
+            serverUrl: formData.serverUrl || undefined,
+            docsUrl: formData.docsUrl || undefined,
+            userConfig: undefined,
+            oauthConfig: undefined,
+          }
+        : {
+            type: "local" as const,
+            label: formData.label,
+            name: formData.name,
+            version: formData.version || undefined,
+            serverType: "local" as const,
+            localConfig: {
+              command: formData.command,
+              arguments: formData.arguments
+                .split("\n")
+                .map((arg) => arg.trim())
+                .filter((arg) => arg.length > 0),
+              environment: formData.environment.trim()
+                ? Object.fromEntries(
+                    formData.environment
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .filter((line) => line.length > 0 && line.includes("="))
+                      .map((line) => {
+                        const [key, ...valueParts] = line.split("=");
+                        return [key, valueParts.join("=")];
+                      }),
+                  )
+                : undefined,
+            },
+          };
+
     await createRequest.mutateAsync({
       externalCatalogId: null,
       requestReason: formData.requestReason,
-      customServerConfig: {
-        type: "remote",
-        label: formData.label,
-        name: formData.name,
-        version: formData.version || undefined,
-        serverType: "remote",
-        serverUrl: formData.serverUrl || undefined,
-        docsUrl: formData.docsUrl || undefined,
-        userConfig: undefined,
-        oauthConfig: undefined,
-      },
+      customServerConfig,
     });
 
     // Reset form
     setFormData({
+      serverType: "remote",
       label: "",
       name: "",
       version: "",
       serverUrl: "",
       docsUrl: "",
+      command: "",
+      arguments: "",
+      environment: "",
       requestReason: "",
     });
     onClose();
@@ -81,6 +132,24 @@ export function CustomServerRequestDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="serverType">Server Type *</Label>
+            <Select
+              value={formData.serverType}
+              onValueChange={(value: ServerType) =>
+                handleInputChange("serverType", value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select server type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="remote">Remote</SelectItem>
+                <SelectItem value="local">Local</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="label">Display Name *</Label>
@@ -112,26 +181,73 @@ export function CustomServerRequestDialog({
                 onChange={(e) => handleInputChange("version", e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="serverUrl">Server URL</Label>
-              <Input
-                id="serverUrl"
-                placeholder="https://example.com/mcp"
-                value={formData.serverUrl}
-                onChange={(e) => handleInputChange("serverUrl", e.target.value)}
-              />
-            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="docsUrl">Documentation URL</Label>
-            <Input
-              id="docsUrl"
-              placeholder="https://example.com/docs"
-              value={formData.docsUrl}
-              onChange={(e) => handleInputChange("docsUrl", e.target.value)}
-            />
-          </div>
+          {/* Conditional fields based on server type */}
+          {formData.serverType === "remote" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="serverUrl">Server URL</Label>
+                <Input
+                  id="serverUrl"
+                  placeholder="https://example.com/mcp"
+                  value={formData.serverUrl}
+                  onChange={(e) =>
+                    handleInputChange("serverUrl", e.target.value)
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="docsUrl">Documentation URL</Label>
+                <Input
+                  id="docsUrl"
+                  placeholder="https://example.com/docs"
+                  value={formData.docsUrl}
+                  onChange={(e) => handleInputChange("docsUrl", e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {formData.serverType === "local" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="command">Command *</Label>
+                <Input
+                  id="command"
+                  placeholder="node"
+                  value={formData.command}
+                  onChange={(e) => handleInputChange("command", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="arguments">Arguments (one per line)</Label>
+                <Textarea
+                  id="arguments"
+                  placeholder={`/path/to/server.js\n--verbose`}
+                  value={formData.arguments}
+                  onChange={(e) =>
+                    handleInputChange("arguments", e.target.value)
+                  }
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="environment">
+                  Environment Variables (KEY=value format)
+                </Label>
+                <Textarea
+                  id="environment"
+                  placeholder={`API_KEY=your-key\nPORT=3000`}
+                  value={formData.environment}
+                  onChange={(e) =>
+                    handleInputChange("environment", e.target.value)
+                  }
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="reason">
@@ -157,7 +273,10 @@ export function CustomServerRequestDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              createRequest.isPending || !formData.label || !formData.name
+              createRequest.isPending ||
+              !formData.label ||
+              !formData.name ||
+              (formData.serverType === "local" && !formData.command)
             }
           >
             {createRequest.isPending && (

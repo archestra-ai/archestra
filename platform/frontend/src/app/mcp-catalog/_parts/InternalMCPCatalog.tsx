@@ -50,6 +50,8 @@ import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
 
+// BIIIIG TODO: SUPPORT LOCAL MCP SERVERS!!!!!!
+
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 

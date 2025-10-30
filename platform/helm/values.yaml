@@ -11,6 +11,40 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   env: {}
 
+  # Kubernetes configuration for MCP Server Runtime
+  # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
+  kubernetes:
+    # Namespace where MCP server pods will be created
+    # If not set, defaults to "default"
+    namespace: ""
+
+    # Base image for MCP server containers
+    # If not set, defaults to "archestra/mcp-server:latest"
+    baseImage: ""
+
+    # Kubeconfig configuration
+    # Choose one of the following methods:
+
+    # Method 1: Use in-cluster configuration (recommended when running inside K8s)
+    # No additional configuration needed - the platform will automatically use the service account
+    useInClusterConfig: true
+
+    # Method 2: Mount a kubeconfig file from a secret
+    # Set useInClusterConfig to false and configure the secret below
+    kubeconfig:
+      # Enable kubeconfig volume mount
+      enabled: false
+
+      # Name of the secret containing the kubeconfig file
+      # The secret should have a key named "config" containing the kubeconfig content
+      # Example of creating the secret:
+      #   kubectl create secret generic archestra-kubeconfig --from-file=config=/path/to/kubeconfig
+      secretName: ""
+
+      # Path where the kubeconfig will be mounted inside the container
+      # This will be set as the KUBECONFIG environment variable
+      mountPath: /etc/kubeconfig
+
 # PostgreSQL configuration
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance

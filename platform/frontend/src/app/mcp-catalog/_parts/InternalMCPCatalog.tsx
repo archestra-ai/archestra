@@ -54,42 +54,6 @@ type CatalogItemWithOptionalLabel =
     label?: string | null;
   };
 
-function ServerCardWithPolling({
-  serverId,
-  onInstallationComplete,
-  children,
-}: {
-  serverId: string | null;
-  onInstallationComplete: (serverId: string) => void;
-  children: (props: {
-    localInstallationStatus?: LocalMcpServerInstallationStatus;
-    localInstallationError?: string | null;
-  }) => React.ReactNode;
-}) {
-  const { data: statusData } = useMcpServerInstallationStatus(serverId, {
-    enabled: !!serverId,
-    onSuccess: (status) => {
-      if (status === "success" && serverId) {
-        onInstallationComplete(serverId);
-      }
-    },
-    onError: () => {
-      if (serverId) {
-        onInstallationComplete(serverId);
-      }
-    },
-  });
-
-  return (
-    <>
-      {children({
-        localInstallationStatus: statusData?.localInstallationStatus,
-        localInstallationError: statusData?.localInstallationError,
-      })}
-    </>
-  );
-}
-
 function InternalServerCard({
   item,
   installed,
@@ -170,7 +134,7 @@ function InternalServerCard({
             {localInstallationStatus === "pending" && (
               <div className="text-sm text-muted-foreground text-center py-2">
                 <RefreshCw className="inline h-4 w-4 mr-2 animate-spin" />
-                Installing...
+                Discovering tools...
               </div>
             )}
             {localInstallationStatus === "error" && localInstallationError && (
@@ -292,6 +256,10 @@ export function InternalMCPCatalog({
   >(null);
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
+  );
+
+  const mcpServerInstallationStatus = useMcpServerInstallationStatus(
+    Array.from(installingServerIds)[0],
   );
 
   const toolsDialogServer = useMemo(() => {
@@ -574,72 +542,38 @@ export function InternalMCPCatalog({
         {filteredCatalogItems?.map((item) => {
           const installedServer = getInstalledServer(item.id);
           const itemWithLabel = item as CatalogItemWithOptionalLabel;
-          // Poll for any server that is pending or just installed
-          const shouldPoll =
-            installedServer &&
-            (installedServer.localInstallationStatus === "pending" ||
-              installingServerIds.has(installedServer.id));
 
           return (
-            <ServerCardWithPolling
+            <InternalServerCard
               key={item.id}
-              serverId={shouldPoll ? installedServer.id : null}
-              onInstallationComplete={(serverId) => {
-                // Remove from installing set
-                setInstallingServerIds((prev) => {
-                  const next = new Set(prev);
-                  next.delete(serverId);
-                  return next;
-                });
-
-                // Invalidate queries to refresh the UI
-                queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-                queryClient.invalidateQueries({ queryKey: ["tools"] });
-                queryClient.invalidateQueries({
-                  queryKey: ["tools", "unassigned"],
-                });
-                queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-                queryClient.invalidateQueries({
-                  queryKey: ["mcp-servers", serverId, "tools"],
-                });
+              item={itemWithLabel}
+              installed={!!installedServer}
+              isInstalling={
+                installingItemId === item.id || installMutation.isPending
+              }
+              localInstallationStatus={
+                mcpServerInstallationStatus.data ?? undefined
+              }
+              localInstallationError={installedServer?.localInstallationError}
+              needsReinstall={installedServer?.reinstallRequired ?? false}
+              onInstall={() => handleInstall(item)}
+              onUninstall={() => {
+                if (installedServer) {
+                  handleUninstallClick(
+                    installedServer.id,
+                    installedServer.name,
+                  );
+                }
               }}
-            >
-              {({ localInstallationStatus, localInstallationError }) => (
-                <InternalServerCard
-                  item={itemWithLabel}
-                  installed={!!installedServer}
-                  isInstalling={
-                    installingItemId === item.id || installMutation.isPending
-                  }
-                  localInstallationStatus={
-                    localInstallationStatus ||
-                    installedServer?.localInstallationStatus
-                  }
-                  localInstallationError={
-                    localInstallationError ||
-                    installedServer?.localInstallationError
-                  }
-                  needsReinstall={installedServer?.reinstallRequired ?? false}
-                  onInstall={() => handleInstall(item)}
-                  onUninstall={() => {
-                    if (installedServer) {
-                      handleUninstallClick(
-                        installedServer.id,
-                        installedServer.name,
-                      );
-                    }
-                  }}
-                  onReinstall={() => handleReinstall(item)}
-                  onEdit={() => setEditingItem(item)}
-                  onDelete={() => setDeletingItem(item)}
-                  onViewTools={
-                    installedServer
-                      ? () => setToolsDialogServerId(installedServer.id)
-                      : undefined
-                  }
-                />
-              )}
-            </ServerCardWithPolling>
+              onReinstall={() => handleReinstall(item)}
+              onEdit={() => setEditingItem(item)}
+              onDelete={() => setDeletingItem(item)}
+              onViewTools={
+                installedServer
+                  ? () => setToolsDialogServerId(installedServer.id)
+                  : undefined
+              }
+            />
           );
         })}
       </div>

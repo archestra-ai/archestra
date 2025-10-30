@@ -12,7 +12,7 @@ const {
   getMcpServers,
   getMcpServerTools,
   installMcpServer,
-  getMcpServerInstallationStatus,
+  getMcpServer,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -95,65 +95,21 @@ export function useMcpServerTools(mcpServerId: string | null) {
 }
 
 export function useMcpServerInstallationStatus(
-  mcpServerId: string | null,
-  options?: {
-    enabled?: boolean;
-    onSuccess?: (status: "idle" | "pending" | "success" | "error") => void;
-    onError?: () => void;
-  },
+  installingMcpServerId: string | null,
 ) {
   return useQuery({
-    queryKey: ["mcp-servers", mcpServerId, "installation-status"],
+    queryKey: ["mcp-servers", installingMcpServerId],
     queryFn: async () => {
-      if (!mcpServerId) return null;
-      try {
-        const response = await getMcpServerInstallationStatus({
-          path: { id: mcpServerId },
-        });
-        return response.data;
-      } catch (error) {
-        console.error("Failed to fetch installation status:", error);
-        return null;
-      }
+      // then it means it's installed already
+      if (!installingMcpServerId) return "success";
+      const response = await getMcpServer({
+        path: { id: installingMcpServerId },
+      });
+      return response.data?.localInstallationStatus ?? null;
     },
-    enabled: !!mcpServerId && (options?.enabled ?? true),
     refetchInterval: (query) => {
-      const status = query.state.data?.localInstallationStatus;
-      // Stop polling once we reach a terminal state (success or error)
-      if (status === "success" || status === "error") {
-        // When installation completes, invalidate relevant queries
-        if (status === "success") {
-          queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-          queryClient.invalidateQueries({ queryKey: ["tools"] });
-          queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-          queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-          if (mcpServerId) {
-            queryClient.invalidateQueries({
-              queryKey: ["mcp-servers", mcpServerId, "tools"],
-            });
-          }
-          options?.onSuccess?.(status);
-        } else if (status === "error") {
-          options?.onError?.();
-        }
-        return false;
-      }
-
-      if (status === "error") {
-        options?.onError?.();
-        return false; // Stop polling
-      }
-
-      // Poll every 5 seconds while installation is pending
-      return status === "pending" ? 5000 : false;
+      const status = query.state.data;
+      return status === "pending" || status === null ? 2000 : false;
     },
-    // Disable automatic retries to prevent excessive requests on errors
-    retry: false,
-    // Reduce stale time to prevent unnecessary refetches
-    staleTime: 4000,
-    // Prevent refetching on window focus or mount
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
   });
 }

@@ -24,6 +24,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateMcpServerInstallationRequest } from "@/lib/mcp-server-installation-request.query";
 
+type ServerType =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
+
 export function CustomServerRequestDialog({
   isOpen,
   onClose,
@@ -32,7 +35,7 @@ export function CustomServerRequestDialog({
   onClose: () => void;
 }) {
   const [formData, setFormData] = useState({
-    serverType: "remote" as "remote" | "local",
+    serverType: "remote" as ServerType,
     label: "",
     name: "",
     version: "",
@@ -133,7 +136,7 @@ export function CustomServerRequestDialog({
             <Label htmlFor="serverType">Server Type *</Label>
             <Select
               value={formData.serverType}
-              onValueChange={(value: "remote" | "local") =>
+              onValueChange={(value: ServerType) =>
                 handleInputChange("serverType", value)
               }
             >

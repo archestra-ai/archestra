@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,11 +24,14 @@ interface CreateCatalogDialogProps {
   onClose: () => void;
 }
 
+type ServerType =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
+
 export function CreateCatalogDialog({
   isOpen,
   onClose,
 }: CreateCatalogDialogProps) {
-  const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
+  const [activeTab, setActiveTab] = useState<ServerType>("remote");
   const createMutation = useCreateInternalMcpCatalogItem();
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -55,7 +59,7 @@ export function CreateCatalogDialog({
         <Tabs
           value={activeTab}
           onValueChange={(v) => {
-            setActiveTab(v as "remote" | "local");
+            setActiveTab(v as ServerType);
           }}
         >
           <TabsList className="grid w-full grid-cols-2">

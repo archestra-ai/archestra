@@ -4290,7 +4290,7 @@ export type GetInternalMcpCatalogResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
@@ -4359,7 +4359,7 @@ export type CreateInternalMcpCatalogItemData = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType?: 'local' | 'remote';
+        serverType: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
         localConfig?: {
@@ -4445,7 +4445,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
@@ -4593,7 +4593,7 @@ export type GetInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
@@ -4759,7 +4759,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             required: boolean;
             description?: string;
         }> | null;
-        serverType: string | null;
+        serverType: 'local' | 'remote';
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
@@ -5919,7 +5919,7 @@ export type GetMcpServersResponses = {
     200: Array<{
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
         createdAt: string;
@@ -5933,7 +5933,7 @@ export type GetMcpServersResponse = GetMcpServersResponses[keyof GetMcpServersRe
 export type InstallMcpServerData = {
     body: {
         name: string;
-        catalogId?: string | null;
+        catalogId: string;
         secretId?: string;
         reinstallRequired?: boolean;
         teams?: Array<string>;
@@ -5975,7 +5975,7 @@ export type InstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
         createdAt: string;
@@ -6077,7 +6077,7 @@ export type GetMcpServerResponses = {
     200: {
         id: string;
         name: string;
-        catalogId: string | null;
+        catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
         createdAt: string;

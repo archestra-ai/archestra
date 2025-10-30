@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2, Info, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,14 @@ import {
 } from "@/components/ui/select";
 import { useTeams } from "@/lib/team.query";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
 interface NoAuthInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInstall: (teams: string[]) => Promise<void>;
-  catalogItem:
-    | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]
-    | null;
+  catalogItem: CatalogItem | null;
   isInstalling: boolean;
   isAdmin: boolean;
 }
@@ -48,46 +49,36 @@ export function NoAuthInstallDialog({
 
   const { data: teams } = useTeams();
 
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
+  const handleAddTeam = (teamId: string) => {
+    if (teamId && !assignedTeamIds.includes(teamId)) {
+      setAssignedTeamIds([...assignedTeamIds, teamId]);
+      setSelectedTeamId("");
+    }
+  };
 
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
+  const handleRemoveTeam = (teamId: string) => {
+    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
+  };
 
-  const getUnassignedTeams = useCallback(() => {
-    if (!teams) return [];
-    return teams.filter((team) => !assignedTeamIds.includes(team.id));
-  }, [teams, assignedTeamIds]);
+  const unassignedTeams = !teams
+    ? []
+    : teams.filter((team) => !assignedTeamIds.includes(team.id));
 
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
+  const getTeamById = (teamId: string) => {
+    return teams?.find((team) => team.id === teamId);
+  };
 
-  const handleInstall = useCallback(async () => {
+  const handleInstall = async () => {
     await onInstall(assignedTeamIds);
     setAssignedTeamIds([]);
     setSelectedTeamId("");
-  }, [assignedTeamIds, onInstall]);
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setAssignedTeamIds([]);
     setSelectedTeamId("");
     onClose();
-  }, [onClose]);
+  };
 
   if (!catalogItem) {
     return null;
@@ -129,12 +120,12 @@ export function NoAuthInstallDialog({
                   <SelectValue placeholder="Select a team to assign" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getUnassignedTeams().length === 0 ? (
+                  {unassignedTeams.length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
                       All teams are already assigned
                     </div>
                   ) : (
-                    getUnassignedTeams().map((team) => (
+                    unassignedTeams.map((team) => (
                       <SelectItem key={team.id} value={team.id}>
                         {team.name}
                       </SelectItem>

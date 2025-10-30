@@ -74,19 +74,8 @@ class McpClient {
       }
     }
 
-    // Get access token for authentication
-    const accessToken = secrets.access_token as string | undefined;
-    if (!accessToken) {
-      return mcpToolCalls.map((tc) => ({
-        id: tc.id,
-        content: null,
-        isError: true,
-        error: "No access token found for MCP server",
-      }));
-    }
-
     try {
-      let client: Client;
+      let client: Client | null = null;
 
       // Determine server type and create appropriate connection
       if (firstTool.mcpServerCatalogId) {
@@ -105,13 +94,16 @@ class McpClient {
             firstTool.mcpServerCatalogId,
             config,
           );
-        } else {
-          // Fallback to GitHub for unknown server types
-          client = await this.getOrCreateGitHubConnection(accessToken);
         }
-      } else {
-        // No catalog ID - assume GitHub for backward compatibility
-        client = await this.getOrCreateGitHubConnection(accessToken);
+      }
+
+      if (!client) {
+        return mcpToolCalls.map((tc) => ({
+          id: tc.id,
+          content: null,
+          isError: true,
+          error: "Failed to create MCP client",
+        }));
       }
 
       // Execute each MCP tool call
@@ -169,34 +161,14 @@ class McpClient {
           id: toolCall.id,
           content: null,
           isError: true,
-          error: `Failed to connect to MCP server: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: `Failed to connect to MCP server: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
         });
       }
     }
 
     return results;
-  }
-
-  /**
-   * TODO: this method is very much temporary just to get the GitHub remote MCP server demo-able.. this should
-   * be removed once we have more generic/broad support for remote MCP servers.
-   *
-   * Get or create a persistent connection to GitHub MCP server
-   */
-  private async getOrCreateGitHubConnection(
-    githubToken: string,
-  ): Promise<Client> {
-    const serverId = "github-mcp-server";
-
-    // Check if we already have an active connection
-    const existingClient = this.activeConnections.get(serverId);
-    if (existingClient) {
-      return existingClient;
-    }
-
-    // Create GitHub config and connect
-    const config = this.createGitHubConfig(githubToken);
-    return this.getOrCreateConnection(serverId, config);
   }
 
   /**

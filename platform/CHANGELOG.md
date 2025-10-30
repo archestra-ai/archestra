@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.15](https://github.com/archestra-ai/archestra/compare/platform-v0.0.14...platform-v0.0.15) (2025-10-29)
+
+
+### Bug Fixes
+
+* volume for pg ([#848](https://github.com/archestra-ai/archestra/issues/848)) ([b2d3b3d](https://github.com/archestra-ai/archestra/commit/b2d3b3d65d0927881cc3778b91d705b967b2a6ea))
+
 ## [0.0.14](https://github.com/archestra-ai/archestra/compare/platform-v0.0.13...platform-v0.0.14) (2025-10-29)
 
 

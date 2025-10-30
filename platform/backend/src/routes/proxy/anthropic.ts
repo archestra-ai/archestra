@@ -57,55 +57,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const MESSAGES_SUFFIX = "/messages";
 
   /**
-   * Register HTTP proxy for all Anthropic API routes EXCEPT messages routes
-   * This will proxy routes like /v1/anthropic/models to https://api.anthropic.com/v1/models
-   */
-  await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
-    prefix: API_PREFIX,
-    rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
-    preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format:
-      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
-      const isMessagesRoute =
-        request.method === "POST" &&
-        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
-
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
-        next(new Error("skip"));
-      } else {
-        next();
-      }
-    },
-  });
-
-  /**
-   * Register HTTP proxy for n8n-style agent routes EXCEPT messages routes
-   * This handles n8n's URL format: /v1/anthropic/:agentId/v1/...
-   * Example: /v1/anthropic/:agentId/v1/models -> https://api.anthropic.com/v1/models
+   * Register HTTP proxy for Anthropic routes
+   * Handles both patterns:
+   * - /v1/anthropic/:agentId/* -> https://api.anthropic.com/v1/* (agentId stripped if UUID)
+   * - /v1/anthropic/* -> https://api.anthropic.com/v1/* (direct proxy)
    *
-   * NOTE: this is really only needed for n8n compatibility...
+   * Messages are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: "https://api.anthropic.com",
-    prefix: `${API_PREFIX}/:agentId`,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support n8n URL format with agent ID
-      const isMessagesRoute =
-        request.method === "POST" &&
-        request.url.match(/\/v1\/anthropic\/[^/]+\/v1\/messages$/);
-
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
+      // Skip messages route (we handle it specially below with full agent support)
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
         next(new Error("skip"));
-      } else {
-        next();
+        return;
       }
+
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
+
+      if (uuidMatch) {
+        // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
+        const remainingPath = uuidMatch[2] || "";
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
+      }
+
+      next();
     },
   });
 

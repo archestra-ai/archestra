@@ -1,5 +1,7 @@
 import fastifyHttpProxy from "@fastify/http-proxy";
 import {
+  type Content,
+  type FunctionResponse,
   type GenerateContentParameters,
   type GenerateContentResponse,
   GoogleGenAI,
@@ -627,37 +629,36 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           if (mcpResults.length > 0) {
             // Convert MCP results to Gemini format
-            const toolResultParts = mcpResults.map((result) => ({
-              functionResponse: {
-                name:
-                  commonToolCalls.find((tc) => tc.id === result.id)?.name ||
-                  "unknown",
-                response: result.isError
-                  ? ({
-                      error: result.error || "Tool execution failed",
-                    } as Record<string, unknown>)
-                  : (result.content as Record<string, unknown>),
-              },
-            }));
+            const toolResultParts: FunctionResponse[] =
+              utils.adapters.gemini.toolResultsToMessages(
+                mcpResults,
+                commonToolCalls,
+              );
 
             // Make another call with the tool results
-            const updatedContents = [
-              ...filteredContents,
+            const updatedContents: Content[] = [
+              ...(filteredContents as Content[]),
               {
                 role: "model" as const,
                 parts: response.candidates?.[0]?.content?.parts || [],
               },
               {
                 role: "user" as const,
-                parts: toolResultParts,
+                parts: toolResultParts.map((fr) => ({
+                  functionResponse: {
+                    name: fr.name,
+                    response: fr.response,
+                  },
+                })),
               },
             ];
 
             // Make final call with tool results
             const finalParams = {
               ...processedBody,
-              contents: updatedContents,
+              contents: updatedContents as Content[],
             } as GenerateContentParameters;
+
             const finalResponse =
               await genAI.models.generateContent(finalParams);
 
@@ -667,13 +668,21 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 finalResponse,
                 modelName,
               );
-
             // Store the interaction with final response
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "gemini:generateContent",
               request: body,
-              response: restResponse,
+              response: {
+                ...restResponse,
+                candidates: [
+                  ...(finalParams.contents as Content[]).map((c, idx) => ({
+                    content: utils.adapters.gemini.sdkContentToRestContent(c),
+                    index: idx,
+                  })),
+                  ...restResponse.candidates,
+                ],
+              },
             });
 
             return reply.send(restResponse);
@@ -737,7 +746,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     verb: "generateContent" | "streamGenerateContent",
     includeAgentId = false,
   ) =>
-    `${API_PREFIX}/v1beta/${includeAgentId ? ":agentId/" : ""}models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
+    `${API_PREFIX}/${includeAgentId ? ":agentId/" : ""}v1beta/models/:model(^[a-zA-Z0-9-.]+$)::${verb}`;
 
   /**
    * Default agent endpoint for Gemini generateContent

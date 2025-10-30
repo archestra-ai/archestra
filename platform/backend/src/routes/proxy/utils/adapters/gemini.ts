@@ -1,6 +1,8 @@
 import {
   Behavior,
   type Candidate,
+  type Content,
+  type FunctionResponse,
   type GenerateContentConfig,
   type GenerateContentParameters,
   type GenerateContentResponse,
@@ -8,7 +10,7 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
-import type { Gemini } from "@/types";
+import type { CommonToolCall, CommonToolResult, Gemini } from "@/types";
 import type { CommonMessage, ToolResultUpdates } from "../types";
 
 type GeminiContents = Gemini.Types.GenerateContentRequest["contents"];
@@ -426,4 +428,38 @@ export function sdkResponseToRestResponse(
     modelVersion: sdkResponse.modelVersion || modelName,
     responseId: sdkResponse.responseId || "unknown",
   } as Gemini.Types.GenerateContentResponse;
+}
+
+/**
+ * Convert SDK Content format to REST API Content format
+ */
+export function sdkContentToRestContent(
+  sdkContents: Content,
+): Gemini.Types.MessageContent {
+  return {
+    role: sdkContents.role ?? "model",
+    parts: sdkContents.parts?.map(sdkPartToRestPart) ?? [],
+  };
+}
+
+/**
+ * Convert common tool results to Anthropic user message with tool_result blocks
+ */
+export function toolResultsToMessages(
+  results: CommonToolResult[],
+  commonToolCalls: CommonToolCall[],
+): FunctionResponse[] {
+  if (results.length === 0) {
+    return [];
+  }
+
+  return results.map((result) => ({
+    name: commonToolCalls.find((tc) => tc.id === result.id)?.name || "unknown",
+    response: result.isError
+      ? { error: result.error || "Tool execution failed" }
+      : (Object.fromEntries(
+          (result.content as []).map((item, index) => [index, item]),
+        ) as Record<string, unknown>),
+    is_error: result.isError,
+  }));
 }

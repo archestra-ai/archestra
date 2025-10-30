@@ -68,6 +68,8 @@ Environment variables for the Archestra Platform container
 - name: KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.kubernetes.kubeconfig.mountPath | quote }}
 {{- end }}
+- name: USE_IN_CLUSTER_KUBECONFIG
+  value: {{ .Values.archestra.kubernetes.useInClusterConfig | quote }}
 {{- range $key, $value := .Values.archestra.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}

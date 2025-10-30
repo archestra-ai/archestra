@@ -141,7 +141,8 @@ export default {
     mcpServerBaseImage:
       process.env.MCP_SERVER_BASE_IMAGE ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
-    useInClusterConfig: process.env.USE_IN_CLUSTER_CONFIG === "true" || true,
+    useInClusterConfig:
+      process.env.USE_IN_CLUSTER_KUBECONFIG === "true" || true,
   },
   observability: {
     otel: {

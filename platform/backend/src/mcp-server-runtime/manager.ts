@@ -38,7 +38,7 @@ class McpServerRuntimeManager {
 
     // Load K8s config from environment or default locations
     try {
-      if (process.env.KUBERNETES_SERVICE_HOST) {
+      if (useInClusterConfig) {
         /**
          * Running inside a K8s cluster
          *

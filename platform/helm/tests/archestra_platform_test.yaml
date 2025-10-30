@@ -142,6 +142,8 @@ tests:
           value:
             - name: DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            - name: USE_IN_CLUSTER_KUBECONFIG
+              value: "true"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1
@@ -178,7 +180,6 @@ tests:
             name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
 
-  # Kubernetes configuration tests for MCP Server Runtime
   - it: should set K8S_NAMESPACE env var when namespace is configured
     documentIndex: 1
     set:
@@ -320,3 +321,25 @@ tests:
           content:
             name: KUBECONFIG
             value: "/etc/kubeconfig/config"
+
+  - it: should set USE_IN_CLUSTER_KUBECONFIG to false when configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.useInClusterConfig: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: USE_IN_CLUSTER_KUBECONFIG
+            value: "false"
+
+  - it: should set USE_IN_CLUSTER_KUBECONFIG to true when configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.useInClusterConfig: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: USE_IN_CLUSTER_KUBECONFIG
+            value: "true"

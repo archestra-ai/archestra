@@ -30,6 +30,7 @@ import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
   useInstallMcpServer,
+  useMcpServerInstallationStatus,
   useMcpServers,
   useMcpServerTools,
 } from "@/lib/mcp-server.query";
@@ -49,10 +50,48 @@ type CatalogItemWithOptionalLabel =
     label?: string | null;
   };
 
+function ServerCardWithPolling({
+  serverId,
+  onInstallationComplete,
+  children,
+}: {
+  serverId: string | null;
+  onInstallationComplete: (serverId: string) => void;
+  children: (props: {
+    installationStatus?: "idle" | "pending" | "success" | "error";
+    installationError?: string | null;
+  }) => React.ReactNode;
+}) {
+  const { data: statusData } = useMcpServerInstallationStatus(serverId, {
+    enabled: !!serverId,
+    onSuccess: (status) => {
+      if (status === "success" && serverId) {
+        onInstallationComplete(serverId);
+      }
+    },
+    onError: () => {
+      if (serverId) {
+        onInstallationComplete(serverId);
+      }
+    },
+  });
+
+  return (
+    <>
+      {children({
+        installationStatus: statusData?.installationStatus,
+        installationError: statusData?.installationError,
+      })}
+    </>
+  );
+}
+
 function InternalServerCard({
   item,
   installed,
   isInstalling,
+  installationStatus,
+  installationError,
   needsReinstall,
   onInstall,
   onUninstall,
@@ -64,6 +103,8 @@ function InternalServerCard({
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
   isInstalling: boolean;
+  installationStatus?: "idle" | "pending" | "success" | "error";
+  installationError?: string | null;
   needsReinstall: boolean;
   onInstall: () => void;
   onUninstall: () => void;
@@ -122,19 +163,30 @@ function InternalServerCard({
       <CardContent className="flex-1 flex flex-col pt-3 gap-2 justify-end">
         {installed ? (
           <>
+            {installationStatus === "pending" && (
+              <div className="text-sm text-muted-foreground text-center py-2">
+                <RefreshCw className="inline h-4 w-4 mr-2 animate-spin" />
+                Installing...
+              </div>
+            )}
+            {installationStatus === "error" && installationError && (
+              <div className="text-sm text-destructive text-center py-2">
+                Installation failed: {installationError}
+              </div>
+            )}
             {needsReinstall && (
               <Button
                 onClick={onReinstall}
                 size="sm"
                 variant="default"
                 className="w-full"
-                disabled={isInstalling}
+                disabled={isInstalling || installationStatus === "pending"}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {isInstalling ? "Reinstalling..." : "Reinstall Required"}
               </Button>
             )}
-            {onViewTools && (
+            {onViewTools && installationStatus === "success" && (
               <Button
                 onClick={onViewTools}
                 size="sm"
@@ -149,6 +201,7 @@ function InternalServerCard({
               onClick={onUninstall}
               size="sm"
               className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              disabled={installationStatus === "pending"}
             >
               Uninstall
             </Button>
@@ -232,6 +285,9 @@ export function InternalMCPCatalog({
   const [catalogItemForReinstall, setCatalogItemForReinstall] = useState<
     archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
+  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const toolsDialogServer = useMemo(() => {
     return installedServers?.find(
@@ -267,11 +323,17 @@ export function InternalMCPCatalog({
       // For servers without configuration, install directly
       try {
         setInstallingItemId(catalogItem.id);
-        await installMutation.mutateAsync({
+        const installedServer = await installMutation.mutateAsync({
           name: catalogItem.name,
           catalogId: catalogItem.id,
           teams: [],
         });
+        // Track the installed server ID for polling
+        if (installedServer?.id) {
+          setInstallingServerIds((prev) =>
+            new Set(prev).add(installedServer.id),
+          );
+        }
       } finally {
         setInstallingItemId(null);
       }
@@ -314,11 +376,17 @@ export function InternalMCPCatalog({
             ? metadata.access_token
             : undefined;
 
-        await installMutation.mutateAsync({
+        const installedServer = await installMutation.mutateAsync({
           name: catalogItem.name,
           catalogId: catalogItem.id,
           ...(accessToken && { accessToken }),
         });
+        // Track the installed server ID for polling
+        if (installedServer?.id) {
+          setInstallingServerIds((prev) =>
+            new Set(prev).add(installedServer.id),
+          );
+        }
       } finally {
         setInstallingItemId(null);
       }
@@ -501,34 +569,58 @@ export function InternalMCPCatalog({
         {filteredCatalogItems?.map((item) => {
           const installedServer = getInstalledServer(item.id);
           const itemWithLabel = item as CatalogItemWithOptionalLabel;
+          // Poll for any server that is pending or just installed
+          const shouldPoll =
+            installedServer &&
+            (installedServer.installationStatus === "pending" ||
+              installingServerIds.has(installedServer.id));
 
           return (
-            <InternalServerCard
+            <ServerCardWithPolling
               key={item.id}
-              item={itemWithLabel}
-              installed={!!installedServer}
-              isInstalling={
-                installingItemId === item.id || installMutation.isPending
-              }
-              needsReinstall={installedServer?.reinstallRequired ?? false}
-              onInstall={() => handleInstall(item)}
-              onUninstall={() => {
-                if (installedServer) {
-                  handleUninstallClick(
-                    installedServer.id,
-                    installedServer.name,
-                  );
-                }
+              serverId={shouldPoll ? installedServer.id : null}
+              onInstallationComplete={(serverId) => {
+                setInstallingServerIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(serverId);
+                  return next;
+                });
               }}
-              onReinstall={() => handleReinstall(item)}
-              onEdit={() => setEditingItem(item)}
-              onDelete={() => setDeletingItem(item)}
-              onViewTools={
-                installedServer
-                  ? () => setToolsDialogServerId(installedServer.id)
-                  : undefined
-              }
-            />
+            >
+              {({ installationStatus, installationError }) => (
+                <InternalServerCard
+                  item={itemWithLabel}
+                  installed={!!installedServer}
+                  isInstalling={
+                    installingItemId === item.id || installMutation.isPending
+                  }
+                  installationStatus={
+                    installationStatus || installedServer?.installationStatus
+                  }
+                  installationError={
+                    installationError || installedServer?.installationError
+                  }
+                  needsReinstall={installedServer?.reinstallRequired ?? false}
+                  onInstall={() => handleInstall(item)}
+                  onUninstall={() => {
+                    if (installedServer) {
+                      handleUninstallClick(
+                        installedServer.id,
+                        installedServer.name,
+                      );
+                    }
+                  }}
+                  onReinstall={() => handleReinstall(item)}
+                  onEdit={() => setEditingItem(item)}
+                  onDelete={() => setDeletingItem(item)}
+                  onViewTools={
+                    installedServer
+                      ? () => setToolsDialogServerId(installedServer.id)
+                      : undefined
+                  }
+                />
+              )}
+            </ServerCardWithPolling>
           );
         })}
       </div>

@@ -7,8 +7,13 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const { deleteMcpServer, getMcpServers, getMcpServerTools, installMcpServer } =
-  archestraApiSdk;
+const {
+  deleteMcpServer,
+  getMcpServers,
+  getMcpServerTools,
+  installMcpServer,
+  getMcpServerInstallationStatus,
+} = archestraApiSdk;
 
 export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
@@ -86,5 +91,57 @@ export function useMcpServerTools(mcpServerId: string | null) {
       }
     },
     enabled: !!mcpServerId,
+  });
+}
+
+export function useMcpServerInstallationStatus(
+  mcpServerId: string | null,
+  options?: {
+    enabled?: boolean;
+    onSuccess?: (status: "idle" | "pending" | "success" | "error") => void;
+    onError?: () => void;
+  },
+) {
+  const queryClient = useQueryClient();
+
+  return useQuery({
+    queryKey: ["mcp-servers", mcpServerId, "installation-status"],
+    queryFn: async () => {
+      if (!mcpServerId) return null;
+      try {
+        const response = await getMcpServerInstallationStatus({
+          path: { id: mcpServerId },
+        });
+        return response.data;
+      } catch (error) {
+        console.error("Failed to fetch installation status:", error);
+        return null;
+      }
+    },
+    enabled: !!mcpServerId && (options?.enabled ?? true),
+    refetchInterval: (query) => {
+      const status = query.state.data?.installationStatus;
+      // Stop polling once we reach a terminal state (success or error)
+      if (status === "success" || status === "error") {
+        // When installation completes, invalidate relevant queries
+        if (status === "success") {
+          queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+          queryClient.invalidateQueries({ queryKey: ["tools"] });
+          queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+          queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+          if (mcpServerId) {
+            queryClient.invalidateQueries({
+              queryKey: ["mcp-servers", mcpServerId, "tools"],
+            });
+          }
+          options?.onSuccess?.(status);
+        } else if (status === "error") {
+          options?.onError?.();
+        }
+        return false;
+      }
+      // Poll every 2 seconds while installation is pending
+      return status === "pending" ? 2000 : false;
+    },
   });
 }

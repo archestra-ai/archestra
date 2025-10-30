@@ -15,7 +15,6 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import { authMiddleware } from "@/middleware/auth";
-import { requestMetrics } from "@/middleware/metrics";
 import {
   Anthropic,
   Gemini,
@@ -86,7 +85,6 @@ const start = async () => {
     await seedDatabase();
 
     await fastify.register(metricsPlugin, { endpoint: "/metrics" });
-    fastify.addHook("onRequest", requestMetrics.handle);
 
     // Register CORS plugin to allow cross-origin requests
     await fastify.register(fastifyCors, {

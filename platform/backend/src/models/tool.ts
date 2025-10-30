@@ -313,6 +313,7 @@ class ToolModel {
       responseModifierTemplate: string | null;
       mcpServerSecretId: string | null;
       mcpServerName: string;
+      mcpServerCatalogId: string | null;
     }>
   > {
     if (toolNames.length === 0) {
@@ -326,6 +327,7 @@ class ToolModel {
           schema.agentToolsTable.responseModifierTemplate,
         mcpServerSecretId: schema.mcpServersTable.secretId,
         mcpServerName: schema.mcpServersTable.name,
+        mcpServerCatalogId: schema.mcpServersTable.catalogId,
       })
       .from(schema.toolsTable)
       .innerJoin(

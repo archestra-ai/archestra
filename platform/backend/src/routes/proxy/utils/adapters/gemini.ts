@@ -94,3 +94,15 @@ export function extractUserRequest(_contents: GeminiContents): string {
   // }
   return "process this data";
 }
+
+type GeminiUsage = Pick<
+  Gemini.Types.UsageMetadata,
+  "promptTokenCount" | "candidatesTokenCount"
+>;
+/** Returns Gemini input and output usage tokens */
+export function getUsageTokens(usage: GeminiUsage) {
+  return {
+    input: usage.promptTokenCount,
+    output: usage.candidatesTokenCount,
+  };
+}

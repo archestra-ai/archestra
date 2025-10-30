@@ -140,7 +140,9 @@ export function transformFormToApiData(
         .filter((line) => line.length > 0 && line.includes("="))
         .forEach((line) => {
           const [key, ...valueParts] = line.split("=");
-          environment![key] = valueParts.join("=");
+          if (key && environment) {
+            environment[key] = valueParts.join("=");
+          }
         });
     }
 

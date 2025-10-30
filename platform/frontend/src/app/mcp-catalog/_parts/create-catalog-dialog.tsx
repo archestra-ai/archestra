@@ -11,12 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 import {
   McpCatalogForm,

@@ -1,5 +1,4 @@
 import type { IncomingMessage } from "node:http";
-import { Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";

@@ -1,5 +1,6 @@
 import {
   archestraApiSdk,
+  type archestraApiTypes,
   type ErrorExtended,
 } from "@shared";
 
@@ -11,7 +12,10 @@ import McpGatewayLogsPage from "./page.client";
 export const dynamic = "force-dynamic";
 
 export default async function McpGatewayLogsPageServer() {
-  let initialData = {
+  let initialData: {
+    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
+  } = {
     mcpToolCalls: {
       data: [],
       pagination: {
@@ -29,20 +33,18 @@ export default async function McpGatewayLogsPageServer() {
   try {
     const headers = await getServerApiHeaders();
 
-    // TODO: Replace with actual SDK call once codegen is run
-    // For now, we'll use placeholder data
-    // const mcpToolCallsResponse = await archestraApiSdk.getMcpToolCalls({
-    //   headers,
-    //   query: {
-    //     limit: DEFAULT_TABLE_LIMIT,
-    //     offset: 0,
-    //     sortBy: "createdAt",
-    //     sortDirection: "desc",
-    //   },
-    // });
-
     initialData = {
-      mcpToolCalls: {
+      mcpToolCalls: (
+        await archestraApiSdk.getMcpToolCalls({
+          headers,
+          query: {
+            limit: DEFAULT_TABLE_LIMIT,
+            offset: 0,
+            sortBy: "createdAt",
+            sortDirection: "desc",
+          },
+        })
+      ).data || {
         data: [],
         pagination: {
           currentPage: 1,

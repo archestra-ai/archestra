@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
@@ -8,71 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useAgents } from "@/lib/agent.query";
+import { useMcpToolCalls } from "@/lib/mcp-tool-call.query";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
-// TODO: Replace with actual types from @shared once codegen is run
-type McpToolCall = {
-  id: string;
-  agentId: string;
-  mcpServerName: string;
-  toolCall: {
-    id: string;
-    name: string;
-    arguments: Record<string, unknown>;
-  };
-  toolResult: {
-    id: string;
-    content: unknown;
-    isError: boolean;
-    error?: string;
-  };
-  createdAt: string;
-};
-
-type McpToolCallsResponse = {
-  data: McpToolCall[];
-  pagination: {
-    currentPage: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-};
-
-// TODO: Replace with actual SDK call once codegen is run
-function useMcpToolCalls({
-  limit,
-  offset,
-  sortBy,
-  sortDirection,
-  initialData,
-}: {
-  limit: number;
-  offset: number;
-  sortBy?: string;
-  sortDirection?: "asc" | "desc";
-  initialData?: McpToolCallsResponse;
-}) {
-  // This is a placeholder - actual implementation will use the generated SDK
-  // For now, return empty data
-  return {
-    data: initialData || {
-      data: [],
-      pagination: {
-        currentPage: 1,
-        limit: DEFAULT_TABLE_LIMIT,
-        total: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false,
-      },
-    },
-  };
-}
+type McpToolCallData =
+  archestraApiTypes.GetMcpToolCallsResponses["200"]["data"][number];
 
 function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
@@ -95,8 +38,8 @@ export default function McpGatewayLogsPage({
   initialData,
 }: {
   initialData?: {
-    mcpToolCalls: McpToolCallsResponse;
-    agents: Array<{ id: string; name: string }>;
+    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
 }) {
   return (
@@ -112,8 +55,8 @@ function McpToolCallsTable({
   initialData,
 }: {
   initialData?: {
-    mcpToolCalls: McpToolCallsResponse;
-    agents: Array<{ id: string; name: string }>;
+    mcpToolCalls: archestraApiTypes.GetMcpToolCallsResponses["200"];
+    agents: archestraApiTypes.GetAgentsResponses["200"];
   };
 }) {
   const [pagination, setPagination] = useState({
@@ -128,7 +71,9 @@ function McpToolCallsTable({
   const sortBy = sorting[0]?.id;
   const sortDirection = sorting[0]?.desc ? "desc" : "asc";
   // Map UI column ids to API sort fields
-  const apiSortBy =
+  const apiSortBy: NonNullable<
+    archestraApiTypes.GetMcpToolCallsData["query"]
+  >["sortBy"] =
     sortBy === "agent"
       ? "agentId"
       : sortBy === "mcpServerName"
@@ -152,7 +97,7 @@ function McpToolCallsTable({
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
   const paginationMeta = mcpToolCallsResponse?.pagination;
 
-  const columns: ColumnDef<McpToolCall>[] = [
+  const columns: ColumnDef<McpToolCallData>[] = [
     {
       id: "createdAt",
       header: ({ column }) => {

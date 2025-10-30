@@ -45,6 +45,9 @@ import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
+type LocalMcpServerInstallationStatus =
+  archestraApiTypes.GetMcpServerInstallationStatusResponses["200"]["localInstallationStatus"];
+
 type CatalogItemWithOptionalLabel =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
     label?: string | null;
@@ -58,8 +61,8 @@ function ServerCardWithPolling({
   serverId: string | null;
   onInstallationComplete: (serverId: string) => void;
   children: (props: {
-    installationStatus?: "idle" | "pending" | "success" | "error";
-    installationError?: string | null;
+    localInstallationStatus?: LocalMcpServerInstallationStatus;
+    localInstallationError?: string | null;
   }) => React.ReactNode;
 }) {
   const { data: statusData } = useMcpServerInstallationStatus(serverId, {
@@ -79,8 +82,8 @@ function ServerCardWithPolling({
   return (
     <>
       {children({
-        installationStatus: statusData?.installationStatus,
-        installationError: statusData?.installationError,
+        localInstallationStatus: statusData?.localInstallationStatus,
+        localInstallationError: statusData?.localInstallationError,
       })}
     </>
   );
@@ -90,8 +93,8 @@ function InternalServerCard({
   item,
   installed,
   isInstalling,
-  installationStatus,
-  installationError,
+  localInstallationStatus,
+  localInstallationError,
   needsReinstall,
   onInstall,
   onUninstall,
@@ -103,8 +106,8 @@ function InternalServerCard({
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
   isInstalling: boolean;
-  installationStatus?: "idle" | "pending" | "success" | "error";
-  installationError?: string | null;
+  localInstallationStatus?: LocalMcpServerInstallationStatus;
+  localInstallationError?: string | null;
   needsReinstall: boolean;
   onInstall: () => void;
   onUninstall: () => void;
@@ -163,15 +166,15 @@ function InternalServerCard({
       <CardContent className="flex-1 flex flex-col pt-3 gap-2 justify-end">
         {installed ? (
           <>
-            {installationStatus === "pending" && (
+            {localInstallationStatus === "pending" && (
               <div className="text-sm text-muted-foreground text-center py-2">
                 <RefreshCw className="inline h-4 w-4 mr-2 animate-spin" />
                 Installing...
               </div>
             )}
-            {installationStatus === "error" && installationError && (
+            {localInstallationStatus === "error" && localInstallationError && (
               <div className="text-sm text-destructive text-center py-2">
-                Installation failed: {installationError}
+                Installation failed: {localInstallationError}
               </div>
             )}
             {needsReinstall && (
@@ -180,13 +183,13 @@ function InternalServerCard({
                 size="sm"
                 variant="default"
                 className="w-full"
-                disabled={isInstalling || installationStatus === "pending"}
+                disabled={isInstalling || localInstallationStatus === "pending"}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {isInstalling ? "Reinstalling..." : "Reinstall Required"}
               </Button>
             )}
-            {onViewTools && installationStatus === "success" && (
+            {onViewTools && localInstallationStatus === "success" && (
               <Button
                 onClick={onViewTools}
                 size="sm"
@@ -201,7 +204,7 @@ function InternalServerCard({
               onClick={onUninstall}
               size="sm"
               className="w-full bg-accent text-accent-foreground hover:bg-accent"
-              disabled={installationStatus === "pending"}
+              disabled={localInstallationStatus === "pending"}
             >
               Uninstall
             </Button>
@@ -572,7 +575,7 @@ export function InternalMCPCatalog({
           // Poll for any server that is pending or just installed
           const shouldPoll =
             installedServer &&
-            (installedServer.installationStatus === "pending" ||
+            (installedServer.localInstallationStatus === "pending" ||
               installingServerIds.has(installedServer.id));
 
           return (
@@ -587,18 +590,20 @@ export function InternalMCPCatalog({
                 });
               }}
             >
-              {({ installationStatus, installationError }) => (
+              {({ localInstallationStatus, localInstallationError }) => (
                 <InternalServerCard
                   item={itemWithLabel}
                   installed={!!installedServer}
                   isInstalling={
                     installingItemId === item.id || installMutation.isPending
                   }
-                  installationStatus={
-                    installationStatus || installedServer?.installationStatus
+                  localInstallationStatus={
+                    localInstallationStatus ||
+                    installedServer?.localInstallationStatus
                   }
-                  installationError={
-                    installationError || installedServer?.installationError
+                  localInstallationError={
+                    localInstallationError ||
+                    installedServer?.localInstallationError
                   }
                   needsReinstall={installedServer?.reinstallRequired ?? false}
                   onInstall={() => handleInstall(item)}

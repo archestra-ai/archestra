@@ -1,4 +1,5 @@
 import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { LocalMcpServerInstallationStatus } from "@/types/mcp-server";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
 
@@ -14,11 +15,11 @@ const mcpServerTable = pgTable("mcp_server", {
     onDelete: "set null",
   }),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),
-  installationStatus: text("installation_status")
+  localInstallationStatus: text("local_installation_status")
     .notNull()
     .default("idle")
-    .$type<"idle" | "pending" | "success" | "error">(),
-  installationError: text("installation_error"),
+    .$type<LocalMcpServerInstallationStatus>(),
+  localInstallationError: text("local_installation_error"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

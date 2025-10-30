@@ -11,6 +11,7 @@ import {
 import {
   ErrorResponseSchema,
   InsertMcpServerSchema,
+  LocalMcpServerInstallationStatusSchema,
   RouteId,
   SelectMcpServerSchema,
   UuidIdSchema,
@@ -221,8 +222,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             try {
               // Set status to pending before starting the pod
               await McpServerModel.update(mcpServer.id, {
-                installationStatus: "pending",
-                installationError: null,
+                localInstallationStatus: "pending",
+                localInstallationError: null,
               });
 
               await McpServerRuntimeManager.startServer(mcpServer);
@@ -267,8 +268,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                   // Set status to success after tools are fetched
                   await McpServerModel.update(mcpServer.id, {
-                    installationStatus: "success",
-                    installationError: null,
+                    localInstallationStatus: "success",
+                    localInstallationError: null,
                   });
 
                   fastify.log.info(
@@ -285,8 +286,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                   // Set status to error if tool fetching fails
                   await McpServerModel.update(mcpServer.id, {
-                    installationStatus: "error",
-                    installationError: errorMessage,
+                    localInstallationStatus: "error",
+                    localInstallationError: errorMessage,
                   });
                 }
               })();
@@ -294,8 +295,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Return the MCP server with pending status
               return reply.send({
                 ...mcpServer,
-                installationStatus: "pending",
-                installationError: null,
+                localInstallationStatus: "pending",
+                localInstallationError: null,
               });
             } catch (podError) {
               // If pod fails to start, delete the MCP server record
@@ -328,14 +329,14 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
           // Set status to success for non-local servers
           await McpServerModel.update(mcpServer.id, {
-            installationStatus: "success",
-            installationError: null,
+            localInstallationStatus: "success",
+            localInstallationError: null,
           });
 
           return reply.send({
             ...mcpServer,
-            installationStatus: "success",
-            installationError: null,
+            localInstallationStatus: "success",
+            localInstallationError: null,
           });
         } catch (toolError) {
           // If fetching/creating tools fails, clean up everything we created
@@ -409,8 +410,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: z.object({
-            installationStatus: z.enum(["idle", "pending", "success", "error"]),
-            installationError: z.string().nullable(),
+            localInstallationStatus: LocalMcpServerInstallationStatusSchema,
+            localInstallationError: z.string().nullable(),
           }),
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -431,12 +432,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         return reply.send({
-          installationStatus: (mcpServer.installationStatus || "idle") as
-            | "idle"
-            | "pending"
-            | "success"
-            | "error",
-          installationError: mcpServer.installationError || null,
+          localInstallationStatus: mcpServer.localInstallationStatus || "idle",
+          localInstallationError: mcpServer.localInstallationError || null,
         });
       } catch (error) {
         fastify.log.error(error);

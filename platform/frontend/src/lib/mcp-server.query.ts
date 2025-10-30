@@ -120,7 +120,7 @@ export function useMcpServerInstallationStatus(
     },
     enabled: !!mcpServerId && (options?.enabled ?? true),
     refetchInterval: (query) => {
-      const status = query.state.data?.installationStatus;
+      const status = query.state.data?.localInstallationStatus;
       // Stop polling once we reach a terminal state (success or error)
       if (status === "success" || status === "error") {
         // When installation completes, invalidate relevant queries

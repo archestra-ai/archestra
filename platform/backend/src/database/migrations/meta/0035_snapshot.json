@@ -1,5 +1,5 @@
 {
-  "id": "43d728b6-a127-40b2-802f-75c2c40e2a53",
+  "id": "64a52bb1-6894-4297-8417-752ccd7ee6f4",
   "prevId": "7a032594-0306-45eb-b5c6-d1f54e0f6469",
   "version": "7",
   "dialect": "postgresql",
@@ -1091,7 +1091,7 @@
           "name": "server_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "server_url": {
           "name": "server_url",
@@ -1353,7 +1353,7 @@
           "name": "catalog_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "secret_id": {
           "name": "secret_id",
@@ -1367,6 +1367,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "local_installation_status": {
+          "name": "local_installation_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "local_installation_error": {
+          "name": "local_installation_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

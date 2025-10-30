@@ -5922,8 +5922,8 @@ export type GetMcpServersResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
-        installationStatus: 'idle' | 'pending' | 'success' | 'error';
-        installationError: string | null;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -5938,8 +5938,8 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         reinstallRequired?: boolean;
-        installationStatus?: 'idle' | 'pending' | 'success' | 'error';
-        installationError?: string | null;
+        localInstallationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError?: string | null;
         teams?: Array<string>;
         agentIds?: Array<string>;
         accessToken?: string;
@@ -5982,8 +5982,8 @@ export type InstallMcpServerResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
-        installationStatus: 'idle' | 'pending' | 'success' | 'error';
-        installationError: string | null;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -6086,8 +6086,8 @@ export type GetMcpServerResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
-        installationStatus: 'idle' | 'pending' | 'success' | 'error';
-        installationError: string | null;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -6133,8 +6133,8 @@ export type GetMcpServerInstallationStatusResponses = {
      * Default Response
      */
     200: {
-        installationStatus: 'idle' | 'pending' | 'success' | 'error';
-        installationError: string | null;
+        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationError: string | null;
     };
 };
 

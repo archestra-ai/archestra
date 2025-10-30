@@ -250,22 +250,8 @@
     {
       "idx": 35,
       "version": "7",
-      "when": 1761786656391,
-      "tag": "0035_married_shockwave",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1761797433787,
-      "tag": "0036_lush_thanos",
-      "breakpoints": true
-    },
-    {
-      "idx": 37,
-      "version": "7",
-      "when": 1761815492807,
-      "tag": "0037_furry_micromax",
+      "when": 1761823484846,
+      "tag": "0035_flashy_speed_demon",
       "breakpoints": true
     }
   ]

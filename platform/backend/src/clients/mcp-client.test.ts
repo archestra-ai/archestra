@@ -43,12 +43,14 @@ describe("McpClient", () => {
       },
     });
 
-    // Create MCP server for testing with secret
+    // Create catalog entry for the MCP server
     const catalogItem = await InternalMcpCatalogModel.create({
       name: "github-mcp-server",
       serverType: "remote",
       serverUrl: "https://api.githubcopilot.com/mcp/",
     });
+
+    // Create MCP server for testing with secret and catalog reference
     const mcpServer = await McpServerModel.create({
       name: "github-mcp-server",
       secretId: secret.id,

@@ -22,6 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Settings/Teams**: <http://localhost:3000/account/settings>
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
+- **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
+- **MCP Gateway Logs**: <http://localhost:3000/logs/mcp-gateway> (View MCP tool call logs)
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
@@ -29,6 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
 

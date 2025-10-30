@@ -17,6 +17,7 @@ export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestTable } from "./mcp-server-installation-request";
 export { default as mcpServerTeamTable } from "./mcp-server-team";
 export { default as mcpServerUserTable } from "./mcp-server-user";
+export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as organizationsTable } from "./organization";
 export { default as secretsTable } from "./secret";
 export { team, teamMember } from "./team";

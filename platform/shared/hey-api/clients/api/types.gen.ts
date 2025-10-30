@@ -6583,6 +6583,132 @@ export type RevokeTeamMcpServerAccessResponses = {
 
 export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
 
+export type GetMcpToolCallsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent ID
+         */
+        agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/mcp-tool-calls';
+};
+
+export type GetMcpToolCallsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallsError = GetMcpToolCallsErrors[keyof GetMcpToolCallsErrors];
+
+export type GetMcpToolCallsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            mcpServerName: string;
+            toolCall: {
+                id: string;
+                name: string;
+                arguments: {
+                    [key: string]: unknown;
+                };
+            };
+            toolResult: {
+                id: string;
+                content: unknown;
+                isError: boolean;
+                error?: string;
+            };
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMcpToolCallsResponse = GetMcpToolCallsResponses[keyof GetMcpToolCallsResponses];
+
+export type GetMcpToolCallData = {
+    body?: never;
+    path: {
+        mcpToolCallId: string;
+    };
+    query?: never;
+    url: '/api/mcp-tool-calls/{mcpToolCallId}';
+};
+
+export type GetMcpToolCallErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallError = GetMcpToolCallErrors[keyof GetMcpToolCallErrors];
+
+export type GetMcpToolCallResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        mcpServerName: string;
+        toolCall: {
+            id: string;
+            name: string;
+            arguments: {
+                [key: string]: unknown;
+            };
+        };
+        toolResult: {
+            id: string;
+            content: unknown;
+            isError: boolean;
+            error?: string;
+        };
+        createdAt: string;
+    };
+};
+
+export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
+
 export type InitiateOAuthData = {
     body: {
         catalogId: string;

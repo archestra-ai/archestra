@@ -366,6 +366,12 @@ const routePermissionsConfig: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["update"],
   },
+  [RouteId.GetMcpToolCalls]: {
+    mcpToolCall: ["read"],
+  },
+  [RouteId.GetMcpToolCall]: {
+    mcpToolCall: ["read"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

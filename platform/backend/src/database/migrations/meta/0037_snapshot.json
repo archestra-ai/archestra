@@ -1,6 +1,6 @@
 {
-  "id": "80e173c1-4290-4df8-8f8e-6e287df17fac",
-  "prevId": "64a52bb1-6894-4297-8417-752ccd7ee6f4",
+  "id": "b481f19f-1272-4f40-b7ef-a6e93f6fefd1",
+  "prevId": "80e173c1-4290-4df8-8f8e-6e287df17fac",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -114,6 +114,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "credential_source_mcp_server_id": {
+          "name": "credential_source_mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -155,6 +161,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk": {
+          "name": "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk",
+          "tableFrom": "agent_tools",
+          "tableTo": "mcp_server",
+          "columnsFrom": [
+            "credential_source_mcp_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1332,6 +1351,73 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.mcp_server_user": {
+      "name": "mcp_server_user",
+      "schema": "",
+      "columns": {
+        "mcp_server_id": {
+          "name": "mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "mcp_server_user_mcp_server_id_mcp_server_id_fk": {
+          "name": "mcp_server_user_mcp_server_id_mcp_server_id_fk",
+          "tableFrom": "mcp_server_user",
+          "tableTo": "mcp_server",
+          "columnsFrom": [
+            "mcp_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mcp_server_user_user_id_user_id_fk": {
+          "name": "mcp_server_user_user_id_user_id_fk",
+          "tableFrom": "mcp_server_user",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "mcp_server_user_mcp_server_id_user_id_pk": {
+          "name": "mcp_server_user_mcp_server_id_user_id_pk",
+          "columns": [
+            "mcp_server_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.mcp_server": {
       "name": "mcp_server",
       "schema": "",
@@ -1358,6 +1444,18 @@
         "secret_id": {
           "name": "secret_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auth_type": {
+          "name": "auth_type",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -1417,6 +1515,19 @@
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "mcp_server_owner_id_user_id_fk": {
+          "name": "mcp_server_owner_id_user_id_fk",
+          "tableFrom": "mcp_server",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_id"
           ],
           "columnsTo": [
             "id"

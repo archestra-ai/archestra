@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,17 +24,33 @@ import {
 } from "@/components/ui/select";
 import { useTeams } from "@/lib/team.query";
 
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
+type UserConfigType = Record<
+  string,
+  {
+    type: "string" | "number" | "boolean" | "directory" | "file";
+    title: string;
+    description: string;
+    required?: boolean;
+    default?: string | number | boolean | Array<string>;
+    multiple?: boolean;
+    sensitive?: boolean;
+    min?: number;
+    max?: number;
+  }
+>;
+
 interface RemoteServerInstallDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInstall: (
-    catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+    catalogItem: CatalogItem,
     metadata: Record<string, unknown>,
     teams: string[],
   ) => Promise<void>;
-  catalogItem:
-    | archestraApiTypes.GetInternalMcpCatalogResponses["200"][number]
-    | null;
+  catalogItem: CatalogItem | null;
   isInstalling: boolean;
   isTeamMode?: boolean;
 }
@@ -53,56 +69,31 @@ export function RemoteServerInstallDialog({
 
   const { data: teams } = useTeams();
 
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
+  const handleAddTeam = (teamId: string) => {
+    if (teamId && !assignedTeamIds.includes(teamId)) {
+      setAssignedTeamIds([...assignedTeamIds, teamId]);
+      setSelectedTeamId("");
+    }
+  };
 
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
+  const handleRemoveTeam = (teamId: string) => {
+    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
+  };
 
-  const getUnassignedTeams = useCallback(() => {
-    if (!teams) return [];
-    return teams.filter((team) => !assignedTeamIds.includes(team.id));
-  }, [teams, assignedTeamIds]);
+  const unassignedTeams = !teams
+    ? []
+    : teams.filter((team) => !assignedTeamIds.includes(team.id));
 
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
+  const getTeamById = (teamId: string) => {
+    return teams?.find((team) => team.id === teamId);
+  };
 
-  const handleInstall = useCallback(async () => {
+  const handleInstall = async () => {
     if (!catalogItem) {
       return;
     }
 
     // Validate required fields
-    type UserConfigType = Record<
-      string,
-      {
-        type: "string" | "number" | "boolean" | "directory" | "file";
-        title: string;
-        description: string;
-        required?: boolean;
-        default?: string | number | boolean | Array<string>;
-        multiple?: boolean;
-        sensitive?: boolean;
-        min?: number;
-        max?: number;
-      }
-    >;
-
     const userConfig =
       (catalogItem.userConfig as UserConfigType | null | undefined) || {};
     const requiredFields = Object.entries(userConfig).filter(
@@ -142,37 +133,21 @@ export function RemoteServerInstallDialog({
     } catch (_error) {
       // Error handling is done in the parent component
     }
-  }, [catalogItem, configValues, assignedTeamIds, onInstall, onClose]);
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setConfigValues({});
     setAssignedTeamIds([]);
     setSelectedTeamId("");
     onClose();
-  }, [onClose]);
+  };
 
   if (!catalogItem) {
     return null;
   }
 
   const userConfig =
-    (catalogItem.userConfig as
-      | Record<
-          string,
-          {
-            type: "string" | "number" | "boolean" | "directory" | "file";
-            title: string;
-            description: string;
-            required?: boolean;
-            default?: string | number | boolean | Array<string>;
-            multiple?: boolean;
-            sensitive?: boolean;
-            min?: number;
-            max?: number;
-          }
-        >
-      | null
-      | undefined) || {};
+    (catalogItem.userConfig as UserConfigType | null | undefined) || {};
   const hasConfig = Object.keys(userConfig).length > 0;
   const hasOAuth = !!catalogItem.oauthConfig;
 
@@ -232,12 +207,12 @@ export function RemoteServerInstallDialog({
                     <SelectValue placeholder="Select a team to assign" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getUnassignedTeams().length === 0 ? (
+                    {unassignedTeams.length === 0 ? (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">
                         All teams are already assigned
                       </div>
                     ) : (
-                      getUnassignedTeams().map((team) => (
+                      unassignedTeams.map((team) => (
                         <SelectItem key={team.id} value={team.id}>
                           {team.name}
                         </SelectItem>
@@ -330,11 +305,6 @@ export function RemoteServerInstallDialog({
                     max={config.max}
                   />
                 )}
-                {/* {config.description && (
-                  <p className="text-sm text-muted-foreground">
-                    {config.description}
-                  </p>
-                )} */}
               </div>
             ))
           ) : !hasOAuth ? (

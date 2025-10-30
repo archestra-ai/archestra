@@ -31,9 +31,23 @@ export const LocalConfigSchema = z.object({
 });
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
-export const LocalConfigFormSchema = z.object({
-  command: z.string().optional(),
-  arguments: z.string(), // UI uses string, gets parsed to array
-  environment: z.string(), // UI uses string, gets parsed to record
-  dockerImage: z.string().optional(), // Custom Docker image URL
-});
+export const LocalConfigFormSchema = z
+  .object({
+    command: z.string().optional(),
+    arguments: z.string().optional(), // UI uses string, gets parsed to array
+    environment: z.string().optional(), // UI uses string, gets parsed to record
+    dockerImage: z.string().optional(), // Custom Docker image URL
+  })
+  .refine(
+    (data) => {
+      // Command is required unless a Docker image is specified
+      if (!data.dockerImage || data.dockerImage.trim() === "") {
+        return data.command && data.command.trim() !== "";
+      }
+      return true;
+    },
+    {
+      message: "Command is required unless a Docker image is specified",
+      path: ["command"],
+    },
+  );

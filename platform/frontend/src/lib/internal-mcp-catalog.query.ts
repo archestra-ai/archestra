@@ -110,7 +110,7 @@ export function useUpdateInternalMcpCatalogItem() {
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
-      console.error("Edit error:", error);
+      console.error("Edit error:", error instanceof Error ? error.message : String(error));
       toast.error("Failed to update catalog item");
     },
   });

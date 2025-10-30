@@ -120,14 +120,14 @@ export function transformFormToApiData(
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
+    const argumentsArray = (values.localConfig.arguments || "")
       .split("\n")
       .map((arg) => arg.trim())
       .filter((arg) => arg.length > 0);
 
     // Parse environment string into key-value pairs
     let environment: Record<string, string> | undefined;
-    if (values.localConfig.environment.trim()) {
+    if (values.localConfig.environment?.trim()) {
       environment = {};
       values.localConfig.environment
         .split("\n")
@@ -141,12 +141,23 @@ export function transformFormToApiData(
         });
     }
 
-    data.localConfig = {
-      command: values.localConfig.command?.trim() || undefined,
+    const localConfig: any = {
       arguments: argumentsArray,
-      environment,
-      dockerImage: values.localConfig.dockerImage || undefined,
     };
+    
+    if (values.localConfig.command?.trim()) {
+      localConfig.command = values.localConfig.command.trim();
+    }
+    
+    if (environment) {
+      localConfig.environment = environment;
+    }
+    
+    if (values.localConfig.dockerImage?.trim()) {
+      localConfig.dockerImage = values.localConfig.dockerImage.trim();
+    }
+    
+    data.localConfig = localConfig;
   }
 
   // Handle OAuth configuration
@@ -258,7 +269,7 @@ export function transformCatalogItemToFormValues(
       : "";
 
     localConfig = {
-      command: item.localConfig.command,
+      command: item.localConfig.command || "",
       arguments: argumentsString,
       environment: environmentString,
       dockerImage: item.localConfig.dockerImage || "",
@@ -426,8 +437,31 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      The executable command to run. Optional - if not
-                      specified, the Dockerfile's CMD will be used.
+                      The executable command to run. If using a custom Docker
+                      image, this field is optional (if not specified, the
+                      Dockerfile's CMD will be used).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="localConfig.dockerImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Docker Image (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="registry.example.com/my-mcp-server:latest"
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Custom Docker image URL. If not specified, the default
+                      base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -472,28 +506,6 @@ export function McpCatalogForm({
                     </FormControl>
                     <FormDescription>
                       Environment variables in KEY=value format, one per line
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="localConfig.dockerImage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Docker Image (optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="registry.example.com/my-mcp-server:latest"
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Custom Docker image URL. If not specified, the default
-                      base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

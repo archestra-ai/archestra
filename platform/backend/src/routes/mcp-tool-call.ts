@@ -70,6 +70,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user.id,
         user.isAdmin,
       );
+
       return reply.send(result);
     },
   );

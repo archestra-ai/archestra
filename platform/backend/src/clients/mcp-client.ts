@@ -25,6 +25,47 @@ class McpClient {
   private activeConnections = new Map<string, Client>();
 
   /**
+   * Helper to persist error results for tool calls
+   */
+  private async persistErrorResults(
+    mcpToolCalls: CommonToolCall[],
+    agentId: string,
+    mcpServerName: string,
+    errorMessage: string,
+  ): Promise<CommonToolResult[]> {
+    const results: CommonToolResult[] = [];
+
+    for (const toolCall of mcpToolCalls) {
+      const toolResult: CommonToolResult = {
+        id: toolCall.id,
+        content: null,
+        isError: true,
+        error: errorMessage,
+      };
+
+      results.push(toolResult);
+
+      // Persist error to database
+      try {
+        await McpToolCallModel.create({
+          agentId,
+          mcpServerName,
+          toolCall,
+          toolResult,
+        });
+        console.log("✅ Saved early-return error:", {
+          toolName: toolCall.name,
+          error: errorMessage,
+        });
+      } catch (dbError) {
+        console.error("Failed to persist early-return error:", dbError);
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Execute tool calls against their assigned MCP servers
    */
   async executeToolCalls(
@@ -67,12 +108,12 @@ class McpClient {
      */
     const firstTool = mcpTools[0];
     if (!firstTool) {
-      return mcpToolCalls.map((tc) => ({
-        id: tc.id,
-        content: null,
-        isError: true,
-        error: "No MCP tools found",
-      }));
+      return await this.persistErrorResults(
+        mcpToolCalls,
+        agentId,
+        "unknown",
+        "No MCP tools found",
+      );
     }
 
     // Load secrets from the secrets table
@@ -90,12 +131,12 @@ class McpClient {
       );
 
       if (!catalogItem) {
-        return mcpToolCalls.map((tc) => ({
-          id: tc.id,
-          content: null,
-          isError: true,
-          error: `No catalog item found for MCP server ${firstTool.mcpServerName}`,
-        }));
+        return await this.persistErrorResults(
+          mcpToolCalls,
+          agentId,
+          firstTool.mcpServerName,
+          `No catalog item found for MCP server ${firstTool.mcpServerName}`,
+        );
       }
 
       // For local servers, use direct JSON-RPC calls instead of MCP SDK client
@@ -161,18 +202,61 @@ class McpClient {
               }
             }
 
-            results.push({
+            const toolResult: CommonToolResult = {
               id: toolCall.id,
               content: modifiedContent,
               isError: !!result.isError,
-            });
+            };
+
+            results.push(toolResult);
+
+            // Persist tool call and result to database
+            try {
+              const savedToolCall = await McpToolCallModel.create({
+                agentId,
+                mcpServerName: firstTool.mcpServerName,
+                toolCall,
+                toolResult,
+              });
+              console.log("✅ Saved local MCP tool call (success):", {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                resultContent:
+                  typeof toolResult.content === "string"
+                    ? toolResult.content.substring(0, 100)
+                    : JSON.stringify(toolResult.content).substring(0, 100),
+              });
+            } catch (dbError) {
+              console.error("Failed to persist local MCP tool call:", dbError);
+              // Continue execution even if persistence fails
+            }
           } catch (error) {
-            results.push({
+            const toolResult: CommonToolResult = {
               id: toolCall.id,
               content: null,
               isError: true,
               error: error instanceof Error ? error.message : "Unknown error",
-            });
+            };
+
+            results.push(toolResult);
+
+            // Persist failed tool call to database
+            try {
+              const savedToolCall = await McpToolCallModel.create({
+                agentId,
+                mcpServerName: firstTool.mcpServerName,
+                toolCall,
+                toolResult,
+              });
+              console.log("✅ Saved local MCP tool call (error):", {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                error: toolResult.error,
+              });
+            } catch (dbError) {
+              console.error("Failed to persist local MCP tool call:", dbError);
+              // Continue execution even if persistence fails
+            }
           }
         }
 
@@ -202,12 +286,12 @@ class McpClient {
       }
 
       if (!client) {
-        return mcpToolCalls.map((tc) => ({
-          id: tc.id,
-          content: null,
-          isError: true,
-          error: "Failed to create MCP client",
-        }));
+        return await this.persistErrorResults(
+          mcpToolCalls,
+          agentId,
+          firstTool.mcpServerName,
+          "Failed to create MCP client",
+        );
       }
 
       // Execute each MCP tool call
@@ -254,11 +338,19 @@ class McpClient {
 
           // Persist tool call and result to database
           try {
-            await McpToolCallModel.create({
+            const savedToolCall = await McpToolCallModel.create({
               agentId,
               mcpServerName: firstTool.mcpServerName,
               toolCall,
               toolResult,
+            });
+            console.log("✅ Saved successful MCP tool call:", {
+              id: savedToolCall.id,
+              toolName: toolCall.name,
+              resultContent:
+                typeof toolResult.content === "string"
+                  ? toolResult.content.substring(0, 100)
+                  : JSON.stringify(toolResult.content).substring(0, 100),
             });
           } catch (dbError) {
             console.error("Failed to persist MCP tool call:", dbError);
@@ -276,11 +368,16 @@ class McpClient {
 
           // Persist failed tool call to database
           try {
-            await McpToolCallModel.create({
+            const savedToolCall = await McpToolCallModel.create({
               agentId,
               mcpServerName: firstTool.mcpServerName,
               toolCall,
               toolResult,
+            });
+            console.log("✅ Saved failed MCP tool call:", {
+              id: savedToolCall.id,
+              toolName: toolCall.name,
+              error: toolResult.error,
             });
           } catch (dbError) {
             console.error("Failed to persist MCP tool call:", dbError);

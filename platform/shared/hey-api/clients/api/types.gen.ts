@@ -846,9 +846,9 @@ export type GeminiGenerateContentResponseInput = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -1022,7 +1022,10 @@ export type AnthropicMessagesResponseInput = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
@@ -1867,9 +1870,9 @@ export type GeminiGenerateContentResponse = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -2043,7 +2046,10 @@ export type AnthropicMessagesResponse = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type GetHealthData = {
@@ -2837,7 +2843,7 @@ export type AnthropicMessagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/anthropic/v1/{agentId}/messages';
+    url: '/v1/anthropic/{agentId}/v1/messages';
 };
 
 export type AnthropicMessagesWithAgentErrors = {
@@ -5994,6 +6000,132 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
+export type GetMcpToolCallsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent ID
+         */
+        agentId?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'createdAt' | 'agentId' | 'mcpServerName';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/mcp-tool-calls';
+};
+
+export type GetMcpToolCallsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallsError = GetMcpToolCallsErrors[keyof GetMcpToolCallsErrors];
+
+export type GetMcpToolCallsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            mcpServerName: string;
+            toolCall: {
+                id: string;
+                name: string;
+                arguments: {
+                    [key: string]: unknown;
+                };
+            };
+            toolResult: {
+                id: string;
+                content: unknown;
+                isError: boolean;
+                error?: string;
+            };
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetMcpToolCallsResponse = GetMcpToolCallsResponses[keyof GetMcpToolCallsResponses];
+
+export type GetMcpToolCallData = {
+    body?: never;
+    path: {
+        mcpToolCallId: string;
+    };
+    query?: never;
+    url: '/api/mcp-tool-calls/{mcpToolCallId}';
+};
+
+export type GetMcpToolCallErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpToolCallError = GetMcpToolCallErrors[keyof GetMcpToolCallErrors];
+
+export type GetMcpToolCallResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        mcpServerName: string;
+        toolCall: {
+            id: string;
+            name: string;
+            arguments: {
+                [key: string]: unknown;
+            };
+        };
+        toolResult: {
+            id: string;
+            content: unknown;
+            isError: boolean;
+            error?: string;
+        };
+        createdAt: string;
+    };
+};
+
+export type GetMcpToolCallResponse = GetMcpToolCallResponses[keyof GetMcpToolCallResponses];
 
 export type InitiateOAuthData = {
     body: {

@@ -69,7 +69,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 K8S_NAMESPACE=default
 KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 USE_IN_CLUSTER_KUBECONFIG=false  # Set to true when running inside K8s cluster
-MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3
+MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
 ```
 
 ## Architecture
@@ -133,6 +133,7 @@ MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/arches
 - JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
 - Pod logs available via `/mcp_proxy/:id/logs`
 - K8s configuration: K8S_NAMESPACE, KUBECONFIG, USE_IN_CLUSTER_KUBECONFIG, MCP_SERVER_BASE_IMAGE
+- Custom Docker images supported per MCP server (overrides MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

@@ -208,7 +208,7 @@ class McpServerModel {
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
       try {
-        const config = mcpClient.createRemoteServerConfig({
+        const config = mcpClient.createServerConfig({
           name: mcpServer.name,
           url: catalogItem.serverUrl,
           secrets,
@@ -230,59 +230,37 @@ class McpServerModel {
     }
 
     /**
-     * For other/unknown servers, return mock data
-     *
-     * Soon we will add support for all mcp servers here...
+     * For local servers, connect via the MCP proxy endpoint
      */
-    return [
-      {
-        name: "read_file",
-        description:
-          "Read the complete contents of a file from the file system",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the file to read",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "list_directory",
-        description: "List all files and directories in a given path",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the directory to list",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "search_files",
-        description: "Search for files matching a pattern",
-        inputSchema: {
-          type: "object",
-          properties: {
-            pattern: {
-              type: "string",
-              description: "Glob pattern to match files",
-            },
-            base_path: {
-              type: "string",
-              description: "Base directory to search from",
-            },
-          },
-          required: ["pattern"],
-        },
-      },
-    ];
+    if (catalogItem?.serverType === "local") {
+      try {
+        // Use the MCP proxy endpoint for local servers
+        const proxyUrl = `http://localhost:9000/mcp_proxy/${mcpServer.id}`;
+        const config = mcpClient.createServerConfig({
+          name: mcpServer.name,
+          url: proxyUrl,
+          secrets, // Local servers might still use secrets for API keys etc.
+        });
+        const tools = await mcpClient.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to get tools from local MCP server ${mcpServer.name}:`,
+          error,
+        );
+        throw error;
+      }
+    }
+
+    /**
+     * For other/unknown servers, return empty array
+     */
+    return [];
   }
 
   /**
@@ -308,7 +286,7 @@ class McpServerModel {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClient.createRemoteServerConfig({
+          const config = mcpClient.createServerConfig({
             name: serverName,
             url: catalogItem.serverUrl,
             secrets,

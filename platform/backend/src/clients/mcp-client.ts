@@ -85,7 +85,7 @@ class McpClient {
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
           // Generic remote server with catalog info
-          const config = this.createRemoteServerConfig({
+          const config = this.createServerConfig({
             name: firstTool.mcpServerName,
             url: catalogItem.serverUrl,
             secrets,
@@ -271,21 +271,9 @@ class McpClient {
   }
 
   /**
-   * Create configuration for a GitHub MCP server
+   * Create configuration for connecting to an MCP server
    */
-  createGitHubConfig = (githubToken: string): McpServerConfig => ({
-    id: "github-mcp-server",
-    name: "github-mcp-server",
-    url: "https://api.githubcopilot.com/mcp/",
-    headers: {
-      Authorization: `Bearer ${githubToken}`,
-    },
-  });
-
-  /**
-   * Create configuration for a generic remote MCP server
-   */
-  createRemoteServerConfig = (params: {
+  createServerConfig = (params: {
     name: string;
     url: string;
     secrets: Record<string, unknown>;
@@ -307,23 +295,6 @@ class McpClient {
       headers,
     };
   };
-
-  /**
-   * Validate that a GitHub token can connect to the GitHub MCP server
-   *
-   * https://github.com/github/github-mcp-server?tab=readme-ov-file#install-in-vs-code
-   */
-  async validateGitHubConnection(githubToken: string): Promise<boolean> {
-    try {
-      const tools = await this.connectAndGetTools(
-        this.createGitHubConfig(githubToken),
-      );
-      return tools.length > 0;
-    } catch (error) {
-      console.error("GitHub MCP validation failed:", error);
-      return false;
-    }
-  }
 
   /**
    * Disconnect from an MCP server

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.17](https://github.com/archestra-ai/archestra/compare/platform-v0.0.16...platform-v0.0.17) (2025-10-30)
+
+
+### Features
+
+* use custom docker image for local mcp servers ([#858](https://github.com/archestra-ai/archestra/issues/858)) ([341e3fc](https://github.com/archestra-ai/archestra/commit/341e3fc33f741671a60c2ed9d2a8af23c05890f2))
+
 ## [0.0.16](https://github.com/archestra-ai/archestra/compare/platform-v0.0.15...platform-v0.0.16) (2025-10-30)
 
 

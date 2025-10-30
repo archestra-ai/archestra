@@ -25,7 +25,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Tilt UI**: <http://localhost:10350/>
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
-- **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (Proxy to K8s MCP server pods)
+- **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
+- **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
 
 ## Common Commands
@@ -65,7 +66,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 # Kubernetes (for MCP server runtime)
 K8S_NAMESPACE=default
-KUBECONFIG=/path/to/kubeconfig  # Optional
+KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 ```
 
@@ -73,7 +74,7 @@ MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime for local servers
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime for local stdio servers
 
 **Workspaces**:
 
@@ -122,5 +123,12 @@ MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 - Admins approve/decline requests with optional messages
 - Prevents duplicate pending requests for same catalog item
 - Full timeline and notes functionality for collaboration
+
+**MCP Server Runtime**:
+
+- Local stdio-based MCP servers run in K8s pods
+- Automatic pod lifecycle management (start/restart/stop)
+- JSON-RPC proxy for communication with pods
+- Configurable via K8S_NAMESPACE, KUBECONFIG, MCP_SERVER_BASE_IMAGE
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

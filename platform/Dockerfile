@@ -50,6 +50,7 @@ ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV OPENAI_BASE_URL="https://api.openai.com/v1"
 ENV ANTHROPIC_BASE_URL="https://api.anthropic.com"
+ENV KUBECONFIG=""
 ENV K8S_NAMESPACE="default"
 ENV MCP_SERVER_BASE_IMAGE="archestra/mcp-server:latest"
 

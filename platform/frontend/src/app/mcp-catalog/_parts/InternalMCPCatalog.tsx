@@ -1,31 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import {
-  Building2,
-  MoreVertical,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-  User,
-  Wrench,
-} from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRole } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -33,374 +14,22 @@ import {
   useDeleteMcpServer,
   useInstallMcpServer,
   useMcpServers,
-  useMcpServerTools,
-  useRevokeAllTeamsMcpServerAccess,
-  useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
-import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
 import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
-import { ManageTeamsDialog } from "./manage-teams-dialog";
-import { ManageUsersDialog } from "./manage-users-dialog";
-import { McpToolsDialog } from "./mcp-tools-dialog";
+import {
+  type CatalogItem,
+  type CatalogItemWithOptionalLabel,
+  type InstalledServer,
+  McpServerCard,
+} from "./mcp-server-card";
 import { NoAuthInstallDialog } from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
-import { TransportBadges } from "./transport-badges";
 
-// BIIIIG TODO: SUPPORT LOCAL MCP SERVERS!!!!!!
-
-type CatalogItem =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-
-type CatalogItemWithOptionalLabel = CatalogItem & {
-  label?: string | null;
-};
-
-type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
-
-type ToolForAssignment = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-  mcpServerId: string | null;
-  mcpServerName: string | null;
-};
-
-type SimpleTool = {
-  id: string;
-  name: string;
-  description: string | null;
-  parameters: Record<string, unknown>;
-  createdAt: string;
-};
-
-function InternalServerCard({
-  item,
-  installedServer,
-  installingItemId,
-  installMutationPending,
-  onInstall,
-  onInstallTeam,
-  onInstallNoAuth,
-  onRevokeMyAccess,
-  onRevokeTeamAccess,
-  onReinstall,
-  onEdit,
-  onDelete,
-  onViewTools,
-  onManageUsers,
-  onManageTeams,
-  isAdmin,
-}: {
-  item: CatalogItemWithOptionalLabel;
-  installedServer: InstalledServer | undefined;
-  installingItemId: string | null;
-  installMutationPending: boolean;
-  onInstall: () => void;
-  onInstallTeam: () => void;
-  onInstallNoAuth: () => void;
-  onRevokeMyAccess?: () => void;
-  onRevokeTeamAccess?: () => void;
-  onReinstall: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onViewTools?: () => void;
-  onManageUsers?: () => void;
-  onManageTeams?: () => void;
-  isAdmin: boolean;
-}) {
-  // Fetch tools data and compute derived values
-  const { data: tools } = useMcpServerTools(installedServer?.id ?? null);
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
-
-  const installed = !!installedServer;
-  const isInstalling = installingItemId === item.id || installMutationPending;
-  const needsReinstall = installedServer?.reinstallRequired ?? false;
-  const userCount = installedServer?.users?.length ?? 0;
-  const teamsCount = installedServer?.teams?.length ?? 0;
-  const toolsDiscoveredCount = tools?.length ?? 0;
-  const toolsAssignedCount = !tools
-    ? 0
-    : tools.filter((tool) => tool.assignedAgentCount > 0).length;
-  const isCurrentUserAuthenticated =
-    currentUserId && installedServer?.users
-      ? installedServer.users.includes(currentUserId)
-      : false;
-  const currentUserHasTeamAuth = (
-    installedServer as { currentUserHasTeamAuth?: boolean }
-  )?.currentUserHasTeamAuth;
-  // Check if authentication is required
-  const requiresAuth = !!(
-    (item.userConfig && Object.keys(item.userConfig).length > 0) ||
-    item.oauthConfig
-  );
-
-  return (
-    <Card className="flex flex-col relative pt-4 min-w-[380px]">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="min-w-0">
-            <CardTitle className="text-lg truncate mb-1 flex items-center">
-              {item.label || item.name}
-            </CardTitle>
-            {item.label && item.label !== item.name && (
-              <p className="text-xs text-muted-foreground font-mono truncate mb-2">
-                {item.name}
-              </p>
-            )}
-            <div className="flex items-center gap-2">
-              {item.oauthConfig && (
-                <Badge variant="secondary" className="text-xs">
-                  OAuth
-                </Badge>
-              )}
-              <TransportBadges isRemote={item.serverType === "remote"} />
-              {!requiresAuth && (
-                <Badge
-                  variant="secondary"
-                  className="text-xs bg-green-700 text-white"
-                >
-                  No auth required
-                </Badge>
-              )}
-            </div>
-          </div>
-          {isAdmin && (
-            <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onDelete}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-2 justify-end">
-        {installed &&
-          (isAdmin ||
-            (userCount !== undefined && userCount > 0) ||
-            (teamsCount !== undefined && teamsCount > 0) ||
-            (toolsAssignedCount !== undefined &&
-              toolsDiscoveredCount !== undefined)) && (
-            <div className="bg-muted/50 rounded-md mb-2 overflow-hidden">
-              {isAdmin && userCount !== undefined && (
-                <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">
-                      Users authenticated:{" "}
-                      <span className="font-medium text-foreground">
-                        {userCount}
-                      </span>
-                      {isCurrentUserAuthenticated && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-2 text-[11px] px-1.5 py-1 h-4 bg-teal-600/20 text-teal-700 dark:bg-teal-400/20 dark:text-teal-400 border-teal-600/30 dark:border-teal-400/30"
-                        >
-                          You
-                        </Badge>
-                      )}
-                    </span>
-                  </div>
-                  {onManageUsers && (
-                    <Button
-                      onClick={onManageUsers}
-                      size="sm"
-                      variant="link"
-                      className="h-7 text-xs"
-                    >
-                      Manage
-                    </Button>
-                  )}
-                </div>
-              )}
-              {isAdmin && teamsCount !== undefined && (
-                <div
-                  className={`flex items-center justify-between px-3 py-2 text-sm ${
-                    toolsAssignedCount !== undefined &&
-                    toolsDiscoveredCount !== undefined
-                      ? "border-b border-muted"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">
-                      Teams with access:{" "}
-                      <span className="font-medium text-foreground">
-                        {teamsCount}
-                      </span>
-                    </span>
-                  </div>
-                  {onManageTeams && (
-                    <Button
-                      onClick={onManageTeams}
-                      size="sm"
-                      variant="link"
-                      className="h-7 text-xs"
-                    >
-                      Manage
-                    </Button>
-                  )}
-                </div>
-              )}
-              {toolsAssignedCount !== undefined &&
-                toolsDiscoveredCount !== undefined && (
-                  <div className="flex items-center justify-between px-3 py-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Wrench className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">
-                        Tools assigned:{" "}
-                        <span className="font-medium text-foreground">
-                          {toolsAssignedCount} (out of {toolsDiscoveredCount})
-                        </span>
-                      </span>
-                    </div>
-                    {onViewTools && (
-                      <Button
-                        onClick={onViewTools}
-                        size="sm"
-                        variant="link"
-                        className="h-7 text-xs"
-                      >
-                        Manage
-                      </Button>
-                    )}
-                  </div>
-                )}
-            </div>
-          )}
-        {installed ? (
-          <>
-            {needsReinstall && (
-              <Button
-                onClick={onReinstall}
-                size="sm"
-                variant="default"
-                className="w-full"
-                disabled={isInstalling}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {isInstalling ? "Reinstalling..." : "Reinstall Required"}
-              </Button>
-            )}
-            {requiresAuth && !isCurrentUserAuthenticated && (
-              <Button
-                onClick={onInstall}
-                disabled={isInstalling}
-                size="sm"
-                variant="outline"
-                className="w-full"
-              >
-                <User className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Authenticate"}
-              </Button>
-            )}
-            {isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
-              <Button
-                onClick={onRevokeMyAccess}
-                size="sm"
-                variant="outline"
-                className="w-full bg-accent text-accent-foreground hover:bg-accent"
-              >
-                Revoke personal token
-              </Button>
-            )}
-            {isAdmin && currentUserHasTeamAuth && onRevokeTeamAccess && (
-              <Button
-                onClick={onRevokeTeamAccess}
-                size="sm"
-                variant="outline"
-                className="w-full bg-accent text-accent-foreground hover:bg-accent"
-              >
-                Revoke teams token
-              </Button>
-            )}
-            {requiresAuth && isAdmin && !currentUserHasTeamAuth && (
-              <Button
-                onClick={onInstallTeam}
-                disabled={isInstalling}
-                size="sm"
-                variant="outline"
-                className="w-full"
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Authorize teams"}
-              </Button>
-            )}
-            {!isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
-              <Button
-                onClick={onRevokeMyAccess}
-                size="sm"
-                className="w-full bg-accent text-accent-foreground hover:bg-accent"
-              >
-                Revoke personal access
-              </Button>
-            )}
-          </>
-        ) : requiresAuth ? (
-          <div className="flex gap-2">
-            <Button
-              onClick={onInstall}
-              disabled={isInstalling}
-              size="sm"
-              variant="outline"
-              className="flex-1"
-            >
-              <User className="mr-2 h-4 w-4" />
-              {isInstalling ? "Adding..." : "Authenticate"}
-            </Button>
-            {isAdmin && (
-              <Button
-                onClick={onInstallTeam}
-                disabled={isInstalling}
-                size="sm"
-                variant="outline"
-                className="flex-1"
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Authorize teams"}
-              </Button>
-            )}
-          </div>
-        ) : (
-          <Button
-            onClick={onInstallNoAuth}
-            disabled={isInstalling}
-            size="sm"
-            variant="outline"
-            className="w-full"
-          >
-            {isInstalling ? "Installing..." : "Install directly"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+// TODO: Add dedicated handling for local MCP server flows if required.
 
 export function InternalMCPCatalog({
   initialData,
@@ -417,8 +46,6 @@ export function InternalMCPCatalog({
   const userRole = useRole();
   const isAdmin = userRole === "admin";
   const deleteMutation = useDeleteMcpServer();
-  const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
-  const revokeAllTeamsMutation = useRevokeAllTeamsMcpServerAccess();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -428,19 +55,14 @@ export function InternalMCPCatalog({
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
+  const [remoteSearchQuery, setRemoteSearchQuery] = useState("");
+  const [localSearchQuery, setLocalSearchQuery] = useState("");
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] =
     useState<CatalogItem | null>(null);
   const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
-  const [toolsDialogServerId, setToolsDialogServerId] = useState<string | null>(
-    null,
-  );
-  const [toolsDialogKey, setToolsDialogKey] = useState(0);
-  const [selectedToolForAssignment, setSelectedToolForAssignment] =
-    useState<ToolForAssignment | null>(null);
-  const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
   const [showReinstallDialog, setShowReinstallDialog] = useState(false);
   const [catalogItemForReinstall, setCatalogItemForReinstall] =
     useState<CatalogItem | null>(null);
@@ -448,21 +70,6 @@ export function InternalMCPCatalog({
   const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
     useState<CatalogItem | null>(null);
-  const [managingUsersState, setManagingUsersState] = useState<{
-    server: InstalledServer;
-    label: string;
-  } | null>(null);
-  const [managingTeamsState, setManagingTeamsState] = useState<{
-    server: InstalledServer;
-    label: string;
-  } | null>(null);
-
-  const toolsDialogServer = installedServers?.find(
-    (server) => server.id === toolsDialogServerId,
-  );
-
-  const { data: toolsDialogTools, isLoading: isLoadingToolsDialogTools } =
-    useMcpServerTools(toolsDialogServerId);
 
   const handleInstall = async (catalogItem: CatalogItem, teamMode = false) => {
     setIsTeamMode(teamMode);
@@ -670,22 +277,6 @@ export function InternalMCPCatalog({
     };
   };
 
-  const handleRevokeMyAccess = async (catalogId: string) => {
-    if (!currentUserId) {
-      toast.error("User ID not found");
-      return;
-    }
-
-    await revokeUserAccessMutation.mutateAsync({
-      catalogId,
-      userId: currentUserId,
-    });
-  };
-
-  const handleRevokeTeamAccess = async (catalogId: string) => {
-    await revokeAllTeamsMutation.mutateAsync({ catalogId });
-  };
-
   const handleReinstallRequired = async (
     catalogId: string,
     updatedData?: { name?: string; serverUrl?: string },
@@ -742,25 +333,47 @@ export function InternalMCPCatalog({
     await handleInstall(catalogItem);
   };
 
-  const filteredItems = catalogSearchQuery.trim()
-    ? (catalogItems || []).filter((item) =>
-        item.name.toLowerCase().includes(catalogSearchQuery.toLowerCase()),
-      )
-    : catalogItems || [];
+  const sortInstalledFirst = (items: CatalogItem[]) =>
+    [...items].sort((a, b) => {
+      const aInstalled = installedServers?.some(
+        (server) => server.catalogId === a.id,
+      );
+      const bInstalled = installedServers?.some(
+        (server) => server.catalogId === b.id,
+      );
 
-  // Sort: installed servers first
-  const filteredCatalogItems = filteredItems.sort((a, b) => {
-    const aInstalled = installedServers?.some(
-      (server) => server.catalogId === a.id,
-    );
-    const bInstalled = installedServers?.some(
-      (server) => server.catalogId === b.id,
-    );
+      if (aInstalled && !bInstalled) return -1;
+      if (!aInstalled && bInstalled) return 1;
+      return 0;
+    });
 
-    if (aInstalled && !bInstalled) return -1;
-    if (!aInstalled && bInstalled) return 1;
-    return 0;
-  });
+  const filterCatalogItems = (items: CatalogItem[], query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return items;
+
+    return items.filter((item) => {
+      const labelText =
+        typeof item.label === "string" ? item.label.toLowerCase() : "";
+      return (
+        item.name.toLowerCase().includes(normalizedQuery) ||
+        labelText.includes(normalizedQuery)
+      );
+    });
+  };
+
+  const remoteCatalogItems = sortInstalledFirst(
+    filterCatalogItems(
+      (catalogItems || []).filter((item) => item.serverType === "remote"),
+      remoteSearchQuery,
+    ),
+  );
+
+  const localCatalogItems = sortInstalledFirst(
+    filterCatalogItems(
+      (catalogItems || []).filter((item) => item.serverType !== "remote"),
+      localSearchQuery,
+    ),
+  );
 
   return (
     <div className="space-y-4">
@@ -784,84 +397,108 @@ export function InternalMCPCatalog({
             : "Request to add custom MCP Server"}
         </Button>
       </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search servers by name..."
-          value={catalogSearchQuery}
-          onChange={(e) => setCatalogSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredCatalogItems?.map((item) => {
-          const installedServer = getAggregatedInstallation(item.id);
-          const itemWithLabel = item as CatalogItemWithOptionalLabel;
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as "remote" | "local")}
+        className="space-y-4"
+      >
+        <TabsList className="mb-4 grid w-full max-w-sm grid-cols-2">
+          <TabsTrigger value="remote">Remote</TabsTrigger>
+          <TabsTrigger value="local">Local</TabsTrigger>
+        </TabsList>
 
-          return (
-            <InternalServerCard
-              key={item.id}
-              item={itemWithLabel}
-              installedServer={installedServer}
-              installingItemId={installingItemId}
-              installMutationPending={installMutation.isPending}
-              onInstall={() => handleInstall(item, false)}
-              onInstallTeam={() => handleInstallTeam(item)}
-              onInstallNoAuth={() => handleInstallNoAuth(item)}
-              onRevokeMyAccess={
-                installedServer?.catalogId
-                  ? // biome-ignore lint/style/noNonNullAssertion: it's checked above
-                    () => handleRevokeMyAccess(installedServer.catalogId!)
-                  : undefined
-              }
-              onRevokeTeamAccess={
-                installedServer?.teams && installedServer.teams.length > 0
-                  ? () => handleRevokeTeamAccess(item.id)
-                  : undefined
-              }
-              onReinstall={() => handleReinstall(item)}
-              onEdit={() => setEditingItem(item)}
-              onDelete={() => setDeletingItem(item)}
-              onViewTools={
-                installedServer
-                  ? () => setToolsDialogServerId(installedServer.id)
-                  : undefined
-              }
-              onManageUsers={
-                installedServer
-                  ? () =>
-                      setManagingUsersState({
-                        server: installedServer,
-                        label: itemWithLabel.label || itemWithLabel.name,
-                      })
-                  : undefined
-              }
-              onManageTeams={
-                installedServer
-                  ? () =>
-                      setManagingTeamsState({
-                        server: installedServer,
-                        label: itemWithLabel.label || itemWithLabel.name,
-                      })
-                  : undefined
-              }
-              isAdmin={isAdmin}
+        <TabsContent value="remote" className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search remote servers by name..."
+              value={remoteSearchQuery}
+              onChange={(e) => setRemoteSearchQuery(e.target.value)}
+              className="pl-9"
             />
-          );
-        })}
-      </div>
-      {filteredCatalogItems?.length === 0 && catalogSearchQuery && (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">
-            No catalog items match "{catalogSearchQuery}".
-          </p>
-        </div>
-      )}
-      {catalogItems?.length === 0 && !catalogSearchQuery && (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">No catalog items found.</p>
-        </div>
-      )}
+          </div>
+          {remoteCatalogItems.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {remoteCatalogItems.map((item) => {
+                const installedServer = getAggregatedInstallation(item.id);
+                const itemWithLabel = item as CatalogItemWithOptionalLabel;
+
+                return (
+                  <McpServerCard
+                    variant="remote"
+                    key={item.id}
+                    item={itemWithLabel}
+                    installedServer={installedServer}
+                    installingItemId={installingItemId}
+                    installMutationPending={installMutation.isPending}
+                    onInstall={() => handleInstall(item, false)}
+                    onInstallTeam={() => handleInstallTeam(item)}
+                    onInstallNoAuth={() => handleInstallNoAuth(item)}
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDelete={() => setDeletingItem(item)}
+                    isAdmin={isAdmin}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">
+                {remoteSearchQuery.trim()
+                  ? `No remote servers match "${remoteSearchQuery}".`
+                  : "No remote servers found."}
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="local" className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search local servers by name..."
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {localCatalogItems.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {localCatalogItems.map((item) => {
+                const installedServer = getAggregatedInstallation(item.id);
+                const itemWithLabel = item as CatalogItemWithOptionalLabel;
+
+                return (
+                  <McpServerCard
+                    variant="local"
+                    key={item.id}
+                    item={itemWithLabel}
+                    installedServer={installedServer}
+                    installingItemId={installingItemId}
+                    installMutationPending={installMutation.isPending}
+                    onInstall={() => handleInstall(item, false)}
+                    onInstallTeam={() => handleInstallTeam(item)}
+                    onInstallNoAuth={() => handleInstallNoAuth(item)}
+                    onReinstall={() => handleReinstall(item)}
+                    onEdit={() => setEditingItem(item)}
+                    onDelete={() => setDeletingItem(item)}
+                    isAdmin={isAdmin}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">
+                {localSearchQuery.trim()
+                  ? `No local servers match "${localSearchQuery}".`
+                  : "No local servers found."}
+              </p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}
@@ -919,66 +556,6 @@ export function InternalMCPCatalog({
         installedServers={installedServers}
       />
 
-      <McpToolsDialog
-        key={toolsDialogKey}
-        open={!!toolsDialogServerId}
-        onOpenChange={(open) => {
-          if (!open) setToolsDialogServerId(null);
-        }}
-        serverName={toolsDialogServer?.name ?? ""}
-        tools={toolsDialogTools ?? []}
-        isLoading={isLoadingToolsDialogTools}
-        onAssignTool={(tool) => {
-          setSelectedToolForAssignment({
-            ...tool,
-            mcpServerId: toolsDialogServerId,
-            mcpServerName: toolsDialogServer?.name ?? null,
-          });
-        }}
-        onBulkAssignTools={(tools) => {
-          setBulkAssignTools(tools);
-        }}
-      />
-
-      <BulkAssignAgentDialog
-        tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}
-        open={bulkAssignTools.length > 0}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBulkAssignTools([]);
-            // Reset the tools dialog to clear selections
-            setToolsDialogKey((prev) => prev + 1);
-          }
-        }}
-      />
-
-      <AssignAgentDialog
-        tool={
-          selectedToolForAssignment
-            ? {
-                id: selectedToolForAssignment.id,
-                tool: {
-                  id: selectedToolForAssignment.id,
-                  name: selectedToolForAssignment.name,
-                  description: selectedToolForAssignment.description,
-                  parameters: selectedToolForAssignment.parameters,
-                  createdAt: selectedToolForAssignment.createdAt,
-                  updatedAt: selectedToolForAssignment.createdAt,
-                  mcpServerId: selectedToolForAssignment.mcpServerId,
-                  mcpServerName: selectedToolForAssignment.mcpServerName,
-                },
-                agent: null,
-                createdAt: selectedToolForAssignment.createdAt,
-                updatedAt: selectedToolForAssignment.createdAt,
-              }
-            : null
-        }
-        open={!!selectedToolForAssignment}
-        onOpenChange={(open) => {
-          if (!open) setSelectedToolForAssignment(null);
-        }}
-      />
-
       <ReinstallConfirmationDialog
         isOpen={showReinstallDialog}
         onClose={() => {
@@ -1008,20 +585,6 @@ export function InternalMCPCatalog({
         catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
         isAdmin={isAdmin}
-      />
-
-      <ManageUsersDialog
-        isOpen={!!managingUsersState}
-        onClose={() => setManagingUsersState(null)}
-        server={managingUsersState?.server}
-        label={managingUsersState?.label}
-      />
-
-      <ManageTeamsDialog
-        isOpen={!!managingTeamsState}
-        onClose={() => setManagingTeamsState(null)}
-        server={managingTeamsState?.server}
-        label={managingTeamsState?.label}
       />
     </div>
   );

@@ -95,7 +95,7 @@ export function ResponseModifierEditor({
           <div className="border rounded-md overflow-hidden">
             <Editor
               height="200px"
-              defaultLanguage="Handlebars"
+              defaultLanguage="handlebars"
               value={template}
               onChange={(value) => setTemplate(value || "")}
               options={{

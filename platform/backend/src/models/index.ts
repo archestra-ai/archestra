@@ -11,6 +11,7 @@ export { default as McpServerTeamModel } from "./mcp-server-team";
 export { default as OrganizationModel } from "./organization";
 export { default as SecretModel } from "./secret";
 export { default as TeamModel } from "./team";
+export { default as TokenPricingModel } from "./token-pricing";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";

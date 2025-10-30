@@ -19,6 +19,7 @@ export { default as mcpServerTeamTable } from "./mcp-server-team";
 export { default as organizationsTable } from "./organization";
 export { default as secretsTable } from "./secret";
 export { team, teamMember } from "./team";
+export { default as tokenPricingTable } from "./token-pricing";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";

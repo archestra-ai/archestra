@@ -156,6 +156,10 @@ export const RouteId = {
   GetTools: "getTools",
   GetUnassignedTools: "getUnassignedTools",
 
+  // Token Pricing Routes
+  GetTokenPricing: "getTokenPricing",
+  UpdateTokenPricing: "updateTokenPricing",
+
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",

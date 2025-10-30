@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertCircle, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { tokenPricingApi, type TokenPrice as ApiTokenPrice } from "@/lib/api/token-pricing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,12 +50,7 @@ interface ToolCallLimit {
   monthlyLimit: string;
 }
 
-interface TokenPrice {
-  provider: string;
-  model: string;
-  inputPricePer1M: string;
-  outputPricePer1M: string;
-}
+interface TokenPrice extends ApiTokenPrice {}
 
 export default function CostManagementPage() {
   const [orgBudgetLimit, setOrgBudgetLimit] = useState("1000");

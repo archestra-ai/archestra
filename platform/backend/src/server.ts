@@ -14,6 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
 import {
   Anthropic,
@@ -86,10 +87,6 @@ const start = async () => {
 
     // Initialize MCP Server Runtime (K8s-based)
     try {
-      const { default: McpServerRuntimeManager } = await import(
-        "@/mcp-server-runtime"
-      );
-
       // Set up callbacks for runtime initialization
       McpServerRuntimeManager.onRuntimeStartupSuccess = () => {
         fastify.log.info("MCP Server Runtime initialized successfully");
@@ -97,8 +94,7 @@ const start = async () => {
 
       McpServerRuntimeManager.onRuntimeStartupError = (error: Error) => {
         fastify.log.error(
-          "MCP Server Runtime failed to initialize:",
-          error.message,
+          `MCP Server Runtime failed to initialize: ${error.message}`,
         );
         // Don't exit the process, allow the server to continue
         // MCP servers can be started manually later
@@ -106,13 +102,12 @@ const start = async () => {
 
       // Start the runtime in the background (non-blocking)
       McpServerRuntimeManager.start().catch((error) => {
-        fastify.log.error(
-          "Failed to start MCP Server Runtime:",
-          error.message,
-        );
+        fastify.log.error("Failed to start MCP Server Runtime:", error.message);
       });
     } catch (error) {
-      fastify.log.error("Failed to import MCP Server Runtime:", error);
+      fastify.log.error(
+        `Failed to import MCP Server Runtime: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       // Continue server startup even if MCP runtime fails
     }
 

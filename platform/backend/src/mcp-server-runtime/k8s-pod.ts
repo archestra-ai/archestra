@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
@@ -47,21 +48,8 @@ export default class K8sPod {
   private createPodEnv(): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
 
-    // Add OAuth tokens if present
-    if (this.mcpServer.oauthTokens) {
-      const tokens = this.mcpServer.oauthTokens as Record<string, unknown>;
-      Object.entries(tokens).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          env.push({
-            name: key.toUpperCase(),
-            value: String(value),
-          });
-        }
-      });
-    }
-
-    // Add user config values if present
-    // TODO: Load from catalog and merge with user config values
+    // TODO: Load OAuth tokens and user config from related catalog item and secrets
+    // For now, just return basic environment
 
     return env;
   }
@@ -73,7 +61,7 @@ export default class K8sPod {
     try {
       // Check if pod already exists
       try {
-        const { body: existingPod } = await this.k8sApi.readNamespacedPod({
+        const existingPod = await this.k8sApi.readNamespacedPod({
           name: this.podName,
           namespace: this.namespace,
         });
@@ -90,9 +78,9 @@ export default class K8sPod {
           console.log(`Deleting failed pod ${this.podName}`);
           await this.removePod();
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Pod doesn't exist, we'll create it below
-        if (error.statusCode !== 404) {
+        if (error instanceof Error && error.message.includes("404")) {
           throw error;
         }
       }
@@ -136,7 +124,7 @@ export default class K8sPod {
         },
       };
 
-      const { body: createdPod } = await this.k8sApi.createNamespacedPod({
+      const createdPod = await this.k8sApi.createNamespacedPod({
         namespace: this.namespace,
         body: podSpec,
       });
@@ -151,9 +139,10 @@ export default class K8sPod {
 
       this.state = "running";
       console.log(`Pod ${this.podName} is now running`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.state = "failed";
-      this.errorMessage = error.message;
+      this.errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       console.error(`Failed to start pod ${this.podName}:`, error);
       throw error;
     }
@@ -163,14 +152,9 @@ export default class K8sPod {
    * Check if this MCP server needs an HTTP port
    */
   private needsHttpPort(): boolean {
-    try {
-      const oauthConfig = this.mcpServer.oauthConfig
-        ? JSON.parse(this.mcpServer.oauthConfig as any)
-        : null;
-      return !!oauthConfig?.streamable_http_url;
-    } catch {
-      return false;
-    }
+    // TODO: Load from catalog item to check if streamable_http_url is configured
+    // For now, assume all local servers use stdio
+    return false;
   }
 
   /**
@@ -195,7 +179,7 @@ export default class K8sPod {
   ): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const { body: pod } = await this.k8sApi.readNamespacedPod({
+        const pod = await this.k8sApi.readNamespacedPod({
           name: this.podName,
           namespace: this.namespace,
         });
@@ -213,8 +197,11 @@ export default class K8sPod {
         if (pod.status?.phase === "Failed") {
           throw new Error(`Pod ${this.podName} failed to start`);
         }
-      } catch (error: any) {
-        if (error.message?.includes("failed to start")) {
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.message.includes("failed to start")
+        ) {
           throw error;
         }
         // Continue waiting for other errors
@@ -240,8 +227,8 @@ export default class K8sPod {
       });
       this.state = "not_created";
       console.log(`Pod ${this.podName} stopped`);
-    } catch (error: any) {
-      if (error.statusCode !== 404) {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes("404")) {
         console.error(`Failed to stop pod ${this.podName}:`, error);
         throw error;
       }
@@ -261,7 +248,7 @@ export default class K8sPod {
    * Stream data to/from the pod (for stdio-based MCP servers)
    */
   async streamToPod(
-    request: any,
+    request: unknown,
     responseStream: IncomingMessage,
   ): Promise<void> {
     try {
@@ -276,8 +263,9 @@ export default class K8sPod {
         this.podName,
         "mcp-server",
         command,
+        // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
         responseStream as any,
-        null as any,
+        null,
         process.stdin,
         true /* tty */,
       );
@@ -298,16 +286,16 @@ export default class K8sPod {
    */
   async getRecentLogs(lines: number = 100): Promise<string> {
     try {
-      const { body: logs } = await this.k8sApi.readNamespacedPodLog({
+      const logs = await this.k8sApi.readNamespacedPodLog({
         name: this.podName,
         namespace: this.namespace,
         tailLines: lines,
       });
 
       return logs || "";
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Failed to get logs for pod ${this.podName}:`, error);
-      if (error.statusCode === 404) {
+      if (error instanceof Error && error.message.includes("404")) {
         return "Pod not found";
       }
       throw error;

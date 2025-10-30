@@ -1,5 +1,7 @@
-import * as k8s from "@kubernetes/client-node";
 import type { IncomingMessage } from "node:http";
+import * as k8s from "@kubernetes/client-node";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpServerModel from "@/models/mcp-server";
 import type { McpServer } from "@/types";
 import K8sPod from "./k8s-pod";
 import type {
@@ -67,20 +69,15 @@ class McpServerRuntimeManager {
       this.status = "running";
 
       // Get all installed local MCP servers from database
-      // Note: We need to import this dynamically to avoid circular dependencies
-      const { default: McpServerModel } = await import("@/models/mcp-server");
       const installedServers = await McpServerModel.findAll();
 
       // Filter for local servers only (remote servers don't need pods)
-      const { default: InternalMcpCatalogModel } = await import(
-        "@/models/internal-mcp-catalog"
-      );
-
       const localServers: McpServer[] = [];
       for (const server of installedServers) {
         if (server.catalogId) {
-          const catalogItem =
-            await InternalMcpCatalogModel.findById(server.catalogId);
+          const catalogItem = await InternalMcpCatalogModel.findById(
+            server.catalogId,
+          );
           if (catalogItem?.serverType === "local") {
             localServers.push(server);
           }
@@ -98,7 +95,9 @@ class McpServerRuntimeManager {
 
       // Count successes and failures
       const failures = results.filter((result) => result.status === "rejected");
-      const successes = results.filter((result) => result.status === "fulfilled");
+      const successes = results.filter(
+        (result) => result.status === "fulfilled",
+      );
 
       if (failures.length > 0) {
         console.warn(
@@ -115,10 +114,11 @@ class McpServerRuntimeManager {
 
       console.log("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
-    } catch (error: any) {
-      console.error("Failed to initialize MCP Server Runtime:", error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
       this.status = "error";
-      this.onRuntimeStartupError(error);
+      this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
     }
   }
@@ -134,9 +134,9 @@ class McpServerRuntimeManager {
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
 
       console.log("K8s connection verified successfully");
-    } catch (error: any) {
-      const errorMsg = `Failed to connect to Kubernetes: ${error.message}`;
-      console.error(errorMsg);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Failed to connect to Kubernetes: ${errorMsg}`);
       throw new Error(errorMsg);
     }
   }
@@ -223,7 +223,6 @@ class McpServerRuntimeManager {
 
     try {
       // Get the MCP server from database
-      const { default: McpServerModel } = await import("@/models/mcp-server");
       const mcpServer = await McpServerModel.findById(mcpServerId);
 
       if (!mcpServer) {
@@ -251,6 +250,7 @@ class McpServerRuntimeManager {
    */
   async streamToPod(
     mcpServerId: string,
+    // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
     request: any,
     responseStream: IncomingMessage,
   ): Promise<void> {

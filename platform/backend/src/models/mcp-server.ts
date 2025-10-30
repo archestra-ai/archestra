@@ -2,6 +2,7 @@ import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema } from "@/database";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import SecretModel from "./secret";
 
@@ -190,9 +191,6 @@ class McpServerModel {
     // Get catalog information if this server was installed from a catalog
     let catalogItem = null;
     if (mcpServer.catalogId) {
-      const { default: InternalMcpCatalogModel } = await import(
-        "./internal-mcp-catalog"
-      );
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
@@ -307,9 +305,6 @@ class McpServerModel {
     // For other remote servers, check if we can connect using catalog info
     if (catalogId) {
       try {
-        const { default: InternalMcpCatalogModel } = await import(
-          "./internal-mcp-catalog"
-        );
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {

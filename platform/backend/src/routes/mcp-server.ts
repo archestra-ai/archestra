@@ -1,7 +1,9 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   AgentToolModel,
+  InternalMcpCatalogModel,
   McpServerModel,
   SecretModel,
   ToolModel,
@@ -209,9 +211,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Check if this is a local server that needs to be started in K8s
           let catalogItem = null;
           if (serverData.catalogId) {
-            const { default: InternalMcpCatalogModel } = await import(
-              "@/models/internal-mcp-catalog"
-            );
             catalogItem = await InternalMcpCatalogModel.findById(
               serverData.catalogId,
             );
@@ -220,9 +219,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For local servers, start the K8s pod first
           if (catalogItem?.serverType === "local") {
             try {
-              const { default: McpServerRuntimeManager } = await import(
-                "@/mcp-server-runtime"
-              );
               await McpServerRuntimeManager.startServer(mcpServer);
               fastify.log.info(
                 `Started K8s pod for local MCP server: ${mcpServer.name}`,
@@ -411,11 +407,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Check if this is a local server that should be running in K8s
         let catalogItem = null;
         if (mcpServer.catalogId) {
-          const { default: InternalMcpCatalogModel } = await import(
-            "@/models/internal-mcp-catalog"
+          catalogItem = await InternalMcpCatalogModel.findById(
+            mcpServer.catalogId,
           );
-          catalogItem =
-            await InternalMcpCatalogModel.findById(mcpServer.catalogId);
         }
 
         // Only handle local servers through the proxy
@@ -430,9 +424,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Get the K8s pod for this MCP server
-        const { default: McpServerRuntimeManager } = await import(
-          "@/mcp-server-runtime"
-        );
         const k8sPod = McpServerRuntimeManager.getPod(mcpServerId);
 
         if (!k8sPod) {
@@ -457,6 +448,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await McpServerRuntimeManager.streamToPod(
           mcpServerId,
           body,
+          // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
           reply.raw as any,
         );
 
@@ -464,7 +456,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        fastify.log.error(`Error proxying to MCP server ${mcpServerId}:`, error);
+        fastify.log.error(
+          `Error proxying to MCP server ${mcpServerId}: ${errorMsg}`,
+        );
 
         // If we haven't sent yet, we can still send error response
         if (!reply.sent) {
@@ -521,9 +515,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { lines } = request.query;
 
       try {
-        const { default: McpServerRuntimeManager } = await import(
-          "@/mcp-server-runtime"
-        );
         const logs = await McpServerRuntimeManager.getMcpServerLogs(
           mcpServerId,
           lines,
@@ -531,8 +522,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(logs);
       } catch (error) {
         fastify.log.error(
-          `Error getting logs for MCP server ${mcpServerId}:`,
-          error,
+          `Error getting logs for MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
         return reply.status(404).send({
           error: {
@@ -572,16 +562,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { id: mcpServerId } = request.params;
 
       try {
-        const { default: McpServerRuntimeManager } = await import(
-          "@/mcp-server-runtime"
-        );
         await McpServerRuntimeManager.restartServer(mcpServerId);
         return reply.send({
           success: true,
           message: `MCP server ${mcpServerId} restarted successfully`,
         });
       } catch (error) {
-        fastify.log.error(`Failed to restart MCP server ${mcpServerId}:`, error);
+        fastify.log.error(
+          `Failed to restart MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
 
         if (error instanceof Error && error.message?.includes("not found")) {
           return reply.status(404).send({

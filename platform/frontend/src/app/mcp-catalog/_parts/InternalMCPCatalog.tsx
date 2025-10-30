@@ -12,7 +12,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { AssignAgentDialog } from "@/app/tools/_parts/assign-agent-dialog";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
@@ -50,16 +50,38 @@ import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
 
-type CatalogItemWithOptionalLabel =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
-    label?: string | null;
-  };
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
+
+type CatalogItemWithOptionalLabel = CatalogItem & {
+  label?: string | null;
+};
+
+type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
+
+type ToolForAssignment = {
+  id: string;
+  name: string;
+  description: string | null;
+  parameters: Record<string, unknown>;
+  createdAt: string;
+  mcpServerId: string | null;
+  mcpServerName: string | null;
+};
+
+type SimpleTool = {
+  id: string;
+  name: string;
+  description: string | null;
+  parameters: Record<string, unknown>;
+  createdAt: string;
+};
 
 function InternalServerCard({
   item,
-  installed,
-  isInstalling,
-  needsReinstall,
+  installedServer,
+  installingItemId,
+  installMutationPending,
   onInstall,
   onInstallTeam,
   onInstallNoAuth,
@@ -71,18 +93,12 @@ function InternalServerCard({
   onViewTools,
   onManageUsers,
   onManageTeams,
-  userCount,
-  teamsCount,
-  toolsAssignedCount,
-  toolsDiscoveredCount,
-  isCurrentUserAuthenticated,
-  currentUserHasTeamAuth,
   isAdmin,
 }: {
   item: CatalogItemWithOptionalLabel;
-  installed: boolean;
-  isInstalling: boolean;
-  needsReinstall: boolean;
+  installedServer: InstalledServer | undefined;
+  installingItemId: string | null;
+  installMutationPending: boolean;
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
@@ -94,14 +110,29 @@ function InternalServerCard({
   onViewTools?: () => void;
   onManageUsers?: () => void;
   onManageTeams?: () => void;
-  userCount?: number;
-  teamsCount?: number;
-  toolsAssignedCount?: number;
-  toolsDiscoveredCount?: number;
-  isCurrentUserAuthenticated?: boolean;
-  currentUserHasTeamAuth?: boolean;
   isAdmin: boolean;
 }) {
+  // Fetch tools data and compute derived values
+  const { data: tools } = useMcpServerTools(installedServer?.id ?? null);
+  const session = authClient.useSession();
+  const currentUserId = session.data?.user?.id;
+
+  const installed = !!installedServer;
+  const isInstalling = installingItemId === item.id || installMutationPending;
+  const needsReinstall = installedServer?.reinstallRequired ?? false;
+  const userCount = installedServer?.users?.length ?? 0;
+  const teamsCount = installedServer?.teams?.length ?? 0;
+  const toolsDiscoveredCount = tools?.length ?? 0;
+  const toolsAssignedCount = !tools
+    ? 0
+    : tools.filter((tool) => tool.assignedAgentCount > 0).length;
+  const isCurrentUserAuthenticated =
+    currentUserId && installedServer?.users
+      ? installedServer.users.includes(currentUserId)
+      : false;
+  const currentUserHasTeamAuth = (
+    installedServer as { currentUserHasTeamAuth?: boolean }
+  )?.currentUserHasTeamAuth;
   // Check if authentication is required
   const requiresAuth = !!(
     (item.userConfig && Object.keys(item.userConfig).length > 0) ||
@@ -369,96 +400,12 @@ function InternalServerCard({
   );
 }
 
-// Wrapper component that fetches tools and computes counts
-function InternalServerCardWithTools({
-  item,
-  installedServer,
-  installingItemId,
-  installMutationPending,
-  onInstall,
-  onInstallTeam,
-  onInstallNoAuth,
-  onRevokeMyAccess,
-  onRevokeTeamAccess,
-  onReinstall,
-  onEdit,
-  onDelete,
-  onViewTools,
-  onManageUsers,
-  onManageTeams,
-  isAdmin,
-}: {
-  item: CatalogItemWithOptionalLabel;
-  installedServer:
-    | archestraApiTypes.GetMcpServersResponses["200"][number]
-    | undefined;
-  installingItemId: string | null;
-  installMutationPending: boolean;
-  onInstall: () => void;
-  onInstallTeam: () => void;
-  onInstallNoAuth: () => void;
-  onRevokeMyAccess?: () => void;
-  onRevokeTeamAccess?: () => void;
-  onReinstall: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onViewTools?: () => void;
-  onManageUsers?: () => void;
-  onManageTeams?: () => void;
-  isAdmin: boolean;
-}) {
-  const { data: tools } = useMcpServerTools(installedServer?.id ?? null);
-  const session = authClient.useSession();
-  const currentUserId = session.data?.user?.id;
-
-  const toolsDiscoveredCount = tools?.length ?? 0;
-  const toolsAssignedCount = useMemo(() => {
-    if (!tools) return 0;
-    return tools.filter((tool) => tool.assignedAgentCount > 0).length;
-  }, [tools]);
-
-  const isCurrentUserAuthenticated = useMemo(() => {
-    if (!currentUserId || !installedServer?.users) return false;
-    return installedServer.users.includes(currentUserId);
-  }, [currentUserId, installedServer?.users]);
-
-  return (
-    <InternalServerCard
-      item={item}
-      installed={!!installedServer}
-      isInstalling={installingItemId === item.id || installMutationPending}
-      needsReinstall={installedServer?.reinstallRequired ?? false}
-      onInstall={onInstall}
-      onInstallTeam={onInstallTeam}
-      onInstallNoAuth={onInstallNoAuth}
-      onRevokeMyAccess={onRevokeMyAccess}
-      onRevokeTeamAccess={onRevokeTeamAccess}
-      onReinstall={onReinstall}
-      onEdit={onEdit}
-      onDelete={onDelete}
-      onViewTools={onViewTools}
-      onManageUsers={onManageUsers}
-      onManageTeams={onManageTeams}
-      userCount={installedServer?.users?.length ?? 0}
-      teamsCount={installedServer?.teams?.length ?? 0}
-      toolsAssignedCount={toolsAssignedCount}
-      toolsDiscoveredCount={toolsDiscoveredCount}
-      isCurrentUserAuthenticated={isCurrentUserAuthenticated}
-      currentUserHasTeamAuth={
-        (installedServer as { currentUserHasTeamAuth?: boolean })
-          ?.currentUserHasTeamAuth
-      }
-      isAdmin={isAdmin}
-    />
-  );
-}
-
 export function InternalMCPCatalog({
   initialData,
   installedServers: initialInstalledServers,
 }: {
-  initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
-  installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
+  initialData?: CatalogItem[];
+  installedServers?: InstalledServer[];
 }) {
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
@@ -476,463 +423,342 @@ export function InternalMCPCatalog({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCustomRequestDialogOpen, setIsCustomRequestDialogOpen] =
     useState(false);
-  const [editingItem, setEditingItem] = useState<
-    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
-  const [deletingItem, setDeletingItem] = useState<
-    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
+  const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
-  const [selectedCatalogItem, setSelectedCatalogItem] = useState<
-    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
+  const [selectedCatalogItem, setSelectedCatalogItem] =
+    useState<CatalogItem | null>(null);
   const [isOAuthDialogOpen, setIsOAuthDialogOpen] = useState(false);
   const [toolsDialogServerId, setToolsDialogServerId] = useState<string | null>(
     null,
   );
   const [toolsDialogKey, setToolsDialogKey] = useState(0);
-  const [selectedToolForAssignment, setSelectedToolForAssignment] = useState<{
-    id: string;
-    name: string;
-    description: string | null;
-    parameters: Record<string, unknown>;
-    createdAt: string;
-    mcpServerId: string | null;
-    mcpServerName: string | null;
-  } | null>(null);
-  const [bulkAssignTools, setBulkAssignTools] = useState<
-    Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      parameters: Record<string, unknown>;
-      createdAt: string;
-    }>
-  >([]);
+  const [selectedToolForAssignment, setSelectedToolForAssignment] =
+    useState<ToolForAssignment | null>(null);
+  const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
   const [showReinstallDialog, setShowReinstallDialog] = useState(false);
-  const [catalogItemForReinstall, setCatalogItemForReinstall] = useState<
-    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
+  const [catalogItemForReinstall, setCatalogItemForReinstall] =
+    useState<CatalogItem | null>(null);
   const [isTeamMode, setIsTeamMode] = useState(false);
   const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
-  const [noAuthCatalogItem, setNoAuthCatalogItem] = useState<
-    archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
-  >(null);
+  const [noAuthCatalogItem, setNoAuthCatalogItem] =
+    useState<CatalogItem | null>(null);
   const [managingUsersState, setManagingUsersState] = useState<{
-    server: archestraApiTypes.GetMcpServersResponses["200"][number];
+    server: InstalledServer;
     label: string;
   } | null>(null);
   const [managingTeamsState, setManagingTeamsState] = useState<{
-    server: archestraApiTypes.GetMcpServersResponses["200"][number];
+    server: InstalledServer;
     label: string;
   } | null>(null);
 
-  const toolsDialogServer = useMemo(() => {
-    return installedServers?.find(
-      (server) => server.id === toolsDialogServerId,
-    );
-  }, [installedServers, toolsDialogServerId]);
+  const toolsDialogServer = installedServers?.find(
+    (server) => server.id === toolsDialogServerId,
+  );
 
   const { data: toolsDialogTools, isLoading: isLoadingToolsDialogTools } =
     useMcpServerTools(toolsDialogServerId);
 
-  const handleInstall = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-      teamMode = false,
-    ) => {
-      setIsTeamMode(teamMode);
+  const handleInstall = async (catalogItem: CatalogItem, teamMode = false) => {
+    setIsTeamMode(teamMode);
 
-      // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
-      if (
-        catalogItem.serverType === "remote" &&
-        catalogItem.userConfig &&
-        Object.keys(catalogItem.userConfig).length > 0
-      ) {
-        setSelectedCatalogItem(catalogItem);
-        setIsRemoteServerDialogOpen(true);
-        return;
-      }
+    // Check if this is a remote server with user configuration or it's the GitHub MCP server from the external catalog
+    if (
+      catalogItem.serverType === "remote" &&
+      catalogItem.userConfig &&
+      Object.keys(catalogItem.userConfig).length > 0
+    ) {
+      setSelectedCatalogItem(catalogItem);
+      setIsRemoteServerDialogOpen(true);
+      return;
+    }
 
-      // Check if this server requires OAuth authentication
-      if (catalogItem.oauthConfig) {
-        setSelectedCatalogItem(catalogItem);
-        setIsOAuthDialogOpen(true);
-        return;
-      }
+    // Check if this server requires OAuth authentication
+    if (catalogItem.oauthConfig) {
+      setSelectedCatalogItem(catalogItem);
+      setIsOAuthDialogOpen(true);
+      return;
+    }
 
-      // For servers without configuration, install directly
-      try {
-        setInstallingItemId(catalogItem.id);
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          teams: [], // TODO: will be populated from team selector in dialogs
-        });
-      } finally {
-        setInstallingItemId(null);
-      }
-    },
-    [installMutation],
-  );
+    // For servers without configuration, install directly
+    setInstallingItemId(catalogItem.id);
+    await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      teams: [],
+    });
+    setInstallingItemId(null);
+  };
 
-  const handleInstallTeam = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-    ) => {
-      await handleInstall(catalogItem, true);
-    },
-    [handleInstall],
-  );
+  const handleInstallTeam = async (catalogItem: CatalogItem) => {
+    await handleInstall(catalogItem, true);
+  };
 
-  const handleInstallNoAuth = useCallback(
-    (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-    ) => {
-      setNoAuthCatalogItem(catalogItem);
-      setIsNoAuthDialogOpen(true);
-    },
-    [],
-  );
+  const handleInstallNoAuth = (catalogItem: CatalogItem) => {
+    setNoAuthCatalogItem(catalogItem);
+    setIsNoAuthDialogOpen(true);
+  };
 
-  const handleNoAuthConfirm = useCallback(
-    async (teams: string[] = []) => {
-      if (!noAuthCatalogItem) return;
+  const handleNoAuthConfirm = async (teams: string[] = []) => {
+    if (!noAuthCatalogItem) return;
 
-      try {
-        setInstallingItemId(noAuthCatalogItem.id);
-        await installMutation.mutateAsync({
-          name: noAuthCatalogItem.name,
-          catalogId: noAuthCatalogItem.id,
-          teams,
-        });
-        setIsNoAuthDialogOpen(false);
-        setNoAuthCatalogItem(null);
-      } finally {
-        setInstallingItemId(null);
-      }
-    },
-    [noAuthCatalogItem, installMutation],
-  );
+    setInstallingItemId(noAuthCatalogItem.id);
+    await installMutation.mutateAsync({
+      name: noAuthCatalogItem.name,
+      catalogId: noAuthCatalogItem.id,
+      teams,
+    });
+    setIsNoAuthDialogOpen(false);
+    setNoAuthCatalogItem(null);
+    setInstallingItemId(null);
+  };
 
-  const _handleGitHubInstall = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-      accessToken: string,
-      teams: string[],
-    ) => {
-      try {
-        setInstallingItemId(catalogItem.id);
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          accessToken,
-          teams,
-        });
-      } finally {
-        setInstallingItemId(null);
-      }
-    },
-    [installMutation],
-  );
+  const handleRemoteServerInstall = async (
+    catalogItem: CatalogItem,
+    metadata?: Record<string, unknown>,
+    teams: string[] = [],
+  ) => {
+    setInstallingItemId(catalogItem.id);
 
-  const handleRemoteServerInstall = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-      metadata?: Record<string, unknown>,
-      teams: string[] = [],
-    ) => {
-      try {
-        setInstallingItemId(catalogItem.id);
+    // Extract access_token from metadata if present and pass as accessToken
+    const accessToken =
+      metadata?.access_token && typeof metadata.access_token === "string"
+        ? metadata.access_token
+        : undefined;
 
-        // Extract access_token from metadata if present and pass as accessToken
-        const accessToken =
-          metadata?.access_token && typeof metadata.access_token === "string"
-            ? metadata.access_token
-            : undefined;
+    await installMutation.mutateAsync({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      ...(accessToken && { accessToken }),
+      teams,
+    });
+    setInstallingItemId(null);
+  };
 
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          ...(accessToken && { accessToken }),
-          teams,
-        });
-      } finally {
-        setInstallingItemId(null);
-      }
-    },
-    [installMutation],
-  );
+  const handleOAuthConfirm = async (teams: string[] = []) => {
+    if (!selectedCatalogItem) return;
 
-  const handleOAuthConfirm = useCallback(
-    async (teams: string[] = []) => {
-      if (!selectedCatalogItem) return;
-
-      try {
-        // Call backend to initiate OAuth flow
-        const response = await fetch("/api/oauth/initiate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            catalogId: selectedCatalogItem.id,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to initiate OAuth flow");
-        }
-
-        const { authorizationUrl, state } = await response.json();
-
-        // Store state and teams in session storage for the callback
-        sessionStorage.setItem("oauth_state", state);
-        sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
-        sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
-
-        // Redirect to OAuth provider
-        window.location.href = authorizationUrl;
-      } catch {
-        // TODO: Show error toast
-      }
-    },
-    [selectedCatalogItem],
-  );
-
-  const getInstallationCount = useCallback(
-    (catalogId: string) => {
-      return (
-        installedServers?.filter((server) => server.catalogId === catalogId)
-          .length || 0
-      );
-    },
-    [installedServers],
-  );
-
-  const getInstalledServer = useCallback(
-    (catalogId: string) => {
-      return installedServers?.find((server) => server.catalogId === catalogId);
-    },
-    [installedServers],
-  );
-
-  // Aggregate all installations of the same catalog item
-  const getAggregatedInstallation = useCallback(
-    (catalogId: string) => {
-      const servers = installedServers?.filter(
-        (server) => server.catalogId === catalogId,
-      );
-
-      if (!servers || servers.length === 0) return undefined;
-
-      // If only one server, return it as-is (but check for team auth ownership)
-      if (servers.length === 1) {
-        const server = servers[0];
-        return {
-          ...server,
-          currentUserHasTeamAuth:
-            server.authType === "team" && server.ownerId === currentUserId,
-        };
-      }
-
-      // Use the first server with users as the base, or just first server
-      const baseServer =
-        servers.find((s) => s.users && s.users.length > 0) || servers[0];
-
-      // Aggregate multiple servers
-      const aggregated = { ...baseServer };
-
-      // Check if current user has a team-auth server
-      const currentUserHasTeamAuth = servers.some(
-        (s) => s.authType === "team" && s.ownerId === currentUserId,
-      );
-
-      // Combine all unique users
-      const allUsers = new Set<string>();
-      const allUserDetails: Array<{
-        userId: string;
-        email: string;
-        createdAt: string;
-        serverId: string; // Track which server this user belongs to
-      }> = [];
-
-      for (const server of servers) {
-        if (server.users) {
-          for (const userId of server.users) {
-            allUsers.add(userId);
-          }
-        }
-        if (server.userDetails) {
-          for (const userDetail of server.userDetails) {
-            // Only add if not already present
-            if (!allUserDetails.some((ud) => ud.userId === userDetail.userId)) {
-              allUserDetails.push({
-                ...userDetail,
-                serverId: server.id, // Include the actual server ID
-              });
-            }
-          }
-        }
-      }
-
-      // Combine all unique teams
-      const allTeams = new Set<string>();
-      const allTeamDetails: Array<{
-        teamId: string;
-        name: string;
-        createdAt: string;
-        serverId: string; // Track which server this team belongs to
-      }> = [];
-
-      for (const server of servers) {
-        if (server.teams) {
-          for (const teamId of server.teams) {
-            allTeams.add(teamId);
-          }
-        }
-        if (server.teamDetails) {
-          for (const teamDetail of server.teamDetails) {
-            // Only add if not already present
-            if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
-              allTeamDetails.push({
-                ...teamDetail,
-                serverId: server.id, // Include the actual server ID
-              });
-            }
-          }
-        }
-      }
-
-      aggregated.users = Array.from(allUsers);
-      aggregated.userDetails = allUserDetails;
-      aggregated.teams = Array.from(allTeams);
-      aggregated.teamDetails = allTeamDetails;
-
-      return {
-        ...aggregated,
-        currentUserHasTeamAuth,
-      };
-    },
-    [installedServers, currentUserId],
-  );
-
-  const handleRevokeMyAccess = useCallback(
-    async (catalogId: string) => {
-      if (!currentUserId) {
-        toast.error("User ID not found");
-        return;
-      }
-
-      try {
-        await revokeUserAccessMutation.mutateAsync({
-          catalogId,
-          userId: currentUserId,
-        });
-      } catch (error) {
-        console.error("Error revoking access:", error);
-      }
-    },
-    [currentUserId, revokeUserAccessMutation],
-  );
-
-  const handleRevokeTeamAccess = useCallback(
-    async (catalogId: string) => {
-      try {
-        await revokeAllTeamsMutation.mutateAsync({ catalogId });
-      } catch (error) {
-        console.error("Error revoking team access:", error);
-      }
-    },
-    [revokeAllTeamsMutation],
-  );
-
-  const handleReinstallRequired = useCallback(
-    async (
-      catalogId: string,
-      updatedData?: { name?: string; serverUrl?: string },
-    ) => {
-      // Check if there's an installed server from this catalog item
-      const installedServer = getInstalledServer(catalogId);
-
-      // Only show reinstall dialog if the server is actually installed
-      if (!installedServer) {
-        return;
-      }
-
-      // Wait a bit for queries to refetch after mutation
-      // This ensures we have fresh catalog data
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Find the catalog item and show reinstall dialog
-      let catalogItem = catalogItems?.find((item) => item.id === catalogId);
-
-      // If we have updated data from the edit, merge it with the catalog item
-      if (catalogItem && updatedData) {
-        catalogItem = {
-          ...catalogItem,
-          ...(updatedData.name && { name: updatedData.name }),
-          ...(updatedData.serverUrl && { serverUrl: updatedData.serverUrl }),
-        };
-      }
-
-      if (catalogItem) {
-        setCatalogItemForReinstall(catalogItem);
-        setShowReinstallDialog(true);
-      }
-    },
-    [catalogItems, getInstalledServer],
-  );
-
-  const handleReinstall = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-    ) => {
-      // Get the installed server to get its ID (not catalog ID)
-      const installedServer = installedServers?.find(
-        (server) => server.catalogId === catalogItem.id,
-      );
-      if (!installedServer) {
-        toast.error("Server not found, cannot reinstall");
-        return;
-      }
-
-      // Delete the installed server using its server ID
-      await deleteMutation.mutateAsync({
-        id: installedServer.id,
-        name: catalogItem.name,
+    try {
+      // Call backend to initiate OAuth flow
+      const response = await fetch("/api/oauth/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          catalogId: selectedCatalogItem.id,
+        }),
       });
 
-      // Then reinstall
-      await handleInstall(catalogItem);
-    },
-    [handleInstall, deleteMutation, installedServers],
-  );
+      if (!response.ok) {
+        throw new Error("Failed to initiate OAuth flow");
+      }
 
-  const filteredCatalogItems = useMemo(() => {
-    const items = catalogSearchQuery.trim()
-      ? (catalogItems || []).filter((item) =>
-          item.name.toLowerCase().includes(catalogSearchQuery.toLowerCase()),
-        )
-      : catalogItems || [];
+      const { authorizationUrl, state } = await response.json();
 
-    // Sort: installed servers first
-    return items.sort((a, b) => {
-      const aInstalled = installedServers?.some(
-        (server) => server.catalogId === a.id,
-      );
-      const bInstalled = installedServers?.some(
-        (server) => server.catalogId === b.id,
-      );
+      // Store state and teams in session storage for the callback
+      sessionStorage.setItem("oauth_state", state);
+      sessionStorage.setItem("oauth_catalog_id", selectedCatalogItem.id);
+      sessionStorage.setItem("oauth_teams", JSON.stringify(teams));
 
-      if (aInstalled && !bInstalled) return -1;
-      if (!aInstalled && bInstalled) return 1;
-      return 0;
+      // Redirect to OAuth provider
+      window.location.href = authorizationUrl;
+    } catch {
+      toast.error("Failed to initiate OAuth flow");
+    }
+  };
+
+  // Aggregate all installations of the same catalog item
+  const getAggregatedInstallation = (catalogId: string) => {
+    const servers = installedServers?.filter(
+      (server) => server.catalogId === catalogId,
+    );
+
+    if (!servers || servers.length === 0) return undefined;
+
+    // If only one server, return it as-is (but check for team auth ownership)
+    if (servers.length === 1) {
+      const server = servers[0];
+      return {
+        ...server,
+        currentUserHasTeamAuth:
+          server.authType === "team" && server.ownerId === currentUserId,
+      };
+    }
+
+    // Use the first server with users as the base, or just first server
+    const baseServer =
+      servers.find((s) => s.users && s.users.length > 0) || servers[0];
+
+    // Aggregate multiple servers
+    const aggregated = { ...baseServer };
+
+    // Check if current user has a team-auth server
+    const currentUserHasTeamAuth = servers.some(
+      (s) => s.authType === "team" && s.ownerId === currentUserId,
+    );
+
+    // Combine all unique users
+    const allUsers = new Set<string>();
+    const allUserDetails: Array<{
+      userId: string;
+      email: string;
+      createdAt: string;
+      serverId: string; // Track which server this user belongs to
+    }> = [];
+
+    for (const server of servers) {
+      if (server.users) {
+        for (const userId of server.users) {
+          allUsers.add(userId);
+        }
+      }
+      if (server.userDetails) {
+        for (const userDetail of server.userDetails) {
+          // Only add if not already present
+          if (!allUserDetails.some((ud) => ud.userId === userDetail.userId)) {
+            allUserDetails.push({
+              ...userDetail,
+              serverId: server.id, // Include the actual server ID
+            });
+          }
+        }
+      }
+    }
+
+    // Combine all unique teams
+    const allTeams = new Set<string>();
+    const allTeamDetails: Array<{
+      teamId: string;
+      name: string;
+      createdAt: string;
+      serverId: string; // Track which server this team belongs to
+    }> = [];
+
+    for (const server of servers) {
+      if (server.teams) {
+        for (const teamId of server.teams) {
+          allTeams.add(teamId);
+        }
+      }
+      if (server.teamDetails) {
+        for (const teamDetail of server.teamDetails) {
+          // Only add if not already present
+          if (!allTeamDetails.some((td) => td.teamId === teamDetail.teamId)) {
+            allTeamDetails.push({
+              ...teamDetail,
+              serverId: server.id, // Include the actual server ID
+            });
+          }
+        }
+      }
+    }
+
+    aggregated.users = Array.from(allUsers);
+    aggregated.userDetails = allUserDetails;
+    aggregated.teams = Array.from(allTeams);
+    aggregated.teamDetails = allTeamDetails;
+
+    return {
+      ...aggregated,
+      currentUserHasTeamAuth,
+    };
+  };
+
+  const handleRevokeMyAccess = async (catalogId: string) => {
+    if (!currentUserId) {
+      toast.error("User ID not found");
+      return;
+    }
+
+    await revokeUserAccessMutation.mutateAsync({
+      catalogId,
+      userId: currentUserId,
     });
-  }, [catalogItems, catalogSearchQuery, installedServers]);
+  };
+
+  const handleRevokeTeamAccess = async (catalogId: string) => {
+    await revokeAllTeamsMutation.mutateAsync({ catalogId });
+  };
+
+  const handleReinstallRequired = async (
+    catalogId: string,
+    updatedData?: { name?: string; serverUrl?: string },
+  ) => {
+    // Check if there's an installed server from this catalog item
+    const installedServer = installedServers?.find(
+      (server) => server.catalogId === catalogId,
+    );
+
+    // Only show reinstall dialog if the server is actually installed
+    if (!installedServer) {
+      return;
+    }
+
+    // Wait a bit for queries to refetch after mutation
+    // This ensures we have fresh catalog data
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Find the catalog item and show reinstall dialog
+    let catalogItem = catalogItems?.find((item) => item.id === catalogId);
+
+    // If we have updated data from the edit, merge it with the catalog item
+    if (catalogItem && updatedData) {
+      catalogItem = {
+        ...catalogItem,
+        ...(updatedData.name && { name: updatedData.name }),
+        ...(updatedData.serverUrl && { serverUrl: updatedData.serverUrl }),
+      };
+    }
+
+    if (catalogItem) {
+      setCatalogItemForReinstall(catalogItem);
+      setShowReinstallDialog(true);
+    }
+  };
+
+  const handleReinstall = async (catalogItem: CatalogItem) => {
+    // Get the installed server to get its ID (not catalog ID)
+    const installedServer = installedServers?.find(
+      (server) => server.catalogId === catalogItem.id,
+    );
+    if (!installedServer) {
+      toast.error("Server not found, cannot reinstall");
+      return;
+    }
+
+    // Delete the installed server using its server ID
+    await deleteMutation.mutateAsync({
+      id: installedServer.id,
+      name: catalogItem.name,
+    });
+
+    // Then reinstall
+    await handleInstall(catalogItem);
+  };
+
+  const filteredItems = catalogSearchQuery.trim()
+    ? (catalogItems || []).filter((item) =>
+        item.name.toLowerCase().includes(catalogSearchQuery.toLowerCase()),
+      )
+    : catalogItems || [];
+
+  // Sort: installed servers first
+  const filteredCatalogItems = filteredItems.sort((a, b) => {
+    const aInstalled = installedServers?.some(
+      (server) => server.catalogId === a.id,
+    );
+    const bInstalled = installedServers?.some(
+      (server) => server.catalogId === b.id,
+    );
+
+    if (aInstalled && !bInstalled) return -1;
+    if (!aInstalled && bInstalled) return 1;
+    return 0;
+  });
 
   return (
     <div className="space-y-4">
@@ -971,7 +797,7 @@ export function InternalMCPCatalog({
           const itemWithLabel = item as CatalogItemWithOptionalLabel;
 
           return (
-            <InternalServerCardWithTools
+            <InternalServerCard
               key={item.id}
               item={itemWithLabel}
               installedServer={installedServer}
@@ -1055,7 +881,11 @@ export function InternalMCPCatalog({
         item={deletingItem}
         onClose={() => setDeletingItem(null)}
         installationCount={
-          deletingItem ? getInstallationCount(deletingItem.id) : 0
+          deletingItem
+            ? installedServers?.filter(
+                (server) => server.catalogId === deletingItem.id,
+              ).length || 0
+            : 0
         }
       />
 

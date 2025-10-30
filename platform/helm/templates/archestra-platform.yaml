@@ -63,3 +63,15 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+          {{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: {{ .Values.archestra.kubernetes.kubeconfig.mountPath }}
+              readOnly: true
+          {{- end }}
+      {{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.archestra.kubernetes.kubeconfig.secretName }}
+      {{- end }}

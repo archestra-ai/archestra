@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  AlertCircle,
-  BarChart3,
-  Calendar,
-  DollarSign,
-  Hash,
-  Plus,
-  Settings2,
-  TrendingUp,
-  X,
-} from "lucide-react";
+import { AlertCircle, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -59,14 +49,97 @@ interface ToolCallLimit {
   monthlyLimit: string;
 }
 
+interface TokenPrice {
+  provider: string;
+  model: string;
+  inputPricePer1M: string;
+  outputPricePer1M: string;
+}
+
 export default function CostManagementPage() {
   const [orgBudgetLimit, setOrgBudgetLimit] = useState("1000");
   const [teamBudgets, setTeamBudgets] = useState<TeamBudget[]>([]);
   const [agentBudgets, setAgentBudgets] = useState<AgentBudget[]>([]);
   const [toolCallLimits, setToolCallLimits] = useState<ToolCallLimit[]>([]);
-  const [alertThreshold, setAlertThreshold] = useState("80");
   const [autoShutdown, setAutoShutdown] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("daily");
+  const [tokenPrices, setTokenPrices] = useState<TokenPrice[]>([
+    // OpenAI models (prices per 1M tokens)
+    {
+      provider: "OpenAI",
+      model: "gpt-4-turbo",
+      inputPricePer1M: "10.00",
+      outputPricePer1M: "30.00",
+    },
+    {
+      provider: "OpenAI",
+      model: "gpt-4",
+      inputPricePer1M: "30.00",
+      outputPricePer1M: "60.00",
+    },
+    {
+      provider: "OpenAI",
+      model: "gpt-3.5-turbo",
+      inputPricePer1M: "0.50",
+      outputPricePer1M: "1.50",
+    },
+    {
+      provider: "OpenAI",
+      model: "gpt-4o",
+      inputPricePer1M: "5.00",
+      outputPricePer1M: "15.00",
+    },
+    {
+      provider: "OpenAI",
+      model: "gpt-4o-mini",
+      inputPricePer1M: "0.15",
+      outputPricePer1M: "0.60",
+    },
+    // Anthropic models
+    {
+      provider: "Anthropic",
+      model: "claude-3-opus",
+      inputPricePer1M: "15.00",
+      outputPricePer1M: "75.00",
+    },
+    {
+      provider: "Anthropic",
+      model: "claude-3-sonnet",
+      inputPricePer1M: "3.00",
+      outputPricePer1M: "15.00",
+    },
+    {
+      provider: "Anthropic",
+      model: "claude-3-haiku",
+      inputPricePer1M: "0.25",
+      outputPricePer1M: "1.25",
+    },
+    {
+      provider: "Anthropic",
+      model: "claude-3.5-sonnet",
+      inputPricePer1M: "3.00",
+      outputPricePer1M: "15.00",
+    },
+    // Google models
+    {
+      provider: "Google",
+      model: "gemini-1.5-pro",
+      inputPricePer1M: "3.50",
+      outputPricePer1M: "10.50",
+    },
+    {
+      provider: "Google",
+      model: "gemini-1.5-flash",
+      inputPricePer1M: "0.075",
+      outputPricePer1M: "0.30",
+    },
+    {
+      provider: "Google",
+      model: "gemini-1.0-pro",
+      inputPricePer1M: "0.50",
+      outputPricePer1M: "1.50",
+    },
+  ]);
 
   const currentSpend = 42.58;
   const budgetAmount = parseFloat(orgBudgetLimit) || 1000;
@@ -145,6 +218,11 @@ export default function CostManagementPage() {
   };
 
   const mockUsageData = {
+    teams: [
+      { name: "Engineering", cost: 22.15, percentage: 52.0 },
+      { name: "Support", cost: 15.23, percentage: 35.8 },
+      { name: "Marketing", cost: 5.2, percentage: 12.2 },
+    ],
     agents: [
       {
         name: "Customer Support Bot",
@@ -186,58 +264,6 @@ export default function CostManagementPage() {
 
       <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="grid gap-6">
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Current Spend
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ${currentSpend.toFixed(2)}
-                </div>
-                <Progress value={spendPercentage} className="mt-2" />
-                <p className="text-xs text-muted-foreground mt-2">
-                  {spendPercentage.toFixed(1)}% of ${orgBudgetLimit} budget
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total API Calls
-                </CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">2,830</div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <span className="text-green-600 font-medium">↑ 12%</span> from
-                  yesterday
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Token Usage
-                </CardTitle>
-                <Hash className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">867.3K</div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  <span className="text-green-600 font-medium">↓ 5%</span> from
-                  last period
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
           {spendPercentage > 75 && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -249,14 +275,50 @@ export default function CostManagementPage() {
           )}
 
           <Tabs defaultValue="usage" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="usage">Usage Breakdown</TabsTrigger>
               <TabsTrigger value="llm-limits">LLM Limits</TabsTrigger>
               <TabsTrigger value="tool-limits">Tool Call Limits</TabsTrigger>
+              <TabsTrigger value="token-pricing">Token Pricing</TabsTrigger>
             </TabsList>
 
             <TabsContent value="usage" className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Cost by Team</CardTitle>
+                    <CardDescription>Team spending breakdown</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {mockUsageData.teams.map((team) => (
+                      <div
+                        key={team.name}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium">
+                              {team.name}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              ${team.cost.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Progress
+                              value={team.percentage}
+                              className="flex-1 mr-2"
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {team.percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Cost by Agent</CardTitle>
@@ -294,7 +356,9 @@ export default function CostManagementPage() {
                     ))}
                   </CardContent>
                 </Card>
+              </div>
 
+              <div className="grid gap-4 md:grid-cols-2">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">
@@ -331,9 +395,7 @@ export default function CostManagementPage() {
                     ))}
                   </CardContent>
                 </Card>
-              </div>
 
-              <div className="grid gap-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Cost by Model</CardTitle>
@@ -637,39 +699,20 @@ export default function CostManagementPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="alert-threshold">
-                        Alert Threshold (%)
+                  <div className="flex items-center justify-between space-x-2">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auto-shutdown">
+                        Auto-shutdown at limit
                       </Label>
-                      <Input
-                        id="alert-threshold"
-                        type="number"
-                        value={alertThreshold}
-                        onChange={(e) => setAlertThreshold(e.target.value)}
-                        placeholder="80"
-                        min="0"
-                        max="100"
-                      />
                       <p className="text-xs text-muted-foreground">
-                        Send alert when spending reaches this percentage
+                        Automatically disable agents when budget is exceeded
                       </p>
                     </div>
-                    <div className="flex items-center justify-between space-x-2">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="auto-shutdown">
-                          Auto-shutdown at limit
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Automatically disable agents when budget is exceeded
-                        </p>
-                      </div>
-                      <Switch
-                        id="auto-shutdown"
-                        checked={autoShutdown}
-                        onCheckedChange={setAutoShutdown}
-                      />
-                    </div>
+                    <Switch
+                      id="auto-shutdown"
+                      checked={autoShutdown}
+                      onCheckedChange={setAutoShutdown}
+                    />
                   </div>
 
                   <div className="flex justify-end">
@@ -1114,6 +1157,133 @@ export default function CostManagementPage() {
 
                   <div className="flex justify-end">
                     <Button>Save Configuration</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="token-pricing" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Token Pricing Configuration</CardTitle>
+                  <CardDescription>
+                    Configure the cost per million tokens for different LLM
+                    models
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground">
+                      Prices are in USD per 1 million tokens. These prices are
+                      used to calculate usage costs.
+                    </div>
+
+                    {/* Group prices by provider */}
+                    {["OpenAI", "Anthropic", "Google"].map((providerName) => (
+                      <div
+                        key={providerName}
+                        className="border rounded-lg p-4 space-y-4"
+                      >
+                        <h4 className="font-medium text-sm">{providerName}</h4>
+                        <div className="space-y-3">
+                          {tokenPrices
+                            .filter((price) => price.provider === providerName)
+                            .map((price, index) => (
+                              <div
+                                key={`${price.provider}-${price.model}`}
+                                className="grid gap-4 md:grid-cols-3"
+                              >
+                                <div className="space-y-2">
+                                  <Label className="text-xs">Model</Label>
+                                  <Input
+                                    value={price.model}
+                                    disabled
+                                    className="text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">
+                                    Input ($/1M tokens)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.001"
+                                    value={price.inputPricePer1M}
+                                    onChange={(e) => {
+                                      const updatedPrices = [...tokenPrices];
+                                      const priceIndex = tokenPrices.findIndex(
+                                        (p) =>
+                                          p.provider === price.provider &&
+                                          p.model === price.model,
+                                      );
+                                      if (priceIndex !== -1) {
+                                        updatedPrices[priceIndex] = {
+                                          ...updatedPrices[priceIndex],
+                                          inputPricePer1M: e.target.value,
+                                        };
+                                        setTokenPrices(updatedPrices);
+                                      }
+                                    }}
+                                    placeholder="0.00"
+                                    className="text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">
+                                    Output ($/1M tokens)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    step="0.001"
+                                    value={price.outputPricePer1M}
+                                    onChange={(e) => {
+                                      const updatedPrices = [...tokenPrices];
+                                      const priceIndex = tokenPrices.findIndex(
+                                        (p) =>
+                                          p.provider === price.provider &&
+                                          p.model === price.model,
+                                      );
+                                      if (priceIndex !== -1) {
+                                        updatedPrices[priceIndex] = {
+                                          ...updatedPrices[priceIndex],
+                                          outputPricePer1M: e.target.value,
+                                        };
+                                        setTokenPrices(updatedPrices);
+                                      }
+                                    }}
+                                    placeholder="0.00"
+                                    className="text-sm"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="border-t pt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Add a new custom model
+                          const customModel: TokenPrice = {
+                            provider: "Custom",
+                            model: "custom-model",
+                            inputPricePer1M: "0.00",
+                            outputPricePer1M: "0.00",
+                          };
+                          setTokenPrices([...tokenPrices, customModel]);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Custom Model
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button>Save Pricing Configuration</Button>
                   </div>
                 </CardContent>
               </Card>

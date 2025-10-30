@@ -357,10 +357,27 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         //   }
         // }
 
+        // Extract token usage if available
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
+        // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
+        const responseAny = response as any;
+        if (responseAny.usageMetadata) {
+          const { input, output } = utils.adapters.gemini.getUsageTokens(
+            responseAny.usageMetadata,
+          );
+          inputTokens = input;
+          outputTokens = output;
+        }
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "gemini:generateContent",
+          provider: "gemini",
+          model: modelName,
+          inputTokens,
+          outputTokens,
           request: body,
           // biome-ignore lint/suspicious/noExplicitAny: Gemini still WIP
           response: response as any,

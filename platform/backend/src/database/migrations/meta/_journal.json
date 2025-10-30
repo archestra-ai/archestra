@@ -246,6 +246,13 @@
       "when": 1761663104702,
       "tag": "0034_fine_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1761785417559,
+      "tag": "0035_stiff_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

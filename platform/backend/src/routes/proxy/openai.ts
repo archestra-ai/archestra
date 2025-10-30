@@ -504,6 +504,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
+          provider: "openai",
+          model: body.model,
+          inputTokens: usageTokens?.input,
+          outputTokens: usageTokens?.output,
           request: body,
           response: {
             id: chunks[0]?.id || "chatcmpl-unknown",
@@ -656,10 +660,24 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Extract token usage from the response
+        const usage = response.usage;
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
+        if (usage) {
+          const tokens = utils.adapters.openai.getUsageTokens(usage);
+          inputTokens = tokens.input;
+          outputTokens = tokens.output;
+        }
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
+          provider: "openai",
+          model: body.model,
+          inputTokens,
+          outputTokens,
           request: body,
           response,
         });

@@ -403,9 +403,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Report token usage metrics for streaming
         const usage = messageStartEvent?.message.usage;
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
         if (usage) {
           const { input, output } =
             utils.adapters.anthropic.getUsageTokens(usage);
+          inputTokens = input;
+          outputTokens = output;
           reportLLMTokens("anthropic", resolvedAgentId, input, output);
         }
 
@@ -413,6 +417,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
+          provider: "anthropic",
+          model: body.model,
+          inputTokens,
+          outputTokens,
           request: body,
           response: {
             id: messageStartEvent?.message.id || "msg-unknown",
@@ -505,6 +513,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
+              provider: "anthropic",
+              model: body.model,
+              inputTokens: response.usage?.input_tokens,
+              outputTokens: response.usage?.output_tokens,
               request: body,
               response: response,
             });
@@ -578,6 +590,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
+          provider: "anthropic",
+          model: body.model,
+          inputTokens: response.usage?.input_tokens,
+          outputTokens: response.usage?.output_tokens,
           request: body,
           response: response,
         });

@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   timestamp,
@@ -23,10 +24,16 @@ const interactionsTable = pgTable(
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
     type: varchar("type").$type<SupportedProviderDiscriminator>().notNull(),
+    provider: varchar("provider", { length: 50 }),
+    model: varchar("model", { length: 100 }),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({
     agentIdIdx: index("interactions_agent_id_idx").on(table.agentId),
+    providerIdx: index("interactions_provider_idx").on(table.provider),
+    modelIdx: index("interactions_model_idx").on(table.model),
   }),
 );
 

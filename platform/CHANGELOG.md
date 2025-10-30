@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.18](https://github.com/archestra-ai/archestra/compare/platform-v0.0.17...platform-v0.0.18) (2025-10-30)
+
+
+### Bug Fixes
+
+* do not add /v1/ prefix when proxying and rely on OPENAI_BASE_URL ([#860](https://github.com/archestra-ai/archestra/issues/860)) ([dc9faab](https://github.com/archestra-ai/archestra/commit/dc9faabbe1cb531c4a3deb35e8853b722d448c46))
+
 ## [0.0.17](https://github.com/archestra-ai/archestra/compare/platform-v0.0.16...platform-v0.0.17) (2025-10-30)
 
 

@@ -66,7 +66,6 @@ class AuthMiddleware {
        * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
        * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
        */
-      url.includes("/tools") ||
       url.includes("/mcp_proxy")
     )
       return true;

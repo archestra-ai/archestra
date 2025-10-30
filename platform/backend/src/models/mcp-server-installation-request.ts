@@ -14,7 +14,6 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 
 /**
  * Rewrite OAuth redirect URIs to use the platform's callback URL
- * Matches the logic in frontend/src/app/mcp-catalog/_parts/ExternalMCPCatalog.tsx
  */
 function rewriteOAuthRedirectUris(
   oauthConfig?: archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"],

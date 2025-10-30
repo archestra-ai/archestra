@@ -161,12 +161,152 @@ export default function InstallationRequestDetailPage({
                 <CardTitle>Request Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium mb-1">Catalog ID</p>
-                  <p className="text-sm text-muted-foreground font-mono">
-                    {request.externalCatalogId}
-                  </p>
-                </div>
+                {request.externalCatalogId ? (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Catalog ID</p>
+                    <p className="text-sm text-muted-foreground font-mono">
+                      {request.externalCatalogId}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-medium mb-1">
+                      Custom Server Configuration
+                    </p>
+                    {request.customServerConfig && (
+                      <div className="space-y-3 mt-2">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Display Name
+                            </p>
+                            <p className="text-sm">
+                              {request.customServerConfig.label}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Technical Name
+                            </p>
+                            <p className="text-sm font-mono">
+                              {request.customServerConfig.name}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">
+                              Server Type
+                            </p>
+                            <Badge variant="outline" className="text-xs">
+                              {request.customServerConfig.serverType}
+                            </Badge>
+                          </div>
+                          {request.customServerConfig.version && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">
+                                Version
+                              </p>
+                              <p className="text-sm font-mono">
+                                {request.customServerConfig.version}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {request.customServerConfig.type === "remote" && (
+                          <>
+                            {request.customServerConfig.serverUrl && (
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  Server URL
+                                </p>
+                                <p className="text-sm font-mono break-all">
+                                  {request.customServerConfig.serverUrl}
+                                </p>
+                              </div>
+                            )}
+                            {request.customServerConfig.docsUrl && (
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  Documentation URL
+                                </p>
+                                <p className="text-sm font-mono break-all">
+                                  {request.customServerConfig.docsUrl}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {request.customServerConfig.type === "local" &&
+                          request.customServerConfig.localConfig && (
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  Command
+                                </p>
+                                <p className="text-sm font-mono bg-muted px-2 py-1 rounded">
+                                  {
+                                    request.customServerConfig.localConfig
+                                      .command
+                                  }
+                                </p>
+                              </div>
+
+                              {request.customServerConfig.localConfig.arguments
+                                .length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                                    Arguments
+                                  </p>
+                                  <div className="space-y-1">
+                                    {request.customServerConfig.localConfig.arguments.map(
+                                      (arg) => (
+                                        <p
+                                          key={arg}
+                                          className="text-sm font-mono bg-muted px-2 py-1 rounded"
+                                        >
+                                          {arg}
+                                        </p>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {request.customServerConfig.localConfig
+                                .environment &&
+                                Object.keys(
+                                  request.customServerConfig.localConfig
+                                    .environment,
+                                ).length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                      Environment Variables
+                                    </p>
+                                    <div className="space-y-1">
+                                      {Object.entries(
+                                        request.customServerConfig.localConfig
+                                          .environment,
+                                      ).map(([key, value]) => (
+                                        <p
+                                          key={key}
+                                          className="text-sm font-mono bg-muted px-2 py-1 rounded"
+                                        >
+                                          {key}={value}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {request.requestReason && (
                   <div>

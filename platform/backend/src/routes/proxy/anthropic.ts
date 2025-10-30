@@ -65,12 +65,21 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Messages are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
+    upstream: config.llm.anthropic.baseUrl,
     prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
     preHandler: (request, _reply, next) => {
       // Skip messages route (we handle it specially below with full agent support)
       if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "Anthropic proxy preHandler: skipping messages route",
+        );
         next(new Error("skip"));
         return;
       }
@@ -84,7 +93,29 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (uuidMatch) {
         // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
         const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
         request.raw.url = `${API_PREFIX}${remainingPath}`;
+
+        fastify.log.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${remainingPath}`,
+          },
+          "Anthropic proxy preHandler: URL rewritten (UUID stripped)",
+        );
+      } else {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "Anthropic proxy preHandler: proxying request",
+        );
       }
 
       next();
@@ -106,6 +137,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { tools, stream } = body;
 
+    fastify.log.info(
+      {
+        agentId,
+        model: body.model,
+        stream,
+        messagesCount: body.messages.length,
+        toolsCount: tools?.length || 0,
+        maxTokens: body.max_tokens,
+      },
+      "Anthropic messages request received",
+    );
+
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -125,6 +168,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers["user-agent"],
       );
     }
+
+    fastify.log.info(
+      { resolvedAgentId, wasExplicit: !!agentId },
+      "Agent resolved",
+    );
 
     const { "x-api-key": anthropicApiKey } = headers;
 
@@ -159,6 +207,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Inject assigned MCP tools (assigned tools take priority)
       const mergedTools = await injectTools(tools, resolvedAgentId);
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          requestToolsCount: tools?.length || 0,
+          mergedToolsCount: mergedTools.length,
+          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
+        },
+        "MCP tools injected",
+      );
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -219,6 +277,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const filteredMessages = utils.adapters.anthropic.applyUpdates(
         body.messages,
         toolResultUpdates,
+      );
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: body.messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
       );
 
       if (stream) {
@@ -503,9 +571,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 input: Record<string, unknown>;
               }>,
             );
+
+            fastify.log.info(
+              {
+                resolvedAgentId,
+                toolCalls: commonToolCalls.map((tc) => ({
+                  id: tc.id,
+                  name: tc.name,
+                  argumentKeys: Object.keys(tc.arguments),
+                })),
+              },
+              "Executing MCP tool calls (non-streaming)",
+            );
+
             const mcpResults = await utils.tools.executeMcpToolCalls(
               commonToolCalls,
               resolvedAgentId,
+            );
+
+            fastify.log.info(
+              {
+                resolvedAgentId,
+                results: mcpResults.map((r) => ({
+                  id: r.id,
+                  isError: r.isError,
+                  contentLength:
+                    typeof r.content === "string"
+                      ? r.content.length
+                      : JSON.stringify(r.content).length,
+                })),
+              },
+              "MCP tool calls completed (non-streaming)",
             );
 
             if (mcpResults.length > 0) {

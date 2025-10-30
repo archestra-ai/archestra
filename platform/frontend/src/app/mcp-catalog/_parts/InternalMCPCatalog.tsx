@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Download,
   Eye,
@@ -30,6 +31,7 @@ import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
   useInstallMcpServer,
+  useMcpServerInstallationStatus,
   useMcpServers,
   useMcpServerTools,
 } from "@/lib/mcp-server.query";
@@ -44,6 +46,9 @@ import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
 import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 
+type LocalMcpServerInstallationStatus =
+  archestraApiTypes.GetMcpServerInstallationStatusResponses["200"]["localInstallationStatus"];
+
 type CatalogItemWithOptionalLabel =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
     label?: string | null;
@@ -53,6 +58,8 @@ function InternalServerCard({
   item,
   installed,
   isInstalling,
+  localInstallationStatus,
+  localInstallationError,
   needsReinstall,
   onInstall,
   onUninstall,
@@ -64,6 +71,8 @@ function InternalServerCard({
   item: CatalogItemWithOptionalLabel;
   installed: boolean;
   isInstalling: boolean;
+  localInstallationStatus?: LocalMcpServerInstallationStatus;
+  localInstallationError?: string | null;
   needsReinstall: boolean;
   onInstall: () => void;
   onUninstall: () => void;
@@ -122,19 +131,30 @@ function InternalServerCard({
       <CardContent className="flex-1 flex flex-col pt-3 gap-2 justify-end">
         {installed ? (
           <>
+            {localInstallationStatus === "pending" && (
+              <div className="text-sm text-muted-foreground text-center py-2">
+                <RefreshCw className="inline h-4 w-4 mr-2 animate-spin" />
+                Discovering tools...
+              </div>
+            )}
+            {localInstallationStatus === "error" && localInstallationError && (
+              <div className="text-sm text-destructive text-center py-2">
+                Installation failed: {localInstallationError}
+              </div>
+            )}
             {needsReinstall && (
               <Button
                 onClick={onReinstall}
                 size="sm"
                 variant="default"
                 className="w-full"
-                disabled={isInstalling}
+                disabled={isInstalling || localInstallationStatus === "pending"}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {isInstalling ? "Reinstalling..." : "Reinstall Required"}
               </Button>
             )}
-            {onViewTools && (
+            {onViewTools && localInstallationStatus === "success" && (
               <Button
                 onClick={onViewTools}
                 size="sm"
@@ -149,6 +169,7 @@ function InternalServerCard({
               onClick={onUninstall}
               size="sm"
               className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              disabled={localInstallationStatus === "pending"}
             >
               Uninstall
             </Button>
@@ -176,6 +197,7 @@ export function InternalMCPCatalog({
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
+  const queryClient = useQueryClient();
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
@@ -232,6 +254,13 @@ export function InternalMCPCatalog({
   const [catalogItemForReinstall, setCatalogItemForReinstall] = useState<
     archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null
   >(null);
+  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const mcpServerInstallationStatus = useMcpServerInstallationStatus(
+    Array.from(installingServerIds)[0],
+  );
 
   const toolsDialogServer = useMemo(() => {
     return installedServers?.find(
@@ -267,11 +296,17 @@ export function InternalMCPCatalog({
       // For servers without configuration, install directly
       try {
         setInstallingItemId(catalogItem.id);
-        await installMutation.mutateAsync({
+        const installedServer = await installMutation.mutateAsync({
           name: catalogItem.name,
           catalogId: catalogItem.id,
           teams: [],
         });
+        // Track the installed server ID for polling
+        if (installedServer?.id) {
+          setInstallingServerIds((prev) =>
+            new Set(prev).add(installedServer.id),
+          );
+        }
       } finally {
         setInstallingItemId(null);
       }
@@ -314,11 +349,17 @@ export function InternalMCPCatalog({
             ? metadata.access_token
             : undefined;
 
-        await installMutation.mutateAsync({
+        const installedServer = await installMutation.mutateAsync({
           name: catalogItem.name,
           catalogId: catalogItem.id,
           ...(accessToken && { accessToken }),
         });
+        // Track the installed server ID for polling
+        if (installedServer?.id) {
+          setInstallingServerIds((prev) =>
+            new Set(prev).add(installedServer.id),
+          );
+        }
       } finally {
         setInstallingItemId(null);
       }
@@ -510,6 +551,10 @@ export function InternalMCPCatalog({
               isInstalling={
                 installingItemId === item.id || installMutation.isPending
               }
+              localInstallationStatus={
+                mcpServerInstallationStatus.data ?? undefined
+              }
+              localInstallationError={installedServer?.localInstallationError}
               needsReinstall={installedServer?.reinstallRequired ?? false}
               onInstall={() => handleInstall(item)}
               onUninstall={() => {

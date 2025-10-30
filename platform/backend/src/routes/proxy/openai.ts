@@ -72,7 +72,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Chat completions are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.openai.com",
+    upstream: config.llm.openai.baseUrl,
     prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
     preHandler: (request, _reply, next) => {
@@ -81,6 +81,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request.method === "POST" &&
         request.url.includes(CHAT_COMPLETIONS_SUFFIX)
       ) {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "OpenAI proxy preHandler: skipping chat/completions route",
+        );
         next(new Error("skip"));
         return;
       }
@@ -94,7 +103,29 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (uuidMatch) {
         // Strip UUID: /v1/openai/:uuid/path -> /v1/openai/path
         const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
         request.raw.url = `${API_PREFIX}${remainingPath}`;
+
+        fastify.log.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.openai.baseUrl,
+            finalProxyUrl: `${config.llm.openai.baseUrl}/v1${remainingPath}`,
+          },
+          "OpenAI proxy preHandler: URL rewritten (UUID stripped)",
+        );
+      } else {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.openai.baseUrl,
+            finalProxyUrl: `${config.llm.openai.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "OpenAI proxy preHandler: proxying request",
+        );
       }
 
       next();
@@ -116,6 +147,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
     const { messages, tools, stream } = body;
 
+    fastify.log.info(
+      {
+        agentId,
+        model: body.model,
+        stream,
+        messagesCount: messages.length,
+        toolsCount: tools?.length || 0,
+        maxTokens: body.max_tokens,
+      },
+      "OpenAI chat completion request received",
+    );
+
     let resolvedAgentId: string;
     if (agentId) {
       // If agentId provided via URL, validate it exists
@@ -135,6 +178,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers["user-agent"],
       );
     }
+
+    fastify.log.info(
+      { resolvedAgentId, wasExplicit: !!agentId },
+      "Agent resolved",
+    );
 
     const { authorization: openAiApiKey } = headers;
     const openAiClient = config.benchmark.mockMode
@@ -167,6 +215,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Inject assigned MCP tools (assigned tools take priority)
       const mergedTools = await injectTools(tools, resolvedAgentId);
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          requestToolsCount: tools?.length || 0,
+          mergedToolsCount: mergedTools.length,
+          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
+        },
+        "MCP tools injected",
+      );
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.openai.toCommonFormat(messages);
@@ -231,6 +289,16 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const filteredMessages = utils.adapters.openai.applyUpdates(
         messages,
         toolResultUpdates,
+      );
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
       );
 
       if (stream) {
@@ -422,9 +490,37 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (accumulatedToolCalls.length > 0) {
               const commonToolCalls =
                 utils.adapters.openai.toolCallsToCommon(accumulatedToolCalls);
+
+              fastify.log.info(
+                {
+                  resolvedAgentId,
+                  toolCalls: commonToolCalls.map((tc) => ({
+                    id: tc.id,
+                    name: tc.name,
+                    argumentKeys: Object.keys(tc.arguments),
+                  })),
+                },
+                "Executing MCP tool calls (streaming)",
+              );
+
               const mcpResults = await utils.tools.executeMcpToolCalls(
                 commonToolCalls,
                 resolvedAgentId,
+              );
+
+              fastify.log.info(
+                {
+                  resolvedAgentId,
+                  results: mcpResults.map((r) => ({
+                    id: r.id,
+                    isError: r.isError,
+                    contentLength:
+                      typeof r.content === "string"
+                        ? r.content.length
+                        : JSON.stringify(r.content).length,
+                  })),
+                },
+                "MCP tool calls completed (streaming)",
               );
 
               if (mcpResults.length > 0) {
@@ -592,9 +688,36 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             assistantMessage.tool_calls,
           );
 
+          fastify.log.info(
+            {
+              resolvedAgentId,
+              toolCalls: commonToolCalls.map((tc) => ({
+                id: tc.id,
+                name: tc.name,
+                argumentKeys: Object.keys(tc.arguments),
+              })),
+            },
+            "Executing MCP tool calls (non-streaming)",
+          );
+
           const mcpResults = await utils.tools.executeMcpToolCalls(
             commonToolCalls,
             resolvedAgentId,
+          );
+
+          fastify.log.info(
+            {
+              resolvedAgentId,
+              results: mcpResults.map((r) => ({
+                id: r.id,
+                isError: r.isError,
+                contentLength:
+                  typeof r.content === "string"
+                    ? r.content.length
+                    : JSON.stringify(r.content).length,
+              })),
+            },
+            "MCP tool calls completed (non-streaming)",
           );
 
           if (mcpResults.length > 0) {

@@ -6,6 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { InternalMcpCatalogServerType } from "@/types/mcp-catalog";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -30,9 +31,17 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     >()
     .default([]),
   // Server type and remote configuration
-  serverType: text("server_type").$type<"local" | "remote">(),
+  serverType: text("server_type")
+    .$type<InternalMcpCatalogServerType>()
+    .notNull(),
   serverUrl: text("server_url"), // For remote servers
   docsUrl: text("docs_url"), // Documentation URL for remote servers
+  // Local server configuration
+  localConfig: jsonb("local_config").$type<{
+    command: string;
+    arguments: Array<string>;
+    environment?: Record<string, string>;
+  }>(),
   userConfig: jsonb("user_config")
     .$type<
       Record<

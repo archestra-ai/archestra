@@ -1,5 +1,5 @@
 {
-  "id": "25c06360-fb9b-4943-9c7d-939143a03175",
+  "id": "64a52bb1-6894-4297-8417-752ccd7ee6f4",
   "prevId": "7a032594-0306-45eb-b5c6-d1f54e0f6469",
   "version": "7",
   "dialect": "postgresql",
@@ -1091,7 +1091,7 @@
           "name": "server_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "server_url": {
           "name": "server_url",
@@ -1102,6 +1102,12 @@
         "docs_url": {
           "name": "docs_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "local_config": {
+          "name": "local_config",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -1347,7 +1353,7 @@
           "name": "catalog_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "secret_id": {
           "name": "secret_id",
@@ -1361,6 +1367,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "local_installation_status": {
+          "name": "local_installation_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "local_installation_error": {
+          "name": "local_installation_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1403,102 +1422,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mcp_tool_calls": {
-      "name": "mcp_tool_calls",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mcp_server_name": {
-          "name": "mcp_server_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_call": {
-          "name": "tool_call",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_result": {
-          "name": "tool_result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mcp_tool_calls_agent_id_idx": {
-          "name": "mcp_tool_calls_agent_id_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mcp_tool_calls_created_at_idx": {
-          "name": "mcp_tool_calls_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mcp_tool_calls_agent_id_agents_id_fk": {
-          "name": "mcp_tool_calls_agent_id_agents_id_fk",
-          "tableFrom": "mcp_tool_calls",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },

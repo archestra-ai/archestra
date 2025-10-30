@@ -1,5 +1,6 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,12 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 import {
   McpCatalogForm,
@@ -29,11 +24,14 @@ interface CreateCatalogDialogProps {
   onClose: () => void;
 }
 
+type ServerType =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
+
 export function CreateCatalogDialog({
   isOpen,
   onClose,
 }: CreateCatalogDialogProps) {
-  const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
+  const [activeTab, setActiveTab] = useState<ServerType>("remote");
   const createMutation = useCreateInternalMcpCatalogItem();
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -61,23 +59,12 @@ export function CreateCatalogDialog({
         <Tabs
           value={activeTab}
           onValueChange={(v) => {
-            setActiveTab(v as "remote" | "local");
+            setActiveTab(v as ServerType);
           }}
         >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="remote">Remote</TabsTrigger>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger onClick={(e) => e.preventDefault()}>
-                  <TabsTrigger value="local" disabled>
-                    Local
-                  </TabsTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Local MCP Servers will be supported soon</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <TabsTrigger value="local">Local</TabsTrigger>
           </TabsList>
 
           <TabsContent value="remote" className="space-y-4 mt-4">
@@ -85,13 +72,17 @@ export function CreateCatalogDialog({
               mode="create"
               onSubmit={onSubmit}
               submitButtonRef={submitButtonRef}
+              serverType="remote"
             />
           </TabsContent>
 
-          <TabsContent value="local">
-            <div className="text-center py-8 text-muted-foreground">
-              Local MCP servers will be supported soon
-            </div>
+          <TabsContent value="local" className="space-y-4 mt-4">
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              submitButtonRef={submitButtonRef}
+              serverType="local"
+            />
           </TabsContent>
         </Tabs>
 

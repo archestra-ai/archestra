@@ -7,8 +7,13 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const { deleteMcpServer, getMcpServers, getMcpServerTools, installMcpServer } =
-  archestraApiSdk;
+const {
+  deleteMcpServer,
+  getMcpServers,
+  getMcpServerTools,
+  installMcpServer,
+  getMcpServer,
+} = archestraApiSdk;
 
 export function useMcpServers(params?: {
   initialData?: archestraApiTypes.GetMcpServersResponses["200"];
@@ -86,5 +91,25 @@ export function useMcpServerTools(mcpServerId: string | null) {
       }
     },
     enabled: !!mcpServerId,
+  });
+}
+
+export function useMcpServerInstallationStatus(
+  installingMcpServerId: string | null,
+) {
+  return useQuery({
+    queryKey: ["mcp-servers", installingMcpServerId],
+    queryFn: async () => {
+      // then it means it's installed already
+      if (!installingMcpServerId) return "success";
+      const response = await getMcpServer({
+        path: { id: installingMcpServerId },
+      });
+      return response.data?.localInstallationStatus ?? null;
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      return status === "pending" || status === null ? 2000 : false;
+    },
   });
 }

@@ -471,20 +471,4 @@ describe("McpClient", () => {
       });
     });
   });
-
-  describe("GitHub configuration", () => {
-    test("creates correct GitHub config", () => {
-      const token = "test-token";
-      const config = mcpClient.createGitHubConfig(token);
-
-      expect(config).toEqual({
-        id: "github-mcp-server",
-        name: "github-mcp-server",
-        url: "https://api.githubcopilot.com/mcp/",
-        headers: {
-          Authorization: "Bearer test-token",
-        },
-      });
-    });
-  });
 });

@@ -142,6 +142,8 @@ tests:
           value:
             - name: DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            - name: USE_IN_CLUSTER_KUBECONFIG
+              value: "true"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1
@@ -177,3 +179,167 @@ tests:
           content:
             name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
+
+  - it: should set K8S_NAMESPACE env var when namespace is configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.namespace: "mcp-servers"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K8S_NAMESPACE
+            value: "mcp-servers"
+
+  - it: should set MCP_SERVER_BASE_IMAGE env var when baseImage is configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.baseImage: "my-registry/mcp-server:v1.0.0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MCP_SERVER_BASE_IMAGE
+            value: "my-registry/mcp-server:v1.0.0"
+
+  - it: should not set K8S_NAMESPACE env var when namespace is empty
+    documentIndex: 1
+    set:
+      archestra.kubernetes.namespace: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K8S_NAMESPACE
+
+  - it: should not set MCP_SERVER_BASE_IMAGE env var when baseImage is empty
+    documentIndex: 1
+    set:
+      archestra.kubernetes.baseImage: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MCP_SERVER_BASE_IMAGE
+
+  # Kubeconfig volume mount tests
+  - it: should not mount kubeconfig volume when kubeconfig is disabled
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+      - isNull:
+          path: spec.template.spec.volumes
+
+  - it: should not mount kubeconfig volume when secretName is empty
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: true
+      archestra.kubernetes.kubeconfig.secretName: ""
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+      - isNull:
+          path: spec.template.spec.volumes
+
+  - it: should mount kubeconfig volume when kubeconfig is enabled
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: true
+      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: kubeconfig
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: "/etc/kubeconfig"
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].readOnly
+          value: true
+
+  - it: should create volume from secret when kubeconfig is enabled
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: true
+      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: kubeconfig
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: "my-kubeconfig"
+
+  - it: should set KUBECONFIG env var when kubeconfig volume is mounted
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: true
+      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KUBECONFIG
+            value: "/etc/kubeconfig/config"
+
+  - it: should not set KUBECONFIG env var when kubeconfig is disabled
+    documentIndex: 1
+    set:
+      archestra.kubernetes.kubeconfig.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KUBECONFIG
+
+  - it: should configure all kubernetes env vars when all settings are provided
+    documentIndex: 1
+    set:
+      archestra.kubernetes.namespace: "mcp-servers"
+      archestra.kubernetes.baseImage: "my-registry/mcp-server:v1.0.0"
+      archestra.kubernetes.kubeconfig.enabled: true
+      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K8S_NAMESPACE
+            value: "mcp-servers"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MCP_SERVER_BASE_IMAGE
+            value: "my-registry/mcp-server:v1.0.0"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KUBECONFIG
+            value: "/etc/kubeconfig/config"
+
+  - it: should set USE_IN_CLUSTER_KUBECONFIG to false when configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.useInClusterConfig: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: USE_IN_CLUSTER_KUBECONFIG
+            value: "false"
+
+  - it: should set USE_IN_CLUSTER_KUBECONFIG to true when configured
+    documentIndex: 1
+    set:
+      archestra.kubernetes.useInClusterConfig: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: USE_IN_CLUSTER_KUBECONFIG
+            value: "true"

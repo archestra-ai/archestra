@@ -1,7 +1,6 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   Download,
   Eye,
@@ -197,7 +196,6 @@ export function InternalMCPCatalog({
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
-  const queryClient = useQueryClient();
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,

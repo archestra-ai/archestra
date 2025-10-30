@@ -57,15 +57,10 @@ const formSchema = z
       if (data.serverType === "remote") {
         return data.serverUrl && data.serverUrl.length > 0;
       }
-      // For local servers, localConfig is required
-      if (data.serverType === "local") {
-        return data.localConfig?.command && data.localConfig.command.length > 0;
-      }
       return true;
     },
     {
-      message:
-        "Server URL is required for remote servers, and command is required for local servers",
+      message: "Server URL is required for remote servers",
       path: ["serverUrl"],
     },
   );
@@ -147,7 +142,7 @@ export function transformFormToApiData(
     }
 
     data.localConfig = {
-      command: values.localConfig.command,
+      command: values.localConfig.command?.trim() || undefined,
       arguments: argumentsArray,
       environment,
       dockerImage: values.localConfig.dockerImage || undefined,
@@ -422,9 +417,7 @@ export function McpCatalogForm({
                 name="localConfig.command"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Command <span className="text-destructive">*</span>
-                    </FormLabel>
+                    <FormLabel>Command</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="node"
@@ -433,7 +426,8 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      The executable command to run
+                      The executable command to run. Optional - if not
+                      specified, the Dockerfile's CMD will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

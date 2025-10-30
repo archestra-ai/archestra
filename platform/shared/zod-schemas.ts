@@ -24,7 +24,7 @@ export const OAuthConfigSchema = z.object({
 });
 
 export const LocalConfigSchema = z.object({
-  command: z.string(),
+  command: z.string().optional(),
   arguments: z.array(z.string()),
   environment: z.record(z.string(), z.string()).optional(),
   dockerImage: z.string().optional(),
@@ -32,7 +32,7 @@ export const LocalConfigSchema = z.object({
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
 export const LocalConfigFormSchema = z.object({
-  command: z.string().min(1, "Command is required"),
+  command: z.string().optional(),
   arguments: z.string(), // UI uses string, gets parsed to array
   environment: z.string(), // UI uses string, gets parsed to record
   dockerImage: z.string().optional(), // Custom Docker image URL

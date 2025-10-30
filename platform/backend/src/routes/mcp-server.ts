@@ -219,10 +219,84 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // For local servers, start the K8s pod first
           if (catalogItem?.serverType === "local") {
             try {
+              // Set status to pending before starting the pod
+              await McpServerModel.update(mcpServer.id, {
+                installationStatus: "pending",
+                installationError: null,
+              });
+
               await McpServerRuntimeManager.startServer(mcpServer);
               fastify.log.info(
                 `Started K8s pod for local MCP server: ${mcpServer.name}`,
               );
+
+              // For local servers, return immediately without waiting for tools
+              // Tools will be fetched asynchronously after the pod is ready
+              fastify.log.info(
+                `Skipping synchronous tool fetch for local server: ${mcpServer.name}. Tools will be fetched asynchronously.`,
+              );
+
+              // Start async tool fetching in the background (non-blocking)
+              (async () => {
+                try {
+                  // Wait a bit for the pod to be fully ready
+                  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+                  fastify.log.info(
+                    `Attempting to fetch tools from local server: ${mcpServer.name}`,
+                  );
+                  const tools =
+                    await McpServerModel.getToolsFromServer(mcpServer);
+
+                  // Persist tools in the database
+                  for (const tool of tools) {
+                    const createdTool = await ToolModel.create({
+                      name: ToolModel.slugifyName(mcpServer.name, tool.name),
+                      description: tool.description,
+                      parameters: tool.inputSchema,
+                      mcpServerId: mcpServer.id,
+                    });
+
+                    // If agentIds were provided, create agent-tool assignments
+                    if (agentIds && agentIds.length > 0) {
+                      for (const agentId of agentIds) {
+                        await AgentToolModel.create(agentId, createdTool.id);
+                      }
+                    }
+                  }
+
+                  // Set status to success after tools are fetched
+                  await McpServerModel.update(mcpServer.id, {
+                    installationStatus: "success",
+                    installationError: null,
+                  });
+
+                  fastify.log.info(
+                    `Successfully fetched and persisted ${tools.length} tools from local server: ${mcpServer.name}`,
+                  );
+                } catch (toolError) {
+                  const errorMessage =
+                    toolError instanceof Error
+                      ? toolError.message
+                      : "Unknown error";
+                  fastify.log.error(
+                    `Failed to fetch tools from local server ${mcpServer.name}: ${errorMessage}`,
+                  );
+
+                  // Set status to error if tool fetching fails
+                  await McpServerModel.update(mcpServer.id, {
+                    installationStatus: "error",
+                    installationError: errorMessage,
+                  });
+                }
+              })();
+
+              // Return the MCP server with pending status
+              return reply.send({
+                ...mcpServer,
+                installationStatus: "pending",
+                installationError: null,
+              });
             } catch (podError) {
               // If pod fails to start, delete the MCP server record
               await McpServerModel.delete(mcpServer.id);
@@ -232,7 +306,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
 
-          // Get real tools from the MCP server
+          // For non-local servers, fetch tools synchronously during installation
           const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
           // Persist tools in the database with source='mcp_server' and mcpServerId
@@ -252,7 +326,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }
           }
 
-          return reply.send(mcpServer);
+          // Set status to success for non-local servers
+          await McpServerModel.update(mcpServer.id, {
+            installationStatus: "success",
+            installationError: null,
+          });
+
+          return reply.send({
+            ...mcpServer,
+            installationStatus: "success",
+            installationError: null,
+          });
         } catch (toolError) {
           // If fetching/creating tools fails, clean up everything we created
           await McpServerModel.delete(mcpServer.id);
@@ -298,6 +382,61 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         return reply.send({
           success: await McpServerModel.delete(request.params.id),
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/mcp_server/:id/installation-status",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerInstallationStatus,
+        description:
+          "Get the installation status of an MCP server (for polling during local server installation)",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({
+            installationStatus: z.enum(["idle", "pending", "success", "error"]),
+            installationError: z.string().nullable(),
+          }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const mcpServer = await McpServerModel.findById(request.params.id);
+
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send({
+          installationStatus: (mcpServer.installationStatus || "idle") as
+            | "idle"
+            | "pending"
+            | "success"
+            | "error",
+          installationError: mcpServer.installationError || null,
         });
       } catch (error) {
         fastify.log.error(error);

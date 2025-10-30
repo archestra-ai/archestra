@@ -129,6 +129,7 @@ export const RouteId = {
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
   RestartMcpServer: "restartMcpServer",
+  GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",

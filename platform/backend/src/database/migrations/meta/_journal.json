@@ -260,6 +260,13 @@
       "when": 1761797433787,
       "tag": "0036_lush_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1761815492807,
+      "tag": "0037_furry_micromax",
+      "breakpoints": true
     }
   ]
 }

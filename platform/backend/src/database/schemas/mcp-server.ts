@@ -14,6 +14,11 @@ const mcpServerTable = pgTable("mcp_server", {
     onDelete: "set null",
   }),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),
+  installationStatus: text("installation_status")
+    .notNull()
+    .default("idle")
+    .$type<"idle" | "pending" | "success" | "error">(),
+  installationError: text("installation_error"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

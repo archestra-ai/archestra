@@ -5922,6 +5922,8 @@ export type GetMcpServersResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
+        installationStatus: 'idle' | 'pending' | 'success' | 'error';
+        installationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -5936,6 +5938,8 @@ export type InstallMcpServerData = {
         catalogId: string;
         secretId?: string;
         reinstallRequired?: boolean;
+        installationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        installationError?: string | null;
         teams?: Array<string>;
         agentIds?: Array<string>;
         accessToken?: string;
@@ -5978,6 +5982,8 @@ export type InstallMcpServerResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
+        installationStatus: 'idle' | 'pending' | 'success' | 'error';
+        installationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -6080,6 +6086,8 @@ export type GetMcpServerResponses = {
         catalogId: string;
         secretId: string | null;
         reinstallRequired: boolean;
+        installationStatus: 'idle' | 'pending' | 'success' | 'error';
+        installationError: string | null;
         createdAt: string;
         updatedAt: string;
         teams?: Array<string>;
@@ -6087,6 +6095,50 @@ export type GetMcpServerResponses = {
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
+
+export type GetMcpServerInstallationStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/installation-status';
+};
+
+export type GetMcpServerInstallationStatusErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerInstallationStatusError = GetMcpServerInstallationStatusErrors[keyof GetMcpServerInstallationStatusErrors];
+
+export type GetMcpServerInstallationStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        installationStatus: 'idle' | 'pending' | 'success' | 'error';
+        installationError: string | null;
+    };
+};
+
+export type GetMcpServerInstallationStatusResponse = GetMcpServerInstallationStatusResponses[keyof GetMcpServerInstallationStatusResponses];
 
 export type GetMcpServerToolsData = {
     body?: never;

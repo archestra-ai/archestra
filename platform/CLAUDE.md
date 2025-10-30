@@ -74,7 +74,7 @@ MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 
 ## Architecture
 
-**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration
+**Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
 **Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime for local stdio servers
 
@@ -128,9 +128,11 @@ MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 
 **MCP Server Runtime**:
 
-- Local stdio-based MCP servers run in K8s pods
+- Local stdio-based MCP servers run in K8s pods (one pod per server)
 - Automatic pod lifecycle management (start/restart/stop)
-- JSON-RPC proxy for communication with pods
-- Configurable via K8S_NAMESPACE, KUBECONFIG, MCP_SERVER_BASE_IMAGE
+- JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
+- Pod logs available via `/mcp_proxy/:id/logs`
+- K8s configuration: K8S_NAMESPACE, KUBECONFIG, USE_IN_CLUSTER_KUBECONFIG, MCP_SERVER_BASE_IMAGE
+- Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

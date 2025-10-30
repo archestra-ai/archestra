@@ -30,15 +30,6 @@ class McpClient {
       return [];
     }
 
-    console.log(
-      "[McpClient] executeToolCalls invoked:",
-      JSON.stringify({
-        agentId,
-        toolCallCount: toolCalls.length,
-        toolNames: toolCalls.map((tc) => tc.name),
-      }),
-    );
-
     // Get MCP tools assigned to the agent
     const mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
       toolCalls.map((tc) => tc.name),
@@ -48,15 +39,6 @@ class McpClient {
     // Filter tool calls to only those that are MCP tools
     const mcpToolCalls = toolCalls.filter((tc) =>
       mcpTools.some((mt) => mt.toolName === tc.name),
-    );
-
-    console.log(
-      "[McpClient] MCP tools found:",
-      JSON.stringify({
-        agentId,
-        mcpToolsCount: mcpTools.length,
-        mcpToolCallsCount: mcpToolCalls.length,
-      }),
     );
 
     if (mcpToolCalls.length === 0) {
@@ -210,38 +192,8 @@ class McpClient {
           firstTool.mcpServerCatalogId,
           config,
         );
-
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          // Generic remote server with catalog info
-          console.log(
-            "[McpClient] Connecting to remote MCP server:",
-            JSON.stringify({
-              agentId,
-              serverName: firstTool.mcpServerName,
-              serverUrl: catalogItem.serverUrl,
-              catalogId: firstTool.mcpServerCatalogId,
-              hasSecrets: Object.keys(secrets).length > 0,
-            }),
-          );
-
-          const config = this.createRemoteServerConfig({
-            name: firstTool.mcpServerName,
-            url: catalogItem.serverUrl,
-            secrets,
-          });
-          client = await this.getOrCreateConnection(
-            firstTool.mcpServerCatalogId,
-            config,
-          );
-
-          console.log(
-            "[McpClient] MCP server connection established:",
-            JSON.stringify({
-              agentId,
-              serverName: firstTool.mcpServerName,
-            }),
-          );
-        }
+      } else {
+        throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
       }
 
       if (!client) {
@@ -264,33 +216,10 @@ class McpClient {
             ? toolCall.name.substring(serverPrefix.length)
             : toolCall.name;
 
-          console.log(
-            "[McpClient] Executing MCP tool call:",
-            JSON.stringify({
-              agentId,
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              mcpToolName,
-              argumentKeys: Object.keys(toolCall.arguments),
-              argumentsSize: JSON.stringify(toolCall.arguments).length,
-            }),
-          );
-
           const result = await client.callTool({
             name: mcpToolName,
             arguments: toolCall.arguments,
           });
-
-          console.log(
-            "[McpClient] MCP tool call result received:",
-            JSON.stringify({
-              agentId,
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              isError: !!result.isError,
-              contentLength: JSON.stringify(result.content).length,
-            }),
-          );
 
           // Apply response modifier template if one exists
           let modifiedContent = result.content;
@@ -316,16 +245,6 @@ class McpClient {
             isError: !!result.isError,
           });
         } catch (error) {
-          console.error(
-            "[McpClient] MCP tool call failed:",
-            JSON.stringify({
-              agentId,
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              error: error instanceof Error ? error.message : "Unknown error",
-            }),
-          );
-
           results.push({
             id: toolCall.id,
             content: null,
@@ -335,15 +254,6 @@ class McpClient {
         }
       }
     } catch (error) {
-      console.error(
-        "[McpClient] MCP server connection failed:",
-        JSON.stringify({
-          agentId,
-          error: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
-      );
-
       // MCP server connection failed - mark all tool calls as failed
       for (const toolCall of mcpToolCalls) {
         results.push({
@@ -356,16 +266,6 @@ class McpClient {
         });
       }
     }
-
-    console.log(
-      "[McpClient] executeToolCalls completed:",
-      JSON.stringify({
-        agentId,
-        resultsCount: results.length,
-        successCount: results.filter((r) => !r.isError).length,
-        errorCount: results.filter((r) => r.isError).length,
-      }),
-    );
 
     return results;
   }

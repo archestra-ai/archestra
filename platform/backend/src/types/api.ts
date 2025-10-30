@@ -130,6 +130,7 @@ export const RouteId = {
   RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
   GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
   RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
+  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",

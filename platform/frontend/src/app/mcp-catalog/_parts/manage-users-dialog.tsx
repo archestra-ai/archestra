@@ -95,13 +95,12 @@ export function ManageUsersDialog({
   const revokeAccessMutation = useRevokeUserMcpServerAccess();
 
   const handleRevoke = useCallback(
-    async (userId: string, serverId?: string) => {
-      if (!liveServer) return;
+    async (userId: string) => {
+      if (!liveServer?.catalogId) return;
 
-      // Use the specific serverId if provided (from aggregated userDetails),
-      // otherwise fallback to the liveServer.id
+      // Use catalogId to find and delete the user's personal-auth server
       await revokeAccessMutation.mutateAsync({
-        serverId: serverId || liveServer.id,
+        catalogId: liveServer.catalogId,
         userId,
       });
     },
@@ -118,7 +117,7 @@ export function ManageUsersDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Personal Credentials
+            Users authenticated
             <span className="text-muted-foreground font-normal">
               {label || liveServer.name}
             </span>
@@ -165,14 +164,7 @@ export function ManageUsersDialog({
                       </TableCell>
                       <TableCell>
                         <Button
-                          onClick={() =>
-                            handleRevoke(
-                              user.userId,
-                              "serverId" in user
-                                ? (user.serverId as string)
-                                : undefined,
-                            )
-                          }
+                          onClick={() => handleRevoke(user.userId)}
                           disabled={revokeAccessMutation.isPending}
                           size="sm"
                           variant="outline"

@@ -5843,6 +5843,15 @@ export type InstallMcpServerErrors = {
     /**
      * Default Response
      */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     500: {
         error: string | {
             message: string;
@@ -6058,23 +6067,14 @@ export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpS
 export type RevokeUserMcpServerAccessData = {
     body?: never;
     path: {
-        id: string;
+        catalogId: string;
         userId: string;
     };
     query?: never;
-    url: '/api/mcp_server/{id}/user/{userId}';
+    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
 };
 
 export type RevokeUserMcpServerAccessErrors = {
-    /**
-     * Default Response
-     */
-    403: {
-        error: string | {
-            message: string;
-            type: string;
-        };
-    };
     /**
      * Default Response
      */
@@ -6108,18 +6108,80 @@ export type RevokeUserMcpServerAccessResponses = {
 
 export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
 
+export type RevokeAllTeamsMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type RevokeAllTeamsMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
+
+export type RevokeAllTeamsMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
+
 export type GrantTeamMcpServerAccessData = {
     body: {
         teamIds: Array<string>;
+        userId?: string;
     };
     path: {
-        id: string;
+        catalogId: string;
     };
     query?: never;
-    url: '/api/mcp_server/{id}/teams';
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
 };
 
 export type GrantTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */

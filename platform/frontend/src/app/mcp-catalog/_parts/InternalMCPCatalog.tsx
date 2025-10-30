@@ -34,6 +34,7 @@ import {
   useInstallMcpServer,
   useMcpServers,
   useMcpServerTools,
+  useRevokeAllTeamsMcpServerAccess,
   useRevokeUserMcpServerAccess,
 } from "@/lib/mcp-server.query";
 import { BulkAssignAgentDialog } from "./bulk-assign-agent-dialog";
@@ -63,6 +64,7 @@ function InternalServerCard({
   onInstallTeam,
   onInstallNoAuth,
   onRevokeMyAccess,
+  onRevokeTeamAccess,
   onReinstall,
   onEdit,
   onDelete,
@@ -74,6 +76,7 @@ function InternalServerCard({
   toolsAssignedCount,
   toolsDiscoveredCount,
   isCurrentUserAuthenticated,
+  currentUserHasTeamAuth,
   isAdmin,
 }: {
   item: CatalogItemWithOptionalLabel;
@@ -84,6 +87,7 @@ function InternalServerCard({
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
   onRevokeMyAccess?: () => void;
+  onRevokeTeamAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -95,6 +99,7 @@ function InternalServerCard({
   toolsAssignedCount?: number;
   toolsDiscoveredCount?: number;
   isCurrentUserAuthenticated?: boolean;
+  currentUserHasTeamAuth?: boolean;
   isAdmin: boolean;
 }) {
   // Check if authentication is required
@@ -162,17 +167,18 @@ function InternalServerCard({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-2 justify-end">
         {installed &&
-          ((userCount !== undefined && userCount > 0) ||
+          (isAdmin ||
+            (userCount !== undefined && userCount > 0) ||
             (teamsCount !== undefined && teamsCount > 0) ||
             (toolsAssignedCount !== undefined &&
               toolsDiscoveredCount !== undefined)) && (
             <div className="bg-muted/50 rounded-md mb-2 overflow-hidden">
-              {isAdmin && userCount !== undefined && userCount > 0 && (
+              {isAdmin && userCount !== undefined && (
                 <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">
-                      Personal credentials:{" "}
+                      Users authenticated:{" "}
                       <span className="font-medium text-foreground">
                         {userCount}
                       </span>
@@ -198,7 +204,7 @@ function InternalServerCard({
                   )}
                 </div>
               )}
-              {teamsCount !== undefined && teamsCount > 0 && (
+              {isAdmin && teamsCount !== undefined && (
                 <div
                   className={`flex items-center justify-between px-3 py-2 text-sm ${
                     toolsAssignedCount !== undefined &&
@@ -210,13 +216,13 @@ function InternalServerCard({
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">
-                      Team credentials:{" "}
+                      Teams with access:{" "}
                       <span className="font-medium text-foreground">
                         {teamsCount}
                       </span>
                     </span>
                   </div>
-                  {isAdmin && onManageTeams && (
+                  {onManageTeams && (
                     <Button
                       onClick={onManageTeams}
                       size="sm"
@@ -277,30 +283,48 @@ function InternalServerCard({
                 className="w-full"
               >
                 <User className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Personal Auth"}
+                {isInstalling ? "Adding..." : "Authenticate"}
               </Button>
             )}
-            {requiresAuth &&
-              isAdmin &&
-              (teamsCount === undefined || teamsCount === 0) && (
-                <Button
-                  onClick={onInstallTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Adding..." : "Team Auth"}
-                </Button>
-              )}
+            {isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
+              <Button
+                onClick={onRevokeMyAccess}
+                size="sm"
+                variant="outline"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              >
+                Revoke personal token
+              </Button>
+            )}
+            {isAdmin && currentUserHasTeamAuth && onRevokeTeamAccess && (
+              <Button
+                onClick={onRevokeTeamAccess}
+                size="sm"
+                variant="outline"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent"
+              >
+                Revoke teams token
+              </Button>
+            )}
+            {requiresAuth && isAdmin && !currentUserHasTeamAuth && (
+              <Button
+                onClick={onInstallTeam}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                {isInstalling ? "Adding..." : "Authorize teams"}
+              </Button>
+            )}
             {!isAdmin && isCurrentUserAuthenticated && onRevokeMyAccess && (
               <Button
                 onClick={onRevokeMyAccess}
                 size="sm"
                 className="w-full bg-accent text-accent-foreground hover:bg-accent"
               >
-                Revoke my access
+                Revoke personal access
               </Button>
             )}
           </>
@@ -314,7 +338,7 @@ function InternalServerCard({
               className="flex-1"
             >
               <User className="mr-2 h-4 w-4" />
-              {isInstalling ? "Adding..." : "Personal Auth"}
+              {isInstalling ? "Adding..." : "Authenticate"}
             </Button>
             {isAdmin && (
               <Button
@@ -325,7 +349,7 @@ function InternalServerCard({
                 className="flex-1"
               >
                 <Building2 className="mr-2 h-4 w-4" />
-                {isInstalling ? "Adding..." : "Team Auth"}
+                {isInstalling ? "Adding..." : "Authorize teams"}
               </Button>
             )}
           </div>
@@ -355,6 +379,7 @@ function InternalServerCardWithTools({
   onInstallTeam,
   onInstallNoAuth,
   onRevokeMyAccess,
+  onRevokeTeamAccess,
   onReinstall,
   onEdit,
   onDelete,
@@ -373,6 +398,7 @@ function InternalServerCardWithTools({
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
   onRevokeMyAccess?: () => void;
+  onRevokeTeamAccess?: () => void;
   onReinstall: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -406,6 +432,7 @@ function InternalServerCardWithTools({
       onInstallTeam={onInstallTeam}
       onInstallNoAuth={onInstallNoAuth}
       onRevokeMyAccess={onRevokeMyAccess}
+      onRevokeTeamAccess={onRevokeTeamAccess}
       onReinstall={onReinstall}
       onEdit={onEdit}
       onDelete={onDelete}
@@ -417,6 +444,10 @@ function InternalServerCardWithTools({
       toolsAssignedCount={toolsAssignedCount}
       toolsDiscoveredCount={toolsDiscoveredCount}
       isCurrentUserAuthenticated={isCurrentUserAuthenticated}
+      currentUserHasTeamAuth={
+        (installedServer as { currentUserHasTeamAuth?: boolean })
+          ?.currentUserHasTeamAuth
+      }
       isAdmin={isAdmin}
     />
   );
@@ -438,6 +469,7 @@ export function InternalMCPCatalog({
   const isAdmin = userRole === "admin";
   const deleteMutation = useDeleteMcpServer();
   const revokeUserAccessMutation = useRevokeUserMcpServerAccess();
+  const revokeAllTeamsMutation = useRevokeAllTeamsMcpServerAccess();
   const session = authClient.useSession();
   const currentUserId = session.data?.user?.id;
 
@@ -697,8 +729,15 @@ export function InternalMCPCatalog({
 
       if (!servers || servers.length === 0) return undefined;
 
-      // If only one server, return it as-is
-      if (servers.length === 1) return servers[0];
+      // If only one server, return it as-is (but check for team auth ownership)
+      if (servers.length === 1) {
+        const server = servers[0];
+        return {
+          ...server,
+          currentUserHasTeamAuth:
+            server.authType === "team" && server.ownerId === currentUserId,
+        };
+      }
 
       // Use the first server with users as the base, or just first server
       const baseServer =
@@ -706,6 +745,11 @@ export function InternalMCPCatalog({
 
       // Aggregate multiple servers
       const aggregated = { ...baseServer };
+
+      // Check if current user has a team-auth server
+      const currentUserHasTeamAuth = servers.some(
+        (s) => s.authType === "team" && s.ownerId === currentUserId,
+      );
 
       // Combine all unique users
       const allUsers = new Set<string>();
@@ -768,13 +812,16 @@ export function InternalMCPCatalog({
       aggregated.teams = Array.from(allTeams);
       aggregated.teamDetails = allTeamDetails;
 
-      return aggregated;
+      return {
+        ...aggregated,
+        currentUserHasTeamAuth,
+      };
     },
-    [installedServers],
+    [installedServers, currentUserId],
   );
 
   const handleRevokeMyAccess = useCallback(
-    async (serverId: string) => {
+    async (catalogId: string) => {
       if (!currentUserId) {
         toast.error("User ID not found");
         return;
@@ -782,7 +829,7 @@ export function InternalMCPCatalog({
 
       try {
         await revokeUserAccessMutation.mutateAsync({
-          serverId,
+          catalogId,
           userId: currentUserId,
         });
       } catch (error) {
@@ -790,6 +837,17 @@ export function InternalMCPCatalog({
       }
     },
     [currentUserId, revokeUserAccessMutation],
+  );
+
+  const handleRevokeTeamAccess = useCallback(
+    async (catalogId: string) => {
+      try {
+        await revokeAllTeamsMutation.mutateAsync({ catalogId });
+      } catch (error) {
+        console.error("Error revoking team access:", error);
+      }
+    },
+    [revokeAllTeamsMutation],
   );
 
   const handleReinstallRequired = useCallback(
@@ -923,8 +981,14 @@ export function InternalMCPCatalog({
               onInstallTeam={() => handleInstallTeam(item)}
               onInstallNoAuth={() => handleInstallNoAuth(item)}
               onRevokeMyAccess={
-                installedServer
-                  ? () => handleRevokeMyAccess(installedServer.id)
+                installedServer?.catalogId
+                  ? // biome-ignore lint/style/noNonNullAssertion: it's checked above
+                    () => handleRevokeMyAccess(installedServer.catalogId!)
+                  : undefined
+              }
+              onRevokeTeamAccess={
+                installedServer?.teams && installedServer.teams.length > 0
+                  ? () => handleRevokeTeamAccess(item.id)
                   : undefined
               }
               onReinstall={() => handleReinstall(item)}
@@ -1019,6 +1083,8 @@ export function InternalMCPCatalog({
           setIsTeamMode(false);
         }}
         isTeamMode={isTeamMode}
+        catalogId={selectedCatalogItem?.id}
+        installedServers={installedServers}
       />
 
       <McpToolsDialog

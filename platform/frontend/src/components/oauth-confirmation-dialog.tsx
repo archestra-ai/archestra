@@ -1,7 +1,8 @@
 "use client";
 
+import type { archestraApiTypes } from "@shared";
 import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
 interface OAuthConfirmationDialogProps {
@@ -30,6 +32,8 @@ interface OAuthConfirmationDialogProps {
   onConfirm: (teams: string[]) => void;
   onCancel: () => void;
   isTeamMode?: boolean;
+  catalogId?: string;
+  installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
 }
 
 export function OAuthConfirmationDialog({
@@ -39,11 +43,34 @@ export function OAuthConfirmationDialog({
   onConfirm,
   onCancel,
   isTeamMode = false,
+  catalogId,
+  installedServers,
 }: OAuthConfirmationDialogProps) {
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   const { data: teams } = useTeams();
+  const { data: allServers } = useMcpServers();
+
+  // Get teams that already have access to this catalog
+  const teamsWithExistingAccess = useMemo(() => {
+    if (!catalogId) return new Set<string>();
+
+    const serversToCheck = installedServers || allServers || [];
+    const serversForCatalog = serversToCheck.filter(
+      (s) => s.catalogId === catalogId,
+    );
+
+    const teamIds = new Set<string>();
+    for (const server of serversForCatalog) {
+      if (server.teams) {
+        for (const teamId of server.teams) {
+          teamIds.add(teamId);
+        }
+      }
+    }
+    return teamIds;
+  }, [catalogId, installedServers, allServers]);
 
   const handleAddTeam = useCallback(
     (teamId: string) => {
@@ -64,8 +91,12 @@ export function OAuthConfirmationDialog({
 
   const getUnassignedTeams = useCallback(() => {
     if (!teams) return [];
-    return teams.filter((team) => !assignedTeamIds.includes(team.id));
-  }, [teams, assignedTeamIds]);
+    return teams.filter(
+      (team) =>
+        !assignedTeamIds.includes(team.id) &&
+        !teamsWithExistingAccess.has(team.id),
+    );
+  }, [teams, assignedTeamIds, teamsWithExistingAccess]);
 
   const getTeamById = useCallback(
     (teamId: string) => {
@@ -101,7 +132,9 @@ export function OAuthConfirmationDialog({
               ) : (
                 <User className="h-5 w-5" />
               )}
-              <span>{isTeamMode ? "Team" : "Personal"} Authentication</span>
+              <span>
+                {isTeamMode ? "Authorize teams" : "Authenticated users"}
+              </span>
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 ml-2"

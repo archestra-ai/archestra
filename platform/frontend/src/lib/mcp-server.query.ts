@@ -78,14 +78,14 @@ export function useRevokeUserMcpServerAccess() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      serverId,
+      catalogId,
       userId,
     }: {
-      serverId: string;
+      catalogId: string;
       userId: string;
     }) => {
       await archestraApiSdk.revokeUserMcpServerAccess({
-        path: { id: serverId, userId },
+        path: { catalogId, userId },
       });
     },
     onSuccess: async () => {
@@ -107,15 +107,17 @@ export function useGrantTeamMcpServerAccess() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      serverId,
+      catalogId,
       teamIds,
+      userId,
     }: {
-      serverId: string;
+      catalogId: string;
       teamIds: string[];
+      userId?: string;
     }) => {
       await archestraApiSdk.grantTeamMcpServerAccess({
-        path: { id: serverId },
-        body: { teamIds },
+        path: { catalogId },
+        body: { teamIds, userId },
       });
     },
     onSuccess: async () => {
@@ -158,6 +160,29 @@ export function useRevokeTeamMcpServerAccess() {
     onError: (error) => {
       console.error("Error revoking team access:", error);
       toast.error("Failed to revoke team access");
+    },
+  });
+}
+
+export function useRevokeAllTeamsMcpServerAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ catalogId }: { catalogId: string }) => {
+      await archestraApiSdk.revokeAllTeamsMcpServerAccess({
+        path: { catalogId },
+      });
+    },
+    onSuccess: async () => {
+      // Wait for refetch to complete so UI updates immediately
+      await queryClient.refetchQueries({
+        queryKey: ["mcp-servers"],
+        type: "active",
+      });
+      toast.success("Team token revoked successfully");
+    },
+    onError: (error) => {
+      console.error("Error revoking team token:", error);
+      toast.error("Failed to revoke team token");
     },
   });
 }

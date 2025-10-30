@@ -1,5 +1,5 @@
-import * as k8s from "@kubernetes/client-node";
 import type { IncomingMessage } from "node:http";
+import type * as k8s from "@kubernetes/client-node";
 import type { McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
 
@@ -98,7 +98,9 @@ export default class K8sPod {
       }
 
       // Create new pod
-      console.log(`Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`);
+      console.log(
+        `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
+      );
       this.state = "pending";
 
       const podSpec: k8s.V1Pod = {
@@ -258,7 +260,10 @@ export default class K8sPod {
   /**
    * Stream data to/from the pod (for stdio-based MCP servers)
    */
-  async streamToPod(request: any, responseStream: IncomingMessage): Promise<void> {
+  async streamToPod(
+    request: any,
+    responseStream: IncomingMessage,
+  ): Promise<void> {
     try {
       // For K8s, we need to use exec to interact with stdin/stdout
       // This is a simplified implementation - you may need to enhance this

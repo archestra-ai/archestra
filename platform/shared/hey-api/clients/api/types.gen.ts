@@ -846,9 +846,9 @@ export type GeminiGenerateContentResponseInput = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -1022,7 +1022,10 @@ export type AnthropicMessagesResponseInput = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type SupportedProviders = 'openai' | 'gemini' | 'anthropic';
@@ -1867,9 +1870,9 @@ export type GeminiGenerateContentResponse = {
      * Metadata on the generation requests' token usage
      */
     usageMetadata: {
-        promptTokenCount: number;
+        promptTokenCount?: number;
         cachedContentTokenCount: number;
-        candidatesTokenCount: number;
+        candidatesTokenCount?: number;
         toolUsePromptTokenCount: number;
         thoughtsTokenCount: number;
         totalTokenCount: number;
@@ -2043,7 +2046,10 @@ export type AnthropicMessagesResponse = {
     stop_reason: unknown;
     stop_sequence: string | unknown;
     type: 'message';
-    usage: unknown;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+    };
 };
 
 export type GetHealthData = {
@@ -2837,7 +2843,7 @@ export type AnthropicMessagesWithAgentData = {
         agentId: string;
     };
     query?: never;
-    url: '/v1/anthropic/v1/{agentId}/messages';
+    url: '/v1/anthropic/{agentId}/v1/messages';
 };
 
 export type AnthropicMessagesWithAgentErrors = {
@@ -4287,6 +4293,13 @@ export type GetInternalMcpCatalogResponses = {
         serverType: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4349,6 +4362,13 @@ export type CreateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4428,6 +4448,13 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverType: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4569,6 +4596,13 @@ export type GetInternalMcpCatalogItemResponses = {
         serverType: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4631,6 +4665,13 @@ export type UpdateInternalMcpCatalogItemData = {
         serverType?: 'local' | 'remote';
         serverUrl?: string | null;
         docsUrl?: string | null;
+        localConfig?: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig?: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4721,6 +4762,13 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverType: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
+        localConfig: {
+            command: string;
+            arguments: Array<string>;
+            environment?: {
+                [key: string]: string;
+            };
+        } | null;
         userConfig: {
             [key: string]: {
                 type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
@@ -4895,6 +4943,17 @@ export type GetMcpServerInstallationRequestsResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -4952,6 +5011,17 @@ export type CreateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
     };
     path?: never;
@@ -5036,6 +5106,17 @@ export type CreateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5210,6 +5291,17 @@ export type GetMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5267,6 +5359,17 @@ export type UpdateMcpServerInstallationRequestData = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse?: string | null;
         reviewedBy?: string | null;
@@ -5372,6 +5475,17 @@ export type UpdateMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5487,6 +5601,17 @@ export type ApproveMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5602,6 +5727,17 @@ export type DeclineMcpServerInstallationRequestResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5717,6 +5853,17 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             };
         } | {
             type: 'local';
+            label: string;
+            name: string;
+            version?: string;
+            serverType: 'local';
+            localConfig: {
+                command: string;
+                arguments: Array<string>;
+                environment?: {
+                    [key: string]: string;
+                };
+            };
         } | null;
         adminResponse: string | null;
         reviewedBy: string | null;
@@ -5994,6 +6141,96 @@ export type GetMcpServerToolsResponses = {
 };
 
 export type GetMcpServerToolsResponse = GetMcpServerToolsResponses[keyof GetMcpServerToolsResponses];
+
+export type GetMcpServerLogsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        lines?: number;
+    };
+    url: '/mcp_proxy/{id}/logs';
+};
+
+export type GetMcpServerLogsErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetMcpServerLogsError = GetMcpServerLogsErrors[keyof GetMcpServerLogsErrors];
+
+export type GetMcpServerLogsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        logs: string;
+        containerName: string;
+    };
+};
+
+export type GetMcpServerLogsResponse = GetMcpServerLogsResponses[keyof GetMcpServerLogsResponses];
+
+export type RestartMcpServerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/restart';
+};
+
+export type RestartMcpServerErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RestartMcpServerError = RestartMcpServerErrors[keyof RestartMcpServerErrors];
+
+export type RestartMcpServerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        message: string;
+    };
+};
+
+export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
 
 export type InitiateOAuthData = {
     body: {

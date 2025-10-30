@@ -22,3 +22,16 @@ export const OAuthConfigSchema = z.object({
   streamable_http_url: z.string().optional(),
   streamable_http_port: z.number().optional(),
 });
+
+export const LocalConfigSchema = z.object({
+  command: z.string(),
+  arguments: z.array(z.string()),
+  environment: z.record(z.string(), z.string()).optional(),
+});
+
+// Form version of LocalConfigSchema for UI forms (using strings that get parsed)
+export const LocalConfigFormSchema = z.object({
+  command: z.string().min(1, "Command is required"),
+  arguments: z.string(), // UI uses string, gets parsed to array
+  environment: z.string(), // UI uses string, gets parsed to record
+});

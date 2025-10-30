@@ -1,4 +1,4 @@
-import { OAuthConfigSchema } from "@shared";
+import { LocalConfigSchema, OAuthConfigSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -36,6 +36,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
+  localConfig: LocalConfigSchema.nullable(),
 });
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
@@ -45,6 +46,7 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
   authFields: z.array(AuthFieldSchema).nullable().optional(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
   oauthConfig: OAuthConfigSchema.nullable().optional(),
+  localConfig: LocalConfigSchema.nullable().optional(),
 });
 
 export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
@@ -54,6 +56,7 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
   authFields: z.array(AuthFieldSchema).nullable().optional(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
   oauthConfig: OAuthConfigSchema.nullable().optional(),
+  localConfig: LocalConfigSchema.nullable().optional(),
 });
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;

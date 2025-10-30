@@ -206,6 +206,36 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         try {
+          // Check if this is a local server that needs to be started in K8s
+          let catalogItem = null;
+          if (serverData.catalogId) {
+            const { default: InternalMcpCatalogModel } = await import(
+              "@/models/internal-mcp-catalog"
+            );
+            catalogItem = await InternalMcpCatalogModel.findById(
+              serverData.catalogId,
+            );
+          }
+
+          // For local servers, start the K8s pod first
+          if (catalogItem?.serverType === "local") {
+            try {
+              const { default: McpServerRuntimeManager } = await import(
+                "@/mcp-server-runtime"
+              );
+              await McpServerRuntimeManager.startServer(mcpServer);
+              fastify.log.info(
+                `Started K8s pod for local MCP server: ${mcpServer.name}`,
+              );
+            } catch (podError) {
+              // If pod fails to start, delete the MCP server record
+              await McpServerModel.delete(mcpServer.id);
+              throw new Error(
+                `Failed to start K8s pod for MCP server: ${podError instanceof Error ? podError.message : "Unknown error"}`,
+              );
+            }
+          }
+
           // Get real tools from the MCP server
           const tools = await McpServerModel.getToolsFromServer(mcpServer);
 
@@ -328,6 +358,246 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: {
             message:
               error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * MCP Proxy endpoint for stdio-based MCP servers running in K8s
+   * This proxies JSON-RPC requests to/from MCP servers running as pods
+   */
+  fastify.post(
+    "/mcp_proxy/:id",
+    {
+      schema: {
+        hide: true,
+        description:
+          "Proxy requests to the MCP server running in a Kubernetes pod",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: z
+          .object({
+            jsonrpc: z.string().optional(),
+            id: z.union([z.string(), z.number()]).optional(),
+            method: z.string().optional(),
+            params: z.any().optional(),
+            sessionId: z.string().optional(),
+            mcpSessionId: z.string().optional(),
+          })
+          .passthrough(),
+      },
+    },
+    async (request, reply) => {
+      const { id: mcpServerId } = request.params;
+      const body = request.body;
+
+      try {
+        // Get the MCP server from database
+        const mcpServer = await McpServerModel.findById(mcpServerId);
+        if (!mcpServer) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Check if this is a local server that should be running in K8s
+        let catalogItem = null;
+        if (mcpServer.catalogId) {
+          const { default: InternalMcpCatalogModel } = await import(
+            "@/models/internal-mcp-catalog"
+          );
+          catalogItem =
+            await InternalMcpCatalogModel.findById(mcpServer.catalogId);
+        }
+
+        // Only handle local servers through the proxy
+        if (catalogItem?.serverType !== "local") {
+          return reply.status(400).send({
+            error: {
+              message:
+                "This endpoint is only for local MCP servers running in K8s",
+              type: "validation_error",
+            },
+          });
+        }
+
+        // Get the K8s pod for this MCP server
+        const { default: McpServerRuntimeManager } = await import(
+          "@/mcp-server-runtime"
+        );
+        const k8sPod = McpServerRuntimeManager.getPod(mcpServerId);
+
+        if (!k8sPod) {
+          return reply.status(404).send({
+            error: {
+              message: "MCP server pod not found or not running",
+              type: "not_found",
+            },
+          });
+        }
+
+        // Hijack the response to handle streaming manually
+        reply.hijack();
+
+        // Set up streaming response headers
+        reply.raw.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+        });
+
+        // Stream the request to the pod
+        await McpServerRuntimeManager.streamToPod(
+          mcpServerId,
+          body,
+          reply.raw as any,
+        );
+
+        // Return undefined when hijacking to prevent Fastify from sending response
+        return;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        fastify.log.error(`Error proxying to MCP server ${mcpServerId}:`, error);
+
+        // If we haven't sent yet, we can still send error response
+        if (!reply.sent) {
+          return reply.status(500).send({
+            error: {
+              message: errorMsg,
+              type: "api_error",
+            },
+          });
+        } else if (!reply.raw.headersSent) {
+          // If already hijacked, try to write error to raw response
+          reply.raw.writeHead(500, { "Content-Type": "application/json" });
+          reply.raw.end(
+            JSON.stringify({
+              error: {
+                message: errorMsg,
+                type: "api_error",
+              },
+            }),
+          );
+        }
+      }
+    },
+  );
+
+  /**
+   * Get logs for an MCP server pod
+   */
+  fastify.get(
+    "/mcp_proxy/:id/logs",
+    {
+      schema: {
+        operationId: RouteId.GetMcpServerLogs,
+        description: "Get logs for a specific MCP server pod",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        querystring: z.object({
+          lines: z.coerce.number().optional().default(100),
+        }),
+        response: {
+          200: z.object({
+            logs: z.string(),
+            containerName: z.string(),
+          }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: mcpServerId } = request.params;
+      const { lines } = request.query;
+
+      try {
+        const { default: McpServerRuntimeManager } = await import(
+          "@/mcp-server-runtime"
+        );
+        const logs = await McpServerRuntimeManager.getMcpServerLogs(
+          mcpServerId,
+          lines,
+        );
+        return reply.send(logs);
+      } catch (error) {
+        fastify.log.error(
+          `Error getting logs for MCP server ${mcpServerId}:`,
+          error,
+        );
+        return reply.status(404).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Failed to get logs",
+            type: "not_found",
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * Restart an MCP server pod
+   */
+  fastify.post(
+    "/api/mcp_server/:id/restart",
+    {
+      schema: {
+        operationId: RouteId.RestartMcpServer,
+        description: "Restart a single MCP server pod",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            message: z.string(),
+          }),
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: mcpServerId } = request.params;
+
+      try {
+        const { default: McpServerRuntimeManager } = await import(
+          "@/mcp-server-runtime"
+        );
+        await McpServerRuntimeManager.restartServer(mcpServerId);
+        return reply.send({
+          success: true,
+          message: `MCP server ${mcpServerId} restarted successfully`,
+        });
+      } catch (error) {
+        fastify.log.error(`Failed to restart MCP server ${mcpServerId}:`, error);
+
+        if (error instanceof Error && error.message?.includes("not found")) {
+          return reply.status(404).send({
+            error: {
+              message: error.message,
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to restart MCP server",
             type: "api_error",
           },
         });

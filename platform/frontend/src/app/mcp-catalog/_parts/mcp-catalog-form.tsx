@@ -201,6 +201,7 @@ interface McpCatalogFormProps {
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
   submitButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  serverType?: "remote" | "local";
 }
 
 export function McpCatalogForm({
@@ -208,6 +209,7 @@ export function McpCatalogForm({
   initialValues,
   onSubmit,
   submitButtonRef,
+  serverType = "remote",
 }: McpCatalogFormProps) {
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
@@ -216,7 +218,7 @@ export function McpCatalogForm({
       : {
           name: "",
           label: "",
-          serverType: "remote",
+          serverType: serverType,
           serverUrl: "",
           authMethod: "none",
           oauthConfig: {

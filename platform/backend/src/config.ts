@@ -135,6 +135,12 @@ export default {
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
   },
+  kubernetes: {
+    namespace: process.env.K8S_NAMESPACE || "default",
+    kubeconfig: process.env.KUBECONFIG,
+    mcpServerBaseImage:
+      process.env.MCP_SERVER_BASE_IMAGE || "archestra/mcp-server:latest",
+  },
   debug: isDevelopment,
   production: isProduction,
   benchmark: {

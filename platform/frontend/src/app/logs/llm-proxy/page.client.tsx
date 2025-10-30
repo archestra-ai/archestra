@@ -21,7 +21,7 @@ import { useInteractions } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
 
 import { DEFAULT_TABLE_LIMIT, formatDate } from "@/lib/utils";
-import { ErrorBoundary } from "../_parts/error-boundary";
+import { ErrorBoundary } from "../../_parts/error-boundary";
 
 type InteractionData =
   archestraApiTypes.GetInteractionsResponses["200"]["data"][number];

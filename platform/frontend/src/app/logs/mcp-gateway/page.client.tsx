@@ -114,7 +114,9 @@ function McpToolCallsTable({
       },
       cell: ({ row }) => (
         <div className="font-mono text-xs">
-          {formatDate({ date: new Date(row.original.createdAt) })}
+          {formatDate({
+            date: new Date(row.original.createdAt).toLocaleDateString(),
+          })}
         </div>
       ),
     },
@@ -214,7 +216,10 @@ function McpToolCallsTable({
         if (result.isError) {
           return (
             <div className="text-xs text-destructive">
-              <TruncatedText message={result.error || "Unknown error"} maxLength={60} />
+              <TruncatedText
+                message={result.error || "Unknown error"}
+                maxLength={60}
+              />
             </div>
           );
         }

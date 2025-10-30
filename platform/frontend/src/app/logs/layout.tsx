@@ -40,9 +40,7 @@ export default function LogsLayout({
               href="/logs/llm-proxy"
               className={cn(
                 "relative pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                isLlmProxyActive
-                  ? "text-foreground"
-                  : "text-muted-foreground",
+                isLlmProxyActive ? "text-foreground" : "text-muted-foreground",
               )}
             >
               LLM Proxy

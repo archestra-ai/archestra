@@ -1,10 +1,16 @@
 import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import db, { schema } from "@/database";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import SecretModel from "./secret";
+
+// Get the API base URL from config
+const API_BASE_URL =
+  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -163,7 +169,28 @@ class McpServerModel {
       return false;
     }
 
-    // Delete the MCP server
+    // Check if this is a local server with a running K8s pod
+    if (mcpServer.catalogId) {
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        mcpServer.catalogId,
+      );
+
+      // For local servers, stop and remove the K8s pod
+      if (catalogItem?.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.removeMcpServer(id);
+          console.log(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+        } catch (error) {
+          console.error(
+            `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+            error,
+          );
+          // Continue with deletion even if pod cleanup fails
+        }
+      }
+    }
+
+    // Delete the MCP server from database
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
@@ -236,7 +263,7 @@ class McpServerModel {
       try {
         const config = mcpClient.createServerConfig({
           name: mcpServer.name,
-          url: `http://localhost:9000/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
+          url: `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
           secrets, // Local servers might still use secrets for API keys etc.
         });
         const tools = await mcpClient.connectAndGetTools(config);

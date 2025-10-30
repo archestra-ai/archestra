@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Download,
   Eye,
@@ -232,6 +233,7 @@ export function InternalMCPCatalog({
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
 }) {
+  const queryClient = useQueryClient();
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
@@ -583,10 +585,22 @@ export function InternalMCPCatalog({
               key={item.id}
               serverId={shouldPoll ? installedServer.id : null}
               onInstallationComplete={(serverId) => {
+                // Remove from installing set
                 setInstallingServerIds((prev) => {
                   const next = new Set(prev);
                   next.delete(serverId);
                   return next;
+                });
+
+                // Invalidate queries to refresh the UI
+                queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+                queryClient.invalidateQueries({ queryKey: ["tools"] });
+                queryClient.invalidateQueries({
+                  queryKey: ["tools", "unassigned"],
+                });
+                queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+                queryClient.invalidateQueries({
+                  queryKey: ["mcp-servers", serverId, "tools"],
                 });
               }}
             >

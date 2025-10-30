@@ -102,8 +102,6 @@ export function useMcpServerInstallationStatus(
     onError?: () => void;
   },
 ) {
-  const queryClient = useQueryClient();
-
   return useQuery({
     queryKey: ["mcp-servers", mcpServerId, "installation-status"],
     queryFn: async () => {
@@ -140,8 +138,22 @@ export function useMcpServerInstallationStatus(
         }
         return false;
       }
-      // Poll every 2 seconds while installation is pending
-      return status === "pending" ? 2000 : false;
+
+      if (status === "error") {
+        options?.onError?.();
+        return false; // Stop polling
+      }
+
+      // Poll every 5 seconds while installation is pending
+      return status === "pending" ? 5000 : false;
     },
+    // Disable automatic retries to prevent excessive requests on errors
+    retry: false,
+    // Reduce stale time to prevent unnecessary refetches
+    staleTime: 4000,
+    // Prevent refetching on window focus or mount
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }

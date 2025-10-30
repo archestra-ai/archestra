@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import config from "@/config";
 import { InternalMcpCatalogModel, SecretModel, ToolModel } from "@/models";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
@@ -9,6 +10,10 @@ import type {
   CommonToolResult,
   McpServerConfig,
 } from "@/types";
+
+// Get the API base URL from config
+const API_BASE_URL =
+  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpClient {
   private clients = new Map<string, Client>();
@@ -75,8 +80,6 @@ class McpClient {
     }
 
     try {
-      let client: Client | null = null;
-
       const catalogItem = await InternalMcpCatalogModel.findById(
         firstTool.mcpServerCatalogId,
       );
@@ -90,6 +93,90 @@ class McpClient {
         }));
       }
 
+      // For local servers, use direct JSON-RPC calls instead of MCP SDK client
+      if (catalogItem.serverType === "local") {
+        const proxyUrl = `${API_BASE_URL}/mcp_proxy/${firstTool.mcpServerId}`;
+
+        // Execute each MCP tool call via direct JSON-RPC
+        for (const toolCall of mcpToolCalls) {
+          try {
+            // Strip the server prefix from tool name for MCP server call
+            const serverPrefix = `${firstTool.mcpServerName}__`;
+            const mcpToolName = toolCall.name.startsWith(serverPrefix)
+              ? toolCall.name.substring(serverPrefix.length)
+              : toolCall.name;
+
+            const response = await fetch(proxyUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: Date.now(),
+                method: "tools/call",
+                params: {
+                  name: mcpToolName,
+                  arguments: toolCall.arguments,
+                },
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`,
+              );
+            }
+
+            const jsonResult = await response.json();
+
+            if (jsonResult.error) {
+              throw new Error(
+                `JSON-RPC error ${jsonResult.error.code}: ${jsonResult.error.message}`,
+              );
+            }
+
+            const result = jsonResult.result;
+
+            // Apply response modifier template if one exists
+            let modifiedContent = result.content;
+            const template = templatesByToolName.get(toolCall.name);
+            if (template) {
+              try {
+                modifiedContent = applyResponseModifierTemplate(
+                  template,
+                  result.content,
+                );
+              } catch (error) {
+                console.error(
+                  `Error applying response modifier template for tool ${toolCall.name}:`,
+                  error,
+                );
+                // If template fails, use original content
+              }
+            }
+
+            results.push({
+              id: toolCall.id,
+              content: modifiedContent,
+              isError: !!result.isError,
+            });
+          } catch (error) {
+            results.push({
+              id: toolCall.id,
+              content: null,
+              isError: true,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+          }
+        }
+
+        return results;
+      }
+
+      // For remote servers, use the standard MCP SDK client
+      let client: Client | null = null;
+
       if (catalogItem.serverType === "remote") {
         // Generic remote server with catalog info
         const config = this.createServerConfig({
@@ -99,16 +186,6 @@ class McpClient {
            * this way that typescript knows that when serverType is remote, serverUrl will ALWAYS be set
            */
           url: catalogItem.serverUrl as string,
-          secrets,
-        });
-        client = await this.getOrCreateConnection(
-          firstTool.mcpServerCatalogId,
-          config,
-        );
-      } else if (catalogItem.serverType === "local") {
-        const config = this.createServerConfig({
-          name: firstTool.mcpServerName,
-          url: `http://localhost:9000/mcp_proxy/${firstTool.mcpServerId}`, // Use the MCP proxy endpoint for local servers
           secrets,
         });
         client = await this.getOrCreateConnection(
@@ -241,6 +318,54 @@ class McpClient {
   ): Promise<CommonMcpToolDefinition[]> {
     const clientId = `${config.name}-${Date.now()}`;
 
+    // For local servers using the mcp_proxy endpoint, make direct JSON-RPC call
+    // instead of using StreamableHTTPClientTransport which expects SSE
+    if (config.url.includes("/mcp_proxy/")) {
+      try {
+        const response = await fetch(config.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...config.headers,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/list",
+            params: {},
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+          throw new Error(
+            `JSON-RPC error ${result.error.code}: ${result.error.message}`,
+          );
+        }
+
+        const toolsList = result.result?.tools || [];
+
+        // Transform tools to our format
+        return toolsList.map((tool: Tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema as Record<string, unknown>,
+        }));
+      } catch (error) {
+        throw new Error(
+          `Failed to connect to MCP server ${config.name}: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+      }
+    }
+
+    // For remote servers, use the standard MCP SDK client
     try {
       // Create stdio transport for the MCP server
       const transport = new StreamableHTTPClientTransport(new URL(config.url), {
@@ -262,11 +387,29 @@ class McpClient {
         },
       );
 
-      await client.connect(transport);
+      // Add timeout wrapper for connection and tool listing (30 seconds)
+      const connectPromise = client.connect(transport);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Connection timeout after 30 seconds"));
+        }, 30000);
+      });
+
+      await Promise.race([connectPromise, timeoutPromise]);
       this.clients.set(clientId, client);
 
-      // List available tools
-      const toolsResult = await client.listTools();
+      // List available tools with timeout
+      const listToolsPromise = client.listTools();
+      const listTimeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("List tools timeout after 30 seconds"));
+        }, 30000);
+      });
+
+      const toolsResult = await Promise.race([
+        listToolsPromise,
+        listTimeoutPromise,
+      ]);
 
       // Transform tools to our format
       const tools: CommonMcpToolDefinition[] = toolsResult.tools.map(

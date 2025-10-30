@@ -17,6 +17,7 @@ export type Resource =
   | "internalMcpCatalog"
   | "mcpServer"
   | "mcpServerInstallationRequest"
+  | "mcpToolCall"
   | "team"
 
 /**
@@ -47,6 +48,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServer: ["create", "read", "update", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   team: ["create", "read", "update", "delete"],
+  mcpToolCall: ["read"],
 };
 
 export const ac = createAccessControl(allAvailableActions);
@@ -73,5 +75,6 @@ export const memberRole = ac.newRole({
   mcpServer: ["read"],
   mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
+  mcpToolCall: ["read"],
 });
 

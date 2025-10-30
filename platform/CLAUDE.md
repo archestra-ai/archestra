@@ -27,6 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
+- **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
 
 ## Common Commands
@@ -67,6 +68,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 # Kubernetes (for MCP server runtime)
 K8S_NAMESPACE=default
 KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
+USE_IN_CLUSTER_KUBECONFIG=true  # Set to true when running inside K8s cluster
 MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
 ```
 

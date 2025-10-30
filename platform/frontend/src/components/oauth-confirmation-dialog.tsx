@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2, Info, ShieldCheck, User, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
 import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
+type McpServer = archestraApiTypes.GetMcpServersResponses["200"][number];
+
 interface OAuthConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,7 +35,7 @@ interface OAuthConfirmationDialogProps {
   onCancel: () => void;
   isTeamMode?: boolean;
   catalogId?: string;
-  installedServers?: archestraApiTypes.GetMcpServersResponses["200"];
+  installedServers?: McpServer[];
 }
 
 export function OAuthConfirmationDialog({
@@ -53,71 +55,56 @@ export function OAuthConfirmationDialog({
   const { data: allServers } = useMcpServers();
 
   // Get teams that already have access to this catalog
-  const teamsWithExistingAccess = useMemo(() => {
-    if (!catalogId) return new Set<string>();
+  const serversToCheck = installedServers || allServers || [];
+  const serversForCatalog = catalogId
+    ? serversToCheck.filter((s) => s.catalogId === catalogId)
+    : [];
 
-    const serversToCheck = installedServers || allServers || [];
-    const serversForCatalog = serversToCheck.filter(
-      (s) => s.catalogId === catalogId,
-    );
-
-    const teamIds = new Set<string>();
-    for (const server of serversForCatalog) {
-      if (server.teams) {
-        for (const teamId of server.teams) {
-          teamIds.add(teamId);
-        }
+  const teamsWithExistingAccess = new Set<string>();
+  for (const server of serversForCatalog) {
+    if (server.teams) {
+      for (const teamId of server.teams) {
+        teamsWithExistingAccess.add(teamId);
       }
     }
-    return teamIds;
-  }, [catalogId, installedServers, allServers]);
+  }
 
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !assignedTeamIds.includes(teamId)) {
-        setAssignedTeamIds([...assignedTeamIds, teamId]);
-        setSelectedTeamId("");
-      }
-    },
-    [assignedTeamIds],
-  );
+  const handleAddTeam = (teamId: string) => {
+    if (teamId && !assignedTeamIds.includes(teamId)) {
+      setAssignedTeamIds([...assignedTeamIds, teamId]);
+      setSelectedTeamId("");
+    }
+  };
 
-  const handleRemoveTeam = useCallback(
-    (teamId: string) => {
-      setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
-    },
-    [assignedTeamIds],
-  );
+  const handleRemoveTeam = (teamId: string) => {
+    setAssignedTeamIds(assignedTeamIds.filter((id) => id !== teamId));
+  };
 
-  const getUnassignedTeams = useCallback(() => {
-    if (!teams) return [];
-    return teams.filter(
-      (team) =>
-        !assignedTeamIds.includes(team.id) &&
-        !teamsWithExistingAccess.has(team.id),
-    );
-  }, [teams, assignedTeamIds, teamsWithExistingAccess]);
+  const unassignedTeams = !teams
+    ? []
+    : teams.filter(
+        (team) =>
+          !assignedTeamIds.includes(team.id) &&
+          !teamsWithExistingAccess.has(team.id),
+      );
 
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return teams?.find((team) => team.id === teamId);
-    },
-    [teams],
-  );
+  const getTeamById = (teamId: string) => {
+    return teams?.find((team) => team.id === teamId);
+  };
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = () => {
     onConfirm(assignedTeamIds);
     setAssignedTeamIds([]);
     setSelectedTeamId("");
     onOpenChange(false);
-  }, [assignedTeamIds, onConfirm, onOpenChange]);
+  };
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     setAssignedTeamIds([]);
     setSelectedTeamId("");
     onCancel();
     onOpenChange(false);
-  }, [onCancel, onOpenChange]);
+  };
 
   const isValid = !isTeamMode || assignedTeamIds.length > 0;
 
@@ -176,12 +163,12 @@ export function OAuthConfirmationDialog({
                     <SelectValue placeholder="Select a team to assign" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getUnassignedTeams().length === 0 ? (
+                    {unassignedTeams.length === 0 ? (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">
                         All teams are already assigned
                       </div>
                     ) : (
-                      getUnassignedTeams().map((team) => (
+                      unassignedTeams.map((team) => (
                         <SelectItem key={team.id} value={team.id}>
                           {team.name}
                         </SelectItem>

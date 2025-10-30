@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useDeleteMcpServer,
   useInstallMcpServer,
+  useMcpServerInstallationStatus,
   useMcpServers,
 } from "@/lib/mcp-server.query";
 import { CreateCatalogDialog } from "./create-catalog-dialog";
@@ -28,8 +29,6 @@ import {
 import { NoAuthInstallDialog } from "./no-auth-install-dialog";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
 import { RemoteServerInstallDialog } from "./remote-server-install-dialog";
-
-// TODO: Add dedicated handling for local MCP server flows if required.
 
 export function InternalMCPCatalog({
   initialData,
@@ -70,6 +69,26 @@ export function InternalMCPCatalog({
   const [isNoAuthDialogOpen, setIsNoAuthDialogOpen] = useState(false);
   const [noAuthCatalogItem, setNoAuthCatalogItem] =
     useState<CatalogItem | null>(null);
+  const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  // Poll installation status for the first installing server
+  const mcpServerInstallationStatus = useMcpServerInstallationStatus(
+    Array.from(installingServerIds)[0] ?? null,
+  );
+
+  // Remove server from installing set when installation completes
+  useEffect(() => {
+    const firstInstallingId = Array.from(installingServerIds)[0];
+    if (firstInstallingId && mcpServerInstallationStatus.data === "success") {
+      setInstallingServerIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(firstInstallingId);
+        return newSet;
+      });
+    }
+  }, [mcpServerInstallationStatus.data, installingServerIds]);
 
   const handleInstall = async (catalogItem: CatalogItem, teamMode = false) => {
     setIsTeamMode(teamMode);
@@ -106,7 +125,30 @@ export function InternalMCPCatalog({
     await handleInstall(catalogItem, true);
   };
 
-  const handleInstallNoAuth = (catalogItem: CatalogItem) => {
+  const handleInstallNoAuth = async (catalogItem: CatalogItem) => {
+    // Local servers (serverType !== "remote") install directly without dialog
+    if (catalogItem.serverType !== "remote") {
+      try {
+        setInstallingItemId(catalogItem.id);
+        const installedServer = await installMutation.mutateAsync({
+          name: catalogItem.name,
+          catalogId: catalogItem.id,
+          teams: [],
+          dontShowToast: true,
+        });
+        // Track the installed server for polling
+        if (installedServer?.id) {
+          setInstallingServerIds((prev) =>
+            new Set(prev).add(installedServer.id),
+          );
+        }
+      } finally {
+        setInstallingItemId(null);
+      }
+      return;
+    }
+
+    // Remote servers without auth show dialog for team selection
     setNoAuthCatalogItem(catalogItem);
     setIsNoAuthDialogOpen(true);
   };
@@ -422,6 +464,9 @@ export function InternalMCPCatalog({
               {remoteCatalogItems.map((item) => {
                 const installedServer = getAggregatedInstallation(item.id);
                 const itemWithLabel = item as CatalogItemWithOptionalLabel;
+                const isInstallInProgress =
+                  installedServer &&
+                  installingServerIds.has(installedServer.id);
 
                 return (
                   <McpServerCard
@@ -431,6 +476,11 @@ export function InternalMCPCatalog({
                     installedServer={installedServer}
                     installingItemId={installingItemId}
                     installMutationPending={installMutation.isPending}
+                    installationStatus={
+                      isInstallInProgress
+                        ? mcpServerInstallationStatus.data
+                        : undefined
+                    }
                     onInstall={() => handleInstall(item, false)}
                     onInstallTeam={() => handleInstallTeam(item)}
                     onInstallNoAuth={() => handleInstallNoAuth(item)}
@@ -468,6 +518,9 @@ export function InternalMCPCatalog({
               {localCatalogItems.map((item) => {
                 const installedServer = getAggregatedInstallation(item.id);
                 const itemWithLabel = item as CatalogItemWithOptionalLabel;
+                const isInstallInProgress =
+                  installedServer &&
+                  installingServerIds.has(installedServer.id);
 
                 return (
                   <McpServerCard
@@ -477,6 +530,11 @@ export function InternalMCPCatalog({
                     installedServer={installedServer}
                     installingItemId={installingItemId}
                     installMutationPending={installMutation.isPending}
+                    installationStatus={
+                      isInstallInProgress
+                        ? mcpServerInstallationStatus.data
+                        : undefined
+                    }
                     onInstall={() => handleInstall(item, false)}
                     onInstallTeam={() => handleInstallTeam(item)}
                     onInstallNoAuth={() => handleInstallNoAuth(item)}

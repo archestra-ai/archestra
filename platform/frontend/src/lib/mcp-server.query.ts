@@ -29,12 +29,17 @@ export function useInstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.InstallMcpServerData["body"],
+      data: archestraApiTypes.InstallMcpServerData["body"] & {
+        dontShowToast?: boolean;
+      },
     ) => {
       const { data: installedServer } = await installMcpServer({ body: data });
+      if (!data.dontShowToast) {
+        toast.success(`Successfully installed ${data.name}`);
+      }
       return installedServer;
     },
-    onSuccess: async (installedServer, variables) => {
+    onSuccess: async (installedServer) => {
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate tools queries since MCP server installation creates new tools
@@ -47,7 +52,6 @@ export function useInstallMcpServer() {
           queryKey: ["mcp-servers", installedServer.id, "tools"],
         });
       }
-      toast.success(`Successfully installed ${variables.name}`);
     },
     onError: (error, variables) => {
       console.error("Install error:", error);
@@ -212,19 +216,30 @@ export function useMcpServerTools(mcpServerId: string | null) {
 export function useMcpServerInstallationStatus(
   installingMcpServerId: string | null,
 ) {
+  const queryClient = useQueryClient();
   return useQuery({
-    queryKey: ["mcp-servers", installingMcpServerId],
+    queryKey: ["mcp-servers-installation-polling", installingMcpServerId],
     queryFn: async () => {
-      // then it means it's installed already
-      if (!installingMcpServerId) return "success";
+      if (!installingMcpServerId) {
+        await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+        return "success";
+      }
       const response = await getMcpServer({
         path: { id: installingMcpServerId },
       });
-      return response.data?.localInstallationStatus ?? null;
+      const result = response.data?.localInstallationStatus ?? null;
+      if (result === "success") {
+        await queryClient.refetchQueries({
+          queryKey: ["mcp-servers", installingMcpServerId],
+        });
+        toast.success(`Successfully installed server`);
+      }
+      return result;
     },
     refetchInterval: (query) => {
       const status = query.state.data;
       return status === "pending" || status === null ? 2000 : false;
     },
+    enabled: !!installingMcpServerId,
   });
 }

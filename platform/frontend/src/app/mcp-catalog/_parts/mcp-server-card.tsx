@@ -33,6 +33,7 @@ import { ManageTeamsDialog } from "./manage-teams-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpToolsDialog } from "./mcp-tools-dialog";
 import { TransportBadges } from "./transport-badges";
+import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -71,6 +72,7 @@ export type McpServerCardProps = {
     | null;
   installingItemId: string | null;
   installMutationPending: boolean;
+  installationStatus?: "error" | "pending" | "success" | "idle" | null;
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
@@ -92,6 +94,7 @@ export function McpServerCard({
   installedServer,
   installingItemId,
   installMutationPending,
+  installationStatus,
   onInstall,
   onInstallTeam,
   onInstallNoAuth,
@@ -116,9 +119,11 @@ export function McpServerCard({
     useState<ToolForAssignment | null>(null);
   const [bulkAssignTools, setBulkAssignTools] = useState<SimpleTool[]>([]);
   const [toolsDialogKey, setToolsDialogKey] = useState(0);
+  const [uninstallingServer, setUninstallingServer] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
-  const _installed = !!installedServer;
-  const isInstalling = installingItemId === item.id || installMutationPending;
   const needsReinstall = installedServer?.reinstallRequired ?? false;
   const userCount = installedServer?.users?.length ?? 0;
   const teamsCount = installedServer?.teams?.length ?? 0;
@@ -126,6 +131,12 @@ export function McpServerCard({
   const toolsAssignedCount = !tools
     ? 0
     : tools.filter((tool) => tool.assignedAgentCount > 0).length;
+  const installed = !!installedServer && toolsDiscoveredCount > 0;
+  const isInstalling = Boolean(
+    installingItemId === item.id ||
+      installMutationPending ||
+      (installationStatus !== "success" && installedServer),
+  );
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
       ? installedServer.users.includes(currentUserId)
@@ -261,16 +272,14 @@ export function McpServerCard({
     <>
       <WithRole requiredRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          {[usersAuthenticated, teamsAccess, toolsAssigned]
-            .filter(Boolean)
-            .map((item) => (
-              <div
-                key={item.key}
-                className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
-              >
-                {item}
-              </div>
-            ))}
+          {[usersAuthenticated, teamsAccess, toolsAssigned].map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
+            >
+              {item}
+            </div>
+          ))}
         </div>
       </WithRole>
       {needsReinstall && (
@@ -336,7 +345,50 @@ export function McpServerCard({
     </>
   );
 
-  const localCardContent = (
+  const localCardContent = installed ? (
+    <>
+      <WithRole requiredRole="admin">
+        <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
+          {[toolsAssigned].map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      </WithRole>
+      {needsReinstall && (
+        <Button
+          onClick={onReinstall}
+          size="sm"
+          variant="default"
+          className="w-full"
+          disabled={isInstalling}
+        >
+          <RefreshCw className="mr-2 h-4 w-4" />
+          {isInstalling ? "Reinstalling..." : "Reinstall Required"}
+        </Button>
+      )}
+      <WithRole requiredRole="admin">
+        <Button
+          onClick={() =>
+            installedServer &&
+            setUninstallingServer({
+              id: installedServer.id,
+              name: item.label || item.name,
+            })
+          }
+          size="sm"
+          variant="outline"
+          className="w-full"
+        >
+          Uninstall
+        </Button>
+      </WithRole>
+    </>
+  ) : (
     <Button
       onClick={onInstallNoAuth}
       disabled={isInstalling}
@@ -344,7 +396,7 @@ export function McpServerCard({
       variant="outline"
       className="w-full"
     >
-      {isInstalling ? "Installing..." : "Install directly"}
+      {isInstalling ? "Installing..." : "Install"}
     </Button>
   );
 
@@ -425,6 +477,11 @@ export function McpServerCard({
         onClose={() => setIsManageTeamsDialogOpen(false)}
         server={installedServer}
         label={item.label || item.name}
+      />
+
+      <UninstallServerDialog
+        server={uninstallingServer}
+        onClose={() => setUninstallingServer(null)}
       />
     </>
   );

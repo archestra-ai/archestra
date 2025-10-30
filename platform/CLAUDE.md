@@ -69,7 +69,7 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 K8S_NAMESPACE=default
 KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
 USE_IN_CLUSTER_KUBECONFIG=true  # Set to true when running inside K8s cluster
-MCP_SERVER_BASE_IMAGE=archestra/mcp-server:latest
+MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3
 ```
 
 ## Architecture

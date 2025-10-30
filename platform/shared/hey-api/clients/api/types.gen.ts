@@ -4299,6 +4299,7 @@ export type GetInternalMcpCatalogResponses = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4368,6 +4369,7 @@ export type CreateInternalMcpCatalogItemData = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4454,6 +4456,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4602,6 +4605,7 @@ export type GetInternalMcpCatalogItemResponses = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4671,6 +4675,7 @@ export type UpdateInternalMcpCatalogItemData = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4768,6 +4773,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             environment?: {
                 [key: string]: string;
             };
+            dockerImage?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4953,6 +4959,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5021,6 +5028,7 @@ export type CreateMcpServerInstallationRequestData = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
     };
@@ -5116,6 +5124,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5301,6 +5310,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5369,6 +5379,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -5485,6 +5496,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5611,6 +5623,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5737,6 +5750,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5863,6 +5877,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 environment?: {
                     [key: string]: string;
                 };
+                dockerImage?: string;
             };
         } | null;
         adminResponse: string | null;

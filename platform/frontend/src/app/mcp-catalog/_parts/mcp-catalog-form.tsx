@@ -150,6 +150,7 @@ export function transformFormToApiData(
       command: values.localConfig.command,
       arguments: argumentsArray,
       environment,
+      dockerImage: values.localConfig.dockerImage || undefined,
     };
   }
 
@@ -247,6 +248,7 @@ export function transformCatalogItemToFormValues(
         command: string;
         arguments: string;
         environment: string;
+        dockerImage?: string;
       }
     | undefined;
   if (item.localConfig) {
@@ -264,6 +266,7 @@ export function transformCatalogItemToFormValues(
       command: item.localConfig.command,
       arguments: argumentsString,
       environment: environmentString,
+      dockerImage: item.localConfig.dockerImage || "",
     };
   }
 
@@ -317,6 +320,7 @@ export function McpCatalogForm({
             command: "",
             arguments: "",
             environment: "",
+            dockerImage: "",
           },
         },
   });
@@ -474,6 +478,28 @@ export function McpCatalogForm({
                     </FormControl>
                     <FormDescription>
                       Environment variables in KEY=value format, one per line
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="localConfig.dockerImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Docker Image (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="registry.example.com/my-mcp-server:latest"
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Custom Docker image URL. If not specified, the default
+                      base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

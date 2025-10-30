@@ -66,15 +66,15 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Register HTTP proxy for OpenAI routes
    * Handles both patterns:
-   * - /v1/openai/:agentId/* -> https://api.openai.com/v1/* (agentId stripped if UUID)
-   *  - /v1/openai/* -> https://api.openai.com/v1/* (direct proxy)
+   * - /v1/openai/:agentId/* -> config.llm.openai.baseUrl/* (agentId stripped if UUID)
+   *  - /v1/openai/* -> config.llm.openai.baseUrl/* (direct proxy)
    *
    * Chat completions are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
     upstream: config.llm.openai.baseUrl,
     prefix: `${API_PREFIX}`,
-    rewritePrefix: "/v1",
+    rewritePrefix: "",
     preHandler: (request, _reply, next) => {
       // Skip chat/completions (we handle it specially below with full agent support)
       if (

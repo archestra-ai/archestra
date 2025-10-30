@@ -133,6 +133,11 @@ export default class K8sPod {
       );
       this.state = "pending";
 
+      // Use custom Docker image if provided, otherwise use the base image
+      const dockerImage =
+        catalogItem.localConfig.dockerImage || mcpServerBaseImage;
+      console.log(`Using Docker image: ${dockerImage}`);
+
       const podSpec: k8s.V1Pod = {
         metadata: {
           name: this.podName,
@@ -146,7 +151,7 @@ export default class K8sPod {
           containers: [
             {
               name: "mcp-server",
-              image: mcpServerBaseImage,
+              image: dockerImage,
               env: this.createPodEnvFromConfig(catalogItem.localConfig),
               // Use the command and arguments from local config
               command: [catalogItem.localConfig.command],

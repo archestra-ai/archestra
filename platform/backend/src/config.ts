@@ -139,7 +139,16 @@ export default {
     namespace: process.env.K8S_NAMESPACE || "default",
     kubeconfig: process.env.KUBECONFIG,
     mcpServerBaseImage:
-      process.env.MCP_SERVER_BASE_IMAGE || "archestra/mcp-server:latest",
+      process.env.MCP_SERVER_BASE_IMAGE ||
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
+    useInClusterConfig: process.env.USE_IN_CLUSTER_CONFIG === "true" || true,
+  },
+  observability: {
+    otel: {
+      otelExporterOtlpEndpoint:
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+        "http://localhost:4318/v1/traces",
+    },
   },
   debug: isDevelopment,
   production: isProduction,

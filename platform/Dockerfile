@@ -52,7 +52,7 @@ ENV OPENAI_BASE_URL="https://api.openai.com/v1"
 ENV ANTHROPIC_BASE_URL="https://api.anthropic.com"
 ENV KUBECONFIG=""
 ENV K8S_NAMESPACE="default"
-ENV MCP_SERVER_BASE_IMAGE="archestra/mcp-server:latest"
+ENV MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \

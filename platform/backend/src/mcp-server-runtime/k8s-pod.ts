@@ -1,7 +1,15 @@
 import type { IncomingMessage } from "node:http";
 import type * as k8s from "@kubernetes/client-node";
-import type { McpServer } from "@/types";
+import type { LocalConfigSchema } from "@shared";
+import type { z } from "zod";
+import config from "@/config";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
+
+const {
+  kubernetes: { mcpServerBaseImage },
+} = config;
 
 /**
  * K8sPod manages a single MCP server running as a Kubernetes pod.
@@ -33,22 +41,35 @@ export default class K8sPod {
   }
 
   /**
-   * Get the base image for MCP server containers
-   * This should match the image used in desktop_app
+   * Get catalog item for this MCP server
    */
-  private getBaseImage(): string {
-    // TODO: Update this to match your container registry
-    return process.env.MCP_SERVER_BASE_IMAGE || "archestra/mcp-server:latest";
+  private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+    if (!this.mcpServer.catalogId) {
+      return null;
+    }
+
+    return await InternalMcpCatalogModel.findById(this.mcpServer.catalogId);
   }
 
   /**
    * Create environment variables for the pod
    */
-  private createPodEnv(): k8s.V1EnvVar[] {
+  private createPodEnvFromConfig(
+    localConfig?: z.infer<typeof LocalConfigSchema>,
+  ): k8s.V1EnvVar[] {
     const env: k8s.V1EnvVar[] = [];
 
-    // TODO: Load OAuth tokens and user config from related catalog item and secrets
-    // For now, just return basic environment
+    // Add environment variables from local config
+    if (localConfig?.environment) {
+      Object.entries(localConfig.environment).forEach(([key, value]) => {
+        env.push({
+          name: key,
+          value: String(value),
+        });
+      });
+    }
+
+    // TODO: Load OAuth tokens and user config from secrets
 
     return env;
   }
@@ -77,16 +98,30 @@ export default class K8sPod {
           console.log(`Deleting failed pod ${this.podName}`);
           await this.removePod();
         }
-      } catch (error: unknown) {
+        // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
+      } catch (error: any) {
         // Pod doesn't exist, we'll create it below
-        if (error instanceof Error && error.message.includes("404")) {
+        if (error?.code !== 404 && error?.statusCode !== 404) {
           throw error;
         }
+        // 404 means pod doesn't exist, which is fine - we'll create it
+      }
+
+      // Get catalog item to get local config
+      const catalogItem = await this.getCatalogItem();
+
+      if (!catalogItem?.localConfig) {
+        throw new Error(
+          `Local config not found for MCP server ${this.mcpServer.name}`,
+        );
       }
 
       // Create new pod
       console.log(
         `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
+      );
+      console.log(
+        `Using command: ${catalogItem.localConfig.command} ${catalogItem.localConfig.arguments.join(" ")}`,
       );
       this.state = "pending";
 
@@ -103,8 +138,11 @@ export default class K8sPod {
           containers: [
             {
               name: "mcp-server",
-              image: this.getBaseImage(),
-              env: this.createPodEnv(),
+              image: mcpServerBaseImage,
+              env: this.createPodEnvFromConfig(catalogItem.localConfig),
+              // Use the command and arguments from local config
+              command: [catalogItem.localConfig.command],
+              args: catalogItem.localConfig.arguments,
               // For stdio-based MCP servers, we use stdin/stdout
               stdin: true,
               tty: false,

@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import * as k8s from "@kubernetes/client-node";
+import config from "@/config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
 import type { McpServer } from "@/types";
@@ -10,6 +11,10 @@ import type {
   K8sRuntimeStatusSummary,
   McpServerContainerLogs,
 } from "./schemas";
+
+const {
+  kubernetes: { namespace, kubeconfig, useInClusterConfig },
+} = config;
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes pods.
@@ -34,11 +39,16 @@ class McpServerRuntimeManager {
     // Load K8s config from environment or default locations
     try {
       if (process.env.KUBERNETES_SERVICE_HOST) {
-        // Running inside a K8s cluster
+        /**
+         * Running inside a K8s cluster
+         *
+         * Automatically configure the client to connect to the Kubernetes API
+         * when the application is running inside a Kubernetes cluster
+         */
         this.k8sConfig.loadFromCluster();
-      } else if (process.env.KUBECONFIG) {
+      } else if (kubeconfig) {
         // Load from KUBECONFIG env var
-        this.k8sConfig.loadFromFile(process.env.KUBECONFIG);
+        this.k8sConfig.loadFromFile(kubeconfig);
       } else {
         // Load from default location (~/.kube/config)
         this.k8sConfig.loadFromDefault();
@@ -50,9 +60,7 @@ class McpServerRuntimeManager {
 
     this.k8sApi = this.k8sConfig.makeApiClient(k8s.CoreV1Api);
     this.k8sExec = new k8s.Exec(this.k8sConfig);
-
-    // Get namespace from env or use default
-    this.namespace = process.env.K8S_NAMESPACE || "default";
+    this.namespace = namespace;
   }
 
   /**

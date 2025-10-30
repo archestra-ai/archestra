@@ -234,11 +234,9 @@ class McpServerModel {
      */
     if (catalogItem?.serverType === "local") {
       try {
-        // Use the MCP proxy endpoint for local servers
-        const proxyUrl = `http://localhost:9000/mcp_proxy/${mcpServer.id}`;
         const config = mcpClient.createServerConfig({
           name: mcpServer.name,
-          url: proxyUrl,
+          url: `http://localhost:9000/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
           secrets, // Local servers might still use secrets for API keys etc.
         });
         const tools = await mcpClient.connectAndGetTools(config);

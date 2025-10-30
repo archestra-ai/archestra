@@ -7,6 +7,8 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
+export const InternalMcpCatalogServerTypeSchema = z.enum(["local", "remote"]);
+
 // Define Zod schemas for complex JSONB fields
 const AuthFieldSchema = z.object({
   name: z.string(),
@@ -33,6 +35,7 @@ const UserConfigFieldSchema = z.object({
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
 ).extend({
+  serverType: InternalMcpCatalogServerTypeSchema,
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
@@ -42,7 +45,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
   schema.internalMcpCatalogTable,
 ).extend({
-  serverType: z.enum(["local", "remote"]).nullable().optional(),
+  serverType: InternalMcpCatalogServerTypeSchema,
   authFields: z.array(AuthFieldSchema).nullable().optional(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
   oauthConfig: OAuthConfigSchema.nullable().optional(),
@@ -52,12 +55,16 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
 export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
   schema.internalMcpCatalogTable,
 ).extend({
-  serverType: z.enum(["local", "remote"]).nullable().optional(),
+  serverType: InternalMcpCatalogServerTypeSchema,
   authFields: z.array(AuthFieldSchema).nullable().optional(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable().optional(),
   oauthConfig: OAuthConfigSchema.nullable().optional(),
   localConfig: LocalConfigSchema.nullable().optional(),
 });
+
+export type InternalMcpCatalogServerType = z.infer<
+  typeof InternalMcpCatalogServerTypeSchema
+>;
 
 export type InternalMcpCatalog = z.infer<typeof SelectInternalMcpCatalogSchema>;
 export type InsertInternalMcpCatalog = z.infer<

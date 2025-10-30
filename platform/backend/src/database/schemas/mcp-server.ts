@@ -5,9 +5,11 @@ import secretTable from "./secret";
 const mcpServerTable = pgTable("mcp_server", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
-    onDelete: "set null",
-  }),
+  catalogId: uuid("catalog_id")
+    .references(() => mcpCatalogTable.id, {
+      onDelete: "set null",
+    })
+    .notNull(),
   secretId: uuid("secret_id").references(() => secretTable.id, {
     onDelete: "set null",
   }),

@@ -5,6 +5,7 @@ import {
 } from "@/test-utils";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerModel from "./mcp-server";
 import TeamModel from "./team";
 import ToolModel from "./tool";
@@ -299,9 +300,16 @@ describe("ToolModel", () => {
         teams: [],
       });
 
+      const catalogItem = await InternalMcpCatalogModel.create({
+        name: "github-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.githubcopilot.com/mcp/",
+      });
+
       // Create an MCP server with GitHub metadata
       const mcpServer = await McpServerModel.create({
         name: "test-github-server",
+        catalogId: catalogItem.id,
       });
 
       // Create an MCP tool
@@ -331,7 +339,8 @@ describe("ToolModel", () => {
         toolName: "github_mcp_server__list_issues",
         mcpServerName: "test-github-server",
         mcpServerSecretId: null,
-        mcpServerCatalogId: null,
+        mcpServerCatalogId: catalogItem.id,
+        mcpServerId: mcpServer.id,
         responseModifierTemplate: null,
       });
     });
@@ -343,9 +352,16 @@ describe("ToolModel", () => {
         teams: [],
       });
 
+      const catalogItem = await InternalMcpCatalogModel.create({
+        name: "github-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.githubcopilot.com/mcp/",
+      });
+
       // Create an MCP server
       const mcpServer = await McpServerModel.create({
         name: "test-server",
+        catalogId: catalogItem.id,
       });
 
       // Create multiple MCP tools
@@ -392,8 +408,14 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server and tool
+      const catalogItem = await InternalMcpCatalogModel.create({
+        name: "github-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.githubcopilot.com/mcp/",
+      });
       const mcpServer = await McpServerModel.create({
         name: "test-server",
+        catalogId: catalogItem.id,
       });
 
       const mcpTool = await ToolModel.create({
@@ -423,8 +445,14 @@ describe("ToolModel", () => {
       });
 
       // Create an MCP server
+      const catalogItem = await InternalMcpCatalogModel.create({
+        name: "github-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.githubcopilot.com/mcp/",
+      });
       const mcpServer = await McpServerModel.create({
         name: "test-server",
+        catalogId: catalogItem.id,
       });
 
       // Create a proxy-sniffed tool (with agentId)
@@ -464,12 +492,24 @@ describe("ToolModel", () => {
       });
 
       // Create two MCP servers
+      const catalogItem = await InternalMcpCatalogModel.create({
+        name: "github-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.githubcopilot.com/mcp/",
+      });
       const server1 = await McpServerModel.create({
         name: "github-server",
+        catalogId: catalogItem.id,
       });
 
+      const catalogItem2 = await InternalMcpCatalogModel.create({
+        name: "other-mcp-server",
+        serverType: "remote",
+        serverUrl: "https://api.othercopilot.com/mcp/",
+      });
       const server2 = await McpServerModel.create({
         name: "other-server",
+        catalogId: catalogItem2.id,
       });
 
       // Create tools for each server

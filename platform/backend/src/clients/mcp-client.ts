@@ -77,24 +77,46 @@ class McpClient {
     try {
       let client: Client | null = null;
 
-      // Determine server type and create appropriate connection
-      if (firstTool.mcpServerCatalogId) {
-        const catalogItem = await InternalMcpCatalogModel.findById(
-          firstTool.mcpServerCatalogId,
-        );
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        firstTool.mcpServerCatalogId,
+      );
 
-        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          // Generic remote server with catalog info
-          const config = this.createServerConfig({
-            name: firstTool.mcpServerName,
-            url: catalogItem.serverUrl,
-            secrets,
-          });
-          client = await this.getOrCreateConnection(
-            firstTool.mcpServerCatalogId,
-            config,
-          );
-        }
+      if (!catalogItem) {
+        return mcpToolCalls.map((tc) => ({
+          id: tc.id,
+          content: null,
+          isError: true,
+          error: `No catalog item found for MCP server ${firstTool.mcpServerName}`,
+        }));
+      }
+
+      if (catalogItem.serverType === "remote") {
+        // Generic remote server with catalog info
+        const config = this.createServerConfig({
+          name: firstTool.mcpServerName,
+          /**
+           * TODO: update SelectInternalMcpCatalogSchema to be a discriminated union of remote and local types
+           * this way that typescript knows that when serverType is remote, serverUrl will ALWAYS be set
+           */
+          url: catalogItem.serverUrl as string,
+          secrets,
+        });
+        client = await this.getOrCreateConnection(
+          firstTool.mcpServerCatalogId,
+          config,
+        );
+      } else if (catalogItem.serverType === "local") {
+        const config = this.createServerConfig({
+          name: firstTool.mcpServerName,
+          url: `http://localhost:9000/mcp_proxy/${firstTool.mcpServerId}`, // Use the MCP proxy endpoint for local servers
+          secrets,
+        });
+        client = await this.getOrCreateConnection(
+          firstTool.mcpServerCatalogId,
+          config,
+        );
+      } else {
+        throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
       }
 
       if (!client) {

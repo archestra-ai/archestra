@@ -263,9 +263,9 @@ export default function InstallationRequestDetailPage({
                                   </p>
                                   <div className="space-y-1">
                                     {request.customServerConfig.localConfig.arguments.map(
-                                      (arg, index) => (
+                                      (arg) => (
                                         <p
-                                          key={index}
+                                          key={arg}
                                           className="text-sm font-mono bg-muted px-2 py-1 rounded"
                                         >
                                           {arg}

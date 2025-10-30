@@ -1,6 +1,6 @@
 {
-  "id": "02659063-0dc1-45ae-b811-bd89b0de5f29",
-  "prevId": "64382850-9f1b-4f0c-b08d-9032b77adf5a",
+  "id": "8d34a44f-fd5f-49c1-ba12-fcf1e32c40f4",
+  "prevId": "02659063-0dc1-45ae-b811-bd89b0de5f29",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -114,6 +114,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "credential_source_mcp_server_id": {
+          "name": "credential_source_mcp_server_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -155,6 +161,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk": {
+          "name": "agent_tools_credential_source_mcp_server_id_mcp_server_id_fk",
+          "tableFrom": "agent_tools",
+          "tableTo": "mcp_server",
+          "columnsFrom": [
+            "credential_source_mcp_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

@@ -119,7 +119,11 @@ export const unassignToolFromAgent = <ThrowOnError extends boolean = false>(opti
 export const assignToolToAgent = <ThrowOnError extends boolean = false>(options: Options<AssignToolToAgentData, ThrowOnError>) => {
     return (options.client ?? client).post<AssignToolToAgentResponses, AssignToolToAgentErrors, ThrowOnError>({
         url: '/api/agents/{agentId}/tools/{toolId}',
-        ...options
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
 };
 

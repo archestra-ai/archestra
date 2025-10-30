@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Search, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TokenSelect } from "@/components/token-select";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -372,6 +373,35 @@ export function AssignedToolsList({
           );
         },
         size: 120,
+      },
+      {
+        id: "token",
+        header: "Token used",
+        cell: ({ row }) => {
+          const isMcpTool = !!row.original.tool.mcpServerName;
+
+          // Only show token selector for MCP tools
+          if (!isMcpTool) {
+            return (
+              <span className="text-sm text-muted-foreground">Derived</span>
+            );
+          }
+
+          return (
+            <TokenSelect
+              value={row.original.credentialSourceMcpServerId}
+              onValueChange={(value) => {
+                agentToolPatchMutation.mutate({
+                  id: row.original.id,
+                  credentialSourceMcpServerId: value,
+                });
+              }}
+              catalogId={row.original.tool.mcpServerCatalogId}
+              className="h-8 w-[200px] text-xs"
+            />
+          );
+        },
+        size: 220,
       },
       {
         id: "allowWithUntrusted",

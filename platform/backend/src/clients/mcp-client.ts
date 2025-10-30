@@ -1,7 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { InternalMcpCatalogModel, SecretModel, ToolModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpServerModel,
+  SecretModel,
+  ToolModel,
+} from "@/models";
 import { applyResponseModifierTemplate } from "@/templating";
 import type {
   CommonMcpToolDefinition,
@@ -66,9 +71,25 @@ class McpClient {
     }
 
     // Load secrets from the secrets table
+    // The credential source MCP server must be explicitly selected (team or user token)
     let secrets: Record<string, unknown> = {};
-    if (firstTool.mcpServerSecretId) {
-      const secret = await SecretModel.findById(firstTool.mcpServerSecretId);
+    let secretId: string | null = null;
+
+    if (firstTool.credentialSourceMcpServerId) {
+      // User selected a specific token (team or user) to use
+      const credentialSourceServer = await McpServerModel.findById(
+        firstTool.credentialSourceMcpServerId,
+      );
+      if (credentialSourceServer?.secretId) {
+        secretId = credentialSourceServer.secretId;
+      }
+    } else {
+      // Use the tool's own MCP server credentials (personal token)
+      secretId = firstTool.mcpServerSecretId;
+    }
+
+    if (secretId) {
+      const secret = await SecretModel.findById(secretId);
       if (secret?.secret) {
         secrets = secret.secret;
       }
@@ -90,10 +111,11 @@ class McpClient {
             url: catalogItem.serverUrl,
             secrets,
           });
-          client = await this.getOrCreateConnection(
-            firstTool.mcpServerCatalogId,
-            config,
-          );
+          // Use catalog ID + secret ID as cache key to ensure different credentials = different connections
+          const connectionKey = secretId
+            ? `${firstTool.mcpServerCatalogId}:${secretId}`
+            : firstTool.mcpServerCatalogId;
+          client = await this.getOrCreateConnection(connectionKey, config);
         }
       }
 

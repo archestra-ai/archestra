@@ -24,6 +24,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMcpServers,
         description: "Get all installed MCP servers",
         tags: ["MCP Server"],
+        querystring: z.object({
+          authType: z.enum(["personal", "team"]).optional(),
+        }),
         response: {
           200: z.array(SelectMcpServerSchema),
           401: ErrorResponseSchema,
@@ -44,7 +47,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        return reply.send(await McpServerModel.findAll(user.id, user.isAdmin));
+        const allServers = await McpServerModel.findAll(user.id, user.isAdmin);
+        const { authType } = request.query;
+
+        // Filter by authType if provided
+        const filteredServers = authType
+          ? allServers.filter((server) => server.authType === authType)
+          : allServers;
+
+        return reply.send(filteredServers);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

@@ -65,6 +65,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema,
           toolId: UuidIdSchema,
         }),
+        body: z
+          .object({
+            credentialSourceMcpServerId: UuidIdSchema.nullable().optional(),
+          })
+          .nullish(),
         response: {
           200: z.object({ success: z.boolean() }),
           404: ErrorResponseSchema,
@@ -75,6 +80,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         const { agentId, toolId } = request.params;
+        const { credentialSourceMcpServerId } = request.body || {};
 
         // Validate that agent exists
         const agent = await AgentModel.findById(agentId);
@@ -99,7 +105,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         // Create the assignment (no-op if already exists)
-        await AgentToolModel.createIfNotExists(agentId, toolId);
+        await AgentToolModel.createIfNotExists(
+          agentId,
+          toolId,
+          credentialSourceMcpServerId,
+        );
 
         return reply.send({ success: true });
       } catch (error) {
@@ -215,6 +225,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           allowUsageWhenUntrustedDataIsPresent: true,
           toolResultTreatment: true,
           responseModifierTemplate: true,
+          credentialSourceMcpServerId: true,
         }).partial(),
         response: {
           200: UpdateAgentToolSchema,

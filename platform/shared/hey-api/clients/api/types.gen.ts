@@ -2532,6 +2532,7 @@ export type GetAllAgentToolsResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        credentialSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2561,6 +2562,7 @@ export type GetAllAgentToolsResponses = {
             updatedAt: string;
             mcpServerId: string | null;
             mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
         };
     }>;
 };
@@ -2603,7 +2605,9 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: never;
+    body?: {
+        credentialSourceMcpServerId?: string | null;
+    } | null;
     path: {
         agentId: string;
         toolId: string;
@@ -2715,6 +2719,7 @@ export type UpdateAgentToolData = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -2757,6 +2762,7 @@ export type UpdateAgentToolResponses = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
@@ -5744,7 +5750,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        authType?: 'personal' | 'team';
+    };
     url: '/api/mcp_server';
 };
 

@@ -13,6 +13,7 @@ class AgentToolModel {
         | "allowUsageWhenUntrustedDataIsPresent"
         | "toolResultTreatment"
         | "responseModifierTemplate"
+        | "credentialSourceMcpServerId"
       >
     >,
   ) {
@@ -76,10 +77,29 @@ class AgentToolModel {
     return !!result;
   }
 
-  static async createIfNotExists(agentId: string, toolId: string) {
+  static async createIfNotExists(
+    agentId: string,
+    toolId: string,
+    credentialSourceMcpServerId?: string | null,
+  ) {
     const exists = await AgentToolModel.exists(agentId, toolId);
     if (!exists) {
-      return await AgentToolModel.create(agentId, toolId);
+      const options: Partial<
+        Pick<
+          InsertAgentTool,
+          | "allowUsageWhenUntrustedDataIsPresent"
+          | "toolResultTreatment"
+          | "responseModifierTemplate"
+          | "credentialSourceMcpServerId"
+        >
+      > = {};
+
+      // Only include credentialSourceMcpServerId if it has a real value
+      if (credentialSourceMcpServerId) {
+        options.credentialSourceMcpServerId = credentialSourceMcpServerId;
+      }
+
+      return await AgentToolModel.create(agentId, toolId, options);
     }
     return null;
   }
@@ -89,7 +109,10 @@ class AgentToolModel {
     data: Partial<
       Pick<
         UpdateAgentTool,
-        "allowUsageWhenUntrustedDataIsPresent" | "toolResultTreatment"
+        | "allowUsageWhenUntrustedDataIsPresent"
+        | "toolResultTreatment"
+        | "responseModifierTemplate"
+        | "credentialSourceMcpServerId"
       >
     >,
   ) {
@@ -125,6 +148,7 @@ class AgentToolModel {
           updatedAt: schema.toolsTable.updatedAt,
           mcpServerId: schema.toolsTable.mcpServerId,
           mcpServerName: schema.mcpServersTable.name,
+          mcpServerCatalogId: schema.mcpServersTable.catalogId,
         },
       })
       .from(schema.agentToolsTable)

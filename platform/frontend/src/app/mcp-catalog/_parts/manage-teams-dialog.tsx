@@ -3,7 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { format } from "date-fns";
 import { Building2, Trash, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,13 +37,12 @@ import {
 } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
+type McpServer = archestraApiTypes.GetMcpServersResponses["200"][number];
+
 interface ManageTeamsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  server:
-    | archestraApiTypes.GetMcpServersResponses["200"][number]
-    | null
-    | undefined;
+  server: McpServer | null | undefined;
   label?: string;
 }
 
@@ -61,23 +60,22 @@ export function ManageTeamsDialog({
   const { data: allServers } = useMcpServers();
 
   // Find all servers with the same catalogId and aggregate their team details
-  const teamDetails: Array<{
+  let teamDetails: Array<{
     teamId: string;
     name: string;
     createdAt: string;
     serverId: string;
-  }> = useMemo(() => {
-    if (!server?.catalogId || !allServers) {
-      // Fallback to server teamDetails if available, but add serverId
-      if (server?.teamDetails && server?.id) {
-        return server.teamDetails.map((td) => ({
-          ...td,
-          serverId: server.id,
-        }));
-      }
-      return [];
-    }
+  }> = [];
 
+  if (!server?.catalogId || !allServers) {
+    // Fallback to server teamDetails if available, but add serverId
+    if (server?.teamDetails && server?.id) {
+      teamDetails = server.teamDetails.map((td) => ({
+        ...td,
+        serverId: server.id,
+      }));
+    }
+  } else {
     // Find all servers with the same catalogId
     const serversForCatalog = allServers.filter(
       (s) => s.catalogId === server.catalogId,
@@ -107,16 +105,16 @@ export function ManageTeamsDialog({
       }
     }
 
-    return aggregatedTeamDetails;
-  }, [allServers, server?.catalogId, server?.teamDetails, server?.id]);
+    teamDetails = aggregatedTeamDetails;
+  }
 
   // Get all team-auth servers for this catalogId
-  const teamAuthServers = useMemo(() => {
-    if (!server?.catalogId || !allServers) return [];
-    return allServers.filter(
-      (s) => s.catalogId === server.catalogId && s.authType === "team",
-    );
-  }, [allServers, server]);
+  const teamAuthServers =
+    !server?.catalogId || !allServers
+      ? []
+      : allServers.filter(
+          (s) => s.catalogId === server.catalogId && s.authType === "team",
+        );
 
   const hasTeamAuthServer = teamAuthServers.length > 0;
 
@@ -141,50 +139,37 @@ export function ManageTeamsDialog({
   const revokeAccessMutation = useRevokeTeamMcpServerAccess();
 
   // Get teams that are not already assigned
-  const unassignedTeams = useMemo(() => {
-    if (!allTeams) return [];
-    const assignedTeamIds = new Set(teamDetails.map((t) => t.teamId));
-    const selectedTeamIdsSet = new Set(selectedTeamIds);
-    return allTeams.filter(
-      (team) =>
-        !assignedTeamIds.has(team.id) && !selectedTeamIdsSet.has(team.id),
-    );
-  }, [allTeams, teamDetails, selectedTeamIds]);
+  const assignedTeamIds = new Set(teamDetails.map((t) => t.teamId));
+  const selectedTeamIdsSet = new Set(selectedTeamIds);
+  const unassignedTeams = !allTeams
+    ? []
+    : allTeams.filter(
+        (team) =>
+          !assignedTeamIds.has(team.id) && !selectedTeamIdsSet.has(team.id),
+      );
 
-  const handleAddTeam = useCallback(
-    (teamId: string) => {
-      if (teamId && !selectedTeamIds.includes(teamId)) {
-        setSelectedTeamIds([...selectedTeamIds, teamId]);
-        setCurrentTeamId("");
-      }
-    },
-    [selectedTeamIds],
-  );
+  const handleAddTeam = (teamId: string) => {
+    if (teamId && !selectedTeamIds.includes(teamId)) {
+      setSelectedTeamIds([...selectedTeamIds, teamId]);
+      setCurrentTeamId("");
+    }
+  };
 
-  const handleRemoveSelectedTeam = useCallback(
-    (teamId: string) => {
-      setSelectedTeamIds(selectedTeamIds.filter((id) => id !== teamId));
-    },
-    [selectedTeamIds],
-  );
+  const handleRemoveSelectedTeam = (teamId: string) => {
+    setSelectedTeamIds(selectedTeamIds.filter((id) => id !== teamId));
+  };
 
-  const getTeamById = useCallback(
-    (teamId: string) => {
-      return allTeams?.find((team) => team.id === teamId);
-    },
-    [allTeams],
-  );
+  const getTeamById = (teamId: string) => {
+    return allTeams?.find((team) => team.id === teamId);
+  };
 
-  const getOwnerEmailByServerId = useCallback(
-    (serverId: string) => {
-      if (!allServers) return null;
-      const server = allServers.find((s) => s.id === serverId);
-      return server?.ownerEmail || null;
-    },
-    [allServers],
-  );
+  const getOwnerEmailByServerId = (serverId: string) => {
+    if (!allServers) return null;
+    const server = allServers.find((s) => s.id === serverId);
+    return server?.ownerEmail || null;
+  };
 
-  const handleGrantAccess = useCallback(async () => {
+  const handleGrantAccess = async () => {
     if (!server?.catalogId || selectedTeamIds.length === 0) return;
 
     await grantAccessMutation.mutateAsync({
@@ -193,25 +178,17 @@ export function ManageTeamsDialog({
       userId: selectedOwnerId || undefined,
     });
     setSelectedTeamIds([]);
-  }, [
-    server?.catalogId,
-    selectedTeamIds,
-    selectedOwnerId,
-    grantAccessMutation,
-  ]);
+  };
 
-  const handleRevoke = useCallback(
-    async (teamId: string, serverId?: string) => {
-      if (!serverId) return;
+  const handleRevoke = async (teamId: string, serverId?: string) => {
+    if (!serverId) return;
 
-      // Use the specific serverId from the team details row
-      await revokeAccessMutation.mutateAsync({
-        serverId,
-        teamId,
-      });
-    },
-    [revokeAccessMutation],
-  );
+    // Use the specific serverId from the team details row
+    await revokeAccessMutation.mutateAsync({
+      serverId,
+      teamId,
+    });
+  };
 
   if (!server) {
     return null;

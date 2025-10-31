@@ -24,6 +24,7 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import { seedDatabase } from "./database/seed";
+import logger from "./logging";
 import * as routes from "./routes";
 
 const {
@@ -38,17 +39,7 @@ const {
 } = config;
 
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss Z",
-        ignore: "pid,hostname",
-        singleLine: true,
-      },
-    },
-  },
+  loggerInstance: logger,
 }).withTypeProvider<ZodTypeProvider>();
 
 // Set up Zod validation and serialization

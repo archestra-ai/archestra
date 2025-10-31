@@ -183,8 +183,8 @@ class McpServerModel {
           logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
         } catch (error) {
           logger.error(
+            { err: error },
             `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
-            error,
           );
           // Continue with deletion even if pod cleanup fails
         }
@@ -250,8 +250,8 @@ class McpServerModel {
         }));
       } catch (error) {
         logger.error(
+          { err: error },
           `Failed to get tools from remote MCP server ${mcpServer.name}:`,
-          error,
         );
         throw error;
       }
@@ -281,8 +281,8 @@ class McpServerModel {
         }));
       } catch (error) {
         logger.error(
+          { err: error },
           `Failed to get tools from local MCP server ${mcpServer.name}:`,
-          error,
         );
         throw error;
       }
@@ -327,8 +327,8 @@ class McpServerModel {
         }
       } catch (error) {
         logger.error(
+          { err: error },
           `Validation failed for remote MCP server ${serverName}:`,
-          error,
         );
         return false;
       }

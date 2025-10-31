@@ -59,7 +59,7 @@ class McpServerRuntimeManager {
         this.k8sConfig.loadFromDefault();
       }
     } catch (error) {
-      logger.error("Failed to load Kubernetes config:", error);
+      logger.error({ err: error }, "Failed to load Kubernetes config:");
       this.status = "error";
     }
 
@@ -178,7 +178,7 @@ class McpServerRuntimeManager {
       await k8sPod.startOrCreatePod();
       logger.info(`Successfully started MCP server pod ${id} (${name})`);
     } catch (error) {
-      logger.error(`Failed to start MCP server pod ${id} (${name}):`, error);
+      logger.error({ err: error }, `Failed to start MCP server pod ${id} (${name}):`);
       // Keep the pod in the map even if it failed to start
       // This ensures it appears in status updates with error state
       logger.warn(
@@ -223,7 +223,7 @@ class McpServerRuntimeManager {
       await k8sPod.removePod();
       logger.info(`Successfully removed MCP server pod ${mcpServerId}`);
     } catch (error) {
-      logger.error(`Failed to remove MCP server pod ${mcpServerId}:`, error);
+      logger.error({ err: error }, `Failed to remove MCP server pod ${mcpServerId}:`);
       throw error;
     } finally {
       this.mcpServerIdToPodMap.delete(mcpServerId);
@@ -255,7 +255,7 @@ class McpServerRuntimeManager {
 
       logger.info(`MCP server pod ${mcpServerId} restarted successfully`);
     } catch (error) {
-      logger.error(`Failed to restart MCP server pod ${mcpServerId}:`, error);
+      logger.error({ err: error }, `Failed to restart MCP server pod ${mcpServerId}:`);
       throw error;
     }
   }
@@ -336,8 +336,8 @@ class McpServerRuntimeManager {
           await this.stopServer(serverId);
         } catch (error) {
           logger.error(
+            { err: error },
             `Failed to stop MCP server pod ${serverId} during shutdown:`,
-            error,
           );
         }
       },

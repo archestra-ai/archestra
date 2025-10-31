@@ -15,7 +15,7 @@ class User {
         .from(schema.usersTable)
         .where(eq(schema.usersTable.email, email));
       if (existing.length > 0) {
-        logger.info("Admin already exists:", email);
+        logger.info({ email }, "Admin already exists:");
         return existing[0];
       }
 
@@ -35,11 +35,11 @@ class User {
           })
           .where(eq(schema.usersTable.email, email));
 
-        logger.info("Admin user created successfully:", email);
+        logger.info({ email }, "Admin user created successfully:");
       }
       return result.user;
     } catch (err) {
-      logger.error("Failed to create admin:", err);
+      logger.error({ err }, "Failed to create admin:");
     }
   }
 }

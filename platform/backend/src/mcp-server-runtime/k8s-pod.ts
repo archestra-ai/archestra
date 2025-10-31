@@ -8,6 +8,7 @@ import config from "@/config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
+import logger from "@/logging";
 
 const {
   orchestrator: { mcpServerBaseImage },
@@ -193,7 +194,7 @@ export default class K8sPod {
       this.state = "failed";
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      logger.error(`Failed to start pod ${this.podName}:`, error);
+      logger.error({ err: error }, `Failed to start pod ${this.podName}:`);
       throw error;
     }
   }
@@ -279,7 +280,7 @@ export default class K8sPod {
       logger.info(`Pod ${this.podName} stopped`);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {
-        logger.error(`Failed to stop pod ${this.podName}:`, error);
+        logger.error({ err: error }, `Failed to stop pod ${this.podName}:`);
         throw error;
       }
       // Pod doesn't exist, that's fine
@@ -430,7 +431,7 @@ export default class K8sPod {
           });
       });
     } catch (error) {
-      logger.error(`Failed to stream to pod ${this.podName}:`, error);
+      logger.error({ err: error }, `Failed to stream to pod ${this.podName}:`);
       throw error;
     }
   }
@@ -448,7 +449,7 @@ export default class K8sPod {
 
       return logs || "";
     } catch (error: unknown) {
-      logger.error(`Failed to get logs for pod ${this.podName}:`, error);
+      logger.error({ err: error }, `Failed to get logs for pod ${this.podName}:`);
       if (error instanceof Error && error.message.includes("404")) {
         return "Pod not found";
       }

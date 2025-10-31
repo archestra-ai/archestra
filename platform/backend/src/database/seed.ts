@@ -41,7 +41,7 @@ export async function seedDatabase(): Promise<void> {
 
     logger.info("\n✅ Database seed completed successfully!\n");
   } catch (error) {
-    logger.error("\n❌ Error seeding database:", error);
+    logger.error({ err: error }, "\n❌ Error seeding database:");
     throw error;
   }
 }

@@ -159,7 +159,7 @@ export default {
   observability: {
     otel: {
       otelExporterOtlpEndpoint:
-        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+        process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT ||
         "http://localhost:4318/v1/traces",
     },
   },

@@ -147,14 +147,18 @@ export default {
      * mcp_registry: process.env.FEATURES_MCP_REGISTRY_ENABLED === "true",
      */
   },
-  kubernetes: {
-    namespace: process.env.ARCHESTRA_K8S_NAMESPACE || "default",
-    kubeconfig: process.env.ARCHESTRA_KUBECONFIG,
+  orchestrator: {
     mcpServerBaseImage:
-      process.env.ARCHESTRA_MCP_SERVER_BASE_IMAGE ||
+      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
-    useInClusterConfig:
-      process.env.ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG === "true",
+    kubernetes: {
+      namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+      kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+      loadKubeconfigFromCurrentCluster:
+        process.env
+          .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
+        "true",
+    },
   },
   observability: {
     otel: {

@@ -56,18 +56,18 @@ Environment variables for the Archestra Platform container
 {{- define "archestra-platform.env" -}}
 - name: ARCHESTRA_DATABASE_URL
   value: {{ if .Values.postgresql.external_database_url }}{{ .Values.postgresql.external_database_url }}{{ else }}postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}{{ end }}
-- name: ARCHESTRA_K8S_NAMESPACE
-  value: {{ default .Release.Namespace .Values.archestra.kubernetes.namespace | quote }}
-{{- if .Values.archestra.kubernetes.baseImage }}
-- name: ARCHESTRA_MCP_SERVER_BASE_IMAGE
-  value: {{ .Values.archestra.kubernetes.baseImage | quote }}
+- name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
+  value: {{ default .Release.Namespace .Values.archestra.orchestrator.kubernetes.namespace | quote }}
+{{- if .Values.archestra.orchestrator.baseImage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
+  value: {{ .Values.archestra.orchestrator.baseImage | quote }}
 {{- end }}
-{{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
-- name: ARCHESTRA_KUBECONFIG
-  value: {{ printf "%s/config" .Values.archestra.kubernetes.kubeconfig.mountPath | quote }}
+{{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
+- name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
+  value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}
 {{- end }}
-- name: ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG
-  value: {{ .Values.archestra.kubernetes.useInClusterConfig | quote }}
+- name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
+  value: {{ .Values.archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster | quote }}
 {{- range $key, $value := .Values.archestra.env }}
 - name: {{ $key }}
   value: {{ $value | quote }}

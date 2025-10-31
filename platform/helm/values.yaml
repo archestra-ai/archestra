@@ -11,39 +11,42 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   env: {}
 
-  # Kubernetes configuration for MCP Server Runtime
-  # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
-  kubernetes:
-    # Namespace where MCP server pods will be created
-    # If not set, defaults to the namespace specified in the helm release
-    namespace: ""
 
+  # Configuration for the MCP Server Runtime
+  orchestrator:
     # Base image for MCP server containers
-    # If not set, defaults to "archestra/mcp-server:latest"
+    # If not set, defaults to "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest"
     baseImage: ""
 
-    # Kubeconfig configuration
-    # Choose one of the following methods:
+    # Kubernetes configuration for MCP Server Runtime
+    # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
+    kubernetes:
+      # Namespace where MCP server pods will be created
+      # If not set, defaults to the namespace specified in the helm release
+      namespace: ""
 
-    # Method 1: Use in-cluster configuration (recommended when running inside K8s)
-    # No additional configuration needed - the platform will automatically use the service account
-    useInClusterConfig: true
+      # Kubeconfig configuration
+      # Choose one of the following methods:
 
-    # Method 2: Mount a kubeconfig file from a secret
-    # Set useInClusterConfig to false and configure the secret below
-    kubeconfig:
-      # Enable kubeconfig volume mount
-      enabled: false
+      # Method 1: Use in-cluster configuration (recommended when running inside K8s)
+      # No additional configuration needed - the platform will automatically use the service account
+      loadKubeconfigFromCurrentCluster: true
 
-      # Name of the secret containing the kubeconfig file
-      # The secret should have a key named "config" containing the kubeconfig content
-      # Example of creating the secret:
-      #   kubectl create secret generic archestra-kubeconfig --from-file=config=/path/to/kubeconfig
-      secretName: ""
+      # Method 2: Mount a kubeconfig file from a secret
+      # Set useInClusterConfig to false and configure the secret below
+      kubeconfig:
+        # Enable kubeconfig volume mount
+        enabled: false
 
-      # Path where the kubeconfig will be mounted inside the container
-      # This will be set as the KUBECONFIG environment variable
-      mountPath: /etc/kubeconfig
+        # Name of the secret containing the kubeconfig file
+        # The secret should have a key named "config" containing the kubeconfig content
+        # Example of creating the secret:
+        #   kubectl create secret generic archestra-kubeconfig --from-file=config=/path/to/kubeconfig
+        secretName: ""
+
+        # Path where the kubeconfig will be mounted inside the container
+        # This will be set as the KUBECONFIG environment variable
+        mountPath: /etc/kubeconfig
 
   # ServiceAccount configuration for the Archestra Platform
   serviceAccount:

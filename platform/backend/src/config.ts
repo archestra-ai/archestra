@@ -17,9 +17,19 @@ import packageJson from "../package.json";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
+/**
+ * Get database URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+ */
+export const getDatabaseUrl = (): string => {
+  const databaseUrl =
+    process.env.ARCHESTRA_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL or DATABASE_URL",
+    );
+  }
+  return databaseUrl;
+};
 
 const isProduction = ["production", "prod"].includes(
   process.env.NODE_ENV?.toLowerCase() ?? "",
@@ -119,14 +129,16 @@ export default {
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
   },
   database: {
-    url: process.env.DATABASE_URL,
+    url: getDatabaseUrl(),
   },
   llm: {
     openai: {
-      baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+      baseUrl:
+        process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
     },
     anthropic: {
-      baseUrl: process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      baseUrl:
+        process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
   },
   features: {
@@ -136,12 +148,13 @@ export default {
      */
   },
   kubernetes: {
-    namespace: process.env.K8S_NAMESPACE || "default",
-    kubeconfig: process.env.KUBECONFIG,
+    namespace: process.env.ARCHESTRA_K8S_NAMESPACE || "default",
+    kubeconfig: process.env.ARCHESTRA_KUBECONFIG,
     mcpServerBaseImage:
-      process.env.MCP_SERVER_BASE_IMAGE ||
+      process.env.ARCHESTRA_MCP_SERVER_BASE_IMAGE ||
       "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3",
-    useInClusterConfig: process.env.USE_IN_CLUSTER_KUBECONFIG === "true",
+    useInClusterConfig:
+      process.env.ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG === "true",
   },
   observability: {
     otel: {

@@ -77,7 +77,7 @@ tests:
           path: spec.template.spec.containers[0].ports[1].containerPort
           value: 3000
 
-  - it: should set DATABASE_URL to internal postgres when external_database_url is null
+  - it: should set ARCHESTRA_DATABASE_URL to internal postgres when external_database_url is null
     documentIndex: 1
     set:
       postgresql.external_database_url: null
@@ -87,19 +87,19 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env[0].name
-          value: DATABASE_URL
+          value: ARCHESTRA_DATABASE_URL
       - matchRegex:
           path: spec.template.spec.containers[0].env[0].value
           pattern: ^postgresql://testuser:testpass@.*-archestra-platform-postgresql:5432/testdb$
 
-  - it: should set DATABASE_URL to external postgres when external_database_url is provided
+  - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
     set:
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env[0].name
-          value: DATABASE_URL
+          value: ARCHESTRA_DATABASE_URL
       - equal:
           path: spec.template.spec.containers[0].env[0].value
           value: postgresql://external:pass@external-host:5432/externaldb
@@ -140,11 +140,11 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
-            - name: DATABASE_URL
+            - name: ARCHESTRA_DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
-            - name: K8S_NAMESPACE
+            - name: ARCHESTRA_K8S_NAMESPACE
               value: NAMESPACE
-            - name: USE_IN_CLUSTER_KUBECONFIG
+            - name: ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG
               value: "true"
 
   - it: should add custom environment variables when archestra.env is set
@@ -165,7 +165,7 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
-  - it: should include DATABASE_URL alongside custom env vars
+  - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:
       archestra.env:
@@ -174,7 +174,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: DATABASE_URL
+            name: ARCHESTRA_DATABASE_URL
             value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
       - contains:
           path: spec.template.spec.containers[0].env
@@ -182,7 +182,7 @@ tests:
             name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
 
-  - it: should set K8S_NAMESPACE env var when namespace is configured
+  - it: should set ARCHESTRA_K8S_NAMESPACE env var when namespace is configured
     documentIndex: 1
     set:
       archestra.kubernetes.namespace: "mcp-servers"
@@ -190,7 +190,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_K8S_NAMESPACE
             value: "mcp-servers"
 
   - it: should use custom namespace over release namespace when both are set
@@ -203,10 +203,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_K8S_NAMESPACE
             value: "custom-mcp-namespace"
 
-  - it: should set MCP_SERVER_BASE_IMAGE env var when baseImage is configured
+  - it: should set ARCHESTRA_MCP_SERVER_BASE_IMAGE env var when baseImage is configured
     documentIndex: 1
     set:
       archestra.kubernetes.baseImage: "my-registry/mcp-server:v1.0.0"
@@ -214,10 +214,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_MCP_SERVER_BASE_IMAGE
             value: "my-registry/mcp-server:v1.0.0"
 
-  - it: should set K8S_NAMESPACE to release namespace when namespace is empty
+  - it: should set ARCHESTRA_K8S_NAMESPACE to release namespace when namespace is empty
     documentIndex: 1
     set:
       archestra.kubernetes.namespace: ""
@@ -227,10 +227,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_K8S_NAMESPACE
             value: "test-namespace"
 
-  - it: should set K8S_NAMESPACE to NAMESPACE when namespace is empty and no release namespace
+  - it: should set ARCHESTRA_K8S_NAMESPACE to NAMESPACE when namespace is empty and no release namespace
     documentIndex: 1
     set:
       archestra.kubernetes.namespace: ""
@@ -238,10 +238,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_K8S_NAMESPACE
             value: "NAMESPACE"
 
-  - it: should not set MCP_SERVER_BASE_IMAGE env var when baseImage is empty
+  - it: should not set ARCHESTRA_MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1
     set:
       archestra.kubernetes.baseImage: ""
@@ -249,7 +249,7 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_MCP_SERVER_BASE_IMAGE
 
   # Kubeconfig volume mount tests
   - it: should not mount kubeconfig volume when kubeconfig is disabled
@@ -303,7 +303,7 @@ tests:
           path: spec.template.spec.volumes[0].secret.secretName
           value: "my-kubeconfig"
 
-  - it: should set KUBECONFIG env var when kubeconfig volume is mounted
+  - it: should set ARCHESTRA_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
     set:
       archestra.kubernetes.kubeconfig.enabled: true
@@ -313,10 +313,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_KUBECONFIG
             value: "/etc/kubeconfig/config"
 
-  - it: should not set KUBECONFIG env var when kubeconfig is disabled
+  - it: should not set ARCHESTRA_KUBECONFIG env var when kubeconfig is disabled
     documentIndex: 1
     set:
       archestra.kubernetes.kubeconfig.enabled: false
@@ -324,7 +324,7 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_KUBECONFIG
 
   - it: should configure all kubernetes env vars when all settings are provided
     documentIndex: 1
@@ -338,20 +338,20 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_K8S_NAMESPACE
             value: "mcp-servers"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_MCP_SERVER_BASE_IMAGE
             value: "my-registry/mcp-server:v1.0.0"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_KUBECONFIG
             value: "/etc/kubeconfig/config"
 
-  - it: should set USE_IN_CLUSTER_KUBECONFIG to false when configured
+  - it: should set ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG to false when configured
     documentIndex: 1
     set:
       archestra.kubernetes.useInClusterConfig: false
@@ -359,10 +359,10 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: USE_IN_CLUSTER_KUBECONFIG
+            name: ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG
             value: "false"
 
-  - it: should set USE_IN_CLUSTER_KUBECONFIG to true when configured
+  - it: should set ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG to true when configured
     documentIndex: 1
     set:
       archestra.kubernetes.useInClusterConfig: true
@@ -370,7 +370,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: USE_IN_CLUSTER_KUBECONFIG
+            name: ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG
             value: "true"
 
   # ServiceAccount tests

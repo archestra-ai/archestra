@@ -54,19 +54,19 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Environment variables for the Archestra Platform container
 */}}
 {{- define "archestra-platform.env" -}}
-- name: DATABASE_URL
+- name: ARCHESTRA_DATABASE_URL
   value: {{ if .Values.postgresql.external_database_url }}{{ .Values.postgresql.external_database_url }}{{ else }}postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}{{ end }}
-- name: K8S_NAMESPACE
+- name: ARCHESTRA_K8S_NAMESPACE
   value: {{ default .Release.Namespace .Values.archestra.kubernetes.namespace | quote }}
 {{- if .Values.archestra.kubernetes.baseImage }}
-- name: MCP_SERVER_BASE_IMAGE
+- name: ARCHESTRA_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.kubernetes.baseImage | quote }}
 {{- end }}
 {{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
-- name: KUBECONFIG
+- name: ARCHESTRA_KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.kubernetes.kubeconfig.mountPath | quote }}
 {{- end }}
-- name: USE_IN_CLUSTER_KUBECONFIG
+- name: ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG
   value: {{ .Values.archestra.kubernetes.useInClusterConfig | quote }}
 {{- range $key, $value := .Values.archestra.env }}
 - name: {{ $key }}

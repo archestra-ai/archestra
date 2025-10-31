@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import config from "@/config";
 import db from "@/database";
+import logger from "@/logging";
 
 /**
  * Completely clears the database by:
@@ -17,7 +18,7 @@ export const clearDb = async (): Promise<void> => {
     );
   }
 
-  console.log("⚠️  Completely clearing database (dropping all tables)...");
+  logger.info("⚠️  Completely clearing database (dropping all tables)...");
 
   // Get all tables in all schemas (public and drizzle)
   const query = sql<string>`SELECT table_schema, table_name
@@ -32,26 +33,26 @@ export const clearDb = async (): Promise<void> => {
     table_name: string;
   }>;
 
-  console.log(`📋 Found ${tables.length} tables to drop`);
+  logger.info(`📋 Found ${tables.length} tables to drop`);
 
   // Drop all tables with CASCADE to handle dependencies
   for (const table of tables) {
     const fullTableName = `"${table.table_schema}"."${table.table_name}"`;
-    console.log(`  🗑️  Dropping table: ${fullTableName}`);
+    logger.info(`  🗑️  Dropping table: ${fullTableName}`);
     const dropQuery = sql.raw(`DROP TABLE IF EXISTS ${fullTableName} CASCADE;`);
     await db.execute(dropQuery);
   }
 
   // Also explicitly drop __drizzle_migrations from public schema if it exists
-  console.log(
+  logger.info(
     "  🗑️  Dropping __drizzle_migrations from public schema (if exists)",
   );
   await db.execute(
     sql.raw("DROP TABLE IF EXISTS public.__drizzle_migrations CASCADE;"),
   );
 
-  console.log("✅ Database completely cleared (all tables dropped)!");
-  console.log("💡 Run 'pnpm db:migrate' to recreate tables from migrations");
+  logger.info("✅ Database completely cleared (all tables dropped)!");
+  logger.info("💡 Run 'pnpm db:migrate' to recreate tables from migrations");
 };
 
 /**
@@ -60,11 +61,11 @@ export const clearDb = async (): Promise<void> => {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   clearDb()
     .then(() => {
-      console.log("\n✅ Done!");
+      logger.info("\n✅ Done!");
       process.exit(0);
     })
     .catch((error) => {
-      console.error("\n❌ Error clearing database:", error);
+      logger.error("\n❌ Error clearing database:", error);
       process.exit(1);
     });
 }

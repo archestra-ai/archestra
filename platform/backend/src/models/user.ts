@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 
 class User {
   static async createOrGetExistingDefaultAdminUser() {
@@ -14,7 +15,7 @@ class User {
         .from(schema.usersTable)
         .where(eq(schema.usersTable.email, email));
       if (existing.length > 0) {
-        console.log("Admin already exists:", email);
+        logger.info("Admin already exists:", email);
         return existing[0];
       }
 
@@ -34,11 +35,11 @@ class User {
           })
           .where(eq(schema.usersTable.email, email));
 
-        console.log("Admin user created successfully:", email);
+        logger.info("Admin user created successfully:", email);
       }
       return result.user;
     } catch (err) {
-      console.error("Failed to create admin:", err);
+      logger.error("Failed to create admin:", err);
     }
   }
 }

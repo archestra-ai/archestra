@@ -2,6 +2,7 @@ import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -179,9 +180,9 @@ class McpServerModel {
       if (catalogItem?.serverType === "local") {
         try {
           await McpServerRuntimeManager.removeMcpServer(id);
-          console.log(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+          logger.info(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
         } catch (error) {
-          console.error(
+          logger.error(
             `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
             error,
           );
@@ -248,7 +249,7 @@ class McpServerModel {
           inputSchema: tool.inputSchema,
         }));
       } catch (error) {
-        console.error(
+        logger.error(
           `Failed to get tools from remote MCP server ${mcpServer.name}:`,
           error,
         );
@@ -266,6 +267,11 @@ class McpServerModel {
           url: `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
           secrets, // Local servers might still use secrets for API keys etc.
         });
+
+        logger.warn(
+          `Attempting to get tools from local MCP server ${mcpServer.name} with config ${JSON.stringify(config)}`,
+        );
+
         const tools = await mcpClient.connectAndGetTools(config);
         // Transform to ensure description is always a string
         return tools.map((tool) => ({
@@ -274,7 +280,7 @@ class McpServerModel {
           inputSchema: tool.inputSchema,
         }));
       } catch (error) {
-        console.error(
+        logger.error(
           `Failed to get tools from local MCP server ${mcpServer.name}:`,
           error,
         );
@@ -320,7 +326,7 @@ class McpServerModel {
           return tools.length > 0;
         }
       } catch (error) {
-        console.error(
+        logger.error(
           `Validation failed for remote MCP server ${serverName}:`,
           error,
         );

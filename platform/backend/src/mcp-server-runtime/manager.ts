@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import * as k8s from "@kubernetes/client-node";
 import { Attach } from "@kubernetes/client-node";
 import config from "@/config";
+import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
 import type { McpServer } from "@/types";
@@ -58,7 +59,7 @@ class McpServerRuntimeManager {
         this.k8sConfig.loadFromDefault();
       }
     } catch (error) {
-      console.error("Failed to load Kubernetes config:", error);
+      logger.error("Failed to load Kubernetes config:", error);
       this.status = "error";
     }
 
@@ -74,7 +75,7 @@ class McpServerRuntimeManager {
   async start(): Promise<void> {
     try {
       this.status = "initializing";
-      console.log("Initializing Kubernetes MCP Server Runtime...");
+      logger.info("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
       await this.verifyK8sConnection();
@@ -97,7 +98,7 @@ class McpServerRuntimeManager {
         }
       }
 
-      console.log(`Found ${localServers.length} local MCP servers to start`);
+      logger.info(`Found ${localServers.length} local MCP servers to start`);
 
       // Start all local servers in parallel
       const startPromises = localServers.map(async (mcpServer) => {
@@ -113,23 +114,23 @@ class McpServerRuntimeManager {
       );
 
       if (failures.length > 0) {
-        console.warn(
+        logger.warn(
           `${failures.length} MCP server(s) failed to start, but will remain visible with error state`,
         );
         failures.forEach((failure) => {
-          console.warn(`  - ${(failure as PromiseRejectedResult).reason}`);
+          logger.warn(`  - ${(failure as PromiseRejectedResult).reason}`);
         });
       }
 
       if (successes.length > 0) {
-        console.log(`${successes.length} MCP server(s) started successfully`);
+        logger.info(`${successes.length} MCP server(s) started successfully`);
       }
 
-      console.log("MCP Server Runtime initialization complete");
+      logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
+      logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
       this.status = "error";
       this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
@@ -141,15 +142,15 @@ class McpServerRuntimeManager {
    */
   private async verifyK8sConnection(): Promise<void> {
     try {
-      console.log(`Verifying K8s connection to namespace: ${this.namespace}`);
+      logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
 
       // Try to list pods in the namespace to verify connectivity
       await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
 
-      console.log("K8s connection verified successfully");
+      logger.info("K8s connection verified successfully");
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      console.error(`Failed to connect to Kubernetes: ${errorMsg}`);
+      logger.error(`Failed to connect to Kubernetes: ${errorMsg}`);
       throw new Error(errorMsg);
     }
   }
@@ -159,7 +160,7 @@ class McpServerRuntimeManager {
    */
   async startServer(mcpServer: McpServer): Promise<void> {
     const { id, name } = mcpServer;
-    console.log(`Starting MCP server pod: id="${id}", name="${name}"`);
+    logger.info(`Starting MCP server pod: id="${id}", name="${name}"`);
 
     try {
       const k8sPod = new K8sPod(
@@ -172,15 +173,15 @@ class McpServerRuntimeManager {
 
       // Register the pod BEFORE starting it
       this.mcpServerIdToPodMap.set(id, k8sPod);
-      console.log(`Registered MCP server pod ${id} in map`);
+      logger.info(`Registered MCP server pod ${id} in map`);
 
       await k8sPod.startOrCreatePod();
-      console.log(`Successfully started MCP server pod ${id} (${name})`);
+      logger.info(`Successfully started MCP server pod ${id} (${name})`);
     } catch (error) {
-      console.error(`Failed to start MCP server pod ${id} (${name}):`, error);
+      logger.error(`Failed to start MCP server pod ${id} (${name}):`, error);
       // Keep the pod in the map even if it failed to start
       // This ensures it appears in status updates with error state
-      console.warn(
+      logger.warn(
         `MCP server pod ${id} failed to start but remains registered for error display`,
       );
       throw error;
@@ -210,19 +211,19 @@ class McpServerRuntimeManager {
    * Remove an MCP server pod completely
    */
   async removeMcpServer(mcpServerId: string): Promise<void> {
-    console.log(`Removing MCP server pod for: ${mcpServerId}`);
+    logger.info(`Removing MCP server pod for: ${mcpServerId}`);
 
     const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
     if (!k8sPod) {
-      console.warn(`No pod found for MCP server ${mcpServerId}`);
+      logger.warn(`No pod found for MCP server ${mcpServerId}`);
       return;
     }
 
     try {
       await k8sPod.removePod();
-      console.log(`Successfully removed MCP server pod ${mcpServerId}`);
+      logger.info(`Successfully removed MCP server pod ${mcpServerId}`);
     } catch (error) {
-      console.error(`Failed to remove MCP server pod ${mcpServerId}:`, error);
+      logger.error(`Failed to remove MCP server pod ${mcpServerId}:`, error);
       throw error;
     } finally {
       this.mcpServerIdToPodMap.delete(mcpServerId);
@@ -233,7 +234,7 @@ class McpServerRuntimeManager {
    * Restart a single MCP server pod
    */
   async restartServer(mcpServerId: string): Promise<void> {
-    console.log(`Restarting MCP server pod: ${mcpServerId}`);
+    logger.info(`Restarting MCP server pod: ${mcpServerId}`);
 
     try {
       // Get the MCP server from database
@@ -252,9 +253,9 @@ class McpServerRuntimeManager {
       // Start the pod again
       await this.startServer(mcpServer);
 
-      console.log(`MCP server pod ${mcpServerId} restarted successfully`);
+      logger.info(`MCP server pod ${mcpServerId} restarted successfully`);
     } catch (error) {
-      console.error(`Failed to restart MCP server pod ${mcpServerId}:`, error);
+      logger.error(`Failed to restart MCP server pod ${mcpServerId}:`, error);
       throw error;
     }
   }
@@ -325,7 +326,7 @@ class McpServerRuntimeManager {
    * Shutdown the runtime
    */
   async shutdown(): Promise<void> {
-    console.log("Shutting down MCP Server Runtime...");
+    logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
 
     // Stop all pods
@@ -334,7 +335,7 @@ class McpServerRuntimeManager {
         try {
           await this.stopServer(serverId);
         } catch (error) {
-          console.error(
+          logger.error(
             `Failed to stop MCP server pod ${serverId} during shutdown:`,
             error,
           );
@@ -343,7 +344,7 @@ class McpServerRuntimeManager {
     );
 
     await Promise.allSettled(stopPromises);
-    console.log("MCP Server Runtime shutdown complete");
+    logger.info("MCP Server Runtime shutdown complete");
   }
 }
 

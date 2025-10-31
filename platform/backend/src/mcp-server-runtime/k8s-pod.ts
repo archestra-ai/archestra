@@ -97,13 +97,13 @@ export default class K8sPod {
         if (existingPod.status?.phase === "Running") {
           this.state = "running";
           this.assignHttpPortIfNeeded(existingPod);
-          console.log(`Pod ${this.podName} is already running`);
+          logger.info(`Pod ${this.podName} is already running`);
           return;
         }
 
         // If pod exists but not running, delete and recreate
         if (existingPod.status?.phase === "Failed") {
-          console.log(`Deleting failed pod ${this.podName}`);
+          logger.info(`Deleting failed pod ${this.podName}`);
           await this.removePod();
         }
         // biome-ignore lint/suspicious/noExplicitAny: TODO: fix this type..
@@ -125,10 +125,10 @@ export default class K8sPod {
       }
 
       // Create new pod
-      console.log(
+      logger.info(
         `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
       );
-      console.log(
+      logger.info(
         `Using command: ${catalogItem.localConfig.command} ${catalogItem.localConfig.arguments.join(" ")}`,
       );
       this.state = "pending";
@@ -136,7 +136,7 @@ export default class K8sPod {
       // Use custom Docker image if provided, otherwise use the base image
       const dockerImage =
         catalogItem.localConfig.dockerImage || mcpServerBaseImage;
-      console.log(`Using Docker image: ${dockerImage}`);
+      logger.info(`Using Docker image: ${dockerImage}`);
 
       const podSpec: k8s.V1Pod = {
         metadata: {
@@ -179,7 +179,7 @@ export default class K8sPod {
         body: podSpec,
       });
 
-      console.log(`Pod ${this.podName} created, waiting for it to be ready...`);
+      logger.info(`Pod ${this.podName} created, waiting for it to be ready...`);
 
       // Wait for pod to be ready
       await this.waitForPodReady();
@@ -188,12 +188,12 @@ export default class K8sPod {
       this.assignHttpPortIfNeeded(createdPod);
 
       this.state = "running";
-      console.log(`Pod ${this.podName} is now running`);
+      logger.info(`Pod ${this.podName} is now running`);
     } catch (error: unknown) {
       this.state = "failed";
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      console.error(`Failed to start pod ${this.podName}:`, error);
+      logger.error(`Failed to start pod ${this.podName}:`, error);
       throw error;
     }
   }
@@ -214,7 +214,7 @@ export default class K8sPod {
     if (this.needsHttpPort() && pod.status?.podIP) {
       // Use the container port directly with pod IP
       this.assignedHttpPort = 8080;
-      console.log(
+      logger.info(
         `Assigned HTTP port ${this.assignedHttpPort} for pod ${this.podName}`,
       );
     }
@@ -270,16 +270,16 @@ export default class K8sPod {
    */
   async stopPod(): Promise<void> {
     try {
-      console.log(`Stopping pod ${this.podName}`);
+      logger.info(`Stopping pod ${this.podName}`);
       await this.k8sApi.deleteNamespacedPod({
         name: this.podName,
         namespace: this.namespace,
       });
       this.state = "not_created";
-      console.log(`Pod ${this.podName} stopped`);
+      logger.info(`Pod ${this.podName} stopped`);
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes("404")) {
-        console.error(`Failed to stop pod ${this.podName}:`, error);
+        logger.error(`Failed to stop pod ${this.podName}:`, error);
         throw error;
       }
       // Pod doesn't exist, that's fine
@@ -430,7 +430,7 @@ export default class K8sPod {
           });
       });
     } catch (error) {
-      console.error(`Failed to stream to pod ${this.podName}:`, error);
+      logger.error(`Failed to stream to pod ${this.podName}:`, error);
       throw error;
     }
   }
@@ -448,7 +448,7 @@ export default class K8sPod {
 
       return logs || "";
     } catch (error: unknown) {
-      console.error(`Failed to get logs for pod ${this.podName}:`, error);
+      logger.error(`Failed to get logs for pod ${this.podName}:`, error);
       if (error instanceof Error && error.message.includes("404")) {
         return "Pod not found";
       }

@@ -132,7 +132,7 @@ tests:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: ".*external-db.example.com.*5432.*"
 
-  - it: should only include DATABASE_URL when archestra.env is empty
+  - it: when archestra.env is empty should set a specific set of environment variables
     documentIndex: 1
     set:
       archestra.env: {}
@@ -142,6 +142,8 @@ tests:
           value:
             - name: DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
+            - name: K8S_NAMESPACE
+              value: NAMESPACE
             - name: USE_IN_CLUSTER_KUBECONFIG
               value: "true"
 
@@ -191,6 +193,19 @@ tests:
             name: K8S_NAMESPACE
             value: "mcp-servers"
 
+  - it: should use custom namespace over release namespace when both are set
+    documentIndex: 1
+    set:
+      archestra.kubernetes.namespace: "custom-mcp-namespace"
+    release:
+      namespace: "release-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K8S_NAMESPACE
+            value: "custom-mcp-namespace"
+
   - it: should set MCP_SERVER_BASE_IMAGE env var when baseImage is configured
     documentIndex: 1
     set:
@@ -202,15 +217,29 @@ tests:
             name: MCP_SERVER_BASE_IMAGE
             value: "my-registry/mcp-server:v1.0.0"
 
-  - it: should not set K8S_NAMESPACE env var when namespace is empty
+  - it: should set K8S_NAMESPACE to release namespace when namespace is empty
+    documentIndex: 1
+    set:
+      archestra.kubernetes.namespace: ""
+    release:
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K8S_NAMESPACE
+            value: "test-namespace"
+
+  - it: should set K8S_NAMESPACE to NAMESPACE when namespace is empty and no release namespace
     documentIndex: 1
     set:
       archestra.kubernetes.namespace: ""
     asserts:
-      - notContains:
+      - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: K8S_NAMESPACE
+            value: "NAMESPACE"
 
   - it: should not set MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1

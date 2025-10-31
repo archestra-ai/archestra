@@ -43,7 +43,7 @@ archestra:
   # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
   kubernetes:
     # Namespace where MCP server pods will be created
-    # If not set, defaults to "default"
+    # If not set, defaults to the namespace specified in the helm release
     namespace: ""
 
     # Base image for MCP server containers

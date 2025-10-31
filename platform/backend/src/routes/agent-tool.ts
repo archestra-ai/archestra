@@ -1,6 +1,13 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  AgentToolModel,
+  McpServerModel,
+  ToolModel,
+  UserModel,
+} from "@/models";
 import {
   ErrorResponseSchema,
   RouteId,
@@ -72,6 +79,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .nullish(),
         response: {
           200: z.object({ success: z.boolean() }),
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -102,6 +110,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "not_found",
             },
           });
+        }
+
+        // If a credential source is specified, validate it
+        if (credentialSourceMcpServerId) {
+          const validationError = await validateCredentialSource(
+            agentId,
+            credentialSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
         }
 
         // Create the assignment (no-op if already exists)
@@ -229,6 +249,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }).partial(),
         response: {
           200: UpdateAgentToolSchema,
+          400: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
         },
@@ -237,6 +258,31 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       try {
         const { id } = request.params;
+        const { credentialSourceMcpServerId } = request.body;
+
+        // If credentialSourceMcpServerId is being updated, validate it
+        if (credentialSourceMcpServerId) {
+          // First, get the agent-tool to find the agentId
+          const agentTools = await AgentToolModel.findAll();
+          const agentTool = agentTools.find((at) => at.id === id);
+
+          if (!agentTool) {
+            return reply.status(404).send({
+              error: {
+                message: `Agent-tool relationship with ID ${id} not found`,
+                type: "not_found",
+              },
+            });
+          }
+          const validationError = await validateCredentialSource(
+            agentTool.agent.id,
+            credentialSourceMcpServerId,
+          );
+
+          if (validationError) {
+            return reply.status(validationError.status).send(validationError);
+          }
+        }
 
         const agentTool = await AgentToolModel.update(id, request.body);
 
@@ -263,5 +309,94 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Validates that a credentialSourceMcpServerId is valid for the given agent.
+ * Returns an error object if validation fails, or null if valid.
+ *
+ * Validation rules:
+ * - (Admin): Admins can use their personal tokens with any agent
+ * - Team token: Agent and MCP server must share at least one team
+ * - Personal token (Member): Token owner must belong to a team that the agent is assigned to
+ */
+async function validateCredentialSource(
+  agentId: string,
+  credentialSourceMcpServerId: string,
+): Promise<{
+  status: 400 | 404;
+  error: { message: string; type: string };
+} | null> {
+  // Check that the MCP server exists
+  const mcpServer = await McpServerModel.findById(credentialSourceMcpServerId);
+
+  if (!mcpServer) {
+    return {
+      status: 404,
+      error: {
+        message: `MCP server with ID ${credentialSourceMcpServerId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  // Get the token owner's details
+  const owner = mcpServer.ownerId
+    ? await UserModel.getUserById(mcpServer.ownerId)
+    : null;
+  if (!owner) {
+    return {
+      status: 400,
+      error: {
+        message: "Personal token owner not found",
+        type: "validation_error",
+      },
+    };
+  }
+
+  if (mcpServer.authType === "team") {
+    // For team tokens: agent and MCP server must share at least one team
+    const shareTeam = await AgentTeamModel.agentAndMcpServerShareTeam(
+      agentId,
+      credentialSourceMcpServerId,
+    );
+
+    if (!shareTeam) {
+      return {
+        status: 400,
+        error: {
+          message:
+            "The selected team token must belong to a team that this agent is assigned to",
+          type: "validation_error",
+        },
+      };
+    }
+  } else if (mcpServer.authType === "personal") {
+    // For personal tokens: check if owner is admin OR if owner belongs to a team that the agent is assigned to
+    // Admins can use their tokens with any agent
+    if (owner.role === "admin") {
+      return null;
+    }
+
+    // Members must belong to a team that the agent is assigned to
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      owner.id,
+      agentId,
+      false, // isAdmin = false to check actual team membership
+    );
+
+    if (!hasAccess) {
+      return {
+        status: 400,
+        error: {
+          message:
+            "The selected personal token must belong to a user who is a member of a team that this agent is assigned to",
+          type: "validation_error",
+        },
+      };
+    }
+  }
+
+  return null;
+}
 
 export default agentToolRoutes;

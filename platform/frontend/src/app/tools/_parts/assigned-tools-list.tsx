@@ -377,7 +377,7 @@ export function AssignedToolsList({
       },
       {
         id: "token",
-        header: "Token owner",
+        header: "Token to use",
         cell: ({ row }) => {
           const isMcpTool = !!row.original.tool.mcpServerName;
 

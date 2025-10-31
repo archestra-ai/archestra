@@ -53,8 +53,8 @@ jobs:
         with:
           working-directory: ./platform
 
-        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
       - name: Setup Blacksmith Builder
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build Docker image

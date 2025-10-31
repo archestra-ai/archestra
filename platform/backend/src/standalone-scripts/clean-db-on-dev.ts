@@ -65,7 +65,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       process.exit(0);
     })
     .catch((error) => {
-      logger.error("\n❌ Error clearing database:", error);
+      logger.error({ err: error }, "\n❌ Error clearing database:");
       process.exit(1);
     });
 }

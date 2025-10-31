@@ -178,7 +178,7 @@ export const auth = betterAuth({
               .where(eq(schema.invitation.id, invitationId));
             logger.info(`✅ Invitation ${invitationId} deleted from database`);
           } catch (error) {
-            logger.error("❌ Failed to delete invitation:", error);
+            logger.error({ err: error }, "❌ Failed to delete invitation:");
           }
         }
       }
@@ -196,7 +196,7 @@ export const auth = betterAuth({
               .where(eq(schema.session.userId, userId));
             logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
-            logger.error("❌ Failed to invalidate user sessions:", error);
+            logger.error({ err: error }, "❌ Failed to invalidate user sessions:");
           }
         }
       }
@@ -238,7 +238,7 @@ export const auth = betterAuth({
               );
             }
           } catch (error) {
-            logger.error("❌ Failed to delete member:", error);
+            logger.error({ err: error }, "❌ Failed to delete member:");
           }
         }
       }
@@ -305,8 +305,8 @@ export const auth = betterAuth({
             );
           } catch (error) {
             logger.error(
+              { err: error },
               `❌ Failed to accept invitation ${invitationId}:`,
-              error,
             );
           }
 
@@ -343,7 +343,7 @@ export const auth = betterAuth({
               }
             }
           } catch (error) {
-            logger.error("❌ Failed to set active organization:", error);
+            logger.error({ err: error }, "❌ Failed to set active organization:");
           }
         }
       }

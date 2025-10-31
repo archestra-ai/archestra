@@ -6,6 +6,7 @@ import {
   type DualLlmMessage,
 } from "./dual-llm-client";
 import type { CommonDualLlmParams, SupportedProviders } from "./types";
+import logger from "@/logging";
 
 /**
  * DualLlmSubagent implements the dual LLM quarantine pattern for safely

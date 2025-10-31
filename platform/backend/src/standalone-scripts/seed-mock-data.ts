@@ -95,7 +95,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       process.exit(0);
     })
     .catch((error) => {
-      logger.error("\n❌ Error seeding database:", error);
+      logger.error({ err: error }, "\n❌ Error seeding database:");
       process.exit(1);
     });
 }

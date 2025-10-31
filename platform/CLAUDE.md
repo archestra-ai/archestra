@@ -118,6 +118,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Flat file structure, avoid barrel files
 - When adding a new route, you will likely need to add configuration to `routePermissionsConfig` in `backend/src/middleware/auth.ts` (otherwise the UI's consumption of those new route(s) will result in HTTP 403)
 - Only export public APIs
+- When logging, please do not use `console`, please use the `pino` `logger` instance exported from `@/logging`
 
 **Team-based Access Control**:
 

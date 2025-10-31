@@ -181,7 +181,10 @@ class McpServerInstallationRequestModel {
       }
     } catch (error) {
       // Log the error but still approve the request - admin can handle catalog creation manually
-      logger.error({ err: error }, "Failed to create catalog item during approval:");
+      logger.error(
+        { err: error },
+        "Failed to create catalog item during approval:",
+      );
     }
 
     // Update the request status

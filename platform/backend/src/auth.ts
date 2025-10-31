@@ -196,7 +196,10 @@ export const auth = betterAuth({
               .where(eq(schema.session.userId, userId));
             logger.info(`✅ All sessions for user ${userId} invalidated`);
           } catch (error) {
-            logger.error({ err: error }, "❌ Failed to invalidate user sessions:");
+            logger.error(
+              { err: error },
+              "❌ Failed to invalidate user sessions:",
+            );
           }
         }
       }
@@ -343,7 +346,10 @@ export const auth = betterAuth({
               }
             }
           } catch (error) {
-            logger.error({ err: error }, "❌ Failed to set active organization:");
+            logger.error(
+              { err: error },
+              "❌ Failed to set active organization:",
+            );
           }
         }
       }

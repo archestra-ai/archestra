@@ -5,10 +5,10 @@ import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
 import type { z } from "zod";
 import config from "@/config";
+import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
-import logger from "@/logging";
 
 const {
   orchestrator: { mcpServerBaseImage },
@@ -449,7 +449,10 @@ export default class K8sPod {
 
       return logs || "";
     } catch (error: unknown) {
-      logger.error({ err: error }, `Failed to get logs for pod ${this.podName}:`);
+      logger.error(
+        { err: error },
+        `Failed to get logs for pod ${this.podName}:`,
+      );
       if (error instanceof Error && error.message.includes("404")) {
         return "Pod not found";
       }

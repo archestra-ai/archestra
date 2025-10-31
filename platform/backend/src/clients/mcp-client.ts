@@ -54,10 +54,13 @@ class McpClient {
           toolCall,
           toolResult,
         });
-        logger.info({
-          toolName: toolCall.name,
-          error: errorMessage,
-        }, "✅ Saved early-return error:");
+        logger.info(
+          {
+            toolName: toolCall.name,
+            error: errorMessage,
+          },
+          "✅ Saved early-return error:",
+        );
       } catch (dbError) {
         logger.error({ err: dbError }, "Failed to persist early-return error:");
       }
@@ -219,16 +222,22 @@ class McpClient {
                 toolCall,
                 toolResult,
               });
-              logger.info({
-                id: savedToolCall.id,
-                toolName: toolCall.name,
-                resultContent:
-                  typeof toolResult.content === "string"
-                    ? toolResult.content.substring(0, 100)
-                    : JSON.stringify(toolResult.content).substring(0, 100),
-              }, "✅ Saved local MCP tool call (success):");
+              logger.info(
+                {
+                  id: savedToolCall.id,
+                  toolName: toolCall.name,
+                  resultContent:
+                    typeof toolResult.content === "string"
+                      ? toolResult.content.substring(0, 100)
+                      : JSON.stringify(toolResult.content).substring(0, 100),
+                },
+                "✅ Saved local MCP tool call (success):",
+              );
             } catch (dbError) {
-              logger.error({ err: dbError }, "Failed to persist local MCP tool call:");
+              logger.error(
+                { err: dbError },
+                "Failed to persist local MCP tool call:",
+              );
               // Continue execution even if persistence fails
             }
           } catch (error) {
@@ -249,13 +258,19 @@ class McpClient {
                 toolCall,
                 toolResult,
               });
-              logger.info({
-                id: savedToolCall.id,
-                toolName: toolCall.name,
-                error: toolResult.error,
-              }, "✅ Saved local MCP tool call (error):");
+              logger.info(
+                {
+                  id: savedToolCall.id,
+                  toolName: toolCall.name,
+                  error: toolResult.error,
+                },
+                "✅ Saved local MCP tool call (error):",
+              );
             } catch (dbError) {
-              logger.error({ err: dbError }, "Failed to persist local MCP tool call:");
+              logger.error(
+                { err: dbError },
+                "Failed to persist local MCP tool call:",
+              );
               // Continue execution even if persistence fails
             }
           }
@@ -345,14 +360,17 @@ class McpClient {
               toolCall,
               toolResult,
             });
-            logger.info({
-              id: savedToolCall.id,
-              toolName: toolCall.name,
-              resultContent:
-                typeof toolResult.content === "string"
-                  ? toolResult.content.substring(0, 100)
-                  : JSON.stringify(toolResult.content).substring(0, 100),
-            }, "✅ Saved successful MCP tool call:");
+            logger.info(
+              {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                resultContent:
+                  typeof toolResult.content === "string"
+                    ? toolResult.content.substring(0, 100)
+                    : JSON.stringify(toolResult.content).substring(0, 100),
+              },
+              "✅ Saved successful MCP tool call:",
+            );
           } catch (dbError) {
             logger.error({ err: dbError }, "Failed to persist MCP tool call:");
             // Continue execution even if persistence fails
@@ -375,11 +393,14 @@ class McpClient {
               toolCall,
               toolResult,
             });
-            logger.info({
-              id: savedToolCall.id,
-              toolName: toolCall.name,
-              error: toolResult.error,
-            }, "✅ Saved failed MCP tool call:");
+            logger.info(
+              {
+                id: savedToolCall.id,
+                toolName: toolCall.name,
+                error: toolResult.error,
+              },
+              "✅ Saved failed MCP tool call:",
+            );
           } catch (dbError) {
             logger.error({ err: dbError }, "Failed to persist MCP tool call:");
             // Continue execution even if persistence fails

@@ -403,7 +403,7 @@ export function AssignedToolsList({
             />
           );
         },
-        size: 150,
+        size: 160,
       },
       {
         id: "allowWithUntrusted",

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { TeamModel } from "@/models";
+import { AgentToolModel, TeamModel } from "@/models";
 import {
   AddTeamMemberBodySchema,
   CreateTeamBodySchema,
@@ -560,6 +560,28 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
               type: "not_found",
             },
           });
+        }
+
+        // Clean up invalid credential sources (personal tokens) for this user
+        // if they no longer have access to agents through other teams
+        try {
+          const cleanedCount =
+            await AgentToolModel.cleanupInvalidCredentialSourcesForUser(
+              request.params.userId,
+              request.params.id,
+            );
+
+          if (cleanedCount > 0) {
+            fastify.log.info(
+              `Cleaned up ${cleanedCount} invalid credential sources for user ${request.params.userId}`,
+            );
+          }
+        } catch (cleanupError) {
+          // Log the error but don't fail the request
+          fastify.log.error(
+            cleanupError,
+            "Error cleaning up credential sources",
+          );
         }
 
         return reply.send({ success: true });

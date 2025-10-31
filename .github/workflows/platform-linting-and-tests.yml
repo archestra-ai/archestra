@@ -84,6 +84,19 @@ jobs:
           echo "=== Quick log check for each container ==="
           docker logs archestra-platform-test --tail 50
 
+      - name: Get Playwright version
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        working-directory: ./platform/e2e-tests
+        run: |
+          echo "PLAYWRIGHT_VERSION=$(cat ./package.json | jq -r '.devDependencies["@playwright/test"]')" >> $GITHUB_ENV
+
+      - name: Cache Playwright binaries and dependencies
+        if: ${{ inputs.should-skip-running-and-always-succeed != true }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}-chromium
+
       - name: Install Playwright browsers
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
         working-directory: ./platform/e2e-tests

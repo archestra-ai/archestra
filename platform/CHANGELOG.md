@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.21](https://github.com/archestra-ai/archestra/compare/platform-v0.0.20...platform-v0.0.21) (2025-10-31)
+
+
+### Features
+
+* support streamable http for local mcp servers ([#871](https://github.com/archestra-ai/archestra/issues/871)) ([ebbc311](https://github.com/archestra-ai/archestra/commit/ebbc311c304619fbbe067d1ac8878822adfe9160))
+* unified logging + env var to set logging ([#874](https://github.com/archestra-ai/archestra/issues/874)) ([5a6fd72](https://github.com/archestra-ai/archestra/commit/5a6fd7299f0504177d789ebcad74d0f6128ff3bf))
+
 ## [0.0.20](https://github.com/archestra-ai/archestra/compare/platform-v0.0.19...platform-v0.0.20) (2025-10-31)
 
 

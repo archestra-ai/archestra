@@ -109,7 +109,7 @@ const getNavigationItems = (
             ? [
                 {
                   title: "LLM & MCP Gateways",
-                  url: "/settings",
+                  url: "/gateways",
                   icon: Settings,
                 },
               ]

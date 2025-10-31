@@ -277,6 +277,9 @@ importers:
       lucide-react:
         specifier: ^0.548.0
         version: 0.548.0(react@19.2.0)
+      mermaid:
+        specifier: ^11.12.1
+        version: 11.12.1
       nanoid:
         specifier: ^5.1.6
         version: 5.1.6

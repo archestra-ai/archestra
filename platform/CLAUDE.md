@@ -139,7 +139,7 @@ ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518
 - JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
 - Pod logs available via `/mcp_proxy/:id/logs`
 - K8s configuration: ARCHESTRA_K8S_NAMESPACE, ARCHESTRA_KUBECONFIG, ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG, ARCHESTRA_MCP_SERVER_BASE_IMAGE
-- Custom Docker images supported per MCP server (overrides MCP_SERVER_BASE_IMAGE)
+- Custom Docker images supported per MCP server (overrides ARCHESTRA_MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Helm Chart RBAC**:

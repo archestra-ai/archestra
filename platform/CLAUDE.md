@@ -51,6 +51,9 @@ pnpm db:studio       # Open Drizzle Studio
 # Logs
 tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
+
+# Testing with WireMock
+tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
 ```
 
 ## Environment Variables

@@ -27,6 +27,19 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: vi.fn(),
 }));
 
+// Mock McpServerRuntimeManager - use vi.hoisted to avoid initialization errors
+const { mockUsesStreamableHttp, mockGetHttpEndpointUrl } = vi.hoisted(() => ({
+  mockUsesStreamableHttp: vi.fn(),
+  mockGetHttpEndpointUrl: vi.fn(),
+}));
+
+vi.mock("@/mcp-server-runtime", () => ({
+  McpServerRuntimeManager: {
+    usesStreamableHttp: mockUsesStreamableHttp,
+    getHttpEndpointUrl: mockGetHttpEndpointUrl,
+  },
+}));
+
 describe("McpClient", () => {
   let agentId: string;
   let mcpServerId: string;
@@ -63,6 +76,8 @@ describe("McpClient", () => {
     mockCallTool.mockReset();
     mockConnect.mockReset();
     mockClose.mockReset();
+    mockUsesStreamableHttp.mockReset();
+    mockGetHttpEndpointUrl.mockReset();
   });
 
   describe("executeToolCalls", () => {
@@ -466,6 +481,229 @@ describe("McpClient", () => {
         expect(results[1]).toEqual({
           id: "call_2",
           content: [{ type: "text", text: "Template 2: Response 2" }],
+          isError: false,
+        });
+      });
+    });
+
+    describe("Streamable HTTP Transport (Local Servers)", () => {
+      let localMcpServerId: string;
+      let localCatalogId: string;
+
+      beforeEach(async () => {
+        // Create catalog entry for local streamable-http server
+        const localCatalog = await InternalMcpCatalogModel.create({
+          name: "local-streamable-http-server",
+          serverType: "local",
+          localConfig: {
+            command: "npx",
+            arguments: [
+              "@modelcontextprotocol/server-everything",
+              "streamableHttp",
+            ],
+            transportType: "streamable-http",
+            httpPort: 3001,
+            httpPath: "/mcp",
+          },
+        });
+        localCatalogId = localCatalog.id;
+
+        // Create MCP server for local streamable-http testing
+        const localMcpServer = await McpServerModel.create({
+          name: "local-streamable-http-server",
+          catalogId: localCatalogId,
+        });
+        localMcpServerId = localMcpServer.id;
+
+        // Reset mocks
+        mockUsesStreamableHttp.mockReset();
+        mockGetHttpEndpointUrl.mockReset();
+        mockCallTool.mockReset();
+        mockConnect.mockReset();
+      });
+
+      test("executes tools using HTTP transport for streamable-http servers", async () => {
+        // Create tool assigned to agent
+        const tool = await ToolModel.createToolIfNotExists({
+          agentId,
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id);
+
+        // Mock runtime manager responses
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Mock successful tool call
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Success from HTTP transport" }],
+          isError: false,
+        });
+
+        const toolCalls = [
+          {
+            id: "call_1",
+            name: "local-streamable-http-server__test_tool",
+            arguments: { input: "test" },
+          },
+        ];
+
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+
+        // Verify HTTP transport was detected
+        expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockGetHttpEndpointUrl).toHaveBeenCalledWith(localMcpServerId);
+
+        // Verify tool was called via HTTP client
+        expect(mockCallTool).toHaveBeenCalledWith({
+          name: "test_tool", // Server prefix stripped
+          arguments: { input: "test" },
+        });
+
+        // Verify result
+        expect(results).toHaveLength(1);
+        expect(results[0]).toEqual({
+          id: "call_1",
+          content: [{ type: "text", text: "Success from HTTP transport" }],
+          isError: false,
+        });
+      });
+
+      test("returns error when HTTP endpoint URL is missing", async () => {
+        // Create tool assigned to agent
+        const tool = await ToolModel.createToolIfNotExists({
+          agentId,
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id);
+
+        // Mock runtime manager responses - no endpoint URL
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue(undefined);
+
+        const toolCalls = [
+          {
+            id: "call_1",
+            name: "local-streamable-http-server__test_tool",
+            arguments: { input: "test" },
+          },
+        ];
+
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+
+        // Verify error result
+        expect(results).toHaveLength(1);
+        expect(results[0]).toEqual({
+          id: "call_1",
+          content: null,
+          isError: true,
+          error: expect.stringContaining("No HTTP endpoint URL found"),
+        });
+      });
+
+      test("applies response modifier template with streamable-http", async () => {
+        // Create tool with response modifier template
+        const tool = await ToolModel.createToolIfNotExists({
+          agentId,
+          name: "local-streamable-http-server__formatted_tool",
+          description: "Tool with template",
+          parameters: {},
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          responseModifierTemplate:
+            'Result: {{{lookup (lookup response 0) "text"}}}',
+        });
+
+        // Mock runtime manager responses
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        // Mock tool call response
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Original content" }],
+          isError: false,
+        });
+
+        const toolCalls = [
+          {
+            id: "call_1",
+            name: "local-streamable-http-server__formatted_tool",
+            arguments: {},
+          },
+        ];
+
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+
+        // Verify template was applied
+        expect(results).toHaveLength(1);
+        expect(results[0]).toEqual({
+          id: "call_1",
+          content: [{ type: "text", text: "Result: Original content" }],
+          isError: false,
+        });
+      });
+
+      test("uses stdio transport when streamable-http is false", async () => {
+        // Create tool assigned to agent
+        const tool = await ToolModel.createToolIfNotExists({
+          agentId,
+          name: "local-streamable-http-server__stdio_tool",
+          description: "Tool using stdio",
+          parameters: {},
+          mcpServerId: localMcpServerId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id);
+
+        // Mock runtime manager to indicate stdio transport
+        mockUsesStreamableHttp.mockResolvedValue(false);
+
+        // Mock fetch for stdio proxy endpoint
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            result: {
+              content: [{ type: "text", text: "Success from stdio" }],
+              isError: false,
+            },
+          }),
+        });
+
+        const toolCalls = [
+          {
+            id: "call_1",
+            name: "local-streamable-http-server__stdio_tool",
+            arguments: { input: "test" },
+          },
+        ];
+
+        const results = await mcpClient.executeToolCalls(toolCalls, agentId);
+
+        // Verify stdio proxy was used (not HTTP transport)
+        expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockGetHttpEndpointUrl).not.toHaveBeenCalled();
+        expect(mockCallTool).not.toHaveBeenCalled();
+
+        // Verify fetch was called with proxy endpoint
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/mcp_proxy/"),
+          expect.any(Object),
+        );
+
+        // Verify result
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({
+          id: "call_1",
           isError: false,
         });
       });

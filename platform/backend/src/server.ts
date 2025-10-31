@@ -39,7 +39,7 @@ const {
 } = config;
 
 const fastify = Fastify({
-  logger: logger,
+  loggerInstance: logger,
 }).withTypeProvider<ZodTypeProvider>();
 
 // Set up Zod validation and serialization

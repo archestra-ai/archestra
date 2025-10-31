@@ -130,9 +130,6 @@ class McpClient {
       if (credentialSourceServer?.secretId) {
         secretId = credentialSourceServer.secretId;
       }
-    } else {
-      // Use the tool's own MCP server credentials (personal token)
-      secretId = firstTool.mcpServerSecretId;
     }
 
     if (secretId) {

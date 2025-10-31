@@ -99,7 +99,10 @@ function InternalServerCard({
                   OAuth
                 </Badge>
               )}
-              <TransportBadges isRemote={item.serverType === "remote"} />
+              <TransportBadges
+                isRemote={item.serverType === "remote"}
+                transportType={item.localConfig?.transportType}
+              />
             </div>
           </div>
           <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">

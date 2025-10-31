@@ -100,9 +100,9 @@ PostgreSQL port for database connectivity checks
 ServiceAccount name for the Archestra Platform
 */}}
 {{- define "archestra-platform.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "archestra-platform.fullname" .) .Values.serviceAccount.name }}
+{{- if .Values.archestra.serviceAccount.create }}
+{{- default (include "archestra-platform.fullname" .) .Values.archestra.serviceAccount.name }}
 {{- else }}
-{{- default "default" .Values.serviceAccount.name }}
+{{- default "default" .Values.archestra.serviceAccount.name }}
 {{- end }}
 {{- end }}

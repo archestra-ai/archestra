@@ -377,7 +377,7 @@ tests:
   - it: should use default ServiceAccount name when serviceAccount.create is true
     documentIndex: 1
     set:
-      serviceAccount.create: true
+      archestra.serviceAccount.create: true
     asserts:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
@@ -386,8 +386,8 @@ tests:
   - it: should use custom ServiceAccount name when provided
     documentIndex: 1
     set:
-      serviceAccount.create: true
-      serviceAccount.name: "custom-sa-name"
+      archestra.serviceAccount.create: true
+      archestra.serviceAccount.name: "custom-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -396,7 +396,7 @@ tests:
   - it: should use default ServiceAccount when serviceAccount.create is false
     documentIndex: 1
     set:
-      serviceAccount.create: false
+      archestra.serviceAccount.create: false
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -405,8 +405,8 @@ tests:
   - it: should use custom ServiceAccount name even when create is false
     documentIndex: 1
     set:
-      serviceAccount.create: false
-      serviceAccount.name: "existing-sa-name"
+      archestra.serviceAccount.create: false
+      archestra.serviceAccount.name: "existing-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -422,7 +422,7 @@ tests:
   - it: should add imagePullSecrets to pod when configured
     documentIndex: 1
     set:
-      imagePullSecrets:
+      archestra.imagePullSecrets:
         - name: myregistrykey
         - name: anotherregistrykey
     asserts:
@@ -437,9 +437,9 @@ tests:
   - it: should configure both ServiceAccount and imagePullSecrets
     documentIndex: 1
     set:
-      serviceAccount.create: true
-      serviceAccount.name: "custom-archestra-sa"
-      imagePullSecrets:
+      archestra.serviceAccount.create: true
+      archestra.serviceAccount.name: "custom-archestra-sa"
+      archestra.imagePullSecrets:
         - name: private-registry-secret
     asserts:
       - equal:

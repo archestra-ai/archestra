@@ -35,7 +35,7 @@ spec:
         {{- include "archestra-platform.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.archestra.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}

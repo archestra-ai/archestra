@@ -198,7 +198,7 @@ test.describe('LLM Proxy - OpenAI', () => {
   });
 });
 
-test('LLM Proxy - Anthropic', () => {
+test.describe('LLM Proxy - Anthropic', () => {
   const ANTHROPIC_TEST_CASE_1_HEADER = 'test-case-1-anthropic-tool-call';
 
   let agentId: string;

@@ -23,7 +23,7 @@ jobs:
   lint-pr-title:
     name: PR Title Linter
     if: github.event_name == 'pull_request'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -41,7 +41,7 @@ jobs:
 
   zizmor:
     name: Zizmor GitHub Actions static analysis
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
     steps:

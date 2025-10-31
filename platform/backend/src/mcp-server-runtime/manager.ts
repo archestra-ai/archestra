@@ -14,7 +14,9 @@ import type {
 } from "./schemas";
 
 const {
-  kubernetes: { namespace, kubeconfig, useInClusterConfig },
+  orchestrator: {
+    kubernetes: { namespace, kubeconfig, loadKubeconfigFromCurrentCluster },
+  },
 } = config;
 
 /**
@@ -40,7 +42,7 @@ class McpServerRuntimeManager {
 
     // Load K8s config from environment or default locations
     try {
-      if (useInClusterConfig) {
+      if (loadKubeconfigFromCurrentCluster) {
         /**
          * Running inside a K8s cluster
          *

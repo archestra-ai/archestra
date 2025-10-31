@@ -77,7 +77,7 @@ tests:
           path: spec.template.spec.containers[0].ports[1].containerPort
           value: 3000
 
-  - it: should set DATABASE_URL to internal postgres when external_database_url is null
+  - it: should set ARCHESTRA_DATABASE_URL to internal postgres when external_database_url is null
     documentIndex: 1
     set:
       postgresql.external_database_url: null
@@ -87,19 +87,19 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env[0].name
-          value: DATABASE_URL
+          value: ARCHESTRA_DATABASE_URL
       - matchRegex:
           path: spec.template.spec.containers[0].env[0].value
           pattern: ^postgresql://testuser:testpass@.*-archestra-platform-postgresql:5432/testdb$
 
-  - it: should set DATABASE_URL to external postgres when external_database_url is provided
+  - it: should set ARCHESTRA_DATABASE_URL to external postgres when external_database_url is provided
     documentIndex: 1
     set:
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env[0].name
-          value: DATABASE_URL
+          value: ARCHESTRA_DATABASE_URL
       - equal:
           path: spec.template.spec.containers[0].env[0].value
           value: postgresql://external:pass@external-host:5432/externaldb
@@ -140,11 +140,11 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
-            - name: DATABASE_URL
+            - name: ARCHESTRA_DATABASE_URL
               value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
-            - name: K8S_NAMESPACE
+            - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
-            - name: USE_IN_CLUSTER_KUBECONFIG
+            - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
 
   - it: should add custom environment variables when archestra.env is set
@@ -165,7 +165,7 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
-  - it: should include DATABASE_URL alongside custom env vars
+  - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:
       archestra.env:
@@ -174,7 +174,7 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: DATABASE_URL
+            name: ARCHESTRA_DATABASE_URL
             value: postgresql://archestra:archestra_dev_password@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
       - contains:
           path: spec.template.spec.containers[0].env
@@ -182,80 +182,80 @@ tests:
             name: ARCHESTRA_API_BASE_URL
             value: "https://api.example.com"
 
-  - it: should set K8S_NAMESPACE env var when namespace is configured
+  - it: should set ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE env var when namespace is configured
     documentIndex: 1
     set:
-      archestra.kubernetes.namespace: "mcp-servers"
+      archestra.orchestrator.kubernetes.namespace: "mcp-servers"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "mcp-servers"
 
   - it: should use custom namespace over release namespace when both are set
     documentIndex: 1
     set:
-      archestra.kubernetes.namespace: "custom-mcp-namespace"
+      archestra.orchestrator.kubernetes.namespace: "custom-mcp-namespace"
     release:
       namespace: "release-namespace"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "custom-mcp-namespace"
 
-  - it: should set MCP_SERVER_BASE_IMAGE env var when baseImage is configured
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var when baseImage is configured
     documentIndex: 1
     set:
-      archestra.kubernetes.baseImage: "my-registry/mcp-server:v1.0.0"
+      archestra.orchestrator.baseImage: "my-registry/mcp-server:v1.0.0"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
             value: "my-registry/mcp-server:v1.0.0"
 
-  - it: should set K8S_NAMESPACE to release namespace when namespace is empty
+  - it: should set ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE to release namespace when namespace is empty
     documentIndex: 1
     set:
-      archestra.kubernetes.namespace: ""
+      archestra.orchestrator.kubernetes.namespace: ""
     release:
       namespace: "test-namespace"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "test-namespace"
 
-  - it: should set K8S_NAMESPACE to NAMESPACE when namespace is empty and no release namespace
+  - it: should set ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE to NAMESPACE when namespace is empty and no release namespace
     documentIndex: 1
     set:
-      archestra.kubernetes.namespace: ""
+      archestra.orchestrator.kubernetes.namespace: ""
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "NAMESPACE"
 
-  - it: should not set MCP_SERVER_BASE_IMAGE env var when baseImage is empty
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE env var when baseImage is empty
     documentIndex: 1
     set:
-      archestra.kubernetes.baseImage: ""
+      archestra.orchestrator.baseImage: ""
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 
   # Kubeconfig volume mount tests
   - it: should not mount kubeconfig volume when kubeconfig is disabled
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: false
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: false
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].volumeMounts
@@ -265,8 +265,8 @@ tests:
   - it: should not mount kubeconfig volume when secretName is empty
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: true
-      archestra.kubernetes.kubeconfig.secretName: ""
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: ""
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].volumeMounts
@@ -276,9 +276,9 @@ tests:
   - it: should mount kubeconfig volume when kubeconfig is enabled
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: true
-      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
-      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[0].name
@@ -293,8 +293,8 @@ tests:
   - it: should create volume from secret when kubeconfig is enabled
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: true
-      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
     asserts:
       - equal:
           path: spec.template.spec.volumes[0].name
@@ -303,81 +303,81 @@ tests:
           path: spec.template.spec.volumes[0].secret.secretName
           value: "my-kubeconfig"
 
-  - it: should set KUBECONFIG env var when kubeconfig volume is mounted
+  - it: should set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: true
-      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
-      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
             value: "/etc/kubeconfig/config"
 
-  - it: should not set KUBECONFIG env var when kubeconfig is disabled
+  - it: should not set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig is disabled
     documentIndex: 1
     set:
-      archestra.kubernetes.kubeconfig.enabled: false
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: false
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
 
   - it: should configure all kubernetes env vars when all settings are provided
     documentIndex: 1
     set:
-      archestra.kubernetes.namespace: "mcp-servers"
-      archestra.kubernetes.baseImage: "my-registry/mcp-server:v1.0.0"
-      archestra.kubernetes.kubeconfig.enabled: true
-      archestra.kubernetes.kubeconfig.secretName: "my-kubeconfig"
-      archestra.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
+      archestra.orchestrator.kubernetes.namespace: "mcp-servers"
+      archestra.orchestrator.baseImage: "my-registry/mcp-server:v1.0.0"
+      archestra.orchestrator.kubernetes.kubeconfig.enabled: true
+      archestra.orchestrator.kubernetes.kubeconfig.secretName: "my-kubeconfig"
+      archestra.orchestrator.kubernetes.kubeconfig.mountPath: "/etc/kubeconfig"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K8S_NAMESPACE
+            name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
             value: "mcp-servers"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_SERVER_BASE_IMAGE
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
             value: "my-registry/mcp-server:v1.0.0"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: KUBECONFIG
+            name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
             value: "/etc/kubeconfig/config"
 
-  - it: should set USE_IN_CLUSTER_KUBECONFIG to false when configured
+  - it: should set ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER to false when configured
     documentIndex: 1
     set:
-      archestra.kubernetes.useInClusterConfig: false
+      archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster: false
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: USE_IN_CLUSTER_KUBECONFIG
+            name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
             value: "false"
 
-  - it: should set USE_IN_CLUSTER_KUBECONFIG to true when configured
+  - it: should set ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER to true when configured
     documentIndex: 1
     set:
-      archestra.kubernetes.useInClusterConfig: true
+      archestra.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster: true
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: USE_IN_CLUSTER_KUBECONFIG
+            name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
             value: "true"
 
   # ServiceAccount tests
   - it: should use default ServiceAccount name when serviceAccount.create is true
     documentIndex: 1
     set:
-      serviceAccount.create: true
+      archestra.serviceAccount.create: true
     asserts:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
@@ -386,8 +386,8 @@ tests:
   - it: should use custom ServiceAccount name when provided
     documentIndex: 1
     set:
-      serviceAccount.create: true
-      serviceAccount.name: "custom-sa-name"
+      archestra.serviceAccount.create: true
+      archestra.serviceAccount.name: "custom-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -396,7 +396,7 @@ tests:
   - it: should use default ServiceAccount when serviceAccount.create is false
     documentIndex: 1
     set:
-      serviceAccount.create: false
+      archestra.serviceAccount.create: false
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -405,8 +405,8 @@ tests:
   - it: should use custom ServiceAccount name even when create is false
     documentIndex: 1
     set:
-      serviceAccount.create: false
-      serviceAccount.name: "existing-sa-name"
+      archestra.serviceAccount.create: false
+      archestra.serviceAccount.name: "existing-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -422,7 +422,7 @@ tests:
   - it: should add imagePullSecrets to pod when configured
     documentIndex: 1
     set:
-      imagePullSecrets:
+      archestra.imagePullSecrets:
         - name: myregistrykey
         - name: anotherregistrykey
     asserts:
@@ -437,9 +437,9 @@ tests:
   - it: should configure both ServiceAccount and imagePullSecrets
     documentIndex: 1
     set:
-      serviceAccount.create: true
-      serviceAccount.name: "custom-archestra-sa"
-      imagePullSecrets:
+      archestra.serviceAccount.create: true
+      archestra.serviceAccount.name: "custom-archestra-sa"
+      archestra.imagePullSecrets:
         - name: private-registry-secret
     asserts:
       - equal:

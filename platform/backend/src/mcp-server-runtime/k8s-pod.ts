@@ -10,7 +10,7 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
 import type { K8sPodState, K8sPodStatusSummary } from "./schemas";
 
 const {
-  kubernetes: { mcpServerBaseImage },
+  orchestrator: { mcpServerBaseImage },
 } = config;
 
 /**

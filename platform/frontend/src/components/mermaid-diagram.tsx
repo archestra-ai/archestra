@@ -55,7 +55,7 @@ export function MermaidDiagram({
     };
 
     renderDiagram();
-  }, [chart, id, isInitialized, theme]);
+  }, [chart, id, isInitialized]);
 
   return (
     <div

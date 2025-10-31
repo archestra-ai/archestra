@@ -50,7 +50,7 @@ export function McpConnectionInstructions({
     setCopiedAuth(true);
     toast.success("Authorization header copied to clipboard");
     setTimeout(() => setCopiedAuth(false), 2000);
-  }, [`Authorization: Bearer ${token}`]);
+  }, [token]);
 
   const handleCopyConfig = useCallback(async () => {
     await navigator.clipboard.writeText(mcpConfig);

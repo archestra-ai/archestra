@@ -1,7 +1,5 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
-import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -12,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAgentAvailableTokens } from "@/lib/mcp-server.query";
 import { cn } from "@/lib/utils";
 
 interface TokenSelectProps {
@@ -21,6 +20,8 @@ interface TokenSelectProps {
   className?: string;
   /** Catalog ID to filter tokens - only shows tokens for the same catalog item */
   catalogId?: string | null;
+  /** Agent ID to filter tokens - only shows tokens that can be used with this agent */
+  agentId?: string | null;
 }
 
 /**
@@ -28,6 +29,7 @@ interface TokenSelectProps {
  * Shows team tokens (authType=team) and user tokens (authType=personal) with owner emails.
  *
  * If catalogId is provided, only shows tokens for that specific catalog item.
+ * If agentId is provided, only shows tokens that can be used with that agent (validates team membership).
  */
 export function TokenSelect({
   value,
@@ -35,19 +37,12 @@ export function TokenSelect({
   disabled,
   className,
   catalogId,
+  agentId,
 }: TokenSelectProps) {
-  const { data: allMcpServers, isLoading } = useQuery({
-    queryKey: ["mcp-servers"],
-    queryFn: async () => {
-      const response = await archestraApiSdk.getMcpServers({});
-      return response.data ?? [];
-    },
+  const { data: mcpServers, isLoading } = useAgentAvailableTokens({
+    agentId: agentId ?? null,
+    catalogId: catalogId ?? null,
   });
-
-  // Filter to only show tokens for the same catalog item
-  const mcpServers = catalogId
-    ? allMcpServers?.filter((server) => server.catalogId === catalogId)
-    : allMcpServers;
 
   // Separate team and personal tokens
   const teamTokens = mcpServers?.filter((server) => server.authType === "team");

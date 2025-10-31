@@ -398,6 +398,7 @@ export function AssignedToolsList({
                 });
               }}
               catalogId={row.original.tool.mcpServerCatalogId}
+              agentId={row.original.agent.id}
               className="h-8 w-[200px] text-xs"
             />
           );

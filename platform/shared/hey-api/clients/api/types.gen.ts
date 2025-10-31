@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1322,7 +1322,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2620,6 +2620,15 @@ export type AssignToolToAgentErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -2732,6 +2741,15 @@ export type UpdateAgentToolErrors = {
     /**
      * Default Response
      */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     404: {
         error: string | {
             message: string;
@@ -2769,6 +2787,70 @@ export type UpdateAgentToolResponses = {
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentAvailableTokensData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: {
+        catalogId?: string;
+    };
+    url: '/api/agents/{agentId}/available-tokens';
+};
+
+export type GetAgentAvailableTokensErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
+
+export type GetAgentAvailableTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        authType: 'personal' | 'team';
+        catalogId: string | null;
+        ownerId: string | null;
+        ownerEmail: string | null;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;

@@ -188,6 +188,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAgentAvailableTokens]: {
+    agent: ["read"],
+  },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },

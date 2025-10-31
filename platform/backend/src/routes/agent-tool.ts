@@ -308,6 +308,139 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+
+  fastify.get(
+    "/api/agents/:agentId/available-tokens",
+    {
+      schema: {
+        operationId: RouteId.GetAgentAvailableTokens,
+        description:
+          "Get MCP servers that can be used as credential sources for the agent's tools",
+        tags: ["Agent Tools"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        querystring: z.object({
+          catalogId: UuidIdSchema.optional(),
+        }),
+        response: {
+          200: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              authType: z.enum(["personal", "team"]),
+              catalogId: z.string().nullable(),
+              ownerId: z.string().nullable(),
+              ownerEmail: z.string().nullable(),
+              teamDetails: z
+                .array(
+                  z.object({
+                    teamId: z.string(),
+                    name: z.string(),
+                    createdAt: z.coerce.date(),
+                  }),
+                )
+                .optional(),
+            }),
+          ),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const { agentId } = request.params;
+        const { catalogId } = request.query;
+
+        // Validate that agent exists
+        const agent = await AgentModel.findById(agentId);
+        if (!agent) {
+          return reply.status(404).send({
+            error: {
+              message: `Agent with ID ${agentId} not found`,
+              type: "not_found",
+            },
+          });
+        }
+
+        // Get all MCP servers accessible to the user
+        const allServers = await McpServerModel.findAll(user.id, user.isAdmin);
+
+        // Filter by catalogId if provided
+        const filteredServers = catalogId
+          ? allServers.filter((server) => server.catalogId === catalogId)
+          : allServers;
+
+        // Apply token validation logic to filter available tokens
+        const validServers = await Promise.all(
+          filteredServers.map(async (server) => {
+            // Admin personal tokens can be used with any agent
+            if (server.authType === "personal" && server.ownerId) {
+              const owner = await UserModel.getUserById(server.ownerId);
+              if (owner?.role === "admin") {
+                return { server, valid: true };
+              }
+
+              // Member personal tokens: check if owner belongs to agent's teams
+              const hasAccess = await AgentTeamModel.userHasAgentAccess(
+                server.ownerId,
+                agentId,
+                false,
+              );
+              return { server, valid: hasAccess };
+            }
+
+            // Team tokens: check if server and agent share a team
+            if (server.authType === "team") {
+              const shareTeam = await AgentTeamModel.agentAndMcpServerShareTeam(
+                agentId,
+                server.id,
+              );
+              return { server, valid: shareTeam };
+            }
+
+            return { server, valid: false };
+          }),
+        );
+
+        const availableTokens = validServers
+          .filter(({ valid, server }) => valid && server.authType !== null)
+          .map(({ server }) => ({
+            id: server.id,
+            name: server.name,
+            authType: server.authType as "personal" | "team",
+            catalogId: server.catalogId,
+            ownerId: server.ownerId,
+            ownerEmail: server.ownerEmail ?? null,
+            teamDetails: server.teamDetails,
+          }));
+
+        return reply.send(availableTokens);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
 };
 
 /**

@@ -13,6 +13,7 @@ const {
   getMcpServerTools,
   installMcpServer,
   getMcpServer,
+  getAgentAvailableTokens,
 } = archestraApiSdk;
 
 export function useMcpServers(params?: {
@@ -241,5 +242,40 @@ export function useMcpServerInstallationStatus(
       return status === "pending" || status === null ? 2000 : false;
     },
     enabled: !!installingMcpServerId,
+  });
+}
+
+/**
+ * Get MCP servers (tokens) available for use with a specific agent's tools.
+ * Filters based on team membership and admin status.
+ *
+ * @param agentId - The agent ID to filter tokens for. If null, returns all servers.
+ * @param catalogId - Optional catalog ID to further filter tokens.
+ */
+export function useAgentAvailableTokens(params: {
+  agentId: string | null;
+  catalogId?: string | null;
+}) {
+  const { agentId, catalogId } = params;
+
+  return useQuery({
+    queryKey: ["agent-available-tokens", { agentId, catalogId }],
+    queryFn: async () => {
+      if (!agentId) {
+        // If no agentId, fallback to fetching all servers
+        const response = await getMcpServers({});
+        const servers = response.data ?? [];
+        return catalogId
+          ? servers.filter((server) => server.catalogId === catalogId)
+          : servers;
+      }
+
+      // Use dedicated endpoint when agentId is provided
+      const response = await getAgentAvailableTokens({
+        path: { agentId },
+        query: catalogId ? { catalogId } : undefined,
+      });
+      return response.data ?? [];
+    },
   });
 }

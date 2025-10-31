@@ -10,6 +10,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import { ToolModel } from "@/models";
 import { type CommonToolCall, UuidIdSchema } from "@/types";
 
@@ -36,9 +37,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 /**
  * Clean up expired sessions periodically
  */
-function cleanupExpiredSessions(logger: {
-  info: (obj: unknown, msg: string) => void;
-}): void {
+function cleanupExpiredSessions(): void {
   const now = Date.now();
   const expiredSessionIds: string[] = [];
 
@@ -500,7 +499,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
  */
 setInterval(
   () => {
-    cleanupExpiredSessions({ info: console.log });
+    cleanupExpiredSessions();
   },
   5 * 60 * 1000,
 );

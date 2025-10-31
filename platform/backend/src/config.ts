@@ -168,6 +168,9 @@ export default {
     },
   },
   debug: isDevelopment,
+  logging: {
+    level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
+  },
   production: isProduction,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",

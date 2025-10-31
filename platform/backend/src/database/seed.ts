@@ -6,6 +6,7 @@ import {
   DEMO_AGENT_ID,
 } from "@shared";
 import { eq } from "drizzle-orm";
+import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import DualLlmConfigModel from "@/models/dual-llm-config";
@@ -28,7 +29,7 @@ import db, { schema } from ".";
  * Idempotent - can be run multiple times without duplicating data
  */
 export async function seedDatabase(): Promise<void> {
-  console.log("\n🌱 Starting database seed...\n");
+  logger.info("\n🌱 Starting database seed...\n");
 
   try {
     // Seed in correct order (respecting foreign keys)
@@ -38,9 +39,9 @@ export async function seedDatabase(): Promise<void> {
     await seedInteractions();
     await seedDualLlmConfig();
 
-    console.log("\n✅ Database seed completed successfully!\n");
+    logger.info("\n✅ Database seed completed successfully!\n");
   } catch (error) {
-    console.error("\n❌ Error seeding database:", error);
+    logger.error({ err: error }, "\n❌ Error seeding database:");
     throw error;
   }
 }
@@ -69,7 +70,7 @@ export async function seedAdminUserAndDefaultOrg(): Promise<void> {
     });
   }
 
-  console.log("✓ Seeded admin user and default organization");
+  logger.info("✓ Seeded admin user and default organization");
 }
 
 /**
@@ -90,9 +91,9 @@ async function seedAgents(): Promise<void> {
       teams: [],
     };
     await AgentModel.create(agentData);
-    console.log("✓ Seeded allowed demo agent");
+    logger.info("✓ Seeded allowed demo agent");
   } else {
-    console.log("✓ Allowed demo agent already exists, skipping");
+    logger.info("✓ Allowed demo agent already exists, skipping");
   }
 
   // Blocked demo agent - bypass access control during seeding
@@ -109,9 +110,9 @@ async function seedAgents(): Promise<void> {
       teams: [],
     };
     await AgentModel.create(agentData);
-    console.log("✓ Seeded blocked demo agent");
+    logger.info("✓ Seeded blocked demo agent");
   } else {
-    console.log("✓ Blocked demo agent already exists, skipping");
+    logger.info("✓ Blocked demo agent already exists, skipping");
   }
 }
 
@@ -155,9 +156,9 @@ async function seedTools(): Promise<void> {
       allowUsageWhenUntrustedDataIsPresent: true,
       toolResultTreatment: "trusted",
     });
-    console.log("✓ Seeded gmail__sendEmail tool");
+    logger.info("✓ Seeded gmail__sendEmail tool");
   } else {
-    console.log("✓ gmail__sendEmail tool already exists, skipping");
+    logger.info("✓ gmail__sendEmail tool already exists, skipping");
   }
 
   const allowedGetEmailsTool = await ToolModel.findById(
@@ -182,9 +183,9 @@ async function seedTools(): Promise<void> {
       allowUsageWhenUntrustedDataIsPresent: true,
       toolResultTreatment: "untrusted",
     });
-    console.log("✓ Seeded gmail__getEmails tool");
+    logger.info("✓ Seeded gmail__getEmails tool");
   } else {
-    console.log("✓ gmail__getEmails tool already exists, skipping");
+    logger.info("✓ gmail__getEmails tool already exists, skipping");
   }
 }
 
@@ -382,9 +383,9 @@ async function seedInteractions(): Promise<void> {
     };
 
     await InteractionModel.create(interactionData);
-    console.log("✓ Seeded allowed demo interaction");
+    logger.info("✓ Seeded allowed demo interaction");
   } else {
-    console.log("✓ Allowed demo interaction already exists, skipping");
+    logger.info("✓ Allowed demo interaction already exists, skipping");
   }
 
   // Blocked demo interaction
@@ -569,9 +570,9 @@ async function seedInteractions(): Promise<void> {
     };
 
     await InteractionModel.create(interactionData);
-    console.log("✓ Seeded blocked demo interaction");
+    logger.info("✓ Seeded blocked demo interaction");
   } else {
-    console.log("✓ Blocked demo interaction already exists, skipping");
+    logger.info("✓ Blocked demo interaction already exists, skipping");
   }
 }
 
@@ -651,8 +652,8 @@ Provide a brief summary (2-3 sentences) of the key information discovered. Focus
     };
 
     await DualLlmConfigModel.create(defaultConfig);
-    console.log("✓ Seeded default dual LLM configuration");
+    logger.info("✓ Seeded default dual LLM configuration");
   } else {
-    console.log("✓ Dual LLM configuration already exists, skipping");
+    logger.info("✓ Dual LLM configuration already exists, skipping");
   }
 }

@@ -361,10 +361,12 @@ const routePermissionsConfig: Partial<
     mcpToolCall: ["read"],
   },
   [RouteId.GetTokenPricing]: {
-    admin: ["read"],
+    // Token pricing is organization-wide, so we check organization read permission
+    organization: ["read"],
   },
   [RouteId.UpdateTokenPricing]: {
-    admin: ["update"],
+    // Only org admins can update token pricing
+    organization: ["update"],
   },
 };
 

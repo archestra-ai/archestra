@@ -32,13 +32,17 @@ class TokenPricingModel {
     // Get distinct provider/model combinations from interactions
     const distinctModels = await db.execute(sql`
       SELECT DISTINCT 
-        COALESCE(provider, SPLIT_PART(type, ':', 1)) as provider,
-        COALESCE(model, request->>'model') as model
+        provider,
+        model
       FROM ${schema.interactionsTable}
       WHERE 
-        (provider IS NOT NULL AND model IS NOT NULL)
-        OR request->>'model' IS NOT NULL
+        provider IS NOT NULL 
+        AND model IS NOT NULL
     `);
+
+    console.log(
+      `Found ${distinctModels.rows.length} distinct provider/model combinations in interactions`,
+    );
 
     // Process each model found
     for (const row of distinctModels.rows) {
@@ -60,6 +64,7 @@ class TokenPricingModel {
 
       // Create if not exists with default $50
       if (existing.length === 0) {
+        console.log(`Creating token price for ${provider}/${model}`);
         await db
           .insert(schema.tokenPricingTable)
           .values({

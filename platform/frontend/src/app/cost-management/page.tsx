@@ -1,13 +1,8 @@
 "use client";
 
 import { AlertCircle, Plus, X } from "lucide-react";
-import { useState } from "react";
-import { 
-  useTokenPrices, 
-  useUpdateTokenPrices, 
-  type TokenPrice, 
-  type UpdateTokenPriceInput 
-} from "@/lib/token-pricing.query";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +24,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  type TokenPrice,
+  type UpdateTokenPriceInput,
+  useTokenPrices,
+  useUpdateTokenPrices,
+} from "@/lib/token-pricing.query";
 
 interface TeamBudget {
   id: string;
@@ -55,21 +56,40 @@ interface ToolCallLimit {
   monthlyLimit: string;
 }
 
-
 export default function CostManagementPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Get the active tab from URL, default to "usage"
+  const activeTab = searchParams.get("tab") || "usage";
+
   const [orgBudgetLimit, setOrgBudgetLimit] = useState("1000");
   const [teamBudgets, setTeamBudgets] = useState<TeamBudget[]>([]);
   const [agentBudgets, setAgentBudgets] = useState<AgentBudget[]>([]);
   const [toolCallLimits, setToolCallLimits] = useState<ToolCallLimit[]>([]);
   const [autoShutdown, setAutoShutdown] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("daily");
-  const { data: tokenPrices = [], isLoading: isLoadingPrices } = useTokenPrices();
+  const { data: tokenPrices = [], isLoading: isLoadingPrices } =
+    useTokenPrices();
   const updateTokenPricesMutation = useUpdateTokenPrices();
-  const [editedPrices, setEditedPrices] = useState<Record<string, TokenPrice>>({});
+  const [editedPrices, setEditedPrices] = useState<Record<string, TokenPrice>>(
+    {},
+  );
 
   const currentSpend = 42.58;
   const budgetAmount = parseFloat(orgBudgetLimit) || 1000;
   const spendPercentage = (currentSpend / budgetAmount) * 100;
+
+  // Function to update URL when tab changes
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams);
+      params.set("tab", value);
+      router.push(`${pathname}?${params.toString()}`);
+    },
+    [pathname, router, searchParams],
+  );
 
   const addTeamBudget = () => {
     const newTeamBudget: TeamBudget = {
@@ -200,7 +220,11 @@ export default function CostManagementPage() {
             </Alert>
           )}
 
-          <Tabs defaultValue="usage" className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="usage">Usage Breakdown</TabsTrigger>
               <TabsTrigger value="llm-limits">LLM Limits</TabsTrigger>
@@ -1104,98 +1128,123 @@ export default function CostManagementPage() {
                       used to calculate usage costs.
                     </div>
 
-                    {/* Group prices by provider */}
-                    {["OpenAI", "Anthropic", "Google"].map((providerName) => (
-                      <div
-                        key={providerName}
-                        className="border rounded-lg p-4 space-y-4"
-                      >
-                        <h4 className="font-medium text-sm">{providerName}</h4>
-                        <div className="space-y-3">
-                          {tokenPrices
-                            .filter((price) => price.provider === providerName)
-                            .map((price) => {
-                              const currentPrice = editedPrices[price.id] || price;
-                              return (
-                              <div
-                                key={`${price.provider}-${price.model}`}
-                                className="grid gap-4 md:grid-cols-3"
-                              >
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Model</Label>
-                                  <Input
-                                    value={currentPrice.model}
-                                    disabled
-                                    className="text-sm"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">
-                                    Input ($/1M tokens)
-                                  </Label>
-                                  <Input
-                                    type="number"
-                                    step="0.001"
-                                    value={currentPrice.inputPricePer1M}
-                                    onChange={(e) => {
-                                      setEditedPrices(prev => ({
-                                        ...prev,
-                                        [price.id]: {
-                                          ...price,
-                                          inputPricePer1M: e.target.value,
-                                        }
-                                      }));
-                                    }}
-                                    placeholder="0.00"
-                                    className="text-sm"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">
-                                    Output ($/1M tokens)
-                                  </Label>
-                                  <Input
-                                    type="number"
-                                    step="0.001"
-                                    value={currentPrice.outputPricePer1M}
-                                    onChange={(e) => {
-                                      setEditedPrices(prev => ({
-                                        ...prev,
-                                        [price.id]: {
-                                          ...price,
-                                          outputPricePer1M: e.target.value,
-                                        }
-                                      }));
-                                    }}
-                                    placeholder="0.00"
-                                    className="text-sm"
-                                  />
-                                </div>
-                              </div>
-                              );
-                            })}
-                        </div>
+                    {isLoadingPrices ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        Loading token prices...
                       </div>
-                    ))}
+                    ) : tokenPrices.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No token prices configured. Prices will be auto-created
+                        when models are used.
+                      </div>
+                    ) : null}
 
+                    {/* Group prices by provider */}
+                    {!isLoadingPrices &&
+                      [...new Set(tokenPrices.map((p) => p.provider))].map(
+                        (providerName) => (
+                          <div
+                            key={providerName}
+                            className="border rounded-lg p-4 space-y-4"
+                          >
+                            <h4 className="font-medium text-sm">
+                              {providerName}
+                            </h4>
+                            <div className="space-y-3">
+                              {tokenPrices
+                                .filter(
+                                  (price) => price.provider === providerName,
+                                )
+                                .map((price) => {
+                                  const currentPrice =
+                                    editedPrices[price.id] || price;
+                                  return (
+                                    <div
+                                      key={`${price.provider}-${price.model}`}
+                                      className="grid gap-4 md:grid-cols-3"
+                                    >
+                                      <div className="space-y-2">
+                                        <Label className="text-xs">Model</Label>
+                                        <Input
+                                          value={currentPrice.model}
+                                          disabled
+                                          className="text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label className="text-xs">
+                                          Input ($/1M tokens)
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="0.001"
+                                          value={currentPrice.inputPricePer1M}
+                                          onChange={(e) => {
+                                            setEditedPrices((prev) => ({
+                                              ...prev,
+                                              [price.id]: {
+                                                ...price,
+                                                inputPricePer1M: e.target.value,
+                                              },
+                                            }));
+                                          }}
+                                          placeholder="0.00"
+                                          className="text-sm"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label className="text-xs">
+                                          Output ($/1M tokens)
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          step="0.001"
+                                          value={currentPrice.outputPricePer1M}
+                                          onChange={(e) => {
+                                            setEditedPrices((prev) => ({
+                                              ...prev,
+                                              [price.id]: {
+                                                ...price,
+                                                outputPricePer1M:
+                                                  e.target.value,
+                                              },
+                                            }));
+                                          }}
+                                          placeholder="0.00"
+                                          className="text-sm"
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        ),
+                      )}
                   </div>
 
                   <div className="flex justify-end">
-                    <Button 
+                    <Button
                       onClick={() => {
-                        const pricesToUpdate: UpdateTokenPriceInput[] = Object.values(editedPrices).map(price => ({
-                          id: price.id,
-                          inputPricePer1M: price.inputPricePer1M,
-                          outputPricePer1M: price.outputPricePer1M,
-                        }));
+                        const pricesToUpdate: UpdateTokenPriceInput[] =
+                          Object.values(editedPrices).map((price) => ({
+                            id: price.id,
+                            inputPricePer1M: price.inputPricePer1M,
+                            outputPricePer1M: price.outputPricePer1M,
+                          }));
                         if (pricesToUpdate.length > 0) {
                           updateTokenPricesMutation.mutate(pricesToUpdate);
                           setEditedPrices({});
                         }
                       }}
-                      disabled={updateTokenPricesMutation.isPending || Object.keys(editedPrices).length === 0}
+                      disabled={
+                        updateTokenPricesMutation.isPending ||
+                        Object.keys(editedPrices).length === 0
+                      }
                     >
-                      {updateTokenPricesMutation.isPending ? "Saving..." : "Save Pricing Configuration"}
+                      {updateTokenPricesMutation.isPending
+                        ? "Saving..."
+                        : "Save Pricing Configuration"}
                     </Button>
                   </div>
                 </CardContent>

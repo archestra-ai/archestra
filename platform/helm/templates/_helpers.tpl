@@ -56,10 +56,8 @@ Environment variables for the Archestra Platform container
 {{- define "archestra-platform.env" -}}
 - name: DATABASE_URL
   value: {{ if .Values.postgresql.external_database_url }}{{ .Values.postgresql.external_database_url }}{{ else }}postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}{{ end }}
-{{- if .Values.archestra.kubernetes.namespace }}
 - name: K8S_NAMESPACE
-  value: {{ .Values.archestra.kubernetes.namespace | quote }}
-{{- end }}
+  value: {{ default .Release.Namespace .Values.archestra.kubernetes.namespace | quote }}
 {{- if .Values.archestra.kubernetes.baseImage }}
 - name: MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.kubernetes.baseImage | quote }}

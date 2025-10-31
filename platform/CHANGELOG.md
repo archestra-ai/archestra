@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.19](https://github.com/archestra-ai/archestra/compare/platform-v0.0.18...platform-v0.0.19) (2025-10-31)
+
+
+### Features
+
+* helm `ServiceAccount` + `Role` + `RoleBinding` ([#864](https://github.com/archestra-ai/archestra/issues/864)) ([7436477](https://github.com/archestra-ai/archestra/commit/7436477619cfc8058c26232c9ba8db4297554cb2))
+* LLM tool call requests and responses ([#853](https://github.com/archestra-ai/archestra/issues/853)) ([efa0e42](https://github.com/archestra-ai/archestra/commit/efa0e425334ec4e32ead97e2bc38248f98b64668))
+
+
+### Bug Fixes
+
+* orlando ([#865](https://github.com/archestra-ai/archestra/issues/865)) ([c926ba2](https://github.com/archestra-ai/archestra/commit/c926ba2ed3141ff7ce1a070d2c1fd5eefa392241))
+* prevent tool id duplication when streaming via proxy ([#866](https://github.com/archestra-ai/archestra/issues/866)) ([89dca1a](https://github.com/archestra-ai/archestra/commit/89dca1a942b6abbe1ee44fa964d135ba9d870058))
+
 ## [0.0.18](https://github.com/archestra-ai/archestra/compare/platform-v0.0.17...platform-v0.0.18) (2025-10-30)
 
 

@@ -142,4 +142,11 @@ MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/arches
 - Custom Docker images supported per MCP server (overrides MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
+**Helm Chart RBAC**:
+
+- ServiceAccount with configurable name/annotations for pod identity
+- Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
+- RoleBinding links ServiceAccount to Role for MCP server management
+- Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

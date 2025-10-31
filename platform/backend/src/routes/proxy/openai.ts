@@ -222,6 +222,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           requestToolsCount: tools?.length || 0,
           mergedToolsCount: mergedTools.length,
           mcpToolsInjected: mergedTools.length - (tools?.length || 0),
+          mergedTools: JSON.stringify(mergedTools),
         },
         "MCP tools injected",
       );
@@ -357,11 +358,13 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const finishReason = chunk.choices[0]?.finish_reason;
 
           // Stream text content immediately. Also stream first chunk with role. And last chunk with finish reason.
+          // But DON'T stream chunks with tool_calls - we'll send those later after policy evaluation
           if (
-            delta?.content !== undefined ||
-            delta?.refusal !== undefined ||
-            delta?.role ||
-            finishReason
+            !delta?.tool_calls &&
+            (delta?.content !== undefined ||
+              delta?.refusal !== undefined ||
+              delta?.role ||
+              finishReason)
           ) {
             reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
@@ -479,11 +482,81 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             };
             reply.raw.write(`data: ${JSON.stringify(refusalChunk)}\n\n`);
           } else {
-            // Tool calls are allowed - stream them now
-            for (const chunk of chunks) {
-              if (chunk.choices[0]?.delta?.tool_calls) {
-                reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-              }
+            // Tool calls are allowed
+            // We must match OpenAI's actual streaming format: send separate chunks for id, name, and arguments
+            for (const [index, toolCall] of accumulatedToolCalls.entries()) {
+              const baseChunk = {
+                id: chunks[0]?.id || "chatcmpl-unknown",
+                object: "chat.completion.chunk" as const,
+                created: chunks[0]?.created || Date.now() / 1000,
+                model: body.model,
+              };
+
+              // Chunk 1: Send id and type (no function object to avoid client concatenation bugs)
+              const idChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          type: "function" as const,
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(idChunk)}\n\n`);
+
+              // Chunk 2: Send function name (with id so clients can use assignment)
+              const nameChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          function: { name: toolCall.function.name },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(nameChunk)}\n\n`);
+
+              // Chunk 3: Send function arguments (with id so clients can use assignment)
+              const argsChunk = {
+                ...baseChunk,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index,
+                          id: toolCall.id,
+                          function: { arguments: toolCall.function.arguments },
+                        },
+                      ],
+                    },
+                    finish_reason: null,
+                    logprobs: null,
+                  },
+                ],
+              };
+              reply.raw.write(`data: ${JSON.stringify(argsChunk)}\n\n`);
             }
 
             // Execute MCP tools and continue streaming conversation

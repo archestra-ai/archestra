@@ -125,6 +125,14 @@ ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendl
 - Admin-only team CRUD operations via `/api/teams/*` routes
 - Members can read teams and access team-assigned agents/MCP servers
 
+**Agent Labels**:
+
+- Agents support key-value labels for organization/categorization
+- Database schema: `label_keys`, `label_values`, `agent_labels` tables
+- Keys and values stored separately for consistency and reuse
+- One value per key per agent (updating same key replaces value)
+- API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
+
 **MCP Server Installation Requests**:
 
 - Members can request MCP servers from external catalog

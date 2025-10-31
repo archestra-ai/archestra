@@ -135,7 +135,7 @@ export function McpServerCard({
   const isInstalling = Boolean(
     installingItemId === item.id ||
       installMutationPending ||
-      (installationStatus !== "success" && installedServer),
+      (installationStatus === "pending" && installedServer),
   );
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
@@ -272,12 +272,16 @@ export function McpServerCard({
     <>
       <WithRole requiredRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          {[usersAuthenticated, teamsAccess, toolsAssigned].map((item) => (
+          {[
+            { id: "1", content: usersAuthenticated },
+            { id: "2", content: teamsAccess },
+            { id: "3", content: toolsAssigned },
+          ].map((item) => (
             <div
-              key={item.key}
+              key={item.id}
               className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
             >
-              {item}
+              {item.content}
             </div>
           ))}
         </div>
@@ -349,14 +353,9 @@ export function McpServerCard({
     <>
       <WithRole requiredRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
-          {[toolsAssigned].map((item) => (
-            <div
-              key={item.key}
-              className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10"
-            >
-              {item}
-            </div>
-          ))}
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
+            {toolsAssigned}
+          </div>
         </div>
       </WithRole>
       {needsReinstall && (

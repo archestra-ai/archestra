@@ -171,7 +171,10 @@ function Agents({
                 Agents
               </h1>
               <p className="text-sm text-muted-foreground">
-                List of agents detected by proxy.{" "}
+                Agents are a way to organize access and logging. <br />
+                <br />
+                An agent can be: an N8N workflow, a custom application, or a
+                team sharing an MCP gateway.{" "}
                 <a
                   href="https://www.archestra.ai/docs/platform-agents"
                   target="_blank"

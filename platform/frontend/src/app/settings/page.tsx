@@ -151,7 +151,7 @@ export default function SettingsPage() {
       <div className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">
-            Settings
+            LLM & MCP Gateways
           </h1>
           <p className="text-sm text-muted-foreground">
             Archestra provides two ways to connect your agent: via LLM Proxy

@@ -60,7 +60,7 @@ const getNavigationItems = (
 ): MenuItem[] => {
   return [
     {
-      title: "How it works",
+      title: "How security works",
       url: "/test-agent",
       icon: Info,
     },
@@ -108,7 +108,7 @@ const getNavigationItems = (
           ...(role === "admin"
             ? [
                 {
-                  title: "Settings",
+                  title: "LLM & MCP Gateways",
                   url: "/settings",
                   icon: Settings,
                 },

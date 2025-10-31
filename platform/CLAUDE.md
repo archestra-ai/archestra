@@ -72,10 +72,10 @@ ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 # Kubernetes (for MCP server runtime)
-ARCHESTRA_K8S_NAMESPACE=default
-ARCHESTRA_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
-ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG=false  # Set to true when running inside K8s cluster
-ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
+ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
+ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
+ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
+ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
 ```
 
 ## Architecture
@@ -138,8 +138,8 @@ ARCHESTRA_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518
 - Automatic pod lifecycle management (start/restart/stop)
 - JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
 - Pod logs available via `/mcp_proxy/:id/logs`
-- K8s configuration: ARCHESTRA_K8S_NAMESPACE, ARCHESTRA_KUBECONFIG, ARCHESTRA_USE_IN_CLUSTER_KUBECONFIG, ARCHESTRA_MCP_SERVER_BASE_IMAGE
-- Custom Docker images supported per MCP server (overrides ARCHESTRA_MCP_SERVER_BASE_IMAGE)
+- K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
+- Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Helm Chart RBAC**:

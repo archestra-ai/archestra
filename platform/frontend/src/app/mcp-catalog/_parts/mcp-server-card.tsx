@@ -255,7 +255,7 @@ export function McpServerCard({
           </span>
         </span>
       </div>
-      {toolsAssignedCount > 0 && (
+      {toolsDiscoveredCount > 0 && (
         <Button
           onClick={() => setIsToolsDialogOpen(true)}
           size="sm"

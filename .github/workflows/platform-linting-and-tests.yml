@@ -55,11 +55,11 @@ jobs:
 
       - name: Setup Blacksmith Builder
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
 
       - name: Build Docker image
         if: ${{ inputs.should-skip-running-and-always-succeed != true }}
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ./platform
           file: ./platform/Dockerfile

@@ -60,11 +60,11 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
 
       - name: Build and push Docker image
         id: build
-        uses: useblacksmith/build-push-action@v2
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
         with:
           context: ${{ inputs.image_directory }} # zizmor: ignore[template-injection] this is only being passed in as a workflow input..
           file: ${{ inputs.image_directory }}/Dockerfile
@@ -108,7 +108,7 @@ jobs:
           merge-multiple: true
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
 
       - name: Log in to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0

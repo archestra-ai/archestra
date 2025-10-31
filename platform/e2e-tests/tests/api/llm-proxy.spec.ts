@@ -198,10 +198,7 @@ test.describe('LLM Proxy - OpenAI', () => {
   });
 });
 
-/**
- * TODO: joey to unskip later today (Oct 29, 2025)
- */
-test.skip('LLM Proxy - Anthropic', () => {
+test('LLM Proxy - Anthropic', () => {
   const ANTHROPIC_TEST_CASE_1_HEADER = 'test-case-1-anthropic-tool-call';
 
   let agentId: string;

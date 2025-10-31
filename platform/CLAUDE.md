@@ -146,7 +146,7 @@ ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendl
 
 **Configuring Transport Type**:
 - Set `transportType: "streamable-http"` in `localConfig` for HTTP transport
-- Optionally specify `httpPort` (defaults to 8080)
+- Optionally specify `httpPort` (defaults to 8080) and `httpPath` (defaults to /mcp)
 - Stdio transport serializes requests (one at a time), HTTP allows concurrent connections
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 

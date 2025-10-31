@@ -48,7 +48,7 @@ describe("getDatabaseUrl", () => {
     delete process.env.DATABASE_URL;
 
     expect(() => getDatabaseUrl()).toThrow(
-      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL",
+      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL or DATABASE_URL",
     );
   });
 
@@ -57,7 +57,7 @@ describe("getDatabaseUrl", () => {
     process.env.DATABASE_URL = "";
 
     expect(() => getDatabaseUrl()).toThrow(
-      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL",
+      "Database URL is not set. Please set ARCHESTRA_DATABASE_URL or DATABASE_URL",
     );
   });
 

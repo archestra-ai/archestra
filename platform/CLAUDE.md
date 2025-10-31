@@ -149,6 +149,7 @@ ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendl
 - Optionally specify `httpPort` (defaults to 8080) and `httpPath` (defaults to /mcp)
 - Stdio transport serializes requests (one at a time), HTTP allows concurrent connections
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
+- For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
 **Helm Chart RBAC**:
 

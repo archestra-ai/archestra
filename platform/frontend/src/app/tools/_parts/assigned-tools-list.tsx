@@ -234,7 +234,7 @@ export function AssignedToolsList({
             aria-label={`Select ${row.original.tool.name}`}
           />
         ),
-        size: 50,
+        size: 30,
       },
       {
         id: "name",
@@ -250,11 +250,12 @@ export function AssignedToolsList({
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="font-medium text-foreground truncate">
-            {row.original.tool.name}
-          </div>
+          <TruncatedText
+            message={row.original.tool.name}
+            className="break-all"
+          />
         ),
-        size: 250,
+        size: 130,
       },
       {
         id: "agent",
@@ -341,7 +342,7 @@ export function AssignedToolsList({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="default"
-                      className="bg-indigo-500 max-w-[120px]"
+                      className="bg-indigo-500 max-w-[100px]"
                     >
                       <span className="truncate">{mcpServerName}</span>
                     </Badge>
@@ -376,7 +377,7 @@ export function AssignedToolsList({
       },
       {
         id: "token",
-        header: "Token used",
+        header: "Token owner",
         cell: ({ row }) => {
           const isMcpTool = !!row.original.tool.mcpServerName;
 
@@ -401,7 +402,7 @@ export function AssignedToolsList({
             />
           );
         },
-        size: 220,
+        size: 150,
       },
       {
         id: "allowWithUntrusted",
@@ -471,6 +472,7 @@ export function AssignedToolsList({
               <SelectTrigger
                 className="h-8 w-[180px] text-xs"
                 onClick={(e) => e.stopPropagation()}
+                size="sm"
               >
                 <SelectValue>
                   {treatmentLabels[row.original.toolResultTreatment]}
@@ -486,7 +488,7 @@ export function AssignedToolsList({
             </Select>
           );
         },
-        size: 200,
+        size: 190,
       },
       {
         accessorKey: "createdAt",
@@ -501,11 +503,12 @@ export function AssignedToolsList({
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="font-mono text-xs text-muted-foreground">
-            {formatDate({ date: row.original.createdAt })}
-          </div>
+          <TruncatedText
+            message={formatDate({ date: row.original.createdAt })}
+            className="font-mono text-xs text-muted-foreground"
+          />
         ),
-        size: 150,
+        size: 100,
       },
       {
         id: "parameters",

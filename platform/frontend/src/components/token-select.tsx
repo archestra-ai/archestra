@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface TokenSelectProps {
   value?: string | null;
@@ -60,7 +61,13 @@ export function TokenSelect({
       onValueChange={onValueChange}
       disabled={disabled || isLoading}
     >
-      <SelectTrigger className={className}>
+      <SelectTrigger
+        className={cn(
+          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0!",
+          className,
+        )}
+        size="sm"
+      >
         <SelectValue placeholder="Select token..." />
       </SelectTrigger>
       <SelectContent>
@@ -68,10 +75,14 @@ export function TokenSelect({
           <SelectGroup>
             <SelectLabel>Team tokens</SelectLabel>
             {teamTokens.map((server) => (
-              <SelectItem key={server.id} value={server.id}>
+              <SelectItem
+                key={server.id}
+                value={server.id}
+                className="cursor-pointer"
+              >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">
+                    <span className="text-xs">
                       {server.ownerEmail || "Unknown owner"}
                     </span>
                   </div>
@@ -98,8 +109,12 @@ export function TokenSelect({
           <SelectGroup>
             <SelectLabel>User tokens</SelectLabel>
             {userTokens.map((server) => (
-              <SelectItem key={server.id} value={server.id}>
-                <span className="text-sm">
+              <SelectItem
+                key={server.id}
+                value={server.id}
+                className="cursor-pointer"
+              >
+                <span className="text-xs">
                   {server.ownerEmail || "Unknown owner"}
                 </span>
               </SelectItem>
@@ -109,7 +124,7 @@ export function TokenSelect({
 
         {(!teamTokens || teamTokens.length === 0) &&
           (!userTokens || userTokens.length === 0) && (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
               No tokens available
             </div>
           )}

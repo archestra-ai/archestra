@@ -28,6 +28,9 @@ export const LocalConfigSchema = z.object({
   arguments: z.array(z.string()),
   environment: z.record(z.string(), z.string()).optional(),
   dockerImage: z.string().optional(),
+  transportType: z.enum(["stdio", "streamable-http"]).optional(),
+  httpPort: z.number().optional(),
+  httpPath: z.string().optional(),
 });
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
@@ -36,4 +39,7 @@ export const LocalConfigFormSchema = z.object({
   arguments: z.string(), // UI uses string, gets parsed to array
   environment: z.string(), // UI uses string, gets parsed to record
   dockerImage: z.string().optional(), // Custom Docker image URL
+  transportType: z.enum(["stdio", "streamable-http"]).optional(),
+  httpPort: z.string().optional(), // UI uses string, gets parsed to number
+  httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
 });

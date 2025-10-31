@@ -11,7 +11,6 @@ archestra:
   #     CUSTOM_VAR: "custom-value"
   env: {}
 
-
   # Configuration for the MCP Server Runtime
   orchestrator:
     # Base image for MCP server containers
@@ -48,26 +47,26 @@ archestra:
         # This will be set as the KUBECONFIG environment variable
         mountPath: /etc/kubeconfig
 
-  # ServiceAccount configuration for the Archestra Platform
-  serviceAccount:
-    # Specifies whether a service account should be created
-    create: true
-    # Annotations to add to the service account
-    annotations: {}
-    # The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
-    name: ""
-    # Image pull secrets to attach to the service account (automatically used by pods)
-    # This is the recommended way to configure image pull secrets
-    # Example:
-    #   imagePullSecrets:
-    #     - name: myregistrykey
-  imagePullSecrets: []
+      # ServiceAccount configuration for the Archestra Platform
+      serviceAccount:
+        # Specifies whether a service account should be created
+        create: true
+        # Annotations to add to the service account
+        annotations: {}
+        # The name of the service account to use.
+        # If not set and create is true, a name is generated using the fullname template
+        name: ""
+        # Image pull secrets to attach to the service account (automatically used by pods)
+        # This is the recommended way to configure image pull secrets
+        # Example:
+        #   imagePullSecrets:
+        #     - name: myregistrykey
+        imagePullSecrets: []
 
-  # RBAC (Role-Based Access Control) configuration
-  rbac:
-    # Specifies whether RBAC resources should be created
-    create: true
+      # RBAC (Role-Based Access Control) configuration
+      rbac:
+        # Specifies whether RBAC resources should be created
+        create: true
 
 # PostgreSQL configuration
 postgresql:

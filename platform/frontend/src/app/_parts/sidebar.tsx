@@ -61,7 +61,7 @@ const getNavigationItems = (
 ): MenuItem[] => {
   return [
     {
-      title: "How it works",
+      title: "How security works",
       url: "/test-agent",
       icon: Info,
     },
@@ -74,8 +74,20 @@ const getNavigationItems = (
           },
           {
             title: "Logs",
-            url: "/logs",
+            url: "/logs/llm-proxy",
             icon: MessagesSquare,
+            subItems: [
+              {
+                title: "LLM Proxy",
+                url: "/logs/llm-proxy",
+                icon: MessagesSquare,
+              },
+              {
+                title: "MCP Gateway",
+                url: "/logs/mcp-gateway",
+                icon: Router,
+              },
+            ],
           },
           {
             title: "Tools",
@@ -102,8 +114,8 @@ const getNavigationItems = (
           ...(role === "admin"
             ? [
                 {
-                  title: "Settings",
-                  url: "/settings",
+                  title: "LLM & MCP Gateways",
+                  url: "/gateways",
                   icon: Settings,
                 },
               ]

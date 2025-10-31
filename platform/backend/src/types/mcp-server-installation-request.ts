@@ -1,4 +1,4 @@
-import { OAuthConfigSchema } from "@shared";
+import { LocalConfigSchema, OAuthConfigSchema } from "@shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -27,7 +27,11 @@ const RemoteCustomServerConfigSchema = z.object({
 
 const LocalCustomServerConfigSchema = z.object({
   type: z.literal("local"),
-  // TODO: add other fields once we support local mcp servers
+  label: z.string(),
+  name: z.string(),
+  version: z.string().optional(),
+  serverType: z.literal("local"),
+  localConfig: LocalConfigSchema,
 });
 
 export const McpServerInstallationRequestCustomServerConfigSchema = z

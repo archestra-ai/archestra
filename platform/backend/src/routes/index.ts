@@ -10,6 +10,7 @@ export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-installation-requests";
+export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as oauthRoutes } from "./oauth";
 export { default as anthropicProxyRoutes } from "./proxy/anthropic";
 export { default as geminiProxyRoutes } from "./proxy/gemini";

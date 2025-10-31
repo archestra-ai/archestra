@@ -13,6 +13,9 @@ const {
   updateInternalMcpCatalogItem,
 } = archestraApiSdk;
 
+type ServerType =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
+
 export function useInternalMcpCatalog(params?: {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
 }) {
@@ -30,7 +33,7 @@ export function useCreateInternalMcpCatalogItem() {
       label?: string;
       name: string;
       version?: string;
-      serverType?: "local" | "remote";
+      serverType: ServerType;
       serverUrl?: string;
       docsUrl?: string;
       userConfig?: Record<

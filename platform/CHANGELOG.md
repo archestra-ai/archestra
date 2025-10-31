@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.20](https://github.com/archestra-ai/archestra/compare/platform-v0.0.19...platform-v0.0.20) (2025-10-31)
+
+
+### Bug Fixes
+
+* UI Polish ([#868](https://github.com/archestra-ai/archestra/issues/868)) ([1c34668](https://github.com/archestra-ai/archestra/commit/1c34668b4567b6534ddca025765f5d96a887ab06))
+
 ## [0.0.19](https://github.com/archestra-ai/archestra/compare/platform-v0.0.18...platform-v0.0.19) (2025-10-31)
 
 

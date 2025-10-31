@@ -59,8 +59,8 @@ tilt trigger orlando-wiremock        # Start orlando WireMock test environment (
 ## Environment Variables
 
 ```bash
-# Required
-DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
+# Required (ARCHESTRA_DATABASE_URL takes precedence over DATABASE_URL)
+ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public"
 
 # Provider API Keys
 OPENAI_API_KEY=your-api-key-here
@@ -68,14 +68,14 @@ GEMINI_API_KEY=your-api-key-here
 ANTHROPIC_API_KEY=your-api-key-here
 
 # Provider Base URLs (optional - for testing)
-OPENAI_BASE_URL=https://api.openai.com/v1
-ANTHROPIC_BASE_URL=https://api.anthropic.com
+ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
 # Kubernetes (for MCP server runtime)
-K8S_NAMESPACE=default
-KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
-USE_IN_CLUSTER_KUBECONFIG=false  # Set to true when running inside K8s cluster
-MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
+ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
+ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config
+ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=false  # Set to true when running inside K8s cluster
+ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3  # Default image when custom Docker image not specified
 ```
 
 ## Architecture
@@ -138,8 +138,8 @@ MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/arches
 - Automatic pod lifecycle management (start/restart/stop)
 - JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
 - Pod logs available via `/mcp_proxy/:id/logs`
-- K8s configuration: K8S_NAMESPACE, KUBECONFIG, USE_IN_CLUSTER_KUBECONFIG, MCP_SERVER_BASE_IMAGE
-- Custom Docker images supported per MCP server (overrides MCP_SERVER_BASE_IMAGE)
+- K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
+- Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Helm Chart RBAC**:

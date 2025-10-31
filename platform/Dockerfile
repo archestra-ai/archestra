@@ -48,12 +48,13 @@ ENV ARCHESTRA_API_BASE_URL="http://localhost:9000"
 ENV ARCHESTRA_AUTH_ADMIN_EMAIL="admin@example.com"
 ENV ARCHESTRA_AUTH_ADMIN_PASSWORD="password"
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV OPENAI_BASE_URL="https://api.openai.com/v1"
-ENV ANTHROPIC_BASE_URL="https://api.anthropic.com"
-ENV USE_IN_CLUSTER_KUBECONFIG="false"
-ENV KUBECONFIG=""
-ENV K8S_NAMESPACE="default"
-ENV MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+ENV ARCHESTRA_OPENAI_BASE_URL="https://api.openai.com/v1"
+ENV ARCHESTRA_ANTHROPIC_BASE_URL="https://api.anthropic.com"
+ENV ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="false"
+ENV ARCHESTRA_ORCHESTRATOR_KUBECONFIG=""
+ENV ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="default"
+ENV ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3"
+ENV ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
 
 # Install PostgreSQL 17 and supervisord
 RUN apk add --no-cache \
@@ -117,7 +118,7 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
-environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",OPENAI_BASE_URL="%(ENV_OPENAI_BASE_URL)s",ANTHROPIC_BASE_URL="%(ENV_ANTHROPIC_BASE_URL)s",USE_IN_CLUSTER_KUBECONFIG="%(ENV_USE_IN_CLUSTER_KUBECONFIG)s",K8S_NAMESPACE="%(ENV_K8S_NAMESPACE)s",MCP_SERVER_BASE_IMAGE="%(ENV_MCP_SERVER_BASE_IMAGE)s",KUBECONFIG="%(ENV_KUBECONFIG)s"
+environment=NODE_ENV="%(ENV_NODE_ENV)s",DATABASE_URL="placeholder",ARCHESTRA_API_BASE_URL="placeholder",ARCHESTRA_AUTH_ADMIN_EMAIL="%(ENV_ARCHESTRA_AUTH_ADMIN_EMAIL)s",ARCHESTRA_AUTH_ADMIN_PASSWORD="%(ENV_ARCHESTRA_AUTH_ADMIN_PASSWORD)s",ARCHESTRA_AUTH_SECRET="%(ENV_ARCHESTRA_AUTH_SECRET)s",ARCHESTRA_OPENAI_BASE_URL="%(ENV_ARCHESTRA_OPENAI_BASE_URL)s",ARCHESTRA_ANTHROPIC_BASE_URL="%(ENV_ARCHESTRA_ANTHROPIC_BASE_URL)s",ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER="%(ENV_ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER)s",ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="%(ENV_ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE)s",ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE="%(ENV_ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)s",ARCHESTRA_ORCHESTRATOR_KUBECONFIG="%(ENV_ARCHESTRA_ORCHESTRATOR_KUBECONFIG)s",ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT="%(ENV_ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT)s"
 
 [program:frontend]
 directory=/app/frontend
@@ -137,18 +138,20 @@ RUN cat > /docker-entrypoint.sh <<'EOF'
 #!/bin/sh
 set -e
 
-# Parse DATABASE_URL or use defaults
-if [ -n "$DATABASE_URL" ]; then
+# Parse DATABASE_URL (prefer ARCHESTRA_DATABASE_URL, fallback to DATABASE_URL)
+EFFECTIVE_DATABASE_URL="${ARCHESTRA_DATABASE_URL:-$DATABASE_URL}"
+
+if [ -n "$EFFECTIVE_DATABASE_URL" ]; then
     # Extract credentials from DATABASE_URL (postgresql://user:pass@host:port/db)
-    POSTGRES_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-    POSTGRES_PASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-    POSTGRES_DB=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+    POSTGRES_USER=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    POSTGRES_PASSWORD=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    POSTGRES_DB=$(echo "$EFFECTIVE_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
 else
     # Use defaults
     POSTGRES_USER=${POSTGRES_USER:-archestra}
     POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-archestra_dev_password}
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
-    DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+    EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 fi
 
 # Initialize PostgreSQL if data directory is empty
@@ -177,7 +180,7 @@ EOSQL
 fi
 
 # Update supervisord config with actual environment variables
-sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${DATABASE_URL}\"|" /etc/supervisord.conf
+sed -i "s|DATABASE_URL=\"[^\"]*\"|DATABASE_URL=\"${EFFECTIVE_DATABASE_URL}\"|" /etc/supervisord.conf
 
 # NOTE: we need to update both ARCHESTRA_API_BASE_URL and NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
 # because the frontend uses NEXT_PUBLIC_ARCHESTRA_API_BASE_URL to set the base URL for the codegen'd API client

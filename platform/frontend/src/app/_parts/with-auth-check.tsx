@@ -68,5 +68,5 @@ export function WithAuthCheck({
 }
 
 const PAGE_WITH_REQUIRED_ROLE: Record<string, Role> = {
-  "/settings": "admin",
+  "/gateways": "admin",
 };

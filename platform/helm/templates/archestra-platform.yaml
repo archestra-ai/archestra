@@ -35,7 +35,7 @@ spec:
         {{- include "archestra-platform.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.archestra.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -68,15 +68,15 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
-          {{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
+          {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
           volumeMounts:
             - name: kubeconfig
-              mountPath: {{ .Values.archestra.kubernetes.kubeconfig.mountPath }}
+              mountPath: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath }}
               readOnly: true
           {{- end }}
-      {{- if and .Values.archestra.kubernetes.kubeconfig.enabled .Values.archestra.kubernetes.kubeconfig.secretName }}
+      {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
       volumes:
         - name: kubeconfig
           secret:
-            secretName: {{ .Values.archestra.kubernetes.kubeconfig.secretName }}
+            secretName: {{ .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
       {{- end }}

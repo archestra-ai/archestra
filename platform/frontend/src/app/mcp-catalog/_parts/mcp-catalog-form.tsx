@@ -66,44 +66,14 @@ const formSchema = z
   );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
-
-// API data type - matches backend expectations
-export type McpCatalogApiData = {
-  name: string;
-  serverType: "remote" | "local";
-  label?: string;
-  serverUrl?: string;
-  localConfig?: z.infer<typeof LocalConfigSchema>;
-  oauthConfig?: {
-    name: string;
-    server_url: string;
-    client_id: string;
-    client_secret?: string;
-    redirect_uris: string[];
-    scopes: string[];
-    default_scopes: string[];
-    supports_resource_metadata: boolean;
-  };
-  userConfig?: Record<
-    string,
-    {
-      type: "string" | "number" | "boolean" | "directory" | "file";
-      title: string;
-      description: string;
-      required?: boolean;
-      sensitive?: boolean;
-      default?: string | number | boolean | string[];
-      multiple?: boolean;
-      min?: number;
-      max?: number;
-    }
-  >;
-};
+type McpCatalogApiData =
+  archestraApiTypes.UpdateInternalMcpCatalogItemData["body"];
+type McpCatalogLocalConfig = NonNullable<McpCatalogApiData>["localConfig"];
 
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
-): McpCatalogApiData {
+): NonNullable<McpCatalogApiData> {
   const data: McpCatalogApiData = {
     name: values.name,
     serverType: values.serverType,
@@ -141,23 +111,28 @@ export function transformFormToApiData(
         });
     }
 
-    const localConfig: any = {
+    const localConfig: {
+      command?: string;
+      arguments: string[];
+      environment?: Record<string, string>;
+      dockerImage?: string;
+    } = {
       arguments: argumentsArray,
     };
-    
+
     if (values.localConfig.command?.trim()) {
       localConfig.command = values.localConfig.command.trim();
     }
-    
+
     if (environment) {
       localConfig.environment = environment;
     }
-    
+
     if (values.localConfig.dockerImage?.trim()) {
       localConfig.dockerImage = values.localConfig.dockerImage.trim();
     }
-    
-    data.localConfig = localConfig;
+
+    data.localConfig = localConfig as McpCatalogLocalConfig;
   }
 
   // Handle OAuth configuration

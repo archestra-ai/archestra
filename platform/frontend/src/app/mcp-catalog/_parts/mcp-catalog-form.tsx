@@ -57,15 +57,21 @@ const formSchema = z
       if (data.serverType === "remote") {
         return data.serverUrl && data.serverUrl.length > 0;
       }
-      // For local servers, localConfig is required
+      // For local servers, at least command or dockerImage is required
       if (data.serverType === "local") {
-        return data.localConfig?.command && data.localConfig.command.length > 0;
+        const hasCommand =
+          data.localConfig?.command &&
+          data.localConfig.command.trim().length > 0;
+        const hasDockerImage =
+          data.localConfig?.dockerImage &&
+          data.localConfig.dockerImage.trim().length > 0;
+        return hasCommand || hasDockerImage;
       }
       return true;
     },
     {
       message:
-        "Server URL is required for remote servers, and command is required for local servers",
+        "Server URL is required for remote servers. For local servers, either command or Docker image must be provided.",
       path: ["serverUrl"],
     },
   );
@@ -126,13 +132,15 @@ export function transformFormToApiData(
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
     const argumentsArray = values.localConfig.arguments
-      .split("\n")
-      .map((arg) => arg.trim())
-      .filter((arg) => arg.length > 0);
+      ? values.localConfig.arguments
+          .split("\n")
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0)
+      : [];
 
     // Parse environment string into key-value pairs
     let environment: Record<string, string> | undefined;
-    if (values.localConfig.environment.trim()) {
+    if (values.localConfig.environment?.trim()) {
       environment = {};
       values.localConfig.environment
         .split("\n")
@@ -147,8 +155,8 @@ export function transformFormToApiData(
     }
 
     data.localConfig = {
-      command: values.localConfig.command,
-      arguments: argumentsArray,
+      command: values.localConfig.command || undefined,
+      arguments: argumentsArray.length > 0 ? argumentsArray : undefined,
       environment,
       dockerImage: values.localConfig.dockerImage || undefined,
       transportType: values.localConfig.transportType || undefined,
@@ -250,7 +258,7 @@ export function transformCatalogItemToFormValues(
   // Extract local config if present
   let localConfig:
     | {
-        command: string;
+        command?: string;
         arguments: string;
         environment: string;
         dockerImage?: string;
@@ -274,7 +282,7 @@ export function transformCatalogItemToFormValues(
     const config = item.localConfig as any;
 
     localConfig = {
-      command: item.localConfig.command,
+      command: item.localConfig.command || "",
       arguments: argumentsString,
       environment: environmentString,
       dockerImage: item.localConfig.dockerImage || "",
@@ -462,7 +470,10 @@ export function McpCatalogForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Command <span className="text-destructive">*</span>
+                      Command{" "}
+                      {!form.watch("localConfig.dockerImage") && (
+                        <span className="text-destructive">*</span>
+                      )}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -472,7 +483,8 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      The executable command to run
+                      The executable command to run. Optional if Docker image is
+                      set (will use image's default CMD).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

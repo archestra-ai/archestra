@@ -97,3 +97,14 @@ PostgreSQL port for database connectivity checks
 5432
 {{- end -}}
 {{- end }}
+
+{{/*
+ServiceAccount name for the Archestra Platform
+*/}}
+{{- define "archestra-platform.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "archestra-platform.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

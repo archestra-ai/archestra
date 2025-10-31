@@ -202,9 +202,9 @@ class McpClient {
                     result.content,
                   );
                 } catch (error) {
-                  console.error(
+                  logger.error(
+                    { err: error },
                     `Error applying response modifier template for tool ${toolCall.name}:`,
-                    error,
                   );
                   // If template fails, use original content
                 }
@@ -226,8 +226,7 @@ class McpClient {
                   toolCall,
                   toolResult,
                 });
-                console.log(
-                  "✅ Saved streamable-http MCP tool call (success):",
+                logger.info(
                   {
                     id: savedToolCall.id,
                     toolName: toolCall.name,
@@ -236,11 +235,12 @@ class McpClient {
                         ? toolResult.content.substring(0, 100)
                         : JSON.stringify(toolResult.content).substring(0, 100),
                   },
+                  "✅ Saved streamable-http MCP tool call (success):",
                 );
               } catch (dbError) {
-                console.error(
+                logger.error(
+                  { err: dbError },
                   "Failed to persist streamable-http MCP tool call:",
-                  dbError,
                 );
                 // Continue execution even if persistence fails
               }
@@ -262,14 +262,18 @@ class McpClient {
                   toolCall,
                   toolResult,
                 });
-                console.log(
+                logger.info(
+                  {
+                    id: savedToolCall.id,
+                    toolName: toolCall.name,
+                    error: toolResult.error,
+                  },
                   "✅ Saved streamable-http MCP tool call (error):",
-                  savedToolCall.id,
                 );
               } catch (dbError) {
-                console.error(
+                logger.error(
+                  { err: dbError },
                   "Failed to persist failed streamable-http MCP tool call:",
-                  dbError,
                 );
               }
             }

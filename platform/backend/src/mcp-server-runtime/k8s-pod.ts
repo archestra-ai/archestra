@@ -129,9 +129,9 @@ export default class K8sPod {
                   baseUrl = `http://localhost:${nodePort}`;
                 }
               } catch (error) {
-                console.error(
+                logger.error(
+                  { err: error },
                   `Could not read service ${serviceName} for existing pod`,
-                  error,
                 );
               }
             }
@@ -141,7 +141,7 @@ export default class K8sPod {
             }
           }
 
-          console.log(`Pod ${this.podName} is already running`);
+          logger.info(`Pod ${this.podName} is already running`);
           return;
         }
 
@@ -264,7 +264,7 @@ export default class K8sPod {
         // Append the HTTP path
         this.httpEndpointUrl = `${baseUrl}${httpPath}`;
 
-        console.log(
+        logger.info(
           `HTTP endpoint URL for ${this.podName}: ${this.httpEndpointUrl}`,
         );
       }
@@ -309,7 +309,7 @@ export default class K8sPod {
           name: serviceName,
           namespace: this.namespace,
         });
-        console.log(`Service ${serviceName} already exists`);
+        logger.info(`Service ${serviceName} already exists`);
         return;
         // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
       } catch (error: any) {
@@ -355,9 +355,12 @@ export default class K8sPod {
         body: serviceSpec,
       });
 
-      console.log(`Created service ${serviceName} for pod ${this.podName}`);
+      logger.info(`Created service ${serviceName} for pod ${this.podName}`);
     } catch (error) {
-      console.error(`Failed to create service for pod ${this.podName}:`, error);
+      logger.error(
+        { err: error },
+        `Failed to create service for pod ${this.podName}:`,
+      );
       throw error;
     }
   }
@@ -372,7 +375,7 @@ export default class K8sPod {
       const httpPort = catalogItem?.localConfig?.httpPort || 8080;
       // Use the container port directly with pod IP
       this.assignedHttpPort = httpPort;
-      console.log(
+      logger.info(
         `Assigned HTTP port ${this.assignedHttpPort} for pod ${this.podName}`,
       );
     }

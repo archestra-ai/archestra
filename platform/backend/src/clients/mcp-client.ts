@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import config from "@/config";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import {
   InternalMcpCatalogModel,
   McpToolCallModel,
@@ -139,8 +140,140 @@ class McpClient {
         );
       }
 
-      // For local servers, use direct JSON-RPC calls instead of MCP SDK client
+      // For local servers, check if they use streamable-http transport
       if (catalogItem.serverType === "local") {
+        const usesStreamableHttp =
+          await McpServerRuntimeManager.usesStreamableHttp(
+            firstTool.mcpServerId,
+          );
+
+        if (usesStreamableHttp) {
+          // Use streamable HTTP transport for these servers
+          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
+            firstTool.mcpServerId,
+          );
+
+          if (!httpEndpointUrl) {
+            return await this.persistErrorResults(
+              mcpToolCalls,
+              agentId,
+              firstTool.mcpServerName,
+              `No HTTP endpoint URL found for streamable-http server ${firstTool.mcpServerName}`,
+            );
+          }
+
+          // Use the same logic as remote servers with StreamableHTTPClientTransport
+          const client = await this.getOrCreateConnection(
+            firstTool.mcpServerId,
+            {
+              id: firstTool.mcpServerId,
+              url: httpEndpointUrl,
+              name: firstTool.mcpServerName,
+              headers: {},
+            },
+          );
+
+          // Execute each MCP tool call via the HTTP client
+          for (const toolCall of mcpToolCalls) {
+            try {
+              // Strip the server prefix from tool name for MCP server call
+              const serverPrefix = `${firstTool.mcpServerName}__`;
+              const mcpToolName = toolCall.name.startsWith(serverPrefix)
+                ? toolCall.name.substring(serverPrefix.length)
+                : toolCall.name;
+
+              const result = await client.callTool({
+                name: mcpToolName,
+                arguments: toolCall.arguments,
+              });
+
+              // Apply response modifier template if one exists
+              let modifiedContent = result.content;
+              const template = templatesByToolName.get(toolCall.name);
+              if (template) {
+                try {
+                  modifiedContent = applyResponseModifierTemplate(
+                    template,
+                    result.content,
+                  );
+                } catch (error) {
+                  console.error(
+                    `Error applying response modifier template for tool ${toolCall.name}:`,
+                    error,
+                  );
+                  // If template fails, use original content
+                }
+              }
+
+              const toolResult: CommonToolResult = {
+                id: toolCall.id,
+                content: modifiedContent,
+                isError: !!result.isError,
+              };
+
+              results.push(toolResult);
+
+              // Persist tool call and result to database
+              try {
+                const savedToolCall = await McpToolCallModel.create({
+                  agentId,
+                  mcpServerName: firstTool.mcpServerName,
+                  toolCall,
+                  toolResult,
+                });
+                console.log(
+                  "✅ Saved streamable-http MCP tool call (success):",
+                  {
+                    id: savedToolCall.id,
+                    toolName: toolCall.name,
+                    resultContent:
+                      typeof toolResult.content === "string"
+                        ? toolResult.content.substring(0, 100)
+                        : JSON.stringify(toolResult.content).substring(0, 100),
+                  },
+                );
+              } catch (dbError) {
+                console.error(
+                  "Failed to persist streamable-http MCP tool call:",
+                  dbError,
+                );
+                // Continue execution even if persistence fails
+              }
+            } catch (error) {
+              const toolResult: CommonToolResult = {
+                id: toolCall.id,
+                content: null,
+                isError: true,
+                error: error instanceof Error ? error.message : "Unknown error",
+              };
+
+              results.push(toolResult);
+
+              // Persist failed tool call to database
+              try {
+                const savedToolCall = await McpToolCallModel.create({
+                  agentId,
+                  mcpServerName: firstTool.mcpServerName,
+                  toolCall,
+                  toolResult,
+                });
+                console.log(
+                  "✅ Saved streamable-http MCP tool call (error):",
+                  savedToolCall.id,
+                );
+              } catch (dbError) {
+                console.error(
+                  "Failed to persist failed streamable-http MCP tool call:",
+                  dbError,
+                );
+              }
+            }
+          }
+
+          return results;
+        }
+
+        // For stdio-based local servers, use direct JSON-RPC calls via proxy
         const proxyUrl = `${API_BASE_URL}/mcp_proxy/${firstTool.mcpServerId}`;
 
         // Execute each MCP tool call via direct JSON-RPC

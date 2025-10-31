@@ -29,6 +29,8 @@ export default class K8sPod {
 
   // Track assigned port for HTTP-based MCP servers
   assignedHttpPort?: number;
+  // Track the HTTP endpoint URL for streamable-http servers
+  httpEndpointUrl?: string;
 
   // Mutex to serialize attach sessions (only one at a time)
   private attachQueue: Promise<void> = Promise.resolve();
@@ -96,7 +98,48 @@ export default class K8sPod {
 
         if (existingPod.status?.phase === "Running") {
           this.state = "running";
-          this.assignHttpPortIfNeeded(existingPod);
+          await this.assignHttpPortIfNeeded(existingPod);
+
+          // Set HTTP endpoint URL if this is an HTTP server
+          const needsHttp = await this.needsHttpPort();
+          if (needsHttp) {
+            const catalogItem = await this.getCatalogItem();
+            const httpPort = catalogItem?.localConfig?.httpPort || 8080;
+            const httpPath = catalogItem?.localConfig?.httpPath || "/mcp";
+
+            // Use service DNS for in-cluster, localhost with NodePort for local dev
+            let baseUrl: string | undefined;
+            if (
+              config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster
+            ) {
+              const serviceName = `${this.podName}-service`;
+              baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+            } else {
+              // Local dev: get NodePort from service
+              const serviceName = `${this.podName}-service`;
+              try {
+                const service = await this.k8sApi.readNamespacedService({
+                  name: serviceName,
+                  namespace: this.namespace,
+                });
+
+                const nodePort = service.spec?.ports?.[0]?.nodePort;
+                if (nodePort) {
+                  baseUrl = `http://localhost:${nodePort}`;
+                }
+              } catch (error) {
+                console.error(
+                  `Could not read service ${serviceName} for existing pod`,
+                  error,
+                );
+              }
+            }
+
+            if (baseUrl) {
+              this.httpEndpointUrl = `${baseUrl}${httpPath}`;
+            }
+          }
+
           console.log(`Pod ${this.podName} is already running`);
           return;
         }
@@ -138,6 +181,10 @@ export default class K8sPod {
         catalogItem.localConfig.dockerImage || mcpServerBaseImage;
       console.log(`Using Docker image: ${dockerImage}`);
 
+      // Check if HTTP port is needed
+      const needsHttp = await this.needsHttpPort();
+      const httpPort = catalogItem.localConfig.httpPort || 8080;
+
       const podSpec: k8s.V1Pod = {
         metadata: {
           name: this.podName,
@@ -160,10 +207,10 @@ export default class K8sPod {
               stdin: true,
               tty: false,
               // For HTTP-based MCP servers, expose port
-              ports: this.needsHttpPort()
+              ports: needsHttp
                 ? [
                     {
-                      containerPort: 8080,
+                      containerPort: httpPort,
                       protocol: "TCP",
                     },
                   ]
@@ -184,8 +231,45 @@ export default class K8sPod {
       // Wait for pod to be ready
       await this.waitForPodReady();
 
+      // For HTTP servers, create a K8s Service and set endpoint URL
+      if (needsHttp) {
+        await this.createServiceForHttpServer(httpPort);
+
+        // Get HTTP path from config (default to /mcp)
+        const httpPath = catalogItem.localConfig.httpPath || "/mcp";
+
+        // Use service DNS for in-cluster, localhost with NodePort for local dev
+        let baseUrl: string;
+        if (config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster) {
+          // In-cluster: use service DNS name
+          const serviceName = `${this.podName}-service`;
+          baseUrl = `http://${serviceName}.${this.namespace}.svc.cluster.local:${httpPort}`;
+        } else {
+          // Local dev: get NodePort from service
+          const serviceName = `${this.podName}-service`;
+          const service = await this.k8sApi.readNamespacedService({
+            name: serviceName,
+            namespace: this.namespace,
+          });
+
+          const nodePort = service.spec?.ports?.[0]?.nodePort;
+          if (!nodePort) {
+            throw new Error(`Service ${serviceName} has no NodePort assigned`);
+          }
+
+          baseUrl = `http://localhost:${nodePort}`;
+        }
+
+        // Append the HTTP path
+        this.httpEndpointUrl = `${baseUrl}${httpPath}`;
+
+        console.log(
+          `HTTP endpoint URL for ${this.podName}: ${this.httpEndpointUrl}`,
+        );
+      }
+
       // Assign HTTP port if needed
-      this.assignHttpPortIfNeeded(createdPod);
+      await this.assignHttpPortIfNeeded(createdPod);
 
       this.state = "running";
       console.log(`Pod ${this.podName} is now running`);
@@ -201,19 +285,92 @@ export default class K8sPod {
   /**
    * Check if this MCP server needs an HTTP port
    */
-  private needsHttpPort(): boolean {
-    // TODO: Load from catalog item to check if streamable_http_url is configured
-    // For now, assume all local servers use stdio
-    return false;
+  private async needsHttpPort(): Promise<boolean> {
+    const catalogItem = await this.getCatalogItem();
+    if (!catalogItem?.localConfig) {
+      return false;
+    }
+    // Default to stdio if transportType is not specified
+    const transportType = catalogItem.localConfig.transportType || "stdio";
+    return transportType === "streamable-http";
+  }
+
+  /**
+   * Create a K8s Service for HTTP-based MCP servers
+   */
+  private async createServiceForHttpServer(httpPort: number): Promise<void> {
+    const serviceName = `${this.podName}-service`;
+
+    try {
+      // Check if service already exists
+      try {
+        await this.k8sApi.readNamespacedService({
+          name: serviceName,
+          namespace: this.namespace,
+        });
+        console.log(`Service ${serviceName} already exists`);
+        return;
+        // biome-ignore lint/suspicious/noExplicitAny: k8s error handling
+      } catch (error: any) {
+        // Service doesn't exist, we'll create it below
+        if (error?.code !== 404 && error?.statusCode !== 404) {
+          throw error;
+        }
+      }
+
+      // Create the service
+      // Use NodePort for local dev, ClusterIP for production
+      const serviceType = config.orchestrator.kubernetes
+        .loadKubeconfigFromCurrentCluster
+        ? "ClusterIP"
+        : "NodePort";
+
+      const serviceSpec: k8s.V1Service = {
+        metadata: {
+          name: serviceName,
+          labels: {
+            app: "mcp-server",
+            "mcp-server-id": this.mcpServer.id,
+          },
+        },
+        spec: {
+          selector: {
+            app: "mcp-server",
+            "mcp-server-id": this.mcpServer.id,
+          },
+          ports: [
+            {
+              protocol: "TCP",
+              port: httpPort,
+              targetPort: httpPort as unknown as k8s.IntOrString,
+            },
+          ],
+          type: serviceType,
+        },
+      };
+
+      await this.k8sApi.createNamespacedService({
+        namespace: this.namespace,
+        body: serviceSpec,
+      });
+
+      console.log(`Created service ${serviceName} for pod ${this.podName}`);
+    } catch (error) {
+      console.error(`Failed to create service for pod ${this.podName}:`, error);
+      throw error;
+    }
   }
 
   /**
    * Assign HTTP port from the pod/service
    */
-  private assignHttpPortIfNeeded(pod: k8s.V1Pod): void {
-    if (this.needsHttpPort() && pod.status?.podIP) {
+  private async assignHttpPortIfNeeded(pod: k8s.V1Pod): Promise<void> {
+    const needsHttp = await this.needsHttpPort();
+    if (needsHttp && pod.status?.podIP) {
+      const catalogItem = await this.getCatalogItem();
+      const httpPort = catalogItem?.localConfig?.httpPort || 8080;
       // Use the container port directly with pod IP
-      this.assignedHttpPort = 8080;
+      this.assignedHttpPort = httpPort;
       console.log(
         `Assigned HTTP port ${this.assignedHttpPort} for pod ${this.podName}`,
       );
@@ -478,5 +635,19 @@ export default class K8sPod {
 
   get containerName(): string {
     return this.podName;
+  }
+
+  /**
+   * Check if this pod uses streamable HTTP transport
+   */
+  async usesStreamableHttp(): Promise<boolean> {
+    return await this.needsHttpPort();
+  }
+
+  /**
+   * Get the HTTP endpoint URL for streamable-http servers
+   */
+  getHttpEndpointUrl(): string | undefined {
+    return this.httpEndpointUrl;
   }
 }

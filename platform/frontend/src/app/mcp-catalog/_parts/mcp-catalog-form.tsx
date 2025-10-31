@@ -151,6 +151,11 @@ export function transformFormToApiData(
       arguments: argumentsArray,
       environment,
       dockerImage: values.localConfig.dockerImage || undefined,
+      transportType: values.localConfig.transportType || undefined,
+      httpPort: values.localConfig.httpPort
+        ? Number(values.localConfig.httpPort)
+        : undefined,
+      httpPath: values.localConfig.httpPath || undefined,
     };
   }
 
@@ -249,6 +254,9 @@ export function transformCatalogItemToFormValues(
         arguments: string;
         environment: string;
         dockerImage?: string;
+        transportType?: "stdio" | "streamable-http";
+        httpPort?: string;
+        httpPath?: string;
       }
     | undefined;
   if (item.localConfig) {
@@ -262,11 +270,17 @@ export function transformCatalogItemToFormValues(
           .join("\n")
       : "";
 
+    // biome-ignore lint/suspicious/noExplicitAny: LocalConfig type doesn't have new fields yet
+    const config = item.localConfig as any;
+
     localConfig = {
       command: item.localConfig.command,
       arguments: argumentsString,
       environment: environmentString,
       dockerImage: item.localConfig.dockerImage || "",
+      transportType: config.transportType || undefined,
+      httpPort: config.httpPort?.toString() || undefined,
+      httpPath: config.httpPath || undefined,
     };
   }
 
@@ -321,6 +335,9 @@ export function McpCatalogForm({
             arguments: "",
             environment: "",
             dockerImage: "",
+            transportType: "stdio",
+            httpPort: "",
+            httpPath: "/mcp",
           },
         },
   });
@@ -419,6 +436,28 @@ export function McpCatalogForm({
             <>
               <FormField
                 control={form.control}
+                name="localConfig.dockerImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Docker Image (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="registry.example.com/my-mcp-server:latest"
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Custom Docker image URL. If not specified, the default
+                      base image will be used.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="localConfig.command"
                 render={({ field }) => (
                   <FormItem>
@@ -486,25 +525,96 @@ export function McpCatalogForm({
 
               <FormField
                 control={form.control}
-                name="localConfig.dockerImage"
+                name="localConfig.transportType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Docker Image (optional)</FormLabel>
+                    <FormLabel>Transport Type</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="registry.example.com/my-mcp-server:latest"
-                        className="font-mono"
-                        {...field}
-                      />
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        value={field.value || "stdio"}
+                        className="space-y-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="stdio" id="transport-stdio" />
+                          <FormLabel
+                            htmlFor="transport-stdio"
+                            className="font-normal cursor-pointer"
+                          >
+                            stdio (default)
+                          </FormLabel>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem
+                            value="streamable-http"
+                            id="transport-http"
+                          />
+                          <FormLabel
+                            htmlFor="transport-http"
+                            className="font-normal cursor-pointer"
+                          >
+                            Streamable HTTP
+                          </FormLabel>
+                        </div>
+                      </RadioGroup>
                     </FormControl>
                     <FormDescription>
-                      Custom Docker image URL. If not specified, the default
-                      base image will be used.
+                      stdio uses JSON-RPC over stdin/stdout (serialized
+                      requests). Streamable HTTP uses native HTTP/SSE transport
+                      (better performance, concurrent requests).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {form.watch("localConfig.transportType") ===
+                "streamable-http" && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="localConfig.httpPort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>HTTP Port (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="8080"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Port for HTTP server (defaults to 8080 if not
+                          specified)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="localConfig.httpPath"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>HTTP Path (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="/mcp"
+                            className="font-mono"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Endpoint path for MCP requests (defaults to /mcp)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
             </>
           )}
         </div>

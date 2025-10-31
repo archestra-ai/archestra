@@ -82,7 +82,7 @@ ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendl
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime for local stdio servers
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support
 
 **Workspaces**:
 
@@ -134,13 +134,22 @@ ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendl
 
 **MCP Server Runtime**:
 
-- Local stdio-based MCP servers run in K8s pods (one pod per server)
+- Local MCP servers run in K8s pods (one pod per server)
 - Automatic pod lifecycle management (start/restart/stop)
-- JSON-RPC proxy for communication with pods via `/mcp_proxy/:id`
+- Two transport types supported:
+  - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
+  - **streamable-http**: Native HTTP/SSE transport using K8s Service (better performance, concurrent requests)
 - Pod logs available via `/mcp_proxy/:id/logs`
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - Runtime manager at `backend/src/mcp-server-runtime/`
+
+**Configuring Transport Type**:
+- Set `transportType: "streamable-http"` in `localConfig` for HTTP transport
+- Optionally specify `httpPort` (defaults to 8080) and `httpPath` (defaults to /mcp)
+- Stdio transport serializes requests (one at a time), HTTP allows concurrent connections
+- HTTP servers get automatic K8s Service creation with ClusterIP DNS name
+- For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
 **Helm Chart RBAC**:
 

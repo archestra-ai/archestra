@@ -2790,16 +2790,24 @@ export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgent
 
 export type GetAgentAvailableTokensData = {
     body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: {
+    path?: never;
+    query: {
+        agentIds: string;
         catalogId?: string;
     };
-    url: '/api/agents/{agentId}/available-tokens';
+    url: '/api/agents/available-tokens';
 };
 
 export type GetAgentAvailableTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */

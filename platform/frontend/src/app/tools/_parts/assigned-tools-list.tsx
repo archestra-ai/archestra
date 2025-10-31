@@ -397,8 +397,8 @@ export function AssignedToolsList({
                   credentialSourceMcpServerId: value,
                 });
               }}
-              catalogId={row.original.tool.mcpServerCatalogId}
-              agentId={row.original.agent.id}
+              catalogId={row.original.tool.mcpServerCatalogId ?? ""}
+              agentIds={[row.original.agent.id]}
               className="h-8 w-[200px] text-xs"
             />
           );

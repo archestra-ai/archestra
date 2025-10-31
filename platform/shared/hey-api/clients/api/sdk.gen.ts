@@ -152,11 +152,11 @@ export const updateAgentTool = <ThrowOnError extends boolean = false>(options: O
 };
 
 /**
- * Get MCP servers that can be used as credential sources for the agent's tools
+ * Get MCP servers that can be used as credential sources for the specified agents' tools
  */
 export const getAgentAvailableTokens = <ThrowOnError extends boolean = false>(options: Options<GetAgentAvailableTokensData, ThrowOnError>) => {
     return (options.client ?? client).get<GetAgentAvailableTokensResponses, GetAgentAvailableTokensErrors, ThrowOnError>({
-        url: '/api/agents/{agentId}/available-tokens',
+        url: '/api/agents/available-tokens',
         ...options
     });
 };

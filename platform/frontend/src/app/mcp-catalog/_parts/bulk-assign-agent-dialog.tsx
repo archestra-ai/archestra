@@ -29,12 +29,14 @@ interface BulkAssignAgentDialogProps {
   }> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  catalogId: string;
 }
 
 export function BulkAssignAgentDialog({
   tools,
   open,
   onOpenChange,
+  catalogId,
 }: BulkAssignAgentDialogProps) {
   const { data: agents } = useAgents({});
   const assignMutation = useAssignTool();
@@ -160,18 +162,6 @@ export function BulkAssignAgentDialog({
 
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="mb-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="token-select">Credential Source</Label>
-              <TokenSelect
-                value={credentialSourceMcpServerId}
-                onValueChange={setCredentialSourceMcpServerId}
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                Select which token will be used when agents execute these tools
-              </p>
-            </div>
-
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -206,6 +196,22 @@ export function BulkAssignAgentDialog({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="mt-10">
+            <Label htmlFor="token-select" className="text-md font-medium mb-1">
+              Token to use
+            </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which token will be used when agents execute these tools
+            </p>
+            <TokenSelect
+              value={credentialSourceMcpServerId}
+              onValueChange={setCredentialSourceMcpServerId}
+              className="w-full"
+              catalogId={catalogId}
+              agentIds={selectedAgentIds}
+            />
           </div>
         </div>
 

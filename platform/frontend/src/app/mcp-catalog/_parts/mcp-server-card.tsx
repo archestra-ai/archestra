@@ -435,6 +435,7 @@ export function McpServerCard({
             setToolsDialogKey((prev) => prev + 1);
           }
         }}
+        catalogId={item.id}
       />
 
       <AssignAgentDialog

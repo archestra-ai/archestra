@@ -310,17 +310,18 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-    "/api/agents/:agentId/available-tokens",
+    "/api/agents/available-tokens",
     {
       schema: {
         operationId: RouteId.GetAgentAvailableTokens,
         description:
-          "Get MCP servers that can be used as credential sources for the agent's tools",
+          "Get MCP servers that can be used as credential sources for the specified agents' tools",
         tags: ["Agent Tools"],
-        params: z.object({
-          agentId: UuidIdSchema,
-        }),
         querystring: z.object({
+          agentIds: z
+            .string()
+            .transform((val) => val.split(","))
+            .pipe(z.array(UuidIdSchema)),
           catalogId: UuidIdSchema.optional(),
         }),
         response: {
@@ -343,6 +344,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 .optional(),
             }),
           ),
+          400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -362,15 +364,22 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const { agentId } = request.params;
-        const { catalogId } = request.query;
+        const { agentIds, catalogId } = request.query;
 
-        // Validate that agent exists
-        const agent = await AgentModel.findById(agentId);
-        if (!agent) {
+        // Validate that at least one agent ID is provided
+        if (agentIds.length === 0) {
+          return reply.status(200).send([]);
+        }
+
+        // Validate that all agents exist
+        const agents = await Promise.all(
+          agentIds.map((id) => AgentModel.findById(id)),
+        );
+        const invalidAgentIds = agentIds.filter((_id, idx) => !agents[idx]);
+        if (invalidAgentIds.length > 0) {
           return reply.status(404).send({
             error: {
-              message: `Agent with ID ${agentId} not found`,
+              message: `Agent(s) not found: ${invalidAgentIds.join(", ")}`,
               type: "not_found",
             },
           });
@@ -385,31 +394,40 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : allServers;
 
         // Apply token validation logic to filter available tokens
+        // A token is valid if it can be used with ANY of the provided agents
         const validServers = await Promise.all(
           filteredServers.map(async (server) => {
             // Admin personal tokens can be used with any agent
             if (server.authType === "personal" && server.ownerId) {
-              const owner = await UserModel.getUserById(server.ownerId);
+              const ownerId = server.ownerId;
+              const owner = await UserModel.getUserById(ownerId);
               if (owner?.role === "admin") {
                 return { server, valid: true };
               }
 
-              // Member personal tokens: check if owner belongs to agent's teams
-              const hasAccess = await AgentTeamModel.userHasAgentAccess(
-                server.ownerId,
-                agentId,
-                false,
+              // Member personal tokens: check if owner belongs to any of the agents' teams
+              const hasAccessResults = await Promise.all(
+                agentIds.map((agentId) =>
+                  AgentTeamModel.userHasAgentAccess(ownerId, agentId, false),
+                ),
               );
-              return { server, valid: hasAccess };
+              const hasAccessToAny = hasAccessResults.some(
+                (hasAccess) => hasAccess,
+              );
+              return { server, valid: hasAccessToAny };
             }
 
-            // Team tokens: check if server and agent share a team
+            // Team tokens: check if server and any of the agents share a team
             if (server.authType === "team") {
-              const shareTeam = await AgentTeamModel.agentAndMcpServerShareTeam(
-                agentId,
-                server.id,
+              const shareTeamResults = await Promise.all(
+                agentIds.map((agentId) =>
+                  AgentTeamModel.agentAndMcpServerShareTeam(agentId, server.id),
+                ),
               );
-              return { server, valid: shareTeam };
+              const shareTeamWithAny = shareTeamResults.some(
+                (shareTeam) => shareTeam,
+              );
+              return { server, valid: shareTeamWithAny };
             }
 
             return { server, valid: false };

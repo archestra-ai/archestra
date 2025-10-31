@@ -246,23 +246,23 @@ export function useMcpServerInstallationStatus(
 }
 
 /**
- * Get MCP servers (tokens) available for use with a specific agent's tools.
+ * Get MCP servers (tokens) available for use with specific agents' tools.
  * Filters based on team membership and admin status.
  *
- * @param agentId - The agent ID to filter tokens for. If null, returns all servers.
+ * @param agentIds - Array of agent IDs to filter tokens for. If null/empty, returns all servers.
  * @param catalogId - Optional catalog ID to further filter tokens.
  */
 export function useAgentAvailableTokens(params: {
-  agentId: string | null;
-  catalogId?: string | null;
+  agentIds: string[];
+  catalogId: string;
 }) {
-  const { agentId, catalogId } = params;
+  const { agentIds, catalogId } = params;
 
   return useQuery({
-    queryKey: ["agent-available-tokens", { agentId, catalogId }],
+    queryKey: ["agent-available-tokens", { agentIds, catalogId }],
     queryFn: async () => {
-      if (!agentId) {
-        // If no agentId, fallback to fetching all servers
+      if (!agentIds || agentIds.length === 0) {
+        // If no agentIds, fallback to fetching all servers
         const response = await getMcpServers({});
         const servers = response.data ?? [];
         return catalogId
@@ -270,10 +270,12 @@ export function useAgentAvailableTokens(params: {
           : servers;
       }
 
-      // Use dedicated endpoint when agentId is provided
+      // Use dedicated endpoint when agentIds are provided
       const response = await getAgentAvailableTokens({
-        path: { agentId },
-        query: catalogId ? { catalogId } : undefined,
+        query: {
+          agentIds: agentIds.join(","),
+          ...(catalogId ? { catalogId } : {}),
+        },
       });
       return response.data ?? [];
     },

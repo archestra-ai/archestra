@@ -360,6 +360,12 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
+  [RouteId.GetTokenPricing]: {
+    admin: ["read"],
+  },
+  [RouteId.UpdateTokenPricing]: {
+    admin: ["update"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

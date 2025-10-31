@@ -22,12 +22,15 @@ const updateTokenPriceSchema = z.object({
 const tokenPricingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Get all token prices, auto-creating for new models found in interactions
   fastify.get(
-    "/",
+    "/api/token-pricing",
     {
       config: {
         routeId: RouteId.GetTokenPricing,
       },
       schema: {
+        operationId: RouteId.GetTokenPricing,
+        description: "Get all token prices",
+        tags: ["Token Pricing"],
         response: {
           200: z.array(tokenPriceSchema),
           500: z.object({
@@ -52,12 +55,15 @@ const tokenPricingRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
   // Update multiple token prices
   fastify.put(
-    "/",
+    "/api/token-pricing",
     {
       config: {
         routeId: RouteId.UpdateTokenPricing,
       },
       schema: {
+        operationId: RouteId.UpdateTokenPricing,
+        description: "Update token prices",
+        tags: ["Token Pricing"],
         body: z.object({
           prices: z.array(updateTokenPriceSchema),
         }),

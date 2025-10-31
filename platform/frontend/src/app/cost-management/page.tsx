@@ -1,8 +1,13 @@
 "use client";
 
 import { AlertCircle, Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { tokenPricingApi, type TokenPrice as ApiTokenPrice } from "@/lib/api/token-pricing";
+import { useState } from "react";
+import { 
+  useTokenPrices, 
+  useUpdateTokenPrices, 
+  type TokenPrice, 
+  type UpdateTokenPriceInput 
+} from "@/lib/token-pricing.query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +55,6 @@ interface ToolCallLimit {
   monthlyLimit: string;
 }
 
-interface TokenPrice extends ApiTokenPrice {}
 
 export default function CostManagementPage() {
   const [orgBudgetLimit, setOrgBudgetLimit] = useState("1000");
@@ -59,83 +63,9 @@ export default function CostManagementPage() {
   const [toolCallLimits, setToolCallLimits] = useState<ToolCallLimit[]>([]);
   const [autoShutdown, setAutoShutdown] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState("daily");
-  const [tokenPrices, setTokenPrices] = useState<TokenPrice[]>([
-    // OpenAI models (prices per 1M tokens)
-    {
-      provider: "OpenAI",
-      model: "gpt-4-turbo",
-      inputPricePer1M: "10.00",
-      outputPricePer1M: "30.00",
-    },
-    {
-      provider: "OpenAI",
-      model: "gpt-4",
-      inputPricePer1M: "30.00",
-      outputPricePer1M: "60.00",
-    },
-    {
-      provider: "OpenAI",
-      model: "gpt-3.5-turbo",
-      inputPricePer1M: "0.50",
-      outputPricePer1M: "1.50",
-    },
-    {
-      provider: "OpenAI",
-      model: "gpt-4o",
-      inputPricePer1M: "5.00",
-      outputPricePer1M: "15.00",
-    },
-    {
-      provider: "OpenAI",
-      model: "gpt-4o-mini",
-      inputPricePer1M: "0.15",
-      outputPricePer1M: "0.60",
-    },
-    // Anthropic models
-    {
-      provider: "Anthropic",
-      model: "claude-3-opus",
-      inputPricePer1M: "15.00",
-      outputPricePer1M: "75.00",
-    },
-    {
-      provider: "Anthropic",
-      model: "claude-3-sonnet",
-      inputPricePer1M: "3.00",
-      outputPricePer1M: "15.00",
-    },
-    {
-      provider: "Anthropic",
-      model: "claude-3-haiku",
-      inputPricePer1M: "0.25",
-      outputPricePer1M: "1.25",
-    },
-    {
-      provider: "Anthropic",
-      model: "claude-3.5-sonnet",
-      inputPricePer1M: "3.00",
-      outputPricePer1M: "15.00",
-    },
-    // Google models
-    {
-      provider: "Google",
-      model: "gemini-1.5-pro",
-      inputPricePer1M: "3.50",
-      outputPricePer1M: "10.50",
-    },
-    {
-      provider: "Google",
-      model: "gemini-1.5-flash",
-      inputPricePer1M: "0.075",
-      outputPricePer1M: "0.30",
-    },
-    {
-      provider: "Google",
-      model: "gemini-1.0-pro",
-      inputPricePer1M: "0.50",
-      outputPricePer1M: "1.50",
-    },
-  ]);
+  const { data: tokenPrices = [], isLoading: isLoadingPrices } = useTokenPrices();
+  const updateTokenPricesMutation = useUpdateTokenPrices();
+  const [editedPrices, setEditedPrices] = useState<Record<string, TokenPrice>>({});
 
   const currentSpend = 42.58;
   const budgetAmount = parseFloat(orgBudgetLimit) || 1000;
@@ -1184,7 +1114,9 @@ export default function CostManagementPage() {
                         <div className="space-y-3">
                           {tokenPrices
                             .filter((price) => price.provider === providerName)
-                            .map((price, index) => (
+                            .map((price) => {
+                              const currentPrice = editedPrices[price.id] || price;
+                              return (
                               <div
                                 key={`${price.provider}-${price.model}`}
                                 className="grid gap-4 md:grid-cols-3"
@@ -1192,7 +1124,7 @@ export default function CostManagementPage() {
                                 <div className="space-y-2">
                                   <Label className="text-xs">Model</Label>
                                   <Input
-                                    value={price.model}
+                                    value={currentPrice.model}
                                     disabled
                                     className="text-sm"
                                   />
@@ -1204,21 +1136,15 @@ export default function CostManagementPage() {
                                   <Input
                                     type="number"
                                     step="0.001"
-                                    value={price.inputPricePer1M}
+                                    value={currentPrice.inputPricePer1M}
                                     onChange={(e) => {
-                                      const updatedPrices = [...tokenPrices];
-                                      const priceIndex = tokenPrices.findIndex(
-                                        (p) =>
-                                          p.provider === price.provider &&
-                                          p.model === price.model,
-                                      );
-                                      if (priceIndex !== -1) {
-                                        updatedPrices[priceIndex] = {
-                                          ...updatedPrices[priceIndex],
+                                      setEditedPrices(prev => ({
+                                        ...prev,
+                                        [price.id]: {
+                                          ...price,
                                           inputPricePer1M: e.target.value,
-                                        };
-                                        setTokenPrices(updatedPrices);
-                                      }
+                                        }
+                                      }));
                                     }}
                                     placeholder="0.00"
                                     className="text-sm"
@@ -1231,55 +1157,46 @@ export default function CostManagementPage() {
                                   <Input
                                     type="number"
                                     step="0.001"
-                                    value={price.outputPricePer1M}
+                                    value={currentPrice.outputPricePer1M}
                                     onChange={(e) => {
-                                      const updatedPrices = [...tokenPrices];
-                                      const priceIndex = tokenPrices.findIndex(
-                                        (p) =>
-                                          p.provider === price.provider &&
-                                          p.model === price.model,
-                                      );
-                                      if (priceIndex !== -1) {
-                                        updatedPrices[priceIndex] = {
-                                          ...updatedPrices[priceIndex],
+                                      setEditedPrices(prev => ({
+                                        ...prev,
+                                        [price.id]: {
+                                          ...price,
                                           outputPricePer1M: e.target.value,
-                                        };
-                                        setTokenPrices(updatedPrices);
-                                      }
+                                        }
+                                      }));
                                     }}
                                     placeholder="0.00"
                                     className="text-sm"
                                   />
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                         </div>
                       </div>
                     ))}
 
-                    <div className="border-t pt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // Add a new custom model
-                          const customModel: TokenPrice = {
-                            provider: "Custom",
-                            model: "custom-model",
-                            inputPricePer1M: "0.00",
-                            outputPricePer1M: "0.00",
-                          };
-                          setTokenPrices([...tokenPrices, customModel]);
-                        }}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Custom Model
-                      </Button>
-                    </div>
                   </div>
 
                   <div className="flex justify-end">
-                    <Button>Save Pricing Configuration</Button>
+                    <Button 
+                      onClick={() => {
+                        const pricesToUpdate: UpdateTokenPriceInput[] = Object.values(editedPrices).map(price => ({
+                          id: price.id,
+                          inputPricePer1M: price.inputPricePer1M,
+                          outputPricePer1M: price.outputPricePer1M,
+                        }));
+                        if (pricesToUpdate.length > 0) {
+                          updateTokenPricesMutation.mutate(pricesToUpdate);
+                          setEditedPrices({});
+                        }
+                      }}
+                      disabled={updateTokenPricesMutation.isPending || Object.keys(editedPrices).length === 0}
+                    >
+                      {updateTokenPricesMutation.isPending ? "Saving..." : "Save Pricing Configuration"}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

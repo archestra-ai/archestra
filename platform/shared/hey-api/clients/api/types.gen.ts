@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1322,7 +1322,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -4157,6 +4157,10 @@ export type GetInteractionsResponses = {
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
+            provider: string | null;
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4164,6 +4168,10 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
+            provider: string | null;
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4171,6 +4179,10 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
+            provider: string | null;
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -4228,6 +4240,10 @@ export type GetInteractionResponses = {
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
+        provider: string | null;
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4235,6 +4251,10 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
+        provider: string | null;
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4242,6 +4262,10 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        provider: string | null;
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     };
 };
@@ -7173,6 +7197,88 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type GetTokenPricingData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/token-pricing';
+};
+
+export type GetTokenPricingErrors = {
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type GetTokenPricingError = GetTokenPricingErrors[keyof GetTokenPricingErrors];
+
+export type GetTokenPricingResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        provider: string;
+        model: string;
+        inputPricePer1M: string;
+        outputPricePer1M: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetTokenPricingResponse = GetTokenPricingResponses[keyof GetTokenPricingResponses];
+
+export type UpdateTokenPricingData = {
+    body: {
+        prices: Array<{
+            id: string;
+            inputPricePer1M: string;
+            outputPricePer1M: string;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/token-pricing';
+};
+
+export type UpdateTokenPricingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string;
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string;
+    };
+};
+
+export type UpdateTokenPricingError = UpdateTokenPricingErrors[keyof UpdateTokenPricingErrors];
+
+export type UpdateTokenPricingResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        provider: string;
+        model: string;
+        inputPricePer1M: string;
+        outputPricePer1M: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type UpdateTokenPricingResponse = UpdateTokenPricingResponses[keyof UpdateTokenPricingResponses];
 
 export type GetToolsData = {
     body?: never;

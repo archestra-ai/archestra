@@ -17,12 +17,11 @@ export function McpConnectionInstructions({
   agentId,
 }: McpConnectionInstructionsProps) {
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedAuth, setCopiedAuth] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
 
   const mcpUrl = `${apiBaseUrl}/mcp`;
   const token = agentId;
-
-  const httpExample = `${mcpUrl}\nAuthorization: Bearer ${token}`;
 
   const mcpConfig = JSON.stringify(
     {
@@ -40,11 +39,18 @@ export function McpConnectionInstructions({
   );
 
   const handleCopyUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(httpExample);
+    await navigator.clipboard.writeText(mcpUrl);
     setCopiedUrl(true);
-    toast.success("MCP configuration copied to clipboard");
+    toast.success("URL copied to clipboard");
     setTimeout(() => setCopiedUrl(false), 2000);
-  }, [httpExample]);
+  }, [mcpUrl]);
+
+  const handleCopyAuth = useCallback(async () => {
+    await navigator.clipboard.writeText(`Authorization: Bearer ${token}`);
+    setCopiedAuth(true);
+    toast.success("Authorization header copied to clipboard");
+    setTimeout(() => setCopiedAuth(false), 2000);
+  }, [token]);
 
   const handleCopyConfig = useCallback(async () => {
     await navigator.clipboard.writeText(mcpConfig);
@@ -56,20 +62,25 @@ export function McpConnectionInstructions({
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          MCP Gateway configuration URL:
-        </p>
-        <div className="bg-muted rounded-md p-3 relative">
-          <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
-            <code>{httpExample}</code>
-          </pre>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2"
-            onClick={handleCopyUrl}
-          >
+        <p className="text-sm text-muted-foreground">MCP Gateway URL:</p>
+        <div className="bg-muted rounded-md p-3 flex items-center justify-between">
+          <CodeText className="text-sm">{mcpUrl}</CodeText>
+          <Button variant="ghost" size="icon" onClick={handleCopyUrl}>
             {copiedUrl ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">Authorization Header:</p>
+        <div className="bg-muted rounded-md p-3 flex items-center justify-between">
+          <CodeText className="text-sm">Authorization: Bearer {token}</CodeText>
+          <Button variant="ghost" size="icon" onClick={handleCopyAuth}>
+            {copiedAuth ? (
               <Check className="h-4 w-4 text-green-500" />
             ) : (
               <Copy className="h-4 w-4" />

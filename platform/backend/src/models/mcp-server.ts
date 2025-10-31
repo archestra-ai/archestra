@@ -1,9 +1,16 @@
 import { eq, inArray, isNull } from "drizzle-orm";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import db, { schema } from "@/database";
+import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
 import SecretModel from "./secret";
+
+// Get the API base URL from config
+const API_BASE_URL =
+  process.env.ARCHESTRA_API_BASE_URL || `http://localhost:${config.api.port}`;
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
@@ -162,7 +169,28 @@ class McpServerModel {
       return false;
     }
 
-    // Delete the MCP server
+    // Check if this is a local server with a running K8s pod
+    if (mcpServer.catalogId) {
+      const catalogItem = await InternalMcpCatalogModel.findById(
+        mcpServer.catalogId,
+      );
+
+      // For local servers, stop and remove the K8s pod
+      if (catalogItem?.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.removeMcpServer(id);
+          console.log(`Cleaned up K8s pod for MCP server: ${mcpServer.name}`);
+        } catch (error) {
+          console.error(
+            `Failed to clean up K8s pod for MCP server ${mcpServer.name}:`,
+            error,
+          );
+          // Continue with deletion even if pod cleanup fails
+        }
+      }
+    }
+
+    // Delete the MCP server from database
     const result = await db
       .delete(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, id));
@@ -190,9 +218,6 @@ class McpServerModel {
     // Get catalog information if this server was installed from a catalog
     let catalogItem = null;
     if (mcpServer.catalogId) {
-      const { default: InternalMcpCatalogModel } = await import(
-        "./internal-mcp-catalog"
-      );
       catalogItem = await InternalMcpCatalogModel.findById(mcpServer.catalogId);
     }
 
@@ -210,7 +235,7 @@ class McpServerModel {
      */
     if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
       try {
-        const config = mcpClient.createRemoteServerConfig({
+        const config = mcpClient.createServerConfig({
           name: mcpServer.name,
           url: catalogItem.serverUrl,
           secrets,
@@ -232,59 +257,35 @@ class McpServerModel {
     }
 
     /**
-     * For other/unknown servers, return mock data
-     *
-     * Soon we will add support for all mcp servers here...
+     * For local servers, connect via the MCP proxy endpoint
      */
-    return [
-      {
-        name: "read_file",
-        description:
-          "Read the complete contents of a file from the file system",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the file to read",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "list_directory",
-        description: "List all files and directories in a given path",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "Path to the directory to list",
-            },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "search_files",
-        description: "Search for files matching a pattern",
-        inputSchema: {
-          type: "object",
-          properties: {
-            pattern: {
-              type: "string",
-              description: "Glob pattern to match files",
-            },
-            base_path: {
-              type: "string",
-              description: "Base directory to search from",
-            },
-          },
-          required: ["pattern"],
-        },
-      },
-    ];
+    if (catalogItem?.serverType === "local") {
+      try {
+        const config = mcpClient.createServerConfig({
+          name: mcpServer.name,
+          url: `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
+          secrets, // Local servers might still use secrets for API keys etc.
+        });
+        const tools = await mcpClient.connectAndGetTools(config);
+        // Transform to ensure description is always a string
+        return tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description || `Tool: ${tool.name}`,
+          inputSchema: tool.inputSchema,
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to get tools from local MCP server ${mcpServer.name}:`,
+          error,
+        );
+        throw error;
+      }
+    }
+
+    /**
+     * For other/unknown servers, return empty array
+     */
+    return [];
   }
 
   /**
@@ -307,13 +308,10 @@ class McpServerModel {
     // For other remote servers, check if we can connect using catalog info
     if (catalogId) {
       try {
-        const { default: InternalMcpCatalogModel } = await import(
-          "./internal-mcp-catalog"
-        );
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
 
         if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
-          const config = mcpClient.createRemoteServerConfig({
+          const config = mcpClient.createServerConfig({
             name: serverName,
             url: catalogItem.serverUrl,
             secrets,

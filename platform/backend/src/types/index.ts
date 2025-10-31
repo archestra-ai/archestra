@@ -9,6 +9,7 @@ export * from "./llm-providers";
 export * from "./mcp-catalog";
 export * from "./mcp-server";
 export * from "./mcp-server-installation-request";
+export * from "./mcp-tool-call";
 export * from "./organization";
 export * from "./team";
 export * from "./tool";

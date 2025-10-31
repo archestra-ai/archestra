@@ -57,53 +57,68 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const MESSAGES_SUFFIX = "/messages";
 
   /**
-   * Register HTTP proxy for all Anthropic API routes EXCEPT messages routes
-   * This will proxy routes like /v1/anthropic/models to https://api.anthropic.com/v1/models
+   * Register HTTP proxy for Anthropic routes
+   * Handles both patterns:
+   * - /v1/anthropic/:agentId/* -> https://api.anthropic.com/v1/* (agentId stripped if UUID)
+   * - /v1/anthropic/* -> https://api.anthropic.com/v1/* (direct proxy)
+   *
+   * Messages are excluded and handled separately below with full agent support
    */
   await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
-    prefix: API_PREFIX,
+    upstream: config.llm.anthropic.baseUrl,
+    prefix: `${API_PREFIX}`,
     rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
     preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format:
-      // /v1/anthropic/v1/messages or /v1/anthropic/v1/:agentId/messages
-      const isMessagesRoute =
-        request.method === "POST" &&
-        (request.url.match(/\/v1\/anthropic\/v1\/messages$/) ||
-          request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/));
-
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
+      // Skip messages route (we handle it specially below with full agent support)
+      if (request.method === "POST" && request.url.includes(MESSAGES_SUFFIX)) {
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            action: "skip-proxy",
+            reason: "handled-by-custom-handler",
+          },
+          "Anthropic proxy preHandler: skipping messages route",
+        );
         next(new Error("skip"));
-      } else {
-        next();
+        return;
       }
-    },
-  });
 
-  /**
-   * Register HTTP proxy for agent-specific routes EXCEPT messages routes
-   * This allows using /v1/anthropic/v1/:agentId/ as a base URL for Anthropic API calls
-   * Example: /v1/anthropic/v1/:agentId/models -> https://api.anthropic.com/v1/models
-   */
-  await fastify.register(fastifyHttpProxy, {
-    upstream: "https://api.anthropic.com",
-    prefix: `${API_PREFIX}/v1/:agentId`,
-    rewritePrefix: "/v1",
-    // Exclude messages route since we handle it specially below
-    preHandler: (request, _reply, next) => {
-      // Support Anthropic SDK standard format with agent ID
-      const isMessagesRoute =
-        request.method === "POST" &&
-        request.url.match(/\/v1\/anthropic\/v1\/[^/]+\/messages$/);
+      // Check if URL has UUID segment that needs stripping
+      const pathAfterPrefix = request.url.replace(API_PREFIX, "");
+      const uuidMatch = pathAfterPrefix.match(
+        /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i,
+      );
 
-      if (isMessagesRoute) {
-        // Skip proxy for this route - we handle it below
-        next(new Error("skip"));
+      if (uuidMatch) {
+        // Strip UUID: /v1/anthropic/:uuid/path -> /v1/anthropic/path
+        const remainingPath = uuidMatch[2] || "";
+        const originalUrl = request.raw.url;
+        request.raw.url = `${API_PREFIX}${remainingPath}`;
+
+        fastify.log.info(
+          {
+            method: request.method,
+            originalUrl,
+            rewrittenUrl: request.raw.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${remainingPath}`,
+          },
+          "Anthropic proxy preHandler: URL rewritten (UUID stripped)",
+        );
       } else {
-        next();
+        fastify.log.info(
+          {
+            method: request.method,
+            url: request.url,
+            upstream: config.llm.anthropic.baseUrl,
+            finalProxyUrl: `${config.llm.anthropic.baseUrl}/v1${pathAfterPrefix}`,
+          },
+          "Anthropic proxy preHandler: proxying request",
+        );
       }
+
+      next();
     },
   });
 
@@ -121,6 +136,18 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     }
 
     const { tools, stream } = body;
+
+    fastify.log.info(
+      {
+        agentId,
+        model: body.model,
+        stream,
+        messagesCount: body.messages.length,
+        toolsCount: tools?.length || 0,
+        maxTokens: body.max_tokens,
+      },
+      "Anthropic messages request received",
+    );
 
     let resolvedAgentId: string;
     if (agentId) {
@@ -141,6 +168,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers["user-agent"],
       );
     }
+
+    fastify.log.info(
+      { resolvedAgentId, wasExplicit: !!agentId },
+      "Agent resolved",
+    );
 
     const { "x-api-key": anthropicApiKey } = headers;
 
@@ -175,6 +207,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Inject assigned MCP tools (assigned tools take priority)
       const mergedTools = await injectTools(tools, resolvedAgentId);
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          requestToolsCount: tools?.length || 0,
+          mergedToolsCount: mergedTools.length,
+          mcpToolsInjected: mergedTools.length - (tools?.length || 0),
+        },
+        "MCP tools injected",
+      );
 
       // Convert to common format and evaluate trusted data policies
       const commonMessages = utils.adapters.anthropic.toCommonFormat(
@@ -235,6 +277,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const filteredMessages = utils.adapters.anthropic.applyUpdates(
         body.messages,
         toolResultUpdates,
+      );
+
+      fastify.log.info(
+        {
+          resolvedAgentId,
+          originalMessagesCount: body.messages.length,
+          filteredMessagesCount: filteredMessages.length,
+          toolResultUpdatesCount: toolResultUpdates.length,
+        },
+        "Messages filtered after trusted data evaluation",
       );
 
       if (stream) {
@@ -531,9 +583,37 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 input: Record<string, unknown>;
               }>,
             );
+
+            fastify.log.info(
+              {
+                resolvedAgentId,
+                toolCalls: commonToolCalls.map((tc) => ({
+                  id: tc.id,
+                  name: tc.name,
+                  argumentKeys: Object.keys(tc.arguments),
+                })),
+              },
+              "Executing MCP tool calls (non-streaming)",
+            );
+
             const mcpResults = await utils.tools.executeMcpToolCalls(
               commonToolCalls,
               resolvedAgentId,
+            );
+
+            fastify.log.info(
+              {
+                resolvedAgentId,
+                results: mcpResults.map((r) => ({
+                  id: r.id,
+                  isError: r.isError,
+                  contentLength:
+                    typeof r.content === "string"
+                      ? r.content.length
+                      : JSON.stringify(r.content).length,
+                })),
+              },
+              "MCP tool calls completed (non-streaming)",
             );
 
             if (mcpResults.length > 0) {
@@ -648,13 +728,16 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Anthropic SDK standard format (with /v1 prefix)
    * An agentId is provided -- agent is fetched based on the agentId
+   *
+   * NOTE: this is really only needed for n8n compatibility...
    */
   fastify.post(
-    `${API_PREFIX}/v1/:agentId${MESSAGES_SUFFIX}`,
+    `${API_PREFIX}/:agentId/v1${MESSAGES_SUFFIX}`,
     {
       schema: {
         operationId: RouteId.AnthropicMessagesWithAgent,
-        description: "Send a message to Anthropic using a specific agent",
+        description:
+          "Send a message to Anthropic using a specific agent (n8n URL format)",
         tags: ["llm-proxy"],
         params: z.object({
           agentId: UuidIdSchema,

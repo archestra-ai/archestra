@@ -125,8 +125,11 @@ export const RouteId = {
   GetMcpServers: "getMcpServers",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
+  GetMcpServerLogs: "getMcpServerLogs",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  RestartMcpServer: "restartMcpServer",
+  GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -163,6 +166,10 @@ export const RouteId = {
   // Interaction Routes
   GetInteractions: "getInteractions",
   GetInteraction: "getInteraction",
+
+  // MCP Tool Call Routes
+  GetMcpToolCalls: "getMcpToolCalls",
+  GetMcpToolCall: "getMcpToolCall",
 
   // Autonomy Policy Routes
   GetOperators: "getOperators",

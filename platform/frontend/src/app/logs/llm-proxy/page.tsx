@@ -7,11 +7,11 @@ import {
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/server-utils";
 import { DEFAULT_TABLE_LIMIT } from "@/lib/utils";
-import LogsPage from "./page.client";
+import LlmProxyLogsPage from "./page.client";
 
 export const dynamic = "force-dynamic";
 
-export default async function LogsPageServer() {
+export default async function LlmProxyLogsPageServer() {
   let initialData: {
     interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAgentsResponses["200"];
@@ -59,5 +59,5 @@ export default async function LogsPageServer() {
     console.error(error);
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
-  return <LogsPage initialData={initialData} />;
+  return <LlmProxyLogsPage initialData={initialData} />;
 }

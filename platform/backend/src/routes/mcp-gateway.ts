@@ -91,6 +91,16 @@ async function createAgentServer(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
       try {
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            argumentKeys: args ? Object.keys(args) : [],
+            argumentsSize: JSON.stringify(args || {}).length,
+          },
+          "MCP gateway tool call received",
+        );
+
         // Generate a unique ID for this tool call
         const toolCallId = `mcp-call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -114,11 +124,33 @@ async function createAgentServer(
         const result = results[0];
 
         if (result.isError) {
+          logger.info(
+            {
+              agentId,
+              toolName: name,
+              error: result.error,
+            },
+            "MCP gateway tool call failed",
+          );
+
           throw {
             code: -32603, // Internal error
             message: result.error || "Tool execution failed",
           };
         }
+
+        logger.info(
+          {
+            agentId,
+            toolName: name,
+            resultContentLength: Array.isArray(result.content)
+              ? JSON.stringify(result.content).length
+              : typeof result.content === "string"
+                ? result.content.length
+                : JSON.stringify(result.content).length,
+          },
+          "MCP gateway tool call completed",
+        );
 
         // Transform CommonToolResult to MCP response format
         return {
@@ -294,6 +326,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           method: request.body?.method,
           isInitialize,
           bodyKeys: Object.keys(request.body || {}),
+          bodySize: JSON.stringify(request.body || {}).length,
           allHeaders: request.headers,
         },
         "MCP gateway POST request received",

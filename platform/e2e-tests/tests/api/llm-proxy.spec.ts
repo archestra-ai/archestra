@@ -218,7 +218,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 
     // 2. Send initial request to register the tool and get the toolId
     const initialResponse = await request.post(
-      `${API_BASE_URL}/v1/anthropic/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/${agentId}/v1/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,
@@ -297,7 +297,7 @@ test.describe('LLM Proxy - Anthropic', () => {
 
     // 5. Send a request with untrusted data
     const response = await request.post(
-      `${API_BASE_URL}/v1/anthropic/${agentId}/messages`,
+      `${API_BASE_URL}/v1/anthropic/${agentId}/v1/messages`,
       {
         headers: {
           'x-api-key': ANTHROPIC_TEST_CASE_1_HEADER,

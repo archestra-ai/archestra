@@ -277,6 +277,28 @@ class McpServerRuntimeManager {
   }
 
   /**
+   * Check if an MCP server uses streamable HTTP transport
+   */
+  async usesStreamableHttp(mcpServerId: string): Promise<boolean> {
+    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    if (!k8sPod) {
+      return false;
+    }
+    return await k8sPod.usesStreamableHttp();
+  }
+
+  /**
+   * Get the HTTP endpoint URL for a streamable-http server
+   */
+  getHttpEndpointUrl(mcpServerId: string): string | undefined {
+    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    if (!k8sPod) {
+      return undefined;
+    }
+    return k8sPod.getHttpEndpointUrl();
+  }
+
+  /**
    * Get logs from an MCP server pod
    */
   async getMcpServerLogs(

@@ -257,13 +257,34 @@ class McpServerModel {
     }
 
     /**
-     * For local servers, connect via the MCP proxy endpoint
+     * For local servers, check transport type and use appropriate endpoint
      */
     if (catalogItem?.serverType === "local") {
       try {
+        // Check if this is a streamable-http server
+        const usesStreamableHttp =
+          await McpServerRuntimeManager.usesStreamableHttp(mcpServer.id);
+
+        let url: string;
+        if (usesStreamableHttp) {
+          // Use the HTTP endpoint URL for streamable-http servers
+          const httpEndpointUrl = McpServerRuntimeManager.getHttpEndpointUrl(
+            mcpServer.id,
+          );
+          if (!httpEndpointUrl) {
+            throw new Error(
+              `No HTTP endpoint URL found for streamable-http server ${mcpServer.name}`,
+            );
+          }
+          url = httpEndpointUrl;
+        } else {
+          // Use the MCP proxy endpoint for stdio servers
+          url = `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`;
+        }
+
         const config = mcpClient.createServerConfig({
           name: mcpServer.name,
-          url: `${API_BASE_URL}/mcp_proxy/${mcpServer.id}`, // Use the MCP proxy endpoint for local servers
+          url,
           secrets, // Local servers might still use secrets for API keys etc.
         });
         const tools = await mcpClient.connectAndGetTools(config);

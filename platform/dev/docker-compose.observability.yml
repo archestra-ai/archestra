@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # Jaeger for distributed tracing UI
@@ -6,9 +6,9 @@ services:
     image: jaegertracing/all-in-one:latest
     container_name: archestra-jaeger
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "4317:4317"    # OTLP gRPC receiver
-      - "4318:4318"    # OTLP HTTP receiver
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
@@ -23,8 +23,8 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4319:4317"    # OTLP gRPC (mapped to 4319 to avoid conflict with Jaeger)
-      - "4320:4318"    # OTLP HTTP (mapped to 4320 to avoid conflict with Jaeger)
+      - "4319:4317" # OTLP gRPC (mapped to 4319 to avoid conflict with Jaeger)
+      - "4320:4318" # OTLP HTTP (mapped to 4320 to avoid conflict with Jaeger)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -42,10 +42,10 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-storage:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -56,7 +56,7 @@ services:
     image: grafana/grafana:latest
     container_name: archestra-grafana
     ports:
-      - "3001:3000"
+      - "3002:3000"
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

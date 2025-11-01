@@ -55,7 +55,7 @@ tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 
 # Testing with WireMock
-tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
+tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
 # Observability
 tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)

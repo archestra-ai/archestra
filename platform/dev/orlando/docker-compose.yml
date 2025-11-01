@@ -5,7 +5,7 @@ services:
     image: "wiremock/wiremock:3.13.1"
     container_name: orlando-wiremock
     ports:
-      - "9090:8080"
+      - "9091:8080"
     volumes:
       - ./wiremock-mappings.json:/home/wiremock/mappings/mappings.json:ro
     entrypoint:

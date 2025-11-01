@@ -17,7 +17,7 @@ export enum RouteCategory {
  *
  * @param provider - The LLM provider (openai, gemini, or anthropic)
  * @param category - The route category (defaults to llm-proxy)
- * @param agent - The agent object (optional, if provided will add agent.name and agent labels)
+ * @param agent - The agent object (optional, if provided will add agent.id, agent.name and agent labels)
  */
 export function sprinkleTraceAttributes(
   provider: SupportedProvider,
@@ -35,6 +35,7 @@ export function sprinkleTraceAttributes(
 
   // Set agent attributes if agent is provided
   if (agent) {
+    span.setAttribute("agent.id", agent.id);
     span.setAttribute("agent.name", agent.name);
 
     // Add all agent labels as attributes with agent.<key>=<value> format

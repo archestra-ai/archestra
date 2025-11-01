@@ -236,59 +236,90 @@ function Agents({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="team-filter">Filter by Team</Label>
-                <Select value={teamFilter} onValueChange={setTeamFilter}>
-                  <SelectTrigger id="team-filter">
-                    <SelectValue placeholder="All teams" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All teams</SelectItem>
-                    {teams?.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select value={teamFilter} onValueChange={setTeamFilter}>
+                    <SelectTrigger id="team-filter">
+                      <SelectValue placeholder="All teams" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams?.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {teamFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setTeamFilter("")}
+                      className="shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="label-key-filter">Filter by Label Key</Label>
-                <Select
-                  value={labelKeyFilter}
-                  onValueChange={setLabelKeyFilter}
-                >
-                  <SelectTrigger id="label-key-filter">
-                    <SelectValue placeholder="All label keys" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All label keys</SelectItem>
-                    {availableKeys.map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {key}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={labelKeyFilter}
+                    onValueChange={setLabelKeyFilter}
+                  >
+                    <SelectTrigger id="label-key-filter">
+                      <SelectValue placeholder="All label keys" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableKeys.map((key) => (
+                        <SelectItem key={key} value={key}>
+                          {key}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {labelKeyFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setLabelKeyFilter("")}
+                      className="shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="label-value-filter">
-                  Filter by Label Value
-                </Label>
-                <Select
-                  value={labelValueFilter}
-                  onValueChange={setLabelValueFilter}
-                >
-                  <SelectTrigger id="label-value-filter">
-                    <SelectValue placeholder="All label values" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All label values</SelectItem>
-                    {availableValues.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {value}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="label-value-filter">Filter by Label Value</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={labelValueFilter}
+                    onValueChange={setLabelValueFilter}
+                  >
+                    <SelectTrigger id="label-value-filter">
+                      <SelectValue placeholder="All label values" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableValues.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {labelValueFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setLabelValueFilter("")}
+                      className="shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
             {(nameFilter ||

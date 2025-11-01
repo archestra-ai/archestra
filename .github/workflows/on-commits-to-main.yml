@@ -38,7 +38,13 @@ jobs:
         with:
           context: ./platform
           file: ./platform/Dockerfile
+          # NOTE: only build on amd64 for now as our staging environment runs on amd64
+          # if we will need to support arm64, we should follow the pattern we do in
+          # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
+          # on both amd64 and arm64 using native arch (to massively speed up the builds)
           platforms: linux/amd64
+          build-args: |
+            VERSION=${{ github.sha }}
           push: true
           tags: |
             europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}

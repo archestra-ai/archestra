@@ -149,6 +149,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Database schema: `label_keys`, `label_values`, `agent_labels` tables
 - Keys and values stored separately for consistency and reuse
 - One value per key per agent (updating same key replaces value)
+- Labels returned in alphabetical order by key for consistency
 - API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
 
 **MCP Server Installation Requests**:

@@ -1,4 +1,3 @@
-import { describe, expect, test } from "vitest";
 import { applyResponseModifierTemplate } from "./templating";
 
 describe("applyResponseModifierTemplate", () => {

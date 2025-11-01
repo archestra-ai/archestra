@@ -4,7 +4,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { beforeEach, describe, expect, test } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";

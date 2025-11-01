@@ -13,11 +13,10 @@ export const oauthConfigSchema = z.object({
 export const formSchema = z
   .object({
     name: z.string().min(1, "Name is required"),
-    label: z.string().min(1, "Label is required"),
     serverType: z.enum(["remote", "local"]),
     serverUrl: z
       .string()
-      .url("Must be a valid URL")
+      .url({ message: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
     authMethod: z.enum(["none", "pat", "oauth"]),
@@ -49,7 +48,6 @@ export type McpCatalogFormValues = z.infer<typeof formSchema>;
 export type McpCatalogApiData = {
   name: string;
   serverType: "remote" | "local";
-  label?: string;
   serverUrl?: string;
   localConfig?: z.infer<typeof LocalConfigSchema>;
   oauthConfig?: {

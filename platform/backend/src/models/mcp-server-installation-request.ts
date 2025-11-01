@@ -138,8 +138,7 @@ class McpServerInstallationRequestModel {
 
           // Create internal catalog item from external server data
           await InternalMcpCatalogModel.create({
-            label: externalServer.display_name || externalServer.name,
-            name: externalServer.name,
+            name: externalServer.display_name || externalServer.name,
             version: undefined,
             serverType: externalServer.server.type,
             serverUrl:
@@ -160,7 +159,6 @@ class McpServerInstallationRequestModel {
 
         if (config.type === "remote") {
           await InternalMcpCatalogModel.create({
-            label: config.label,
             name: config.name,
             version: config.version,
             serverType: "remote",
@@ -171,7 +169,6 @@ class McpServerInstallationRequestModel {
           });
         } else if (config.type === "local") {
           await InternalMcpCatalogModel.create({
-            label: config.label,
             name: config.name,
             version: config.version,
             serverType: "local",

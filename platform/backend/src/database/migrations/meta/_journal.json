@@ -267,6 +267,13 @@
       "when": 1761941802916,
       "tag": "0037_fluffy_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1762001426416,
+      "tag": "0038_great_gamma_corps",
+      "breakpoints": true
     }
   ]
 }

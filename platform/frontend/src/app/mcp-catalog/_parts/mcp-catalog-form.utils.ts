@@ -13,10 +13,6 @@ export function transformFormToApiData(
     serverType: values.serverType,
   };
 
-  if (values.label) {
-    data.label = values.label;
-  }
-
   if (values.serverUrl) {
     data.serverUrl = values.serverUrl;
   }
@@ -76,7 +72,7 @@ export function transformFormToApiData(
       : ["read", "write"];
 
     data.oauthConfig = {
-      name: values.label, // Use label as OAuth provider name
+      name: values.name, // Use name as OAuth provider name
       server_url: values.serverUrl || "", // Use serverUrl as OAuth server URL
       client_id: values.oauthConfig.client_id || "",
       client_secret: values.oauthConfig.client_secret || undefined,
@@ -187,7 +183,6 @@ export function transformCatalogItemToFormValues(
 
   return {
     name: item.name,
-    label: item.label || item.name,
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,

@@ -52,7 +52,6 @@ export function McpCatalogForm({
       ? transformCatalogItemToFormValues(initialValues)
       : {
           name: "",
-          label: "",
           serverType: serverType,
           serverUrl: "",
           authMethod: "none",
@@ -111,32 +110,9 @@ export function McpCatalogForm({
                   Name <span className="text-destructive">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="e.g., github"
-                    className="font-mono"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Unique identifier for this server
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="label"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Label <span className="text-destructive">*</span>
-                </FormLabel>
-                <FormControl>
                   <Input placeholder="e.g., GitHub MCP Server" {...field} />
                 </FormControl>
-                <FormDescription>Display name shown in the UI</FormDescription>
+                <FormDescription>Display name for this server</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

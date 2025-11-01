@@ -4395,7 +4395,6 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4468,7 +4467,6 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
-        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -4558,7 +4556,6 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4710,7 +4707,6 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4783,7 +4779,6 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
-        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -4884,7 +4879,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;

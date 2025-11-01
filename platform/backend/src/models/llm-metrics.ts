@@ -42,10 +42,16 @@ export function reportLLMTokens(
   outputTokens?: number,
 ): void {
   if (inputTokens && inputTokens > 0) {
-    llmTokensCounter.inc({ provider, agent, agent_name: agentName, type: "input" }, inputTokens);
+    llmTokensCounter.inc(
+      { provider, agent, agent_name: agentName, type: "input" },
+      inputTokens,
+    );
   }
   if (outputTokens && outputTokens > 0) {
-    llmTokensCounter.inc({ provider, agent, agent_name: agentName, type: "output" }, outputTokens);
+    llmTokensCounter.inc(
+      { provider, agent, agent_name: agentName, type: "output" },
+      outputTokens,
+    );
   }
 }
 

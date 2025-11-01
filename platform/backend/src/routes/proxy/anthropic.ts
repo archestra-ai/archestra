@@ -165,7 +165,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const resolvedAgentId = resolvedAgent.id;
 
     // Add OpenTelemetry trace attributes
-    utils.tracing.sprinkleTraceAttributes("anthropic", utils.tracing.RouteCategory.LLM_PROXY, resolvedAgent);
+    utils.tracing.sprinkleTraceAttributes(
+      "anthropic",
+      utils.tracing.RouteCategory.LLM_PROXY,
+      resolvedAgent,
+    );
 
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
@@ -177,7 +181,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch("anthropic", resolvedAgentId, resolvedAgent.name),
+      fetch: getObservableFetch(
+        "anthropic",
+        resolvedAgentId,
+        resolvedAgent.name,
+      ),
     });
 
     try {
@@ -456,7 +464,13 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (usage) {
           const { input, output } =
             utils.adapters.anthropic.getUsageTokens(usage);
-          reportLLMTokens("anthropic", resolvedAgentId, resolvedAgent.name, input, output);
+          reportLLMTokens(
+            "anthropic",
+            resolvedAgentId,
+            resolvedAgent.name,
+            input,
+            output,
+          );
         }
 
         // Store the complete interaction

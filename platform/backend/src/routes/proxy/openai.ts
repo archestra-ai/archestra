@@ -175,7 +175,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const resolvedAgentId = resolvedAgent.id;
 
     // Add OpenTelemetry trace attributes
-    utils.tracing.sprinkleTraceAttributes("openai", utils.tracing.RouteCategory.LLM_PROXY, resolvedAgent);
+    utils.tracing.sprinkleTraceAttributes(
+      "openai",
+      utils.tracing.RouteCategory.LLM_PROXY,
+      resolvedAgent,
+    );
 
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
@@ -188,7 +192,11 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgentId, resolvedAgent.name),
+          fetch: getObservableFetch(
+            "openai",
+            resolvedAgentId,
+            resolvedAgent.name,
+          ),
         });
 
     try {

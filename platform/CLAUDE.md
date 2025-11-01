@@ -111,7 +111,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes for Jaeger filtering.
 
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) dynamically include all agent labels as separate metric dimensions. Metrics must be initialized at startup with `initializeMetrics(labelKeys)` using keys from `AgentLabelModel.getAllKeys()`.
 
 **Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Jaeger, Prometheus, and Grafana with pre-configured datasources.
 

@@ -38,7 +38,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Build Docker image
         uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2

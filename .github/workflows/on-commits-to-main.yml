@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  id-token: write
-
 concurrency:
   # Cancel any running workflow when new commits are pushed to main.
   group: on-commits-to-main
@@ -16,19 +12,41 @@ concurrency:
 
 jobs:
   build-dev-image:
-    name: Build Dev Docker Image
+    name: Build Platform Dev Docker Image
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
-    uses: ./.github/workflows/build-dockerhub-image.yml
-    with:
-      image_directory: platform
-      image_name: platform
-      version: dev
-      push_image: true
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      id-token: write # Required for Workload Identity Federation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
+
+      - name: Build Docker image
+        uses: useblacksmith/build-push-action@30c71162f16ea2c27c3e21523255d209b8b538c1 # v2
+        with:
+          context: ./platform
+          file: ./platform/Dockerfile
+          # NOTE: only build on amd64 for now as our staging environment runs on amd64
+          # if we will need to support arm64, we should follow the pattern we do in
+          # .github/workflows/build-dockerhub-image.yml and do a matrix build so that we are build
+          # on both amd64 and arm64 using native arch (to massively speed up the builds)
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ github.sha }}
+          push: true
+          tags: |
+            europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }}
 
   deploy-to-staging:
     name: Deploy to staging
@@ -36,7 +54,7 @@ jobs:
     needs: build-dev-image
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Required for Workload Identity Federation
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -52,24 +70,23 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin
+
       - name: Configure kubectl
         run: |
           gcloud container clusters get-credentials archestra-staging \
             --zone us-central1-a \
             --project friendly-path-465518-r6
 
-      - name: Set up Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
-        with:
-          version: "latest"
-
       - name: Deploy to staging
         run: |
           helm upgrade archestra-platform \
-            helm \
+            ./platform/helm \
             --install \
             --namespace archestra \
             --create-namespace \
-            --set archestra.image=archestra/platform:dev \
+            --set archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${{ github.sha }} \
             --set archestra.databaseUrl="${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}" \
             --wait

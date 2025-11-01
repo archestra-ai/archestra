@@ -30,7 +30,7 @@ class AgentModel {
       ...createdAgent,
       tools: [],
       teams: teams || [],
-      labels: labels || [],
+      labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
     };
   }
 

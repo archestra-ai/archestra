@@ -249,4 +249,96 @@ describe("AgentModel", () => {
       expect(Array.isArray(foundAgent?.teams)).toBe(true);
     });
   });
+
+  describe("Label Ordering", () => {
+    test("labels are returned in alphabetical order by key", async () => {
+      // Create an agent with labels in non-alphabetical order
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        labels: [
+          { key: "region", value: "us-west-2" },
+          { key: "environment", value: "production" },
+          { key: "team", value: "engineering" },
+        ],
+      });
+
+      // Verify labels are returned in alphabetical order
+      expect(agent.labels).toHaveLength(3);
+      expect(agent.labels[0].key).toBe("environment");
+      expect(agent.labels[0].value).toBe("production");
+      expect(agent.labels[1].key).toBe("region");
+      expect(agent.labels[1].value).toBe("us-west-2");
+      expect(agent.labels[2].key).toBe("team");
+      expect(agent.labels[2].value).toBe("engineering");
+    });
+
+    test("findById returns labels in alphabetical order", async () => {
+      // Create an agent with labels
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        labels: [
+          { key: "zebra", value: "last" },
+          { key: "alpha", value: "first" },
+          { key: "beta", value: "second" },
+        ],
+      });
+
+      // Retrieve the agent by ID
+      const foundAgent = await AgentModel.findById(agent.id);
+
+      if (!foundAgent) {
+        throw new Error("Agent not found");
+      }
+
+      expect(foundAgent.labels).toHaveLength(3);
+      expect(foundAgent.labels[0].key).toBe("alpha");
+      expect(foundAgent.labels[1].key).toBe("beta");
+      expect(foundAgent.labels[2].key).toBe("zebra");
+    });
+
+    test("findAll returns labels in alphabetical order for all agents", async () => {
+      // Create multiple agents with labels
+      await AgentModel.create({
+        name: "Agent 1",
+        teams: [],
+        labels: [
+          { key: "environment", value: "prod" },
+          { key: "application", value: "web" },
+        ],
+      });
+
+      await AgentModel.create({
+        name: "Agent 2",
+        teams: [],
+        labels: [
+          { key: "zone", value: "us-east" },
+          { key: "deployment", value: "blue" },
+        ],
+      });
+
+      const agents = await AgentModel.findAll();
+
+      expect(agents).toHaveLength(2);
+
+      // Check first agent's labels are sorted
+      const agent1 = agents.find((a) => a.name === "Agent 1");
+      if (!agent1) {
+        throw new Error("Agent 1 not found");
+      }
+
+      expect(agent1.labels[0].key).toBe("application");
+      expect(agent1.labels[1].key).toBe("environment");
+
+      // Check second agent's labels are sorted
+      const agent2 = agents.find((a) => a.name === "Agent 2");
+      if (!agent2) {
+        throw new Error("Agent 2 not found");
+      }
+
+      expect(agent2.labels[0].key).toBe("deployment");
+      expect(agent2.labels[1].key).toBe("zone");
+    });
+  });
 });

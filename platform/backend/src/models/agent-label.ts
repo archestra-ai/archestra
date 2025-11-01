@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentLabelWithDetails } from "@/types/label";
 
@@ -25,7 +25,8 @@ class AgentLabelModel {
         schema.labelValueTable,
         eq(schema.agentLabelTable.valueId, schema.labelValueTable.id),
       )
-      .where(eq(schema.agentLabelTable.agentId, agentId));
+      .where(eq(schema.agentLabelTable.agentId, agentId))
+      .orderBy(asc(schema.labelKeyTable.key));
 
     return rows.map((row) => ({
       keyId: row.keyId,
@@ -90,6 +91,19 @@ class AgentLabelModel {
     agentId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
+    // Process labels outside of transaction to avoid deadlocks
+    const labelInserts: { agentId: string; keyId: string; valueId: string }[] =
+      [];
+
+    if (labels.length > 0) {
+      // Process each label to get or create keys/values
+      for (const label of labels) {
+        const keyId = await AgentLabelModel.getOrCreateKey(label.key);
+        const valueId = await AgentLabelModel.getOrCreateValue(label.value);
+        labelInserts.push({ agentId, keyId, valueId });
+      }
+    }
+
     await db.transaction(async (tx) => {
       // Delete all existing labels for this agent
       await tx
@@ -97,16 +111,7 @@ class AgentLabelModel {
         .where(eq(schema.agentLabelTable.agentId, agentId));
 
       // Insert new labels (if any provided)
-      if (labels.length > 0) {
-        // Process each label to get or create keys/values
-        const labelInserts = await Promise.all(
-          labels.map(async (label) => {
-            const keyId = await AgentLabelModel.getOrCreateKey(label.key);
-            const valueId = await AgentLabelModel.getOrCreateValue(label.value);
-            return { agentId, keyId, valueId };
-          }),
-        );
-
+      if (labelInserts.length > 0) {
         await tx.insert(schema.agentLabelTable).values(labelInserts);
       }
     });

@@ -1,4 +1,4 @@
-name: Deploy to Staging on Main
+name: On commits to main
 
 on:
   push:
@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  # Cancel any running workflow when new commits are pushed to main.
+  group: on-commits-to-main
+  cancel-in-progress: true
 
 jobs:
   build-dev-image:
@@ -28,7 +33,7 @@ jobs:
 
   deploy-to-staging:
     name: Deploy to staging
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build-dev-image
     permissions:
       contents: read

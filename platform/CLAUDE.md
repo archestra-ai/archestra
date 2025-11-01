@@ -31,6 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **Grafana**: <http://localhost:3001/> (metrics and trace visualization, manual start via Tilt)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
@@ -54,6 +55,9 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 
 # Testing with WireMock
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
+
+# Observability
+tilt trigger grafana                 # Start Grafana for trace/metrics visualization
 ```
 
 ## Environment Variables

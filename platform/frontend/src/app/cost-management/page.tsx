@@ -2,7 +2,7 @@
 
 import { AlertCircle, Plus, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,11 @@ import {
   useTokenPrices,
   useUpdateTokenPrices,
 } from "@/lib/token-pricing.query";
+import {
+  type UsagePeriod,
+  useCostSummary,
+  useUsageBreakdown,
+} from "@/lib/usage-analytics.query";
 
 interface TeamBudget {
   id: string;
@@ -69,7 +74,7 @@ export default function CostManagementPage() {
   const [agentBudgets, setAgentBudgets] = useState<AgentBudget[]>([]);
   const [toolCallLimits, setToolCallLimits] = useState<ToolCallLimit[]>([]);
   const [autoShutdown, setAutoShutdown] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState("daily");
+  const [selectedPeriod, setSelectedPeriod] = useState<UsagePeriod>("daily");
   const { data: tokenPrices = [], isLoading: isLoadingPrices } =
     useTokenPrices();
   const updateTokenPricesMutation = useUpdateTokenPrices();
@@ -77,8 +82,20 @@ export default function CostManagementPage() {
     {},
   );
 
-  const currentSpend = 42.58;
-  const budgetAmount = parseFloat(orgBudgetLimit) || 1000;
+  // Fetch real usage data
+  const { data: teamBreakdown = [], isLoading: isLoadingTeams } =
+    useUsageBreakdown(selectedPeriod, "team");
+  const { data: agentBreakdown = [], isLoading: isLoadingAgents } =
+    useUsageBreakdown(selectedPeriod, "agent");
+  const { data: providerBreakdown = [], isLoading: isLoadingProviders } =
+    useUsageBreakdown(selectedPeriod, "provider");
+  const { data: modelBreakdown = [], isLoading: isLoadingModels } =
+    useUsageBreakdown(selectedPeriod, "model");
+  const { data: costSummary } = useCostSummary(selectedPeriod);
+
+  const currentSpend = costSummary?.currentSpend || 0;
+  const budgetAmount =
+    parseFloat(orgBudgetLimit) || costSummary?.budgetLimit || 1000;
   const spendPercentage = (currentSpend / budgetAmount) * 100;
 
   // Function to update URL when tab changes
@@ -163,37 +180,6 @@ export default function CostManagementPage() {
     );
   };
 
-  const mockUsageData = {
-    teams: [
-      { name: "Engineering", cost: 22.15, percentage: 52.0 },
-      { name: "Support", cost: 15.23, percentage: 35.8 },
-      { name: "Marketing", cost: 5.2, percentage: 12.2 },
-    ],
-    agents: [
-      {
-        name: "Customer Support Bot",
-        cost: 15.23,
-        calls: 1250,
-        tokens: 125000,
-      },
-      { name: "Code Review Assistant", cost: 12.45, calls: 890, tokens: 98500 },
-      { name: "Data Analyst", cost: 8.67, calls: 456, tokens: 67800 },
-      { name: "Content Generator", cost: 6.23, calls: 234, tokens: 45200 },
-    ],
-    providers: [
-      { name: "OpenAI", cost: 28.45, percentage: 66.8 },
-      { name: "Anthropic", cost: 10.23, percentage: 24.0 },
-      { name: "Gemini", cost: 3.9, percentage: 9.2 },
-    ],
-    models: [
-      { name: "gpt-4-turbo", cost: 18.23, tokens: 182300, percentage: 42.8 },
-      { name: "gpt-3.5-turbo", cost: 10.22, tokens: 511000, percentage: 24.0 },
-      { name: "claude-3-opus", cost: 7.45, tokens: 49667, percentage: 17.5 },
-      { name: "claude-3-sonnet", cost: 2.78, tokens: 46333, percentage: 6.5 },
-      { name: "gemini-1.5-pro", cost: 3.9, tokens: 78000, percentage: 9.2 },
-    ],
-  };
-
   return (
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">
@@ -204,6 +190,19 @@ export default function CostManagementPage() {
           <p className="text-sm text-muted-foreground">
             Monitor and control your AI agent spending with budget limits and
             usage analytics
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Note: All limits and statistics are hourly. For long-term
+            observability, refer to the{" "}
+            <a
+              href="https://www.archestra.ai/docs/platform-observability"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              platform observability documentation
+            </a>
+            .
           </p>
         </div>
       </div>
@@ -225,10 +224,9 @@ export default function CostManagementPage() {
             onValueChange={handleTabChange}
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="usage">Usage Breakdown</TabsTrigger>
-              <TabsTrigger value="llm-limits">LLM Limits</TabsTrigger>
-              <TabsTrigger value="tool-limits">Tool Call Limits</TabsTrigger>
+              <TabsTrigger value="limits">Limits</TabsTrigger>
               <TabsTrigger value="token-pricing">Token Pricing</TabsTrigger>
             </TabsList>
 
@@ -240,32 +238,42 @@ export default function CostManagementPage() {
                     <CardDescription>Team spending breakdown</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {mockUsageData.teams.map((team) => (
-                      <div
-                        key={team.name}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium">
-                              {team.name}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              ${team.cost.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Progress
-                              value={team.percentage}
-                              className="flex-1 mr-2"
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {team.percentage.toFixed(1)}%
-                            </span>
+                    {isLoadingTeams ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        Loading team data...
+                      </div>
+                    ) : teamBreakdown.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No team usage data available for this period.
+                      </div>
+                    ) : (
+                      teamBreakdown.map((team) => (
+                        <div
+                          key={team.id}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium">
+                                {team.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                ${team.cost.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Progress
+                                value={team.percentage}
+                                className="flex-1 mr-2"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {team.percentage.toFixed(1)}%
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </CardContent>
                 </Card>
 
@@ -275,35 +283,47 @@ export default function CostManagementPage() {
                     <CardDescription>Top spending agents today</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {mockUsageData.agents.map((agent) => (
-                      <div
-                        key={agent.name}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium">
-                              {agent.name}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              ${agent.cost.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Progress
-                              value={(agent.cost / currentSpend) * 100}
-                              className="flex-1 mr-2"
-                            />
-                            <div className="text-xs text-muted-foreground text-right">
-                              <div>{agent.calls} calls</div>
-                              <div>
-                                {(agent.tokens / 1000).toFixed(1)}K tokens
+                    {isLoadingAgents ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        Loading agent data...
+                      </div>
+                    ) : agentBreakdown.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No agent usage data available for this period.
+                      </div>
+                    ) : (
+                      agentBreakdown.slice(0, 4).map((agent) => (
+                        <div
+                          key={agent.id}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium">
+                                {agent.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                ${agent.cost.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Progress
+                                value={(agent.cost / currentSpend) * 100}
+                                className="flex-1 mr-2"
+                              />
+                              <div className="text-xs text-muted-foreground text-right">
+                                {agent.calls && <div>{agent.calls} calls</div>}
+                                {agent.tokens && (
+                                  <div>
+                                    {(agent.tokens / 1000).toFixed(1)}K tokens
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -317,32 +337,42 @@ export default function CostManagementPage() {
                     <CardDescription>LLM provider breakdown</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {mockUsageData.providers.map((provider) => (
-                      <div
-                        key={provider.name}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium">
-                              {provider.name}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              ${provider.cost.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Progress
-                              value={provider.percentage}
-                              className="flex-1 mr-2"
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {provider.percentage.toFixed(1)}%
-                            </span>
+                    {isLoadingProviders ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        Loading provider data...
+                      </div>
+                    ) : providerBreakdown.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No provider usage data available for this period.
+                      </div>
+                    ) : (
+                      providerBreakdown.map((provider) => (
+                        <div
+                          key={provider.id}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium">
+                                {provider.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                ${provider.cost.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Progress
+                                value={provider.percentage}
+                                className="flex-1 mr-2"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {provider.percentage.toFixed(1)}%
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </CardContent>
                 </Card>
 
@@ -354,10 +384,18 @@ export default function CostManagementPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {mockUsageData.models.map((model) => (
+                    {isLoadingModels ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        Loading model data...
+                      </div>
+                    ) : modelBreakdown.length === 0 ? (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No model usage data available for this period.
+                      </div>
+                    ) : (
+                      modelBreakdown.map((model) => (
                         <div
-                          key={model.name}
+                          key={model.id}
                           className="flex items-center justify-between"
                         >
                           <div className="flex-1">
@@ -376,21 +414,23 @@ export default function CostManagementPage() {
                               />
                               <div className="text-xs text-muted-foreground text-right">
                                 <div>{model.percentage.toFixed(1)}%</div>
-                                <div>
-                                  {(model.tokens / 1000).toFixed(1)}K tokens
-                                </div>
+                                {model.tokens && (
+                                  <div>
+                                    {(model.tokens / 1000).toFixed(1)}K tokens
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>
             </TabsContent>
 
-            <TabsContent value="llm-limits" className="space-y-4">
+            <TabsContent value="limits" className="space-y-4">
               <Card>
                 <CardHeader>
                   <CardTitle>LLM Budget Configuration</CardTitle>
@@ -404,7 +444,9 @@ export default function CostManagementPage() {
                     <Label htmlFor="budget-period">Budget Period</Label>
                     <Select
                       value={selectedPeriod}
-                      onValueChange={setSelectedPeriod}
+                      onValueChange={(value) =>
+                        setSelectedPeriod(value as UsagePeriod)
+                      }
                     >
                       <SelectTrigger id="budget-period">
                         <SelectValue />
@@ -664,15 +706,9 @@ export default function CostManagementPage() {
                       onCheckedChange={setAutoShutdown}
                     />
                   </div>
-
-                  <div className="flex justify-end">
-                    <Button>Save Configuration</Button>
-                  </div>
                 </CardContent>
               </Card>
-            </TabsContent>
 
-            <TabsContent value="tool-limits" className="space-y-4">
               <Card>
                 <CardHeader>
                   <CardTitle>Tool Call Limits Configuration</CardTitle>
@@ -1104,12 +1140,12 @@ export default function CostManagementPage() {
                       )}
                     </div>
                   </div>
-
-                  <div className="flex justify-end">
-                    <Button>Save Configuration</Button>
-                  </div>
                 </CardContent>
               </Card>
+
+              <div className="flex justify-end">
+                <Button size="lg">Save All Limits</Button>
+              </div>
             </TabsContent>
 
             <TabsContent value="token-pricing" className="space-y-4">

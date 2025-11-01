@@ -16,4 +16,5 @@ export { default as TokenPricingModel } from "./token-pricing";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
+export { default as UsageAnalyticsModel } from "./usage-analytics";
 export { default as UserModel } from "./user";

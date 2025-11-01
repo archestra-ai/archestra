@@ -368,6 +368,14 @@ const routePermissionsConfig: Partial<
     // Only org admins can update token pricing
     organization: ["update"],
   },
+  [RouteId.GetUsageBreakdown]: {
+    // Usage analytics is available to all organization members
+    organization: ["read"],
+  },
+  [RouteId.GetUsageCostSummary]: {
+    // Usage cost summary is available to all organization members
+    organization: ["read"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

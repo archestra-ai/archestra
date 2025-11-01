@@ -196,6 +196,10 @@ export const RouteId = {
   GetDualLlmResultByToolCallId: "getDualLlmResultByToolCallId",
   GetDualLlmResultsByInteraction: "getDualLlmResultsByInteraction",
 
+  // Usage Analytics Routes
+  GetUsageBreakdown: "getUsageBreakdown",
+  GetUsageCostSummary: "getUsageCostSummary",
+
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:
     "openAiChatCompletionsWithDefaultAgent",

@@ -18,3 +18,4 @@ export { default as openAiProxyRoutes } from "./proxy/openai";
 export { default as teamRoutes } from "./team";
 export { default as tokenPricingRoutes } from "./token-pricing";
 export { default as toolRoutes } from "./tool";
+export { default as usageAnalyticsRoutes } from "./usage-analytics";

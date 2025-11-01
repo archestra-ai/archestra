@@ -549,9 +549,7 @@ export function InternalMCPCatalog({
               key={item.id}
               item={itemWithLabel}
               installed={!!installedServer}
-              isInstalling={
-                installingItemId === item.id || installMutation.isPending
-              }
+              isInstalling={installingItemId === item.id}
               localInstallationStatus={
                 mcpServerInstallationStatus.data ?? undefined
               }

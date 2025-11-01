@@ -2,8 +2,9 @@ name: Deploy to Staging on Main
 
 on:
   push:
-    branches:
-      - main
+  # TODO: remove when done testing
+  # branches:
+  #   - main
 
 permissions:
   contents: read

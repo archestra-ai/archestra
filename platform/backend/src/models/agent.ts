@@ -2,10 +2,15 @@ import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent, UpdateAgent } from "@/types";
+import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
 
 class AgentModel {
-  static async create({ teams, ...agent }: InsertAgent): Promise<Agent> {
+  static async create({
+    teams,
+    labels,
+    ...agent
+  }: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values(agent)
@@ -16,10 +21,16 @@ class AgentModel {
       await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
     }
 
+    // Assign labels to the agent if provided
+    if (labels && labels.length > 0) {
+      await AgentLabelModel.syncAgentLabels(createdAgent.id, labels);
+    }
+
     return {
       ...createdAgent,
       tools: [],
       teams: teams || [],
+      labels: labels || [],
     };
   }
 
@@ -65,6 +76,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [],
+          labels: [],
         });
       }
 
@@ -76,9 +88,10 @@ class AgentModel {
 
     const agents = Array.from(agentsMap.values());
 
-    // Populate teams for each agent
+    // Populate teams and labels for each agent
     for (const agent of agents) {
       agent.teams = await AgentTeamModel.getTeamsForAgent(agent.id);
+      agent.labels = await AgentLabelModel.getLabelsForAgent(agent.id);
     }
 
     return agents;
@@ -118,11 +131,13 @@ class AgentModel {
     const tools = rows.map((row) => row.tools).filter((tool) => tool !== null);
 
     const teams = await AgentTeamModel.getTeamsForAgent(id);
+    const labels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...agent,
       tools,
       teams,
+      labels,
     };
   }
 
@@ -150,6 +165,7 @@ class AgentModel {
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamsForAgent(agent.id),
+        labels: await AgentLabelModel.getLabelsForAgent(agent.id),
       };
     }
 
@@ -158,14 +174,15 @@ class AgentModel {
       name: name || DEFAULT_AGENT_NAME,
       isDefault: true,
       teams: [],
+      labels: [],
     });
   }
 
   static async update(
     id: string,
-    { teams, ...agent }: Partial<UpdateAgent>,
+    { teams, labels, ...agent }: Partial<UpdateAgent>,
   ): Promise<Agent | null> {
-    let updatedAgent: Omit<Agent, "tools" | "teams"> | undefined;
+    let updatedAgent: Omit<Agent, "tools" | "teams" | "labels"> | undefined;
 
     // If setting isDefault to true, unset all other agents' isDefault first
     if (agent.isDefault === true) {
@@ -205,19 +222,26 @@ class AgentModel {
       await AgentTeamModel.syncAgentTeams(id, teams);
     }
 
+    // Sync label assignments if labels is provided
+    if (labels !== undefined) {
+      await AgentLabelModel.syncAgentLabels(id, labels);
+    }
+
     // Fetch the tools for the updated agent
     const tools = await db
       .select()
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.agentId, updatedAgent.id));
 
-    // Fetch current teams
+    // Fetch current teams and labels
     const currentTeams = await AgentTeamModel.getTeamsForAgent(id);
+    const currentLabels = await AgentLabelModel.getLabelsForAgent(id);
 
     return {
       ...updatedAgent,
       tools,
       teams: currentTeams,
+      labels: currentLabels,
     };
   }
 

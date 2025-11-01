@@ -201,6 +201,12 @@ const routePermissionsConfig: Partial<
     agent: ["update"],
     tool: ["update"],
   },
+  [RouteId.GetLabelKeys]: {
+    agent: ["read"],
+  },
+  [RouteId.GetLabelValues]: {
+    agent: ["read"],
+  },
   [RouteId.GetTools]: {
     tool: ["read"],
   },

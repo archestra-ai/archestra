@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { archestraCatalogSdk } from "@shared";
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type {
   InsertMcpServerInstallationRequest,
   McpServerInstallationRequest,
@@ -137,8 +138,7 @@ class McpServerInstallationRequestModel {
 
           // Create internal catalog item from external server data
           await InternalMcpCatalogModel.create({
-            label: externalServer.display_name || externalServer.name,
-            name: externalServer.name,
+            name: externalServer.display_name || externalServer.name,
             version: undefined,
             serverType: externalServer.server.type,
             serverUrl:
@@ -159,7 +159,6 @@ class McpServerInstallationRequestModel {
 
         if (config.type === "remote") {
           await InternalMcpCatalogModel.create({
-            label: config.label,
             name: config.name,
             version: config.version,
             serverType: "remote",
@@ -170,7 +169,6 @@ class McpServerInstallationRequestModel {
           });
         } else if (config.type === "local") {
           await InternalMcpCatalogModel.create({
-            label: config.label,
             name: config.name,
             version: config.version,
             serverType: "local",
@@ -180,7 +178,10 @@ class McpServerInstallationRequestModel {
       }
     } catch (error) {
       // Log the error but still approve the request - admin can handle catalog creation manually
-      console.error("Failed to create catalog item during approval:", error);
+      logger.error(
+        { err: error },
+        "Failed to create catalog item during approval:",
+      );
     }
 
     // Update the request status

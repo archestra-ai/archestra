@@ -13,11 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
-import {
-  McpCatalogForm,
-  type McpCatalogFormValues,
-  transformFormToApiData,
-} from "./mcp-catalog-form";
+import { McpCatalogForm } from "./mcp-catalog-form";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+import { transformFormToApiData } from "./mcp-catalog-form.utils";
 
 interface CreateCatalogDialogProps {
   isOpen: boolean;

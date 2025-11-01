@@ -21,7 +21,7 @@ processors:
 exporters:
   # Export to Jaeger
   otlp/jaeger:
-    endpoint: jaeger-collector:4317
+    endpoint: jaeger:4317
     tls:
       insecure: true
 

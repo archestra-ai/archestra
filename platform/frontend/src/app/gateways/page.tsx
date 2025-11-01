@@ -70,8 +70,6 @@ export default function SettingsPage() {
     LLM --> G
     LLM --> C
 
-    style GW fill:#e5e7eb,stroke:#6b7280,stroke-width:2px
-    style Orch fill:#f3f4f6,stroke:#9ca3af,stroke-width:1px
     style RightSide fill:transparent,stroke:none
     style TopRow fill:transparent,stroke:none
     style BottomRow fill:transparent,stroke:none`;

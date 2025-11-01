@@ -94,6 +94,26 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 };
 
 /**
+ * Get all available label keys
+ */
+export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<GetLabelKeysData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetLabelKeysResponses, GetLabelKeysErrors, ThrowOnError>({
+        url: '/api/agents/labels/keys',
+        ...options
+    });
+};
+
+/**
+ * Get all available label values
+ */
+export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({
+        url: '/api/agents/labels/values',
+        ...options
+    });
+};
+
+/**
  * Get all agent-tool relationships with details
  */
 export const getAllAgentTools = <ThrowOnError extends boolean = false>(options?: Options<GetAllAgentToolsData, ThrowOnError>) => {

@@ -48,10 +48,8 @@ import { UninstallServerDialog } from "./uninstall-server-dialog";
 type LocalMcpServerInstallationStatus =
   archestraApiTypes.GetMcpServerInstallationStatusResponses["200"]["localInstallationStatus"];
 
-type CatalogItemWithOptionalLabel =
-  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] & {
-    label?: string | null;
-  };
+type CatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 function InternalServerCard({
   item,
@@ -67,7 +65,7 @@ function InternalServerCard({
   onDelete,
   onViewTools,
 }: {
-  item: CatalogItemWithOptionalLabel;
+  item: CatalogItem;
   installed: boolean;
   isInstalling: boolean;
   localInstallationStatus?: LocalMcpServerInstallationStatus;
@@ -86,20 +84,18 @@ function InternalServerCard({
         <div className="flex items-start justify-between">
           <div className="min-w-0">
             <CardTitle className="text-lg truncate mb-1 flex items-center">
-              {item.label || item.name}
+              {item.name}
             </CardTitle>
-            {item.label && item.label !== item.name && (
-              <p className="text-xs text-muted-foreground font-mono truncate mb-2">
-                {item.name}
-              </p>
-            )}
             <div className="flex items-center gap-2">
               {item.oauthConfig && (
                 <Badge variant="secondary" className="text-xs">
                   OAuth
                 </Badge>
               )}
-              <TransportBadges isRemote={item.serverType === "remote"} />
+              <TransportBadges
+                isRemote={item.serverType === "remote"}
+                transportType={item.localConfig?.transportType}
+              />
             </div>
           </div>
           <div className="flex flex-wrap gap-1 items-center flex-shrink-0 mt-1">
@@ -305,27 +301,6 @@ export function InternalMCPCatalog({
             new Set(prev).add(installedServer.id),
           );
         }
-      } finally {
-        setInstallingItemId(null);
-      }
-    },
-    [installMutation],
-  );
-
-  const _handleGitHubInstall = useCallback(
-    async (
-      catalogItem: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-      accessToken: string,
-      teams: string[],
-    ) => {
-      try {
-        setInstallingItemId(catalogItem.id);
-        await installMutation.mutateAsync({
-          name: catalogItem.name,
-          catalogId: catalogItem.id,
-          accessToken,
-          teams,
-        });
       } finally {
         setInstallingItemId(null);
       }
@@ -539,16 +514,13 @@ export function InternalMCPCatalog({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filteredCatalogItems?.map((item) => {
           const installedServer = getInstalledServer(item.id);
-          const itemWithLabel = item as CatalogItemWithOptionalLabel;
 
           return (
             <InternalServerCard
               key={item.id}
-              item={itemWithLabel}
+              item={item}
               installed={!!installedServer}
-              isInstalling={
-                installingItemId === item.id || installMutation.isPending
-              }
+              isInstalling={installingItemId === item.id}
               localInstallationStatus={
                 mcpServerInstallationStatus.data ?? undefined
               }
@@ -712,9 +684,7 @@ export function InternalMCPCatalog({
             setCatalogItemForReinstall(null);
           }
         }}
-        serverName={
-          catalogItemForReinstall?.label || catalogItemForReinstall?.name || ""
-        }
+        serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={installMutation.isPending}
       />
     </div>

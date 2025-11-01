@@ -5,18 +5,22 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentLabelWithDetailsSchema } from "./label";
 import { SelectToolSchema } from "./tool";
 
 export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),
   teams: z.array(z.string()),
+  labels: z.array(AgentLabelWithDetailsSchema),
 });
 export const InsertAgentSchema = createInsertSchema(schema.agentsTable).extend({
   teams: z.array(z.string()),
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export const UpdateAgentSchema = createUpdateSchema(schema.agentsTable).extend({
   teams: z.array(z.string()),
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export type Agent = z.infer<typeof SelectAgentSchema>;

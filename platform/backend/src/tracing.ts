@@ -10,6 +10,7 @@ import {
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import config from "@/config";
+import logger from "@/logging";
 
 const {
   api: { name, version },
@@ -50,8 +51,8 @@ sdk.start();
 process.on("SIGTERM", () => {
   sdk
     .shutdown()
-    .then(() => console.log("Tracing terminated"))
-    .catch((error) => console.log("Error terminating tracing", error))
+    .then(() => logger.info("Tracing terminated"))
+    .catch((error) => logger.error("Error terminating tracing", error))
     .finally(() => process.exit(0));
 });
 

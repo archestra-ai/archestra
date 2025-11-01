@@ -2,9 +2,8 @@ name: On commits to main
 
 on:
   push:
-    # TODO: remove when done testing
-    # branches:
-    #   - main
+    branches:
+      - main
 
 concurrency:
   # Cancel any running workflow when new commits are pushed to main.

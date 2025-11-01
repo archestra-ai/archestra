@@ -1,5 +1,7 @@
 import type { GoogleGenAI } from "@google/genai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Agent } from "@/types";
+import AgentModel from "./agent";
 
 const histogramObserve = vi.fn();
 const counterInc = vi.fn();
@@ -23,6 +25,15 @@ vi.mock("prom-client", () => {
 
 import { getObservableFetch, getObservableGenAI } from "./llm-metrics";
 
+let testAgent: Agent;
+
+beforeAll(async () => {
+  testAgent = await AgentModel.create({
+    name: "Test Agent",
+    teams: [],
+  });
+});
+
 describe("getObservableFetch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,24 +53,39 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("openai", "agent-123");
+    const observableFetch = getObservableFetch("openai", testAgent);
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
     });
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "openai", agent: "agent-123", status_code: "200" },
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "200",
+      },
       expect.any(Number),
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "openai", agent: "agent-123", type: "input" },
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "input",
+      },
       100,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "openai", agent: "agent-123", type: "output" },
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "output",
+      },
       50,
     );
   });
@@ -73,14 +99,19 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("anthropic", "agent-456");
+    const observableFetch = getObservableFetch("anthropic", testAgent);
 
     await observableFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
     });
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "anthropic", agent: "agent-456", status_code: "400" },
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "400",
+      },
       expect.any(Number),
     );
   });
@@ -94,14 +125,19 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("openai", "agent-789");
+    const observableFetch = getObservableFetch("openai", testAgent);
 
     await observableFetch("https://api.openai.com/v1/chat", {
       method: "POST",
     });
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "openai", agent: "agent-789", status_code: "503" },
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "503",
+      },
       expect.any(Number),
     );
   });
@@ -109,14 +145,19 @@ describe("getObservableFetch", () => {
   it("records duration with status_code 0 on network error", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
-    const observableFetch = getObservableFetch("openai", "agent-network");
+    const observableFetch = getObservableFetch("openai", testAgent);
 
     await expect(
       observableFetch("https://api.openai.com/v1/chat", { method: "POST" }),
     ).rejects.toThrow("Network error");
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "openai", agent: "agent-network", status_code: "0" },
+      {
+        provider: "openai",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "0",
+      },
       expect.any(Number),
     );
   });
@@ -135,19 +176,29 @@ describe("getObservableFetch", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-    const observableFetch = getObservableFetch("anthropic", "agent-anthropic");
+    const observableFetch = getObservableFetch("anthropic", testAgent);
 
     await observableFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
     });
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "anthropic", agent: "agent-anthropic", type: "input" },
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "input",
+      },
       200,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "anthropic", agent: "agent-anthropic", type: "output" },
+      {
+        provider: "anthropic",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "output",
+      },
       75,
     );
   });
@@ -163,7 +214,7 @@ describe("getObservableFetch", () => {
     const mockFetch = vi.fn().mockResolvedValue(mockResponse);
     globalThis.fetch = mockFetch;
 
-    const observableFetch = getObservableFetch("openai", "agent-test");
+    const observableFetch = getObservableFetch("openai", testAgent);
     const url = "https://mock.openai.com/v1/chat";
     const init = { method: "POST", body: '{"model":"gpt-4"}' };
 
@@ -177,7 +228,7 @@ describe("getObservableFetch", () => {
     const testError = new Error("Fetch failed");
     globalThis.fetch = vi.fn().mockRejectedValue(testError);
 
-    const observableFetch = getObservableFetch("anthropic", "agent-error");
+    const observableFetch = getObservableFetch("anthropic", testAgent);
 
     await expect(
       observableFetch("https://mock.anthropic.com/v1/messages", {
@@ -214,23 +265,38 @@ describe("getObservableGenAI", () => {
       },
     });
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, "agent-gemini");
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
 
     // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
     await instrumentedGenAI.models.generateContent({} as any);
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "gemini", agent: "agent-gemini", status_code: "200" },
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "200",
+      },
       expect.any(Number),
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "gemini", agent: "agent-gemini", type: "input" },
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "input",
+      },
       150,
     );
 
     expect(counterInc).toHaveBeenCalledWith(
-      { provider: "gemini", agent: "agent-gemini", type: "output" },
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        type: "output",
+      },
       80,
     );
   });
@@ -240,7 +306,7 @@ describe("getObservableGenAI", () => {
     Object.assign(errorWithStatus, { status: 400 });
 
     const mockGenAI = getGenAIMock(errorWithStatus);
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, "agent-gemini-400");
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -248,7 +314,12 @@ describe("getObservableGenAI", () => {
     ).rejects.toThrow("Bad request");
 
     expect(histogramObserve).toHaveBeenCalledWith(
-      { provider: "gemini", agent: "agent-gemini-400", status_code: "400" },
+      {
+        provider: "gemini",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        status_code: "400",
+      },
       expect.any(Number),
     );
   });
@@ -256,10 +327,7 @@ describe("getObservableGenAI", () => {
   it("records duration with status_code 0 on Gemini network error", async () => {
     const mockGenAI = getGenAIMock(new Error("Network timeout"));
 
-    const instrumentedGenAI = getObservableGenAI(
-      mockGenAI,
-      "agent-gemini-network",
-    );
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing
@@ -269,7 +337,8 @@ describe("getObservableGenAI", () => {
     expect(histogramObserve).toHaveBeenCalledWith(
       {
         provider: "gemini",
-        agent: "agent-gemini-network",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
         status_code: "0",
       },
       expect.any(Number),
@@ -293,10 +362,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(
-      mockGenAI,
-      "agent-passthrough",
-    );
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
 
     const params = { model: "gemini-pro", contents: [{ text: "test" }] };
     const result = await instrumentedGenAI.models.generateContent(
@@ -320,7 +386,7 @@ describe("getObservableGenAI", () => {
       },
     } as unknown as GoogleGenAI;
 
-    const instrumentedGenAI = getObservableGenAI(mockGenAI, "agent-error-prop");
+    const instrumentedGenAI = getObservableGenAI(mockGenAI, testAgent);
 
     await expect(
       // biome-ignore lint/suspicious/noExplicitAny: Mock parameter for testing

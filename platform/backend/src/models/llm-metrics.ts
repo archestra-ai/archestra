@@ -75,14 +75,24 @@ export function getObservableFetch(
       const duration = Math.round((Date.now() - startTime) / 1000);
       const status = response.status.toString();
       llmRequestDuration.observe(
-        { provider, agent_id: agent.id, agent_name: agent.name, status_code: status },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: status,
+        },
         duration,
       );
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
       const duration = Math.round((Date.now() - startTime) / 1000);
       llmRequestDuration.observe(
-        { provider, agent_id: agent.id, agent_name: agent.name, status_code: "0" },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: "0",
+        },
         duration,
       );
       throw error;
@@ -124,10 +134,7 @@ export function getObservableFetch(
 /**
  * Wraps observability around GenAI's LLM request methods
  */
-export function getObservableGenAI(
-  genAI: GoogleGenAI,
-  agent: Agent,
-) {
+export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
   const originalGenerateContent = genAI.models.generateContent;
   const provider: SupportedProvider = "gemini";
   genAI.models.generateContent = async (...args) => {
@@ -139,7 +146,12 @@ export function getObservableGenAI(
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
       llmRequestDuration.observe(
-        { provider, agent_id: agent.id, agent_name: agent.name, status_code: "200" },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: "200",
+        },
         duration,
       );
 
@@ -161,7 +173,12 @@ export function getObservableGenAI(
           : "0";
 
       llmRequestDuration.observe(
-        { provider, agent_id: agent.id, agent_name: agent.name, status_code: statusCode },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: statusCode,
+        },
         duration,
       );
 

@@ -31,6 +31,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
         }),
         response: {
+          400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -98,7 +99,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const result = streamText({
         model: openai(conversation.selectedModel),
         messages: convertToModelMessages(messages),
-        tools: mcpTools as any,
+        tools: mcpTools,
         onFinish: async ({ usage, finishReason }) => {
           fastify.log.info(
             {
@@ -112,6 +113,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Return UI message stream response - Fastify handles streaming automatically
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return reply.send(
         result.toUIMessageStreamResponse({
           originalMessages: messages,
@@ -151,7 +153,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
             }
           },
-        }),
+        }) as any,
       );
     },
   );

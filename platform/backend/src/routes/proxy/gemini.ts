@@ -108,14 +108,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     agentId?: string,
     stream = false,
   ) => {
-    // Add OpenTelemetry span attribute for filtering in Jaeger
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute("route.category", "llm-proxy");
-      span.setAttribute("llm.provider", "gemini");
-    }
-
-    let resolvedAgentId: string;
+    let resolvedAgent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -127,18 +120,24 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
+
+    const resolvedAgentId = resolvedAgent.id;
+
+    // Add OpenTelemetry trace attributes
+    utils.tracing.sprinkleTraceAttributes("gemini", utils.tracing.RouteCategory.LLM_PROXY, resolvedAgent);
 
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
       resolvedAgentId,
+      resolvedAgent.name,
     );
 
     // Use the model from the URL path or default to gemini-pro

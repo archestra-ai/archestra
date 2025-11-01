@@ -138,13 +138,6 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    // Add OpenTelemetry span attribute for filtering in Jaeger
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute("route.category", "llm-proxy");
-      span.setAttribute("llm.provider", "openai");
-    }
-
     const { messages, tools, stream } = body;
 
     fastify.log.info(
@@ -159,7 +152,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "OpenAI chat completion request received",
     );
 
-    let resolvedAgentId: string;
+    let resolvedAgent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -171,13 +164,18 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
+
+    const resolvedAgentId = resolvedAgent.id;
+
+    // Add OpenTelemetry trace attributes
+    utils.tracing.sprinkleTraceAttributes("openai", utils.tracing.RouteCategory.LLM_PROXY, resolvedAgent);
 
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
@@ -190,7 +188,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch("openai", resolvedAgentId),
+          fetch: getObservableFetch("openai", resolvedAgentId, resolvedAgent.name),
         });
 
     try {
@@ -657,6 +655,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           reportLLMTokens(
             "openai",
             resolvedAgentId,
+            resolvedAgent.name,
             usageTokens.input,
             usageTokens.output,
           );

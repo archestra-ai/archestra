@@ -1,13 +1,13 @@
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import {
-  defaultResource,
-  resourceFromAttributes,
-} from "@opentelemetry/resources";
+import { Resource } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
+  ATTR_TELEMETRY_SDK_LANGUAGE,
+  ATTR_TELEMETRY_SDK_NAME,
+  ATTR_TELEMETRY_SDK_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import config from "@/config";
 import logger from "@/logging";
@@ -23,12 +23,15 @@ const traceExporter = new OTLPTraceExporter({
 });
 
 // Create a resource with service information
-const resource = defaultResource().merge(
-  resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: name,
-    [ATTR_SERVICE_VERSION]: version,
-  }),
-);
+// Note: We don't use defaultResource().merge() to avoid any undefined attributes
+// that might cause service name display issues (e.g., "ServiceName-<nil>")
+const resource = new Resource({
+  [ATTR_SERVICE_NAME]: name,
+  [ATTR_SERVICE_VERSION]: version,
+  [ATTR_TELEMETRY_SDK_NAME]: "opentelemetry",
+  [ATTR_TELEMETRY_SDK_LANGUAGE]: "nodejs",
+  [ATTR_TELEMETRY_SDK_VERSION]: "1.0.0",
+});
 
 // Initialize the OpenTelemetry SDK with auto-instrumentations
 const sdk = new NodeSDK({

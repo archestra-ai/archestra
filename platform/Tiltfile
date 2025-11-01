@@ -166,6 +166,16 @@ spec:
 
 k8s_resource('otel-collector', port_forwards=['4317:4317', '4318:4318'], labels=['observability'])
 
+# Grafana for visualizing traces and metrics
+local_resource(
+  'grafana',
+  serve_cmd='docker compose -f docker-compose-grafana.yml up grafana',
+  serve_dir='.',
+  labels=['observability'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
 # Database cleanup button (manual trigger only, for development)
 local_resource(
   'db-clean',

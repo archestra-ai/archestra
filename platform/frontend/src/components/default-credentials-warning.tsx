@@ -73,10 +73,7 @@ export function DefaultCredentialsWarning({
               create the admin account.
             </p>
             <p>
-              Run{" "}
-              <code className="bg-muted px-1 py-0.5 rounded">
-                pnpm db:migrate
-              </code>{" "}
+              Restart the application
               to initialize the database with the default admin credentials.
             </p>
           </AlertDescription>

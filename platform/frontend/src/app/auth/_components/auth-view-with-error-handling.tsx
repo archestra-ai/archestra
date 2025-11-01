@@ -21,7 +21,6 @@ export function AuthViewWithErrorHandling({
   classNames,
 }: AuthViewWithErrorHandlingProps) {
   const [serverError, setServerError] = useState(false);
-  const [errorTimestamp, setErrorTimestamp] = useState<string>("");
 
   useEffect(() => {
     // Intercept fetch to detect 500 errors from auth endpoints
@@ -46,7 +45,6 @@ export function AuthViewWithErrorHandling({
             url,
           );
           setServerError(true);
-          setErrorTimestamp(new Date().toISOString());
         }
 
         return response;
@@ -62,7 +60,6 @@ export function AuthViewWithErrorHandling({
         ) {
           console.error("Network error from auth endpoint:", url, error);
           setServerError(true);
-          setErrorTimestamp(new Date().toISOString());
         }
         throw error;
       }

@@ -5,8 +5,8 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { SelectToolSchema } from "./tool";
 import { AgentLabelWithDetailsSchema } from "./label";
+import { SelectToolSchema } from "./tool";
 
 export const SelectAgentSchema = createSelectSchema(schema.agentsTable).extend({
   tools: z.array(SelectToolSchema),

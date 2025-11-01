@@ -120,8 +120,8 @@ class AgentLabelModel {
     key: string,
     value: string,
   ): Promise<void> {
-    const keyId = await this.getOrCreateKey(key);
-    const valueId = await this.getOrCreateValue(value);
+    const keyId = await AgentLabelModel.getOrCreateKey(key);
+    const valueId = await AgentLabelModel.getOrCreateValue(value);
 
     // Check if this key already exists for this agent
     const existing = await db

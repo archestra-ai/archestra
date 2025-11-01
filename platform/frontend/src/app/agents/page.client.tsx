@@ -2,14 +2,14 @@
 
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Plug, Plus, Trash2, Wrench, X, Tag } from "lucide-react";
+import { Pencil, Plug, Plus, Tag, Trash2, Wrench, X } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
-import { AgentLabels, type AgentLabel } from "@/components/agent-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,9 +55,9 @@ import {
   useAgents,
   useCreateAgent,
   useDeleteAgent,
-  useUpdateAgent,
   useLabelKeys,
   useLabelValues,
+  useUpdateAgent,
 } from "@/lib/agent.query";
 import { AssignToolsDialog } from "./assign-tools-dialog";
 

@@ -2141,8 +2141,8 @@ export type GetAgentsResponses = {
         labels: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     }>;
 };
@@ -2158,8 +2158,8 @@ export type CreateAgentData = {
         labels?: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
     path?: never;
@@ -2229,8 +2229,8 @@ export type CreateAgentResponses = {
         labels: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -2306,8 +2306,8 @@ export type GetDefaultAgentResponses = {
         labels: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -2437,8 +2437,8 @@ export type GetAgentResponses = {
         labels: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -2454,8 +2454,8 @@ export type UpdateAgentData = {
         labels?: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
     path: {
@@ -2527,8 +2527,8 @@ export type UpdateAgentResponses = {
         labels: Array<{
             key: string;
             value: string;
-            keyId: string;
-            valueId: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };

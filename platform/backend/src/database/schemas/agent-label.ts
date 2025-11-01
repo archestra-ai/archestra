@@ -1,9 +1,4 @@
-import {
-  pgTable,
-  primaryKey,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import labelKeyTable from "./label-key";
 import labelValueTable from "./label-value";

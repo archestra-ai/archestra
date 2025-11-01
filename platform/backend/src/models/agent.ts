@@ -2,11 +2,15 @@ import { DEFAULT_AGENT_NAME } from "@shared";
 import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent, UpdateAgent } from "@/types";
-import AgentTeamModel from "./agent-team";
 import AgentLabelModel from "./agent-label";
+import AgentTeamModel from "./agent-team";
 
 class AgentModel {
-  static async create({ teams, labels, ...agent }: InsertAgent): Promise<Agent> {
+  static async create({
+    teams,
+    labels,
+    ...agent
+  }: InsertAgent): Promise<Agent> {
     const [createdAgent] = await db
       .insert(schema.agentsTable)
       .values(agent)

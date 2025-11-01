@@ -270,7 +270,9 @@ function Agents({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="label-value-filter">Filter by Label Value</Label>
+                <Label htmlFor="label-value-filter">
+                  Filter by Label Value
+                </Label>
                 <Select
                   value={labelValueFilter}
                   onValueChange={setLabelValueFilter}
@@ -289,7 +291,10 @@ function Agents({
                 </Select>
               </div>
             </div>
-            {(nameFilter || teamFilter || labelKeyFilter || labelValueFilter) && (
+            {(nameFilter ||
+              teamFilter ||
+              labelKeyFilter ||
+              labelValueFilter) && (
               <div className="mt-4">
                 <Button
                   variant="outline"

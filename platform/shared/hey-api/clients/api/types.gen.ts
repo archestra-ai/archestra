@@ -2076,10 +2076,10 @@ export type GetAgentsData = {
     body?: never;
     path?: never;
     query?: {
-        labelKey?: string;
-        labelValue?: string;
         name?: string;
         teamId?: string;
+        labelKey?: string;
+        labelValue?: string;
     };
     url: '/api/agents';
 };

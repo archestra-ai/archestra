@@ -77,9 +77,7 @@ class AgentModel {
         return [];
       }
 
-      whereConditions.push(
-        inArray(schema.agentsTable.id, accessibleAgentIds),
-      );
+      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
     // Apply team filter
@@ -159,7 +157,9 @@ class AgentModel {
     // Apply all where conditions
     if (whereConditions.length > 0) {
       query = query.where(
-        whereConditions.length > 1 ? and(...whereConditions) : whereConditions[0],
+        whereConditions.length > 1
+          ? and(...whereConditions)
+          : whereConditions[0],
       );
     }
 

@@ -58,6 +58,7 @@ tilt trigger orlando-wiremock        # Start orlando WireMock test environment (
 
 # Observability
 tilt trigger grafana                 # Start Grafana for trace/metrics visualization
+docker compose -f docker-compose-grafana.yml up -d  # Alternative: Start Grafana via docker-compose
 ```
 
 ## Environment Variables

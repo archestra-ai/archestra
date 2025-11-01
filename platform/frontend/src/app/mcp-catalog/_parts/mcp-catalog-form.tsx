@@ -27,6 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { stripEnvVarQuotes } from "@/lib/utils";
 
 // Simplified OAuth config schema
 const oauthConfigSchema = z.object({
@@ -141,7 +142,9 @@ export function transformFormToApiData(
         .forEach((line) => {
           const [key, ...valueParts] = line.split("=");
           if (key && environment) {
-            environment[key] = valueParts.join("=");
+            // Strip surrounding quotes from the value to prevent double-quoting
+            const rawValue = valueParts.join("=");
+            environment[key] = stripEnvVarQuotes(rawValue);
           }
         });
     }

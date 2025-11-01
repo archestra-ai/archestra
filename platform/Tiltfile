@@ -15,7 +15,6 @@ next_pubic_api_base_url = os.getenv("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL")
 if not next_pubic_api_base_url and api_base_url and api_base_url != "":
   os.putenv('NEXT_PUBLIC_ARCHESTRA_API_BASE_URL', api_base_url)
 
-
 # Check if .env exists, if not copy from .env.example
 if not os.path.exists('.env'):
   local('cp .env.example .env')
@@ -26,11 +25,11 @@ else:
 dotenv('./.env')
 
 # Load sub-Tiltfiles by label
-load_dynamic('./dev/.tilt/pre.Tiltfile')
-load_dynamic('./dev/.tilt/database.Tiltfile')
-load_dynamic('./dev/.tilt/observability.Tiltfile')
-load_dynamic('./dev/.tilt/dev.Tiltfile')
-load_dynamic('./dev/.tilt/prod.Tiltfile')
-load_dynamic('./dev/.tilt/test.Tiltfile')
-load_dynamic('./dev/.tilt/integrations.Tiltfile')
+load_dynamic('./dev/.tilt/pre/Tiltfile')
+load_dynamic('./dev/.tilt/database/Tiltfile')
+load_dynamic('./dev/.tilt/observability/Tiltfile')
+load_dynamic('./dev/.tilt/dev/Tiltfile')
+load_dynamic('./dev/.tilt/prod/Tiltfile')
+load_dynamic('./dev/.tilt/test/Tiltfile')
+load_dynamic('./dev/.tilt/integrations/Tiltfile')
 

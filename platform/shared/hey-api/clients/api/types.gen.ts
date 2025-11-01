@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1322,7 +1322,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -2138,6 +2138,12 @@ export type GetAgentsResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     }>;
 };
 
@@ -2149,6 +2155,12 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -2214,6 +2226,12 @@ export type CreateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
 };
 
@@ -2285,6 +2303,12 @@ export type GetDefaultAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
 };
 
@@ -2410,6 +2434,12 @@ export type GetAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
 };
 
@@ -2421,6 +2451,12 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
     path: {
         id: string;
@@ -2488,10 +2524,94 @@ export type UpdateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId: string;
+            valueId: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/keys';
+};
+
+export type GetLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelKeysError = GetLabelKeysErrors[keyof GetLabelKeysErrors];
+
+export type GetLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysResponses];
+
+export type GetLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/values';
+};
+
+export type GetLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
+
+export type GetLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;

@@ -31,7 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
-- **Grafana**: <http://localhost:3001/> (metrics and trace visualization, manual start via Tilt)
+- **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
@@ -59,7 +59,7 @@ tilt trigger orlando-wiremock        # Start orlando WireMock test environment (
 
 # Observability
 tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)
-docker compose -f dev/observability/docker-compose.yml up -d  # Alternative: Start via docker-compose
+docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables

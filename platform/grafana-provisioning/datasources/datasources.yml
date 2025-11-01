@@ -1,15 +1,15 @@
 apiVersion: 1
 
 datasources:
-  # Jaeger data source for traces
+  # Jaeger data source for traces (running in k8s via Tilt)
   - name: Jaeger
     type: jaeger
     access: proxy
-    url: http://jaeger:16686
+    url: http://host.docker.internal:16686
     isDefault: true
     editable: true
 
-  # Prometheus data source for metrics (if you add prometheus in the future)
+  # Prometheus data source for metrics (running in docker-compose)
   - name: Prometheus
     type: prometheus
     access: proxy

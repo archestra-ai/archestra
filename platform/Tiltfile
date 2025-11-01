@@ -166,10 +166,10 @@ spec:
 
 k8s_resource('otel-collector', port_forwards=['4317:4317', '4318:4318'], labels=['observability'])
 
-# Grafana for visualizing traces and metrics
+# Prometheus and Grafana for metrics and visualization
 local_resource(
-  'grafana',
-  serve_cmd='docker compose -f docker-compose-grafana.yml up grafana',
+  'prometheus-grafana',
+  serve_cmd='docker compose -f docker-compose-grafana.yml up',
   serve_dir='.',
   labels=['observability'],
   trigger_mode=TRIGGER_MODE_MANUAL,

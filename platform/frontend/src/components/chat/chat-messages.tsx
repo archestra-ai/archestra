@@ -1,8 +1,44 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Fragment } from "react";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import { Response } from "@/components/ai-elements/response";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 
 interface ChatMessagesProps {
   messages: UIMessage[];
+}
+
+// Type guards for tool parts
+function isToolPart(part: any): part is {
+  type: string;
+  state?: string;
+  toolCallId?: string;
+  input?: any;
+  output?: any;
+  errorText?: string;
+} {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    (part.type?.startsWith("tool-") || part.type === "dynamic-tool")
+  );
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
@@ -17,209 +53,170 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
     );
   }
 
-  const renderMessagePart = (part: any, index: number) => {
-    // Text content
-    if (part.type === "text") {
-      return (
-        <div key={index} className="whitespace-pre-wrap">
-          {part.text}
-        </div>
-      );
-    }
-
-    // Step start (thinking indicator)
-    if (part.type === "step-start") {
-      return (
-        <div
-          key={index}
-          className="my-2 p-2 rounded border border-purple-300 bg-purple-50 dark:bg-purple-950 dark:border-purple-700"
-        >
-          <div className="text-xs text-purple-600 dark:text-purple-400">
-            💭 Thinking...
-          </div>
-        </div>
-      );
-    }
-
-    // Tool invocation (type is "tool-{toolName}")
-    if (part.type?.startsWith("tool-")) {
-      const toolName = part.type.replace("tool-", "");
-      const state = part.state;
-
-      // Input streaming
-      if (state === "input-streaming") {
-        return (
-          <div
-            key={index}
-            className="my-2 p-3 rounded border border-blue-300 bg-blue-50 dark:bg-blue-950 dark:border-blue-700"
-          >
-            <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
-              🔧 Calling: {toolName}
-            </div>
-            <div className="text-xs text-blue-600 dark:text-blue-400">
-              Loading...
-            </div>
-          </div>
-        );
-      }
-
-      // Input available (tool called with input)
-      if (state === "input-available") {
-        return (
-          <div
-            key={index}
-            className="my-2 p-3 rounded border border-blue-300 bg-blue-50 dark:bg-blue-950 dark:border-blue-700"
-          >
-            <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
-              🔧 Tool Call: {toolName}
-            </div>
-            {part.input && Object.keys(part.input).length > 0 && (
-              <details className="text-xs text-blue-600 dark:text-blue-400">
-                <summary className="cursor-pointer">Arguments</summary>
-                <pre className="mt-1 overflow-x-auto">
-                  {JSON.stringify(part.input, null, 2)}
-                </pre>
-              </details>
-            )}
-          </div>
-        );
-      }
-
-      // Output available (tool completed successfully)
-      if (state === "output-available") {
-        return (
-          <div
-            key={index}
-            className="my-2 p-3 rounded border border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-700"
-          >
-            <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-2">
-              ✅ Tool Result: {toolName}
-            </div>
-            {part.input && Object.keys(part.input).length > 0 && (
-              <details className="text-xs text-green-600 dark:text-green-400 mb-2">
-                <summary className="cursor-pointer">Input</summary>
-                <pre className="mt-1 overflow-x-auto">
-                  {JSON.stringify(part.input, null, 2)}
-                </pre>
-              </details>
-            )}
-            <div className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
-              {typeof part.output === "string"
-                ? part.output
-                : JSON.stringify(part.output, null, 2)}
-            </div>
-          </div>
-        );
-      }
-
-      // Output error (tool failed)
-      if (state === "output-error") {
-        return (
-          <div
-            key={index}
-            className="my-2 p-3 rounded border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-700"
-          >
-            <div className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
-              ❌ Tool Error: {toolName}
-            </div>
-            <div className="text-sm text-red-800 dark:text-red-200">
-              {part.errorText || "Unknown error"}
-            </div>
-          </div>
-        );
-      }
-
-      // Unknown tool state
-      return (
-        <div
-          key={index}
-          className="my-2 p-2 rounded border border-gray-300 bg-gray-50 dark:bg-gray-950 dark:border-gray-700"
-        >
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            🔧 {toolName} (state: {state || "unknown"})
-          </div>
-        </div>
-      );
-    }
-
-    // Dynamic tool (MCP tools at runtime)
-    if (part.type === "dynamic-tool") {
-      const state = part.state;
-      const toolName = part.toolName;
-
-      if (state === "output-available") {
-        return (
-          <div
-            key={index}
-            className="my-2 p-3 rounded border border-green-300 bg-green-50 dark:bg-green-950 dark:border-green-700"
-          >
-            <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">
-              ✅ Dynamic Tool Result: {toolName}
-            </div>
-            <div className="text-sm text-green-800 dark:text-green-200 whitespace-pre-wrap">
-              {typeof part.output === "string"
-                ? part.output
-                : JSON.stringify(part.output, null, 2)}
-            </div>
-          </div>
-        );
-      }
-    }
-
-    // Reasoning part
-    if (part.type === "reasoning") {
-      return (
-        <div
-          key={index}
-          className="my-2 p-3 rounded border border-indigo-300 bg-indigo-50 dark:bg-indigo-950 dark:border-indigo-700"
-        >
-          <div className="text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1">
-            🧠 Reasoning
-          </div>
-          <div className="text-sm text-indigo-800 dark:text-indigo-200 whitespace-pre-wrap">
-            {part.text}
-          </div>
-        </div>
-      );
-    }
-
-    // Fallback for unknown part types
-    return (
-      <div key={index} className="text-xs text-muted-foreground">
-        [Unknown part type: {part.type}]
-      </div>
-    );
-  };
-
   return (
-    <ScrollArea className="flex-1 p-4">
-      <div className="max-w-3xl mx-auto space-y-4">
-        {messages.map((message, index) => (
-          <div
-            key={message.id || index}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
-              }`}
-            >
-              <div className="text-sm font-medium mb-1">
-                {message.role === "user" ? "You" : "Assistant"}
-              </div>
-              <div className="space-y-2">
-                {message.parts?.map((part, partIndex) =>
-                  renderMessagePart(part, partIndex),
-                )}
-              </div>
+    <Conversation className="h-full">
+      <ConversationContent>
+        <div className="max-w-4xl mx-auto">
+          {messages.map((message, idx) => (
+            <div key={message.id || idx}>
+              {message.parts.map((part, i) => {
+                // Skip tool result parts that immediately follow a tool invocation with same toolCallId
+                if (
+                  isToolPart(part) &&
+                  part.state === "output-available" &&
+                  i > 0
+                ) {
+                  const prevPart = message.parts[i - 1];
+                  if (
+                    isToolPart(prevPart) &&
+                    prevPart.state === "input-available" &&
+                    prevPart.toolCallId === part.toolCallId
+                  ) {
+                    return null;
+                  }
+                }
+
+                switch (part.type) {
+                  case "text":
+                    return (
+                      <Fragment key={`${message.id}-${i}`}>
+                        <Message from={message.role}>
+                          <MessageContent>
+                            {message.role === "system" && (
+                              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                System Prompt
+                              </div>
+                            )}
+                            <Response>{part.text}</Response>
+                          </MessageContent>
+                        </Message>
+                      </Fragment>
+                    );
+
+                  case "reasoning":
+                    return (
+                      <Reasoning key={`${message.id}-${i}`} className="w-full">
+                        <ReasoningTrigger />
+                        <ReasoningContent>{part.text}</ReasoningContent>
+                      </Reasoning>
+                    );
+
+                  case "dynamic-tool": {
+                    if (!isToolPart(part)) return null;
+                    const toolName = (part as any).toolName;
+
+                    // Look ahead for tool result (same tool call ID)
+                    let toolResultPart: any = null;
+                    const nextPart = message.parts[i + 1];
+                    if (
+                      nextPart &&
+                      isToolPart(nextPart) &&
+                      nextPart.type === "dynamic-tool" &&
+                      nextPart.state === "output-available" &&
+                      nextPart.toolCallId === part.toolCallId
+                    ) {
+                      toolResultPart = nextPart;
+                    }
+
+                    return (
+                      <Tool key={`${message.id}-${part.toolCallId}`}>
+                        <ToolHeader
+                          type={`tool-${toolName}`}
+                          state={
+                            toolResultPart
+                              ? "output-available"
+                              : part.state || "input-available"
+                          }
+                        />
+                        <ToolContent>
+                          {part.input && Object.keys(part.input).length > 0 && (
+                            <ToolInput input={part.input} />
+                          )}
+                          {toolResultPart && (
+                            <ToolOutput
+                              label={
+                                toolResultPart.errorText ? "Error" : "Result"
+                              }
+                              output={toolResultPart.output}
+                              errorText={toolResultPart.errorText}
+                            />
+                          )}
+                          {!toolResultPart && Boolean(part.output) && (
+                            <ToolOutput
+                              label={part.errorText ? "Error" : "Result"}
+                              output={part.output}
+                              errorText={part.errorText}
+                            />
+                          )}
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  default: {
+                    // Handle tool invocations (type is "tool-{toolName}")
+                    if (isToolPart(part) && part.type?.startsWith("tool-")) {
+                      const toolName = part.type.replace("tool-", "");
+
+                      // Look ahead for tool result (same tool call ID)
+                      let toolResultPart: any = null;
+                      const nextPart = message.parts[i + 1];
+                      if (
+                        nextPart &&
+                        isToolPart(nextPart) &&
+                        nextPart.type?.startsWith("tool-") &&
+                        nextPart.state === "output-available" &&
+                        nextPart.toolCallId === part.toolCallId
+                      ) {
+                        toolResultPart = nextPart;
+                      }
+
+                      return (
+                        <Tool key={`${message.id}-${part.toolCallId}`}>
+                          <ToolHeader
+                            type={`tool-${toolName}`}
+                            state={
+                              toolResultPart
+                                ? "output-available"
+                                : part.state || "input-available"
+                            }
+                          />
+                          <ToolContent>
+                            {part.input &&
+                              Object.keys(part.input).length > 0 && (
+                                <ToolInput input={part.input} />
+                              )}
+                            {toolResultPart && (
+                              <ToolOutput
+                                label={
+                                  toolResultPart.errorText ? "Error" : "Result"
+                                }
+                                output={toolResultPart.output}
+                                errorText={toolResultPart.errorText}
+                              />
+                            )}
+                            {!toolResultPart && Boolean(part.output) && (
+                              <ToolOutput
+                                label={part.errorText ? "Error" : "Result"}
+                                output={part.output}
+                                errorText={part.errorText}
+                              />
+                            )}
+                          </ToolContent>
+                        </Tool>
+                      );
+                    }
+
+                    // Skip step-start and other non-renderable parts
+                    return null;
+                  }
+                }
+              })}
             </div>
-          </div>
-        ))}
-      </div>
-    </ScrollArea>
+          ))}
+        </div>
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }

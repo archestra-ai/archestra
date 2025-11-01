@@ -31,6 +31,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
+- **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
 
 ## Common Commands
@@ -53,7 +55,11 @@ tilt logs pnpm-dev                   # Get logs for frontend + backend
 tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resource
 
 # Testing with WireMock
-tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
+tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
+
+# Observability
+tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)
+docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables
@@ -100,6 +106,14 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - API keys have all permissions by default
 - API keys work as fallback when session auth fails (e.g., "No active organization" errors)
 - Use `pnpm test:e2e` to run API tests with API key authentication
+
+## Observability
+
+**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes for Jaeger filtering.
+
+**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
+
+**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Jaeger, Prometheus, and Grafana with pre-configured datasources.
 
 ## Coding Conventions
 

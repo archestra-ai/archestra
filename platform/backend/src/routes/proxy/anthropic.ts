@@ -7,7 +7,13 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
-import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import {
+  type Agent,
+  Anthropic,
+  ErrorResponseSchema,
+  RouteId,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
@@ -128,13 +134,6 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     reply: FastifyReply,
     agentId?: string,
   ) => {
-    // Add OpenTelemetry span attribute for filtering in Jaeger
-    const span = trace.getActiveSpan();
-    if (span) {
-      span.setAttribute("route.category", "llm-proxy");
-      span.setAttribute("llm.provider", "anthropic");
-    }
-
     const { tools, stream } = body;
 
     fastify.log.info(
@@ -149,7 +148,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Anthropic messages request received",
     );
 
-    let resolvedAgentId: string;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);
@@ -161,13 +160,22 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
-      resolvedAgentId = agentId;
+      resolvedAgent = agent;
     } else {
       // Otherwise get or create default agent
-      resolvedAgentId = await utils.getAgentIdFromRequest(
+      resolvedAgent = await AgentModel.getAgentOrCreateDefault(
         headers["user-agent"],
       );
     }
+
+    const resolvedAgentId = resolvedAgent.id;
+
+    // Add OpenTelemetry trace attributes
+    utils.tracing.sprinkleTraceAttributes(
+      "anthropic",
+      utils.tracing.RouteCategory.LLM_PROXY,
+      resolvedAgent,
+    );
 
     fastify.log.info(
       { resolvedAgentId, wasExplicit: !!agentId },
@@ -179,7 +187,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const anthropicClient = new AnthropicProvider({
       apiKey: anthropicApiKey,
       baseURL: config.llm.anthropic.baseUrl,
-      fetch: getObservableFetch("anthropic", resolvedAgentId),
+      fetch: getObservableFetch("anthropic", resolvedAgent),
     });
 
     try {
@@ -458,7 +466,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (usage) {
           const { input, output } =
             utils.adapters.anthropic.getUsageTokens(usage);
-          reportLLMTokens("anthropic", resolvedAgentId, input, output);
+          reportLLMTokens("anthropic", resolvedAgent, input, output);
         }
 
         // Store the complete interaction

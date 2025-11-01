@@ -1,0 +1,72 @@
+# Development + pre-requisite resources
+
+# Define is_prod locally (same logic as main Tiltfile)
+is_prod = os.getenv('PROD') == 'true'
+
+local_resource(
+  'pnpm-install',
+  cmd='pnpm install',
+  deps=[
+    '../frontend/package.json',
+    '../backend/package.json',
+  ],
+  labels=['dev']
+)
+
+if is_prod:
+  # prod bundle
+  local_resource(
+    'pnpm-prod',
+    cmd='rm -rf frontend/.next && pnpm build',
+    serve_cmd='pnpm start',
+    labels=['dev'],
+    resource_deps=['db-migrate']
+  )
+else:
+  # dev bundle
+  local_resource(
+    'pnpm-dev',
+    serve_cmd='pnpm dev',
+    labels=['dev'],
+    resource_deps=['db-migrate']
+  )
+
+local_resource(
+  'lint:fix',
+  cmd='pnpm type-check && pnpm lint:fix',
+  labels=['dev'],
+  resource_deps=['pnpm-install'],
+  deps=[
+    "../frontend/src",
+    "../backend/src",
+    "../experiments/src",
+    "../biome.json",
+  ]
+)
+
+local_resource(
+  'lint:fix:unsafe',
+  cmd='pnpm lint:fix:unsafe',
+  labels=['dev'],
+  resource_deps=['pnpm-install'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'codegen:api-client',
+  cmd='pnpm codegen:api-client',
+  labels=['dev'],
+  resource_deps=['pnpm-install', 'pnpm-dev'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'observability',
+  serve_cmd='docker compose -f docker-compose.observability.yml up',
+  serve_dir='.',
+  labels=['observability'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)

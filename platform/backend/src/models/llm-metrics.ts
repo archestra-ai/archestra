@@ -8,6 +8,8 @@
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import logger from "@/logging";
+import type { Agent } from "@/types";
+import type { SupportedProvider } from "@/types/llm-providers";
 import * as utils from "../routes/proxy/utils";
 
 type Fetch = (
@@ -20,7 +22,7 @@ type Fetch = (
 const llmRequestDuration = new client.Histogram({
   name: "llm_request_duration_seconds",
   help: "LLM request duration in seconds",
-  labelNames: ["provider", "agent", "status_code"],
+  labelNames: ["provider", "agent_id", "agent_name", "status_code"],
   // Same bucket style as http_request_duration_seconds but adjusted for LLM latency
   buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
 });
@@ -28,23 +30,29 @@ const llmRequestDuration = new client.Histogram({
 const llmTokensCounter = new client.Counter({
   name: "llm_tokens_total",
   help: "Total tokens used",
-  labelNames: ["provider", "agent", "type"], // type: input|output
+  labelNames: ["provider", "agent_id", "agent_name", "type"], // type: input|output
 });
 
 /**
  * Reports LLM token usage
  */
 export function reportLLMTokens(
-  provider: "openai" | "anthropic" | "gemini",
-  agent: string,
+  provider: SupportedProvider,
+  agent: Agent,
   inputTokens?: number,
   outputTokens?: number,
 ): void {
   if (inputTokens && inputTokens > 0) {
-    llmTokensCounter.inc({ provider, agent, type: "input" }, inputTokens);
+    llmTokensCounter.inc(
+      { provider, agent_id: agent.id, agent_name: agent.name, type: "input" },
+      inputTokens,
+    );
   }
   if (outputTokens && outputTokens > 0) {
-    llmTokensCounter.inc({ provider, agent, type: "output" }, outputTokens);
+    llmTokensCounter.inc(
+      { provider, agent_id: agent.id, agent_name: agent.name, type: "output" },
+      outputTokens,
+    );
   }
 }
 
@@ -52,8 +60,8 @@ export function reportLLMTokens(
  * Returns a fetch wrapped in observability. Use it as OpenAI or Anthropic provider custom fetch implementation.
  */
 export function getObservableFetch(
-  provider: "openai" | "anthropic",
-  agent: string = "unknown",
+  provider: SupportedProvider,
+  agent: Agent,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -67,14 +75,24 @@ export function getObservableFetch(
       const duration = Math.round((Date.now() - startTime) / 1000);
       const status = response.status.toString();
       llmRequestDuration.observe(
-        { provider, agent, status_code: status },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: status,
+        },
         duration,
       );
     } catch (error) {
       // Network errors only: fetch does not throw on 4xx or 5xx.
       const duration = Math.round((Date.now() - startTime) / 1000);
       llmRequestDuration.observe(
-        { provider, agent, status_code: "0" },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: "0",
+        },
         duration,
       );
       throw error;
@@ -116,12 +134,9 @@ export function getObservableFetch(
 /**
  * Wraps observability around GenAI's LLM request methods
  */
-export function getObservableGenAI(
-  genAI: GoogleGenAI,
-  agent: string = "unknown",
-) {
+export function getObservableGenAI(genAI: GoogleGenAI, agent: Agent) {
   const originalGenerateContent = genAI.models.generateContent;
-  const provider = "gemini";
+  const provider: SupportedProvider = "gemini";
   genAI.models.generateContent = async (...args) => {
     const startTime = Date.now();
 
@@ -131,7 +146,12 @@ export function getObservableGenAI(
 
       // Assuming 200 status code. Gemini doesn't expose HTTP status, but unlike fetch, throws on 4xx & 5xx.
       llmRequestDuration.observe(
-        { provider, agent, status_code: "200" },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: "200",
+        },
         duration,
       );
 
@@ -139,7 +159,7 @@ export function getObservableGenAI(
       const usage = result.usageMetadata;
       if (usage) {
         const { input, output } = utils.adapters.gemini.getUsageTokens(usage);
-        reportLLMTokens("gemini", agent, input, output);
+        reportLLMTokens(provider, agent, input, output);
       }
 
       return result;
@@ -153,7 +173,12 @@ export function getObservableGenAI(
           : "0";
 
       llmRequestDuration.observe(
-        { provider, agent, status_code: statusCode },
+        {
+          provider,
+          agent_id: agent.id,
+          agent_name: agent.name,
+          status_code: statusCode,
+        },
         duration,
       );
 

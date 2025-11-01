@@ -1,0 +1,30 @@
+# Integration resources
+
+local_resource(
+  'n8n',
+  serve_cmd='docker compose -f docker-compose-n8n.yml up n8n --no-deps',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+local_resource(
+  'mcp-inspector',
+  serve_env={
+    'DANGEROUSLY_OMIT_AUTH': 'true'
+  },
+  serve_cmd='npx @modelcontextprotocol/inspector --server-url http://localhost:9000/v1/mcp',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+local_resource(
+  'orlando-wiremock',
+  serve_cmd='docker compose -f dev/orlando/docker-compose.yml up wiremock',
+  serve_dir='.',
+  labels=['integrations'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)

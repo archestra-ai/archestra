@@ -25,6 +25,8 @@ import {
 } from "@/types";
 import { seedDatabase } from "./database/seed";
 import logger from "./logging";
+import AgentLabelModel from "./models/agent-label";
+import { initializeMetrics } from "./models/llm-metrics";
 import * as routes from "./routes";
 
 const {
@@ -76,6 +78,13 @@ const start = async () => {
   try {
     // Seed database with demo data
     await seedDatabase();
+
+    // Initialize metrics with dynamic agent label keys
+    const agentLabelKeys = await AgentLabelModel.getAllKeys();
+    initializeMetrics(agentLabelKeys);
+    fastify.log.info(
+      `Initialized LLM metrics with ${agentLabelKeys.length} agent label keys: ${agentLabelKeys.join(", ")}`,
+    );
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

@@ -22,13 +22,19 @@ vi.mock("prom-client", () => {
   };
 });
 
-import { getObservableFetch, getObservableGenAI } from "./llm-metrics";
+import {
+  getObservableFetch,
+  getObservableGenAI,
+  initializeMetrics,
+} from "./llm-metrics";
 
 describe("getObservableFetch", () => {
   let testAgent: Agent;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Initialize metrics with no agent label keys for basic tests
+    initializeMetrics([]);
     testAgent = await AgentModel.create({
       name: "Test Agent",
       teams: [],
@@ -234,6 +240,78 @@ describe("getObservableFetch", () => {
 
     expect(globalThis.fetch).toHaveBeenCalled();
   });
+
+  it("includes agent labels in metrics", async () => {
+    // Initialize metrics with agent label keys
+    initializeMetrics(["environment", "team"]);
+
+    // Create agent with labels
+    const agentWithLabels = await AgentModel.create({
+      name: "Labeled Agent",
+      teams: [],
+      labels: [
+        { key: "environment", value: "production" },
+        { key: "team", value: "backend" },
+      ],
+    });
+
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      clone: () => ({
+        json: async () => ({
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      }),
+    } as Response;
+
+    globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const observableFetch = getObservableFetch("openai", agentWithLabels);
+
+    await observableFetch("https://api.openai.com/v1/chat", {
+      method: "POST",
+    });
+
+    // Check that histogram includes agent labels
+    expect(histogramObserve).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: agentWithLabels.id,
+        agent_name: agentWithLabels.name,
+        status_code: "200",
+        environment: "production",
+        team: "backend",
+      },
+      expect.any(Number),
+    );
+
+    // Check that counter includes agent labels
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: agentWithLabels.id,
+        agent_name: agentWithLabels.name,
+        type: "input",
+        environment: "production",
+        team: "backend",
+      },
+      100,
+    );
+
+    expect(counterInc).toHaveBeenCalledWith(
+      {
+        provider: "openai",
+        agent_id: agentWithLabels.id,
+        agent_name: agentWithLabels.name,
+        type: "output",
+        environment: "production",
+        team: "backend",
+      },
+      50,
+    );
+  });
 });
 
 describe("getObservableGenAI", () => {
@@ -253,6 +331,8 @@ describe("getObservableGenAI", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Initialize metrics with no agent label keys for basic tests
+    initializeMetrics([]);
     testAgent = await AgentModel.create({
       name: "Test Agent",
       teams: [],

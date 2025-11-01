@@ -1,7 +1,7 @@
 archestra:
   # The Docker image to use for the Archestra Platform
   # This image contains both the backend API and frontend
-  image: archestra/platform:joey-test
+  image: archestra/platform:latest
 
   # Additional environment variables to pass to the container
   # These will be merged with the default DATABASE_URL environment variable

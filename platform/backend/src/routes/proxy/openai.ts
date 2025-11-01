@@ -192,11 +192,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       : new OpenAIProvider({
           apiKey: openAiApiKey,
           baseURL: config.llm.openai.baseUrl,
-          fetch: getObservableFetch(
-            "openai",
-            resolvedAgentId,
-            resolvedAgent.name,
-          ),
+          fetch: getObservableFetch("openai", resolvedAgent),
         });
 
     try {
@@ -662,8 +658,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (usageTokens) {
           reportLLMTokens(
             "openai",
-            resolvedAgentId,
-            resolvedAgent.name,
+            resolvedAgent,
             usageTokens.input,
             usageTokens.output,
           );

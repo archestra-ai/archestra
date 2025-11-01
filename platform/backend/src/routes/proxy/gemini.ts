@@ -140,8 +140,7 @@ const geminiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const { "x-goog-api-key": geminiApiKey } = headers;
     const genAI = getObservableGenAI(
       new GoogleGenAI({ apiKey: geminiApiKey }),
-      resolvedAgentId,
-      resolvedAgent.name,
+      resolvedAgent,
     );
 
     // Use the model from the URL path or default to gemini-pro

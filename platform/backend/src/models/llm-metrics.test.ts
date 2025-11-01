@@ -25,18 +25,18 @@ vi.mock("prom-client", () => {
 
 import { getObservableFetch, getObservableGenAI } from "./llm-metrics";
 
-let testAgent: Agent;
-
-beforeAll(async () => {
-  testAgent = await AgentModel.create({
-    name: "Test Agent",
-    teams: [],
-  });
-});
-
 describe("getObservableFetch", () => {
+  let testAgent: Agent;
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  beforeAll(async () => {
+    testAgent = await AgentModel.create({
+      name: "Test Agent",
+      teams: [],
+    });
   });
 
   it("records duration and tokens on successful request", async () => {
@@ -253,8 +253,17 @@ describe("getObservableGenAI", () => {
     } as unknown as GoogleGenAI;
   }
 
+  let testAgent: Agent;
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  beforeAll(async () => {
+    testAgent = await AgentModel.create({
+      name: "Test Agent",
+      teams: [],
+    });
   });
 
   it("records duration and tokens on successful Gemini request", async () => {

@@ -1,4 +1,5 @@
 import { context, trace } from "@opentelemetry/api";
+import logger from "@/logging";
 import type { Agent } from "@/types";
 import type { SupportedProvider } from "@/types/llm-providers";
 
@@ -28,7 +29,7 @@ export function sprinkleTraceAttributes(
   const span = trace.getSpan(context.active());
 
   if (!span) {
-    console.warn("[tracing] No active span found when trying to set attributes");
+    logger.warn("[tracing] No active span found when trying to set attributes");
     return;
   }
 
@@ -49,11 +50,14 @@ export function sprinkleTraceAttributes(
     }
   }
 
-  console.log("[tracing] Set trace attributes:", {
-    "route.category": category,
-    "llm.provider": provider,
-    "agent.id": agent?.id,
-    "agent.name": agent?.name,
-    "agent.labels": agent?.labels?.length || 0,
-  });
+  logger.info(
+    {
+      "route.category": category,
+      "llm.provider": provider,
+      "agent.id": agent?.id,
+      "agent.name": agent?.name,
+      "agent.labels": agent?.labels?.length || 0,
+    },
+    "[tracing] Set trace attributes",
+  );
 }

@@ -292,7 +292,9 @@ function Agents({
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="label-value-filter">Filter by Label Value</Label>
+                <Label htmlFor="label-value-filter">
+                  Filter by Label Value
+                </Label>
                 <div className="flex gap-2">
                   <Select
                     value={labelValueFilter}

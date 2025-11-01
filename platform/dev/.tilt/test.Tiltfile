@@ -1,0 +1,45 @@
+# Test resources
+
+local_resource(
+  'unit-tests',
+  cmd='pnpm test',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'helm-tests',
+  cmd='cd helm && helm unittest .',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)
+
+local_resource(
+  'e2e-tests',
+  cmd='pnpm test:e2e',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'e2e-tests-ui',
+  serve_cmd='pnpm test:e2e:ui',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['pnpm-install', 'pnpm-dev']
+)
+
+local_resource(
+  'wiremock',
+  serve_cmd='docker compose -f e2e-tests/docker-compose-platform.yml up wiremock',
+  serve_dir='.',
+  labels=['test'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
+)

@@ -3029,6 +3029,7 @@ export type GetDefaultCredentialsStatusErrors = {
      */
     500: {
         enabled: boolean;
+        hasUsers: boolean;
     };
 };
 
@@ -3040,6 +3041,7 @@ export type GetDefaultCredentialsStatusResponses = {
      */
     200: {
         enabled: boolean;
+        hasUsers: boolean;
     };
 };
 

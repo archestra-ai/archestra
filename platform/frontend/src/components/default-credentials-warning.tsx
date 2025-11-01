@@ -15,8 +15,7 @@ export function DefaultCredentialsWarning({
 }) {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
-  const { data: credentialsStatus, isLoading } =
-    useDefaultCredentialsEnabled();
+  const { data: credentialsStatus, isLoading } = useDefaultCredentialsEnabled();
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
 
@@ -70,10 +69,15 @@ export function DefaultCredentialsWarning({
           </AlertTitle>
           <AlertDescription className="text-xs mt-1">
             <p className="mb-2">
-              The database has no users. Please initialize the database to create the admin account.
+              The database has no users. Please initialize the database to
+              create the admin account.
             </p>
             <p>
-              Run <code className="bg-muted px-1 py-0.5 rounded">pnpm db:migrate</code> to initialize the database with the default admin credentials.
+              Run{" "}
+              <code className="bg-muted px-1 py-0.5 rounded">
+                pnpm db:migrate
+              </code>{" "}
+              to initialize the database with the default admin credentials.
             </p>
           </AlertDescription>
         </Alert>

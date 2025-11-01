@@ -364,7 +364,7 @@ local_resource(
 
 local_resource(
   'orlando-wiremock',
-  serve_cmd='docker compose -f orlando/docker-compose.yml up wiremock',
+  serve_cmd='docker compose -f dev/orlando/docker-compose.yml up wiremock',
   serve_dir='.',
   labels=['integrations'],
   trigger_mode=TRIGGER_MODE_MANUAL,

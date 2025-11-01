@@ -200,5 +200,13 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Chat Routes
+  StreamChat: "streamChat",
+  GetChatConversations: "getChatConversations",
+  GetChatConversation: "getChatConversation",
+  CreateChatConversation: "createChatConversation",
+  UpdateChatConversation: "updateChatConversation",
+  DeleteChatConversation: "deleteChatConversation",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

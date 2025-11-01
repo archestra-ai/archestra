@@ -16,6 +16,7 @@ import {
   Info,
   LogIn,
   type LucideIcon,
+  MessageCircle,
   MessagesSquare,
   Router,
   Settings,
@@ -66,6 +67,11 @@ const getNavigationItems = (
     },
     ...(isAuthenticated
       ? [
+          {
+            title: "Chat",
+            url: "/chat",
+            icon: MessageCircle,
+          },
           {
             title: "Agents",
             url: "/agents",

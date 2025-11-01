@@ -298,7 +298,7 @@ export type OpenAiChatCompletionResponseInput = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -1322,7 +1322,7 @@ export type OpenAiChatCompletionResponse = {
          */
         message: {
             content: string | unknown;
-            refusal: string | unknown;
+            refusal?: string | unknown;
             role: 'assistant';
             annotations?: Array<unknown>;
             audio?: unknown;
@@ -4300,6 +4300,9 @@ export type GetInternalMcpCatalogResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4370,6 +4373,9 @@ export type CreateInternalMcpCatalogItemData = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4457,6 +4463,9 @@ export type CreateInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4606,6 +4615,9 @@ export type GetInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4676,6 +4688,9 @@ export type UpdateInternalMcpCatalogItemData = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4774,6 +4789,9 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4960,6 +4978,9 @@ export type GetMcpServerInstallationRequestsResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5029,6 +5050,9 @@ export type CreateMcpServerInstallationRequestData = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
     };
@@ -5125,6 +5149,9 @@ export type CreateMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5311,6 +5338,9 @@ export type GetMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5380,6 +5410,9 @@ export type UpdateMcpServerInstallationRequestData = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -5497,6 +5530,9 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5624,6 +5660,9 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5751,6 +5790,9 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5878,6 +5920,9 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;

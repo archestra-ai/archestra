@@ -58,8 +58,8 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9090)
 
 # Observability
-tilt trigger prometheus-grafana      # Start Prometheus + Grafana for metrics visualization
-docker compose -f observability/docker-compose.yml up -d  # Alternative: Start via docker-compose
+tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)
+docker compose -f dev/observability/docker-compose.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables
@@ -106,6 +106,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - API keys have all permissions by default
 - API keys work as fallback when session auth fails (e.g., "No active organization" errors)
 - Use `pnpm test:e2e` to run API tests with API key authentication
+
+## Observability
+
+**LLM Tracing**: All LLM proxy routes include agent data in traces via `sprinkleTraceAttributes()` utility. Traces include `agent.name` and custom `agent.<label>` attributes for filtering in Jaeger.
+
+**Prometheus Metrics**: LLM metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
 
 ## Coding Conventions
 

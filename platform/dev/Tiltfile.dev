@@ -1,10 +1,16 @@
 # Development + pre-requisite resources
 
+# Define is_prod locally (same logic as main Tiltfile)
+is_prod = os.getenv('PROD') == 'true'
+
 local_resource(
   'pnpm-install',
   cmd='pnpm install',
-  deps=['./frontend/package.json', './backend/package.json'],
-  labels=['pre']
+  deps=[
+    '../frontend/package.json',
+    '../backend/package.json',
+  ],
+  labels=['dev']
 )
 
 if is_prod:
@@ -31,10 +37,10 @@ local_resource(
   labels=['dev'],
   resource_deps=['pnpm-install'],
   deps=[
-    "./frontend/src",
-    "./backend/src",
-    "./experiments/src",
-    "./biome.json"
+    "../frontend/src",
+    "../backend/src",
+    "../experiments/src",
+    "../biome.json",
   ]
 )
 
@@ -54,4 +60,13 @@ local_resource(
   resource_deps=['pnpm-install', 'pnpm-dev'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
+)
+
+local_resource(
+  'observability',
+  serve_cmd='docker compose -f docker-compose.observability.yml up',
+  serve_dir='.',
+  labels=['observability'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False
 )

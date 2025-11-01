@@ -1,4 +1,5 @@
 # Database resources
+load('ext://helm_remote', 'helm_remote')
 
 # PostgreSQL database for local development
 # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
@@ -28,7 +29,8 @@ k8s_resource('postgresql', port_forwards=['5432:5432'], labels=['database'])
 # Database cleanup button (manual trigger only, for development)
 local_resource(
   'db-clean',
-  cmd='cd backend && pnpm db:clean',
+  cmd='pnpm db:clean',
+  dir='../backend',
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
   labels=['database']
@@ -50,7 +52,6 @@ local_resource(
   # propogate the required environment variables (ie. DATABASE_URL)
   # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
   cmd='''
-    cd backend
     for i in {1..30}; do
       if pnpm db:migrate 2>/dev/null; then
         echo "✅ Migration completed successfully"
@@ -62,14 +63,16 @@ local_resource(
     echo "❌ Migration failed after 30 attempts"
     exit 1
   ''',
-  deps=['./backend/src/database/migrations'],
+  dir='../backend',
+  deps=['../backend/src/database/migrations'],
   resource_deps=['pnpm-install', 'postgresql'],
   labels=['database']
 )
 
 local_resource(
   'db-generate',
-  cmd='cd backend && pnpm db:generate',
+  cmd='pnpm db:generate',
+  dir='../backend',
   resource_deps=['postgresql'],
   labels=['database'],
   trigger_mode=TRIGGER_MODE_MANUAL,
@@ -81,7 +84,8 @@ local_resource(
   # NOTE: we need to cd into the backend directory to run the migrate command
   # because otherwise if we run the command from this directory, it is run via turbo, which does not properly
   # propogate the required environment variables (ie. DATABASE_URL)
-  serve_cmd='cd backend && pnpm db:studio',
+  serve_cmd='pnpm db:studio',
+  serve_dir='../backend',
   labels=['database'],
   resource_deps=['postgresql']
 )

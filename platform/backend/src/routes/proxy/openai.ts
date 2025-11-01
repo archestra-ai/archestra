@@ -7,7 +7,13 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
-import { ErrorResponseSchema, OpenAi, RouteId, UuidIdSchema } from "@/types";
+import {
+  type Agent,
+  ErrorResponseSchema,
+  OpenAi,
+  RouteId,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import { MockOpenAIClient } from "./mock-openai-client";
 import * as utils from "./utils";
@@ -152,7 +158,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "OpenAI chat completion request received",
     );
 
-    let resolvedAgent;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);

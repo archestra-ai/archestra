@@ -7,7 +7,13 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
-import { Anthropic, ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
+import {
+  type Agent,
+  Anthropic,
+  ErrorResponseSchema,
+  RouteId,
+  UuidIdSchema,
+} from "@/types";
 import { PROXY_API_PREFIX } from "./common";
 import * as utils from "./utils";
 
@@ -142,7 +148,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       "Anthropic messages request received",
     );
 
-    let resolvedAgent;
+    let resolvedAgent: Agent;
     if (agentId) {
       // If agentId provided via URL, validate it exists
       const agent = await AgentModel.findById(agentId);

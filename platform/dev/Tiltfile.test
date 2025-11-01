@@ -11,7 +11,8 @@ local_resource(
 
 local_resource(
   'helm-tests',
-  cmd='cd helm && helm unittest .',
+  cmd='helm unittest helm',
+  dir='../',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False
@@ -29,6 +30,7 @@ local_resource(
 local_resource(
   'e2e-tests-ui',
   serve_cmd='pnpm test:e2e:ui',
+  serve_dir='../',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False,
@@ -38,7 +40,7 @@ local_resource(
 local_resource(
   'wiremock',
   serve_cmd='docker compose -f e2e-tests/docker-compose-platform.yml up wiremock',
-  serve_dir='.',
+  serve_dir='../',
   labels=['test'],
   trigger_mode=TRIGGER_MODE_MANUAL,
   auto_init=False

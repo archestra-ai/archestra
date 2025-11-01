@@ -1,6 +1,5 @@
 allow_k8s_contexts(['orbstack', 'docker-desktop'])
 
-load('ext://helm_remote', 'helm_remote')
 load('ext://dotenv', 'dotenv')
 
 is_prod = os.getenv('PROD') == 'true'
@@ -25,8 +24,7 @@ else:
 dotenv('./.env')
 
 # Load sub-Tiltfiles by label
-load_dynamic('./dev/.tilt/database/Tiltfile')
-load_dynamic('./dev/.tilt/observability/Tiltfile')
-load_dynamic('./dev/.tilt/dev/Tiltfile')
-load_dynamic('./dev/.tilt/test/Tiltfile')
-load_dynamic('./dev/.tilt/integrations/Tiltfile')
+load_dynamic('./dev/Tiltfile.database')
+load_dynamic('./dev/Tiltfile.dev')
+load_dynamic('./dev/Tiltfile.test')
+load_dynamic('./dev/Tiltfile.integrations')

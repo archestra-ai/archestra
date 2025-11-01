@@ -136,6 +136,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Keys and values stored separately for consistency and reuse
 - One value per key per agent (updating same key replaces value)
 - API endpoints: GET `/api/agents/labels/keys`, `/api/agents/labels/values`
+- Agents API supports filtering by: `name` (case-insensitive), `teamId`, `labelKey`, `labelValue`
 
 **MCP Server Installation Requests**:
 

@@ -25,11 +25,8 @@ else:
 dotenv('./.env')
 
 # Load sub-Tiltfiles by label
-load_dynamic('./dev/.tilt/pre/Tiltfile')
 load_dynamic('./dev/.tilt/database/Tiltfile')
 load_dynamic('./dev/.tilt/observability/Tiltfile')
 load_dynamic('./dev/.tilt/dev/Tiltfile')
-load_dynamic('./dev/.tilt/prod/Tiltfile')
 load_dynamic('./dev/.tilt/test/Tiltfile')
 load_dynamic('./dev/.tilt/integrations/Tiltfile')
-

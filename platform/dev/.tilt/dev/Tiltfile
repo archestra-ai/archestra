@@ -1,7 +1,23 @@
-# Development resources
+# Development + pre-requisite resources
 
-# dev
-if not is_prod:
+local_resource(
+  'pnpm-install',
+  cmd='pnpm install',
+  deps=['./frontend/package.json', './backend/package.json'],
+  labels=['pre']
+)
+
+if is_prod:
+  # prod bundle
+  local_resource(
+    'pnpm-prod',
+    cmd='rm -rf frontend/.next && pnpm build',
+    serve_cmd='pnpm start',
+    labels=['dev'],
+    resource_deps=['db-migrate']
+  )
+else:
+  # dev bundle
   local_resource(
     'pnpm-dev',
     serve_cmd='pnpm dev',

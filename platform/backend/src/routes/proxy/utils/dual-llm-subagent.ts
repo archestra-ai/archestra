@@ -1,3 +1,4 @@
+import logger from "@/logging";
 import { DualLlmConfigModel, DualLlmResultModel } from "@/models";
 import type { DualLlmConfig } from "@/types";
 import {
@@ -84,12 +85,12 @@ export class DualLlmSubagent {
     ];
 
     // Q&A loop: Main agent asks questions, quarantined agent answers
-    console.log(
+    logger.info(
       `\n=== Starting Dual LLM Q&A Loop (max ${this.config.maxRounds} rounds) ===`,
     );
 
     for (let round = 0; round < this.config.maxRounds; round++) {
-      console.log(`\n--- Round ${round + 1}/${this.config.maxRounds} ---`);
+      logger.info(`\n--- Round ${round + 1}/${this.config.maxRounds} ---`);
 
       // Step 1: Main agent formulates a multiple choice question
       const response = await this.llmClient.chat(conversation, 0);
@@ -97,7 +98,7 @@ export class DualLlmSubagent {
 
       // Check if main agent is done questioning
       if (response === "DONE" || response.includes("DONE")) {
-        console.log("✓ Main agent signaled DONE. Ending Q&A loop.");
+        logger.info("✓ Main agent signaled DONE. Ending Q&A loop.");
         break;
       }
 
@@ -106,7 +107,7 @@ export class DualLlmSubagent {
       const optionsMatch = response.match(/OPTIONS:\s*([\s\S]+)/);
 
       if (!questionMatch || !optionsMatch) {
-        console.log("✗ Main agent did not format question correctly. Ending.");
+        logger.info("✗ Main agent did not format question correctly. Ending.");
         break;
       }
 
@@ -117,17 +118,17 @@ export class DualLlmSubagent {
         .map((line) => line.replace(/^\d+:\s*/, "").trim())
         .filter((opt) => opt.length > 0);
 
-      console.log(`\nQuestion: ${question}`);
-      console.log(`Options (${options.length}):`);
+      logger.info(`\nQuestion: ${question}`);
+      logger.info(`Options (${options.length}):`);
       for (let idx = 0; idx < options.length; idx++) {
-        console.log(`  ${idx}: ${options[idx]}`);
+        logger.info(`  ${idx}: ${options[idx]}`);
       }
 
       // Step 3: Quarantined agent answers the question (can see untrusted data)
       const answerIndex = await this.answerQuestion(question, options);
       const selectedOption = options[answerIndex];
 
-      console.log(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
+      logger.info(`\nAnswer: ${answerIndex} - "${selectedOption}"`);
 
       // Stream progress if callback provided
       if (onProgress) {
@@ -145,12 +146,12 @@ export class DualLlmSubagent {
       });
     }
 
-    console.log("\n=== Q&A Loop Complete ===\n");
+    logger.info("\n=== Q&A Loop Complete ===\n");
 
     // Log the complete conversation history
-    console.log("=== Final Messages Object ===");
-    console.log(JSON.stringify(conversation, null, 2));
-    console.log("=== End Messages Object ===\n");
+    logger.info("=== Final Messages Object ===");
+    logger.info(JSON.stringify(conversation, null, 2));
+    logger.info("=== End Messages Object ===\n");
 
     // Generate a safe summary from the Q&A conversation
     const summary = await this.generateSummary(conversation);
@@ -208,7 +209,7 @@ export class DualLlmSubagent {
 
     // Code-level validation: Check if response has correct structure
     if (!parsed || typeof parsed.answer !== "number") {
-      console.warn("Invalid response structure, defaulting to last option");
+      logger.warn("Invalid response structure, defaulting to last option");
       return options.length - 1;
     }
 

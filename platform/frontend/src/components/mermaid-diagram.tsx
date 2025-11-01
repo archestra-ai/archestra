@@ -2,7 +2,7 @@
 
 import mermaid from "mermaid";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface MermaidDiagramProps {
   chart: string;
@@ -15,29 +15,39 @@ export function MermaidDiagram({
 }: MermaidDiagramProps) {
   const ref = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    const isDark = theme === "dark";
+
     mermaid.initialize({
       startOnLoad: false,
-      theme: theme === "dark" ? "dark" : "neutral",
-      themeVariables: {
-        primaryColor: "#f3f4f6",
-        primaryBorderColor: "#9ca3af",
-        primaryTextColor: "#000",
-        lineColor: "#5e5e5e",
-        background: "#f9fafb",
-        mainBkg: "#f3f4f6",
-        secondBkg: "#e5e7eb",
-        tertiaryColor: "#d1d5db",
-        fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-      },
+      theme: isDark ? "dark" : "neutral",
+      themeVariables: isDark
+        ? {
+            // Dark mode colors
+            primaryColor: "#374151",
+            primaryBorderColor: "#4b5563",
+            primaryTextColor: "#f3f4f6",
+            lineColor: "#9ca3af",
+            background: "#1f2937",
+            mainBkg: "#374151",
+            secondBkg: "#4b5563",
+            tertiaryColor: "#6b7280",
+            fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+          }
+        : {
+            // Light mode colors
+            primaryColor: "#f3f4f6",
+            primaryBorderColor: "#9ca3af",
+            primaryTextColor: "#000",
+            lineColor: "#5e5e5e",
+            background: "#f9fafb",
+            mainBkg: "#f3f4f6",
+            secondBkg: "#e5e7eb",
+            tertiaryColor: "#d1d5db",
+            fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+          },
     });
-    setIsInitialized(true);
-  }, [theme]);
-
-  useEffect(() => {
-    if (!isInitialized) return;
 
     const renderDiagram = async () => {
       if (ref.current) {
@@ -55,7 +65,7 @@ export function MermaidDiagram({
     };
 
     renderDiagram();
-  }, [chart, id, isInitialized]);
+  }, [chart, id, theme]);
 
   return (
     <div

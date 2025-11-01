@@ -42,6 +42,9 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
     arguments: Array<string>;
     environment?: Record<string, string>;
     dockerImage?: string;
+    transportType?: "stdio" | "streamable-http";
+    httpPort?: number;
+    httpPath?: string;
   }>(),
   userConfig: jsonb("user_config")
     .$type<

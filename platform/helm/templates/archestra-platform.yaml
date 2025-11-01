@@ -35,10 +35,6 @@ spec:
         {{- include "archestra-platform.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
-      {{- with .Values.archestra.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       # Init container to wait for PostgreSQL to be ready before starting the application
       # This prevents the application from crashing when PostgreSQL is still starting up
       # and the application tries to run database migrations (in which it assumes that the database is already ready)

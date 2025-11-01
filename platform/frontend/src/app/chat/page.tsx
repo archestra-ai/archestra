@@ -2,7 +2,9 @@
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { DefaultChatTransport } from "ai";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useState } from "react";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
@@ -22,9 +24,31 @@ interface ConversationWithMessages extends Conversation {
 }
 
 export default function ChatPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+
   const [conversationId, setConversationId] = useState<string>();
   const [input, setInput] = useState("");
+
+  // Initialize conversation ID from URL on mount
+  useEffect(() => {
+    const conversationParam = searchParams.get("conversation");
+    if (conversationParam && conversationParam !== conversationId) {
+      setConversationId(conversationParam);
+    }
+  }, [searchParams, conversationId]);
+
+  // Update URL when conversation changes
+  const selectConversation = (id: string | undefined) => {
+    setConversationId(id);
+    if (id) {
+      router.push(`${pathname}?conversation=${id}`);
+    } else {
+      router.push(pathname);
+    }
+  };
 
   // Fetch conversations
   const { data: conversations = [] } = useQuery<Conversation[]>({
@@ -61,18 +85,28 @@ export default function ChatPage() {
     },
     onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      setConversationId(newConversation.id);
+      selectConversation(newConversation.id);
     },
   });
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, stop } = useChat({
-    api: "/api/chat", // Must match backend route
+  const { messages, sendMessage, status, stop, setMessages } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat", // Must match backend route
+      credentials: "include", // Send cookies for authentication
+    }),
     id: conversationId,
-    credentials: "include", // Send cookies for authentication
-    initialMessages: conversation?.messages || [],
-    key: conversationId, // Force re-initialization when conversation changes
   });
+
+  // Sync messages when conversation loads
+  useEffect(() => {
+    if (conversation?.messages) {
+      setMessages(conversation.messages);
+    } else if (conversationId && !conversation) {
+      // Clear messages when switching to a conversation that's loading
+      setMessages([]);
+    }
+  }, [conversation, conversationId, setMessages]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -95,7 +129,7 @@ export default function ChatPage() {
       <ConversationList
         conversations={conversations}
         selectedConversationId={conversationId}
-        onSelectConversation={setConversationId}
+        onSelectConversation={selectConversation}
         onCreateConversation={() => createConversation.mutate()}
         isCreatingConversation={createConversation.isPending}
       />

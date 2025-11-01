@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel } from "@/models";
+import AgentLabelModel from "@/models/agent-label";
 import {
   ErrorResponseSchema,
   InsertAgentSchema,
@@ -282,6 +283,90 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
 
         return reply.send({ success: true });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/agents/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetLabelKeys,
+        description: "Get all available label keys",
+        tags: ["Agents"],
+        response: {
+          200: z.array(z.string()),
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const keys = await AgentLabelModel.getAllKeys();
+        return reply.send(keys);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/agents/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetLabelValues,
+        description: "Get all available label values",
+        tags: ["Agents"],
+        response: {
+          200: z.array(z.string()),
+          401: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        const values = await AgentLabelModel.getAllValues();
+        return reply.send(values);
       } catch (error) {
         fastify.log.error(error);
         return reply.status(500).send({

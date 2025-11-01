@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import logger from "@/logging";
 import { seedDatabase } from "../database/seed";
 
 /**
@@ -7,11 +8,11 @@ import { seedDatabase } from "../database/seed";
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   seedDatabase()
     .then(() => {
-      console.log("\n✅ Done!");
+      logger.info("\n✅ Done!");
       process.exit(0);
     })
     .catch((error) => {
-      console.error("\n❌ Error seeding database:", error);
+      logger.error({ err: error }, "\n❌ Error seeding database:");
       process.exit(1);
     });
 }

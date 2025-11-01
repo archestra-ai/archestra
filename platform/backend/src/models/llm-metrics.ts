@@ -7,6 +7,7 @@
 
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
+import logger from "@/logging";
 import * as utils from "../routes/proxy/utils";
 
 type Fetch = (
@@ -104,7 +105,7 @@ export function getObservableFetch(
           throw new Error("Unknown provider when logging usage token metrics");
         }
       } catch (_parseError) {
-        console.error("Error parsing LLM response JSON for tokens");
+        logger.error("Error parsing LLM response JSON for tokens");
       }
     }
 

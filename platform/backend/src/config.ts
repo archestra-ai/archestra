@@ -144,6 +144,9 @@ export default {
   chat: {
     openai: {
       apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_OPENAI_BASE_URL ||
+        "https://api.openai.com/v1",
     },
     mcp: {
       remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",

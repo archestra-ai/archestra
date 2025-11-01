@@ -71,6 +71,13 @@ ANTHROPIC_API_KEY=your-api-key-here
 ARCHESTRA_OPENAI_BASE_URL=https://api.openai.com/v1
 ARCHESTRA_ANTHROPIC_BASE_URL=https://api.anthropic.com
 
+# Chat Feature Configuration
+ARCHESTRA_CHAT_OPENAI_API_KEY=your-api-key-here
+ARCHESTRA_CHAT_OPENAI_BASE_URL=https://api.openai.com/v1  # Optional, defaults to OpenAI
+ARCHESTRA_CHAT_DEFAULT_MODEL=gpt-4o  # Optional, defaults to gpt-4o
+ARCHESTRA_CHAT_MCP_SERVER_URL=http://localhost:9000/v1/mcp  # Optional, for MCP tool integration
+ARCHESTRA_CHAT_MCP_SERVER_HEADERS={"Authorization":"Bearer token","Accept":"application/json, text/event-stream"}  # Optional
+
 # Kubernetes (for MCP server runtime)
 ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE=default
 ARCHESTRA_ORCHESTRATOR_KUBECONFIG=/path/to/kubeconfig  # Optional, defaults to in-cluster config or ~/.kube/config

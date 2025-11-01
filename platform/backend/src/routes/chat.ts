@@ -93,13 +93,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create OpenAI client
       const openai = createOpenAI({
         apiKey: config.chat.openai.apiKey,
+        baseURL: config.chat.openai.baseUrl,
+        fetch: async (url, init) => {
+          // Add custom header to bypass strict validation for streaming tool calls
+          const headers = new Headers(init?.headers);
+          headers.set("X-Stainless-Raw-Response", "true");
+          return fetch(url, { ...init, headers });
+        },
       });
 
-      // Stream with AI SDK
+      // Stream with AI SDK - use .chat() to explicitly use /chat/completions endpoint
       const result = streamText({
-        model: openai(conversation.selectedModel),
+        model: openai.chat(conversation.selectedModel),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
+        maxSteps: 5, // Enable multi-step tool calling
         onFinish: async ({ usage, finishReason }) => {
           fastify.log.info(
             {

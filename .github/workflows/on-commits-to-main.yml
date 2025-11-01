@@ -67,7 +67,7 @@ jobs:
       - name: Deploy to staging
         run: |
           helm upgrade archestra-platform \
-            ./helm \
+            ./platform/helm \
             --install \
             --namespace archestra \
             --create-namespace \

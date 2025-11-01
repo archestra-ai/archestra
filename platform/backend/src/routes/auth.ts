@@ -21,21 +21,36 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       response: {
         200: z.object({
           enabled: z.boolean(),
+          hasUsers: z.boolean(),
         }),
         500: z.object({
           enabled: z.boolean(),
+          hasUsers: z.boolean(),
         }),
       },
     },
     handler: async (_request, reply) => {
       try {
+        // First, check if there are ANY users in the database
+        const userCount = await db.select().from(schema.usersTable).limit(1);
+
+        const hasUsers = userCount.length > 0;
+
+        // If no users exist, return that info
+        if (!hasUsers) {
+          return reply.send({
+            enabled: false,
+            hasUsers: false,
+          });
+        }
+
         // Check if admin email from config matches the default
         const configUsesDefaults =
           config.auth.adminDefaultEmail === DEFAULT_ADMIN_EMAIL;
 
         if (!configUsesDefaults) {
           // Custom credentials are configured
-          return reply.send({ enabled: false });
+          return reply.send({ enabled: false, hasUsers: true });
         }
 
         // Check if a user with the default email exists
@@ -47,7 +62,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!adminUser) {
           // Default admin user doesn't exist
-          return reply.send({ enabled: false });
+          return reply.send({ enabled: false, hasUsers: true });
         }
 
         // Check if the user is using the default password
@@ -60,7 +75,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         if (!account?.password) {
           // No password set (shouldn't happen for email/password auth)
-          return reply.send({ enabled: false });
+          return reply.send({ enabled: false, hasUsers: true });
         }
 
         // Compare the stored password hash with the default password
@@ -69,10 +84,10 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hash: account.password,
         });
 
-        return reply.send({ enabled: isDefaultPassword });
+        return reply.send({ enabled: isDefaultPassword, hasUsers: true });
       } catch (error) {
         fastify.log.error(error);
-        return reply.status(500).send({ enabled: false });
+        return reply.status(500).send({ enabled: false, hasUsers: false });
       }
     },
   });

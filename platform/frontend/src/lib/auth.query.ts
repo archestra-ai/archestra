@@ -58,7 +58,10 @@ export function useDefaultCredentialsEnabled() {
     queryKey: ["auth", "defaultCredentialsEnabled"],
     queryFn: async () => {
       const { data } = await archestraApiSdk.getDefaultCredentialsStatus();
-      return data?.enabled ?? false;
+      return {
+        enabled: data?.enabled ?? false,
+        hasUsers: data?.hasUsers ?? true, // Default to true if undefined
+      };
     },
     // Refetch when window is focused to catch password changes
     refetchOnWindowFocus: true,

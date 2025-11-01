@@ -15,7 +15,7 @@ export function DefaultCredentialsWarning({
 }) {
   const { data: session } = authClient.useSession();
   const userEmail = session?.user?.email;
-  const { data: defaultCredentialsEnabled, isLoading } =
+  const { data: credentialsStatus, isLoading } =
     useDefaultCredentialsEnabled();
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
@@ -55,12 +55,35 @@ export function DefaultCredentialsWarning({
   };
 
   // Loading state - don't show anything yet
-  if (isLoading || defaultCredentialsEnabled === undefined) {
+  if (isLoading || credentialsStatus === undefined) {
+    return null;
+  }
+
+  // Check if database has no users
+  if (!credentialsStatus.hasUsers) {
+    // Show "no users" warning on login page
+    if (alwaysShow) {
+      return (
+        <Alert variant="destructive" className="text-xs">
+          <AlertTitle className="text-xs font-semibold">
+            No Users in Database
+          </AlertTitle>
+          <AlertDescription className="text-xs mt-1">
+            <p className="mb-2">
+              The database has no users. Please initialize the database to create the admin account.
+            </p>
+            <p>
+              Run <code className="bg-muted px-1 py-0.5 rounded">pnpm db:migrate</code> to initialize the database with the default admin credentials.
+            </p>
+          </AlertDescription>
+        </Alert>
+      );
+    }
     return null;
   }
 
   // If default credentials are not enabled, don't show warning
-  if (!defaultCredentialsEnabled) {
+  if (!credentialsStatus.enabled) {
     return null;
   }
 

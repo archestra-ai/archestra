@@ -1,9 +1,16 @@
 import { DEFAULT_AGENT_NAME } from "@shared";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { Agent, InsertAgent, UpdateAgent } from "@/types";
 import AgentLabelModel from "./agent-label";
 import AgentTeamModel from "./agent-team";
+
+interface AgentFilters {
+  name?: string;
+  teamId?: string;
+  labelKey?: string;
+  labelValue?: string;
+}
 
 class AgentModel {
   static async create({
@@ -34,7 +41,11 @@ class AgentModel {
     };
   }
 
-  static async findAll(userId?: string, isAdmin?: boolean): Promise<Agent[]> {
+  static async findAll(
+    userId?: string,
+    isAdmin?: boolean,
+    filters?: AgentFilters,
+  ): Promise<Agent[]> {
     let query = db
       .select()
       .from(schema.agentsTable)
@@ -48,6 +59,13 @@ class AgentModel {
       )
       .$dynamic();
 
+    const whereConditions = [];
+
+    // Apply name filter (case-insensitive search)
+    if (filters?.name) {
+      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+    }
+
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -59,7 +77,90 @@ class AgentModel {
         return [];
       }
 
-      query = query.where(inArray(schema.agentsTable.id, accessibleAgentIds));
+      whereConditions.push(
+        inArray(schema.agentsTable.id, accessibleAgentIds),
+      );
+    }
+
+    // Apply team filter
+    if (filters?.teamId) {
+      const agentIdsWithTeam = await db
+        .select({ agentId: schema.agentTeamTable.agentId })
+        .from(schema.agentTeamTable)
+        .where(eq(schema.agentTeamTable.teamId, filters.teamId));
+
+      const agentIds = agentIdsWithTeam.map((row) => row.agentId);
+
+      if (agentIds.length === 0) {
+        return [];
+      }
+
+      whereConditions.push(inArray(schema.agentsTable.id, agentIds));
+    }
+
+    // Apply label filter
+    if (filters?.labelKey || filters?.labelValue) {
+      const labelConditions = [];
+
+      if (filters.labelKey) {
+        const labelKeys = await db
+          .select({ id: schema.labelKeyTable.id })
+          .from(schema.labelKeyTable)
+          .where(eq(schema.labelKeyTable.key, filters.labelKey));
+
+        if (labelKeys.length === 0) {
+          return [];
+        }
+
+        labelConditions.push(
+          inArray(
+            schema.agentLabelTable.keyId,
+            labelKeys.map((k) => k.id),
+          ),
+        );
+      }
+
+      if (filters.labelValue) {
+        const labelValues = await db
+          .select({ id: schema.labelValueTable.id })
+          .from(schema.labelValueTable)
+          .where(eq(schema.labelValueTable.value, filters.labelValue));
+
+        if (labelValues.length === 0) {
+          return [];
+        }
+
+        labelConditions.push(
+          inArray(
+            schema.agentLabelTable.valueId,
+            labelValues.map((v) => v.id),
+          ),
+        );
+      }
+
+      const agentIdsWithLabels = await db
+        .select({ agentId: schema.agentLabelTable.agentId })
+        .from(schema.agentLabelTable)
+        .where(
+          labelConditions.length > 1
+            ? and(...labelConditions)
+            : labelConditions[0],
+        );
+
+      const agentIds = agentIdsWithLabels.map((row) => row.agentId);
+
+      if (agentIds.length === 0) {
+        return [];
+      }
+
+      whereConditions.push(inArray(schema.agentsTable.id, agentIds));
+    }
+
+    // Apply all where conditions
+    if (whereConditions.length > 0) {
+      query = query.where(
+        whereConditions.length > 1 ? and(...whereConditions) : whereConditions[0],
+      );
     }
 
     const rows = await query;

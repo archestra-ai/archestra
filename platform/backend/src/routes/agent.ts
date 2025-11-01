@@ -20,6 +20,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAgents,
         description: "Get all agents",
         tags: ["Agents"],
+        querystring: z.object({
+          name: z.string().optional(),
+          teamId: z.string().optional(),
+          labelKey: z.string().optional(),
+          labelValue: z.string().optional(),
+        }),
         response: {
           200: z.array(SelectAgentSchema),
           401: ErrorResponseSchema,
@@ -40,7 +46,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
 
-        const agents = await AgentModel.findAll(user.id, user.isAdmin);
+        const agents = await AgentModel.findAll(
+          user.id,
+          user.isAdmin,
+          request.query,
+        );
         return reply.send(agents);
       } catch (error) {
         fastify.log.error(error);

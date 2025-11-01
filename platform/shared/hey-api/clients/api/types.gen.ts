@@ -2075,7 +2075,12 @@ export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 export type GetAgentsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        labelKey?: string;
+        labelValue?: string;
+        name?: string;
+        teamId?: string;
+    };
     url: '/api/agents';
 };
 

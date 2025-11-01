@@ -18,10 +18,21 @@ const {
 
 export function useAgents(params?: {
   initialData?: archestraApiTypes.GetAgentsResponses["200"];
+  filters?: {
+    name?: string;
+    teamId?: string;
+    labelKey?: string;
+    labelValue?: string;
+  };
 }) {
   return useSuspenseQuery({
-    queryKey: ["agents"],
-    queryFn: async () => (await getAgents()).data ?? null,
+    queryKey: ["agents", params?.filters],
+    queryFn: async () =>
+      (
+        await getAgents({
+          query: params?.filters,
+        })
+      ).data ?? null,
     initialData: params?.initialData,
   });
 }

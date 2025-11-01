@@ -140,7 +140,21 @@ function Agents({
 }: {
   initialData: archestraApiTypes.GetAgentsResponses["200"];
 }) {
-  const { data: agents } = useAgents({ initialData });
+  // Filter state
+  const [nameFilter, setNameFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
+  const [labelKeyFilter, setLabelKeyFilter] = useState("");
+  const [labelValueFilter, setLabelValueFilter] = useState("");
+
+  const { data: agents } = useAgents({
+    initialData,
+    filters: {
+      name: nameFilter || undefined,
+      teamId: teamFilter || undefined,
+      labelKey: labelKeyFilter || undefined,
+      labelValue: labelValueFilter || undefined,
+    },
+  });
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -148,6 +162,8 @@ function Agents({
       return data || [];
     },
   });
+  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableValues = [] } = useLabelValues();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
@@ -203,13 +219,103 @@ function Agents({
       </div>
 
       <div className="max-w-7xl mx-auto px-8 py-8">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Filter Agents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name-filter">Search by Name</Label>
+                <Input
+                  id="name-filter"
+                  placeholder="Search agents..."
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-filter">Filter by Team</Label>
+                <Select value={teamFilter} onValueChange={setTeamFilter}>
+                  <SelectTrigger id="team-filter">
+                    <SelectValue placeholder="All teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All teams</SelectItem>
+                    {teams?.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="label-key-filter">Filter by Label Key</Label>
+                <Select
+                  value={labelKeyFilter}
+                  onValueChange={setLabelKeyFilter}
+                >
+                  <SelectTrigger id="label-key-filter">
+                    <SelectValue placeholder="All label keys" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All label keys</SelectItem>
+                    {availableKeys.map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="label-value-filter">Filter by Label Value</Label>
+                <Select
+                  value={labelValueFilter}
+                  onValueChange={setLabelValueFilter}
+                >
+                  <SelectTrigger id="label-value-filter">
+                    <SelectValue placeholder="All label values" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All label values</SelectItem>
+                    {availableValues.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {(nameFilter || teamFilter || labelKeyFilter || labelValueFilter) && (
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNameFilter("");
+                    setTeamFilter("");
+                    setLabelKeyFilter("");
+                    setLabelValueFilter("");
+                  }}
+                >
+                  Clear all filters
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {!agents || agents.length === 0 ? (
           <Card>
             <CardHeader>
               <CardTitle>No agents found</CardTitle>
               <CardDescription>
-                Create your first agent to get started with the Archestra
-                Platform.
+                {nameFilter || teamFilter || labelKeyFilter || labelValueFilter
+                  ? "No agents match the current filters. Try adjusting your search criteria."
+                  : "Create your first agent to get started with the Archestra Platform."}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -280,7 +386,30 @@ function Agents({
                           day: "numeric",
                         })}
                       </TableCell>
-                      <TableCell>{agent.tools.length}</TableCell>
+                      <TableCell>
+                        {agent.tools.length > 0 ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help">
+                                  {agent.tools.length}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="flex flex-col gap-1 max-w-xs">
+                                  {agent.tools.map((tool) => (
+                                    <div key={tool.id} className="text-xs">
+                                      {tool.name}
+                                    </div>
+                                  ))}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <span>{agent.tools.length}</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <AgentTeamsBadges
                           teamIds={agent.teams || []}

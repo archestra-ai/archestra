@@ -36,7 +36,13 @@ export function initializeMetrics(labelKeys: string[]): void {
   llmRequestDuration = new client.Histogram({
     name: "llm_request_duration_seconds",
     help: "LLM request duration in seconds",
-    labelNames: ["provider", "agent_id", "agent_name", "status_code", ...labelKeys],
+    labelNames: [
+      "provider",
+      "agent_id",
+      "agent_name",
+      "status_code",
+      ...labelKeys,
+    ],
     // Same bucket style as http_request_duration_seconds but adjusted for LLM latency
     buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
   });

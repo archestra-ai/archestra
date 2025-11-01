@@ -49,15 +49,4 @@ export function sprinkleTraceAttributes(
       }
     }
   }
-
-  logger.info(
-    {
-      "route.category": category,
-      "llm.provider": provider,
-      "agent.id": agent?.id,
-      "agent.name": agent?.name,
-      "agent.labels": agent?.labels?.length || 0,
-    },
-    "[tracing] Set trace attributes",
-  );
 }

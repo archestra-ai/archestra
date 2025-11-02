@@ -281,6 +281,20 @@
       "when": 1762075335833,
       "tag": "0039_thin_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1762099284531,
+      "tag": "0040_foamy_toad_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1762100060719,
+      "tag": "0041_deep_big_bertha",
+      "breakpoints": true
     }
   ]
 }

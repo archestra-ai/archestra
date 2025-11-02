@@ -1,16 +1,10 @@
 "use client";
-import {
-  authLocalization,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@daveyplate/better-auth-ui";
+import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import type { Role } from "@shared";
 import {
   BookOpen,
   Bot,
   Bug,
-  ClipboardList,
   Github,
   Info,
   LogIn,
@@ -275,11 +269,7 @@ export function AppSidebar() {
               <UserButton
                 align="center"
                 className="w-full bg-transparent hover:bg-transparent text-foreground"
-                localization={{
-                  ...authLocalization,
-                  SETTINGS: "",
-                  ACCOUNT: "",
-                }}
+                disableDefaultLinks
               />
             </SidebarGroupContent>
           </SidebarGroup>

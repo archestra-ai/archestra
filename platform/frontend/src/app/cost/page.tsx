@@ -40,6 +40,7 @@ ChartJS.register(
   Filler,
 );
 
+import type { CatalogItem } from "@/app/mcp-catalog/_parts/mcp-server-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,12 +70,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -94,19 +89,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Tooltip as UITooltip,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import {
   useCreateLimit,
   useDeleteLimit,
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
-import { useMcpServers } from "@/lib/mcp-server.query";
 import { useTeams } from "@/lib/team.query";
 
 // Inline Form Component for adding/editing limits
@@ -121,16 +111,18 @@ function LimitInlineForm({
   getTeamsWithLimits,
 }: {
   initialData?: any;
-  limitType: "token_cost" | "mcp_server_calls" | "tool_calls";
+  limitType: "token_cost" | "mcp_server_calls";
   onSave: (data: any) => void;
   onCancel: () => void;
   teams: any[];
-  mcpServers: any[];
+  mcpServers: CatalogItem[];
   hasOrganizationLimit: (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => boolean;
   getTeamsWithLimits: (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => string[];
 }) {
   const [formData, setFormData] = useState({
@@ -139,18 +131,15 @@ function LimitInlineForm({
     entityType: initialData?.entityType || "team",
     entityId: initialData?.entityId || "",
     mcpServerName: initialData?.mcpServerName || "",
-    toolName: initialData?.toolName || "",
     limitValue: initialData?.limitValue?.toString() || "",
   });
 
-  const selectedServer = mcpServers.find(
-    (s) => s.name === formData.mcpServerName,
+  // Get teams with existing limits for this limit type and MCP server
+  const teamsWithLimits = getTeamsWithLimits(limitType, formData.mcpServerName);
+  const organizationHasLimit = hasOrganizationLimit(
+    limitType,
+    formData.mcpServerName,
   );
-  const availableTools = selectedServer?.tools || [];
-
-  // Get teams with existing limits for this limit type
-  const teamsWithLimits = getTeamsWithLimits(limitType);
-  const organizationHasLimit = hasOrganizationLimit(limitType);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,13 +155,12 @@ function LimitInlineForm({
   const isValid =
     formData.limitValue &&
     (formData.entityType === "organization" || formData.entityId) &&
-    (limitType === "token_cost" || formData.mcpServerName) &&
-    (limitType !== "tool_calls" || formData.toolName);
+    (limitType === "token_cost" || formData.mcpServerName);
 
   return (
     <tr className="border-b">
       <td
-        colSpan={limitType === "token_cost" ? 4 : 6}
+        colSpan={limitType === "token_cost" ? 4 : 5}
         className="p-4 bg-muted/30"
       >
         <TooltipProvider>
@@ -254,7 +242,6 @@ function LimitInlineForm({
                     setFormData({
                       ...formData,
                       mcpServerName: value,
-                      toolName: "",
                     })
                   }
                 >
@@ -267,42 +254,29 @@ function LimitInlineForm({
                         No MCP servers available
                       </div>
                     ) : (
-                      mcpServers.map((server) => (
-                        <SelectItem key={server.id} value={server.name}>
-                          {server.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                      mcpServers.map((server) => {
+                        // For MCP limits, check if this server already has a limit for the selected entity
+                        const isDisabled =
+                          limitType === "mcp_server_calls" &&
+                          ((formData.entityType === "organization" &&
+                            hasOrganizationLimit(limitType, server.name)) ||
+                            (formData.entityType === "team" &&
+                              formData.entityId &&
+                              getTeamsWithLimits(
+                                limitType,
+                                server.name,
+                              ).includes(formData.entityId)));
 
-            {limitType === "tool_calls" && formData.mcpServerName && (
-              <div className="flex items-center gap-2">
-                <Label htmlFor="tool" className="text-sm whitespace-nowrap">
-                  Tool
-                </Label>
-                <Select
-                  value={formData.toolName}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, toolName: value })
-                  }
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Select a tool" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTools.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No tools available for this server
-                      </div>
-                    ) : (
-                      availableTools.map((tool: any) => (
-                        <SelectItem key={tool.name} value={tool.name}>
-                          {tool.name}
-                        </SelectItem>
-                      ))
+                        return (
+                          <SelectItem
+                            key={server.id}
+                            value={server.name}
+                            disabled={isDisabled}
+                          >
+                            {server.name}
+                          </SelectItem>
+                        );
+                      })
                     )}
                   </SelectContent>
                 </Select>
@@ -315,17 +289,23 @@ function LimitInlineForm({
               </Label>
               <Input
                 id="limitValue"
-                type="number"
-                value={formData.limitValue}
-                onChange={(e) =>
-                  setFormData({ ...formData, limitValue: e.target.value })
+                type="text"
+                value={
+                  formData.limitValue
+                    ? parseInt(formData.limitValue, 10).toLocaleString()
+                    : ""
                 }
+                onChange={(e) => {
+                  // Remove commas and keep only numbers
+                  const value = e.target.value.replace(/[^0-9]/g, "");
+                  setFormData({ ...formData, limitValue: value });
+                }}
                 placeholder={
-                  limitType === "token_cost" ? "e.g. 100" : "e.g. 1000"
+                  limitType === "token_cost" ? "e.g. 100,000" : "e.g. 10,000"
                 }
                 min="1"
                 required
-                className="w-24"
+                className="w-32"
               />
             </div>
 
@@ -362,7 +342,6 @@ function LimitRow({
   teams,
   mcpServers,
   getEntityName,
-  getMcpServerName,
   getUsageStatus,
   hasOrganizationLimit,
   getTeamsWithLimits,
@@ -374,18 +353,19 @@ function LimitRow({
   onCancel: () => void;
   onDelete: () => void;
   teams: any[];
-  mcpServers: any[];
+  mcpServers: CatalogItem[];
   getEntityName: (limit: any) => string;
-  getMcpServerName: (limit: any) => string;
   getUsageStatus: (
     currentUsage: number,
     limitValue: number,
   ) => { percentage: number; status: string };
   hasOrganizationLimit: (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => boolean;
   getTeamsWithLimits: (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => string[];
 }) {
   if (isEditing) {
@@ -432,6 +412,11 @@ function LimitRow({
       <td className="p-4 text-sm text-muted-foreground">
         {getEntityName(limit)}
       </td>
+      {limit.limitType !== "token_cost" && (
+        <td className="p-4 text-sm text-muted-foreground">
+          {limit.mcpServerName || "-"}
+        </td>
+      )}
       <td className="p-4">
         <div className="space-y-1">
           <div className="flex justify-between text-sm">
@@ -510,7 +495,7 @@ export default function CostPage() {
 
   // Data fetching hooks
   const { data: limits = [], isLoading: limitsLoading } = useLimits();
-  const { data: mcpServers = [] } = useMcpServers();
+  const { data: mcpServers = [] } = useInternalMcpCatalog();
   const { data: teams = [] } = useTeams();
   const deleteLimit = useDeleteLimit();
   const createLimit = useCreateLimit();
@@ -518,27 +503,47 @@ export default function CostPage() {
 
   // Filter limits by type
   const llmLimits = limits.filter((limit) => limit.limitType === "token_cost");
-  const mcpLimits = limits.filter((limit) =>
-    ["mcp_server_calls", "tool_calls"].includes(limit.limitType),
+  const mcpLimits = limits.filter(
+    (limit) => limit.limitType === "mcp_server_calls",
   );
 
   // Helper functions to detect existing limits
   const hasOrganizationLimit = (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => {
-    return limits.some(
-      (limit) =>
-        limit.limitType === limitType && limit.entityType === "organization",
-    );
+    return limits.some((limit) => {
+      if (
+        limit.limitType !== limitType ||
+        limit.entityType !== "organization"
+      ) {
+        return false;
+      }
+      // For LLM limits, any org limit blocks another
+      if (limitType === "token_cost") {
+        return true;
+      }
+      // For MCP limits, only block if same MCP server
+      return limit.mcpServerName === mcpServerName;
+    });
   };
 
   const getTeamsWithLimits = (
-    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+    limitType: "token_cost" | "mcp_server_calls",
+    mcpServerName?: string,
   ) => {
     return limits
-      .filter(
-        (limit) => limit.limitType === limitType && limit.entityType === "team",
-      )
+      .filter((limit) => {
+        if (limit.limitType !== limitType || limit.entityType !== "team") {
+          return false;
+        }
+        // For LLM limits, any team limit blocks another
+        if (limitType === "token_cost") {
+          return true;
+        }
+        // For MCP limits, only block if same MCP server
+        return limit.mcpServerName === mcpServerName;
+      })
       .map((limit) => limit.entityId);
   };
 
@@ -552,13 +557,6 @@ export default function CostPage() {
       return "The whole organization";
     }
     return "Unknown Agent";
-  };
-
-  // Helper function to get MCP server name
-  const getMcpServerName = (limit: any) => {
-    if (!limit.mcpServerName) return "-";
-    const server = mcpServers.find((s) => s.name === limit.mcpServerName);
-    return server?.name || limit.mcpServerName;
   };
 
   // Helper function to get usage percentage and status
@@ -1182,87 +1180,9 @@ export default function CostPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Total Tokens</CardTitle>
-                  <CardDescription>
-                    {timeframe === "all"
-                      ? "All-time"
-                      : timeframe.startsWith("custom:")
-                        ? `Last ${getTimeframeDisplay(timeframe)}`
-                        : `Last ${getTimeframeDisplay(timeframe)}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">1,234,567</div>
-                  <p className="text-xs text-muted-foreground">
-                    +12.3% from previous period
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Total Cost</CardTitle>
-                  <CardDescription>
-                    {timeframe === "all"
-                      ? "All-time"
-                      : timeframe.startsWith("custom:")
-                        ? `Last ${getTimeframeDisplay(timeframe)}`
-                        : `Last ${getTimeframeDisplay(timeframe)}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">$2,456.89</div>
-                  <p className="text-xs text-muted-foreground">
-                    +8.7% from previous period
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Avg Cost/Request</CardTitle>
-                  <CardDescription>
-                    {timeframe === "all"
-                      ? "All-time average"
-                      : timeframe.startsWith("custom:")
-                        ? `Last ${getTimeframeDisplay(timeframe)}`
-                        : `Last ${getTimeframeDisplay(timeframe)}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">$0.045</div>
-                  <p className="text-xs text-muted-foreground">
-                    -2.1% from previous period
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Models</CardTitle>
-                  <CardDescription>
-                    {timeframe === "all"
-                      ? "All-time"
-                      : timeframe.startsWith("custom:")
-                        ? `Last ${getTimeframeDisplay(timeframe)}`
-                        : `Last ${getTimeframeDisplay(timeframe)}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">7</div>
-                  <p className="text-xs text-muted-foreground">
-                    GPT-4, Claude, Gemini...
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
             <Card>
               <CardHeader>
-                <CardTitle>Usage by Team</CardTitle>
+                <CardTitle>Teams</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1344,7 +1264,7 @@ export default function CostPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Usage by Agent</CardTitle>
+                <CardTitle>Agents</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1413,7 +1333,7 @@ export default function CostPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Usage by Model</CardTitle>
+                <CardTitle>Models</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1549,7 +1469,7 @@ export default function CostPage() {
                       {llmLimits.length === 0 && !isAddingLlmLimit ? (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={4}
                             className="text-center py-8 text-muted-foreground"
                           >
                             <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -1572,7 +1492,6 @@ export default function CostPage() {
                             teams={teams}
                             mcpServers={mcpServers}
                             getEntityName={getEntityName}
-                            getMcpServerName={getMcpServerName}
                             getUsageStatus={getUsageStatus}
                             hasOrganizationLimit={hasOrganizationLimit}
                             getTeamsWithLimits={getTeamsWithLimits}
@@ -1623,7 +1542,6 @@ export default function CostPage() {
                         <TableHead>Status</TableHead>
                         <TableHead>Applied to</TableHead>
                         <TableHead>MCP Server</TableHead>
-                        <TableHead>Tool</TableHead>
                         <TableHead>Usage</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -1643,7 +1561,7 @@ export default function CostPage() {
                       {mcpLimits.length === 0 && !isAddingMcpLimit ? (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={5}
                             className="text-center py-8 text-muted-foreground"
                           >
                             <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -1666,7 +1584,6 @@ export default function CostPage() {
                             teams={teams}
                             mcpServers={mcpServers}
                             getEntityName={getEntityName}
-                            getMcpServerName={getMcpServerName}
                             getUsageStatus={getUsageStatus}
                             hasOrganizationLimit={hasOrganizationLimit}
                             getTeamsWithLimits={getTeamsWithLimits}

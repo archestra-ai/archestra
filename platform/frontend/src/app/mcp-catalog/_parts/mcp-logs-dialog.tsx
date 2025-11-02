@@ -86,25 +86,27 @@ export function McpLogsDialog({
               </Button>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0 rounded-md border bg-slate-950 p-4">
-              {isLoading ? (
-                <div className="text-slate-400 font-mono text-sm">
-                  Loading logs...
-                </div>
-              ) : error ? (
-                <div className="text-red-400 font-mono text-sm">
-                  Error loading logs: {error.message}
-                </div>
-              ) : logs ? (
-                <pre className="text-slate-200 font-mono text-xs whitespace-pre-wrap break-words">
-                  {logs}
-                </pre>
-              ) : (
-                <div className="text-slate-400 font-mono text-sm">
-                  No logs available
-                </div>
-              )}
-            </ScrollArea>
+            <div className="h-[450px] rounded-md border bg-slate-950 overflow-y-scroll">
+              <div className="p-4">
+                {isLoading ? (
+                  <div className="text-slate-400 font-mono text-sm">
+                    Loading logs...
+                  </div>
+                ) : error ? (
+                  <div className="text-red-400 font-mono text-sm">
+                    Error loading logs: {error.message}
+                  </div>
+                ) : logs ? (
+                  <pre className="text-slate-200 font-mono text-xs whitespace-pre-wrap">
+                    {logs}
+                  </pre>
+                ) : (
+                  <div className="text-slate-400 font-mono text-sm">
+                    No logs available
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Command section */}

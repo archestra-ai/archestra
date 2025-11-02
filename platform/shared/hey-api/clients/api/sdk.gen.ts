@@ -786,7 +786,7 @@ export const getMcpServerTools = <ThrowOnError extends boolean = false>(options:
  */
 export const getMcpServerLogs = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerLogsData, ThrowOnError>) => {
     return (options.client ?? client).get<GetMcpServerLogsResponses, GetMcpServerLogsErrors, ThrowOnError>({
-        url: '/mcp_proxy/{id}/logs',
+        url: '/api/mcp_server/{id}/logs',
         ...options
     });
 };

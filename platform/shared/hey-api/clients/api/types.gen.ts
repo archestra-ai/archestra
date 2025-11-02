@@ -6555,7 +6555,7 @@ export type GetMcpServerLogsData = {
     query?: {
         lines?: number;
     };
-    url: '/mcp_proxy/{id}/logs';
+    url: '/api/mcp_server/{id}/logs';
 };
 
 export type GetMcpServerLogsErrors = {

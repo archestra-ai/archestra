@@ -630,6 +630,39 @@ export default class K8sPod {
   }
 
   /**
+   * Stream logs from the pod with follow enabled
+   */
+  async streamLogs(
+    responseStream: NodeJS.WritableStream,
+    lines: number = 100,
+  ): Promise<void> {
+    try {
+      const logStream = await this.k8sApi.readNamespacedPodLog({
+        name: this.podName,
+        namespace: this.namespace,
+        tailLines: lines,
+        follow: true,
+      });
+
+      // The K8s client returns a string when follow is enabled, but we need to
+      // handle it as a stream. We'll write it to the response stream.
+      if (typeof logStream === "string") {
+        responseStream.write(logStream);
+        responseStream.end();
+      } else {
+        // If it's already a stream, pipe it
+        (logStream as unknown as NodeJS.ReadableStream).pipe(responseStream);
+      }
+    } catch (error: unknown) {
+      logger.error(
+        { err: error },
+        `Failed to stream logs for pod ${this.podName}:`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Get the pod's status summary
    */
   get statusSummary(): K8sPodStatusSummary {

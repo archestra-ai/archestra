@@ -543,6 +543,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         querystring: z.object({
           lines: z.coerce.number().optional().default(100),
+          follow: z.coerce.boolean().optional().default(false),
         }),
         response: {
           200: z.object({
@@ -558,9 +559,29 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id: mcpServerId } = request.params;
-      const { lines } = request.query;
+      const { lines, follow } = request.query;
 
       try {
+        // If follow is enabled, stream the logs
+        if (follow) {
+          // Hijack the response to handle streaming
+          reply.hijack();
+          reply.raw.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+          });
+
+          await McpServerRuntimeManager.streamMcpServerLogs(
+            mcpServerId,
+            reply.raw,
+            lines,
+          );
+
+          return;
+        }
+
+        // Otherwise, return logs as usual
         const logs = await McpServerRuntimeManager.getMcpServerLogs(
           mcpServerId,
           lines,
@@ -570,6 +591,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         fastify.log.error(
           `Error getting logs for MCP server ${mcpServerId}: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
+
+        // If we've already hijacked, we can't send a normal error response
+        if (follow && reply.raw.headersSent) {
+          reply.raw.end();
+          return;
+        }
+
         return reply.status(404).send({
           error: {
             message:

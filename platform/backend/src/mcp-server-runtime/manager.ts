@@ -331,6 +331,22 @@ class McpServerRuntimeManager {
   }
 
   /**
+   * Stream logs from an MCP server pod with follow enabled
+   */
+  async streamMcpServerLogs(
+    mcpServerId: string,
+    responseStream: NodeJS.WritableStream,
+    lines: number = 100,
+  ): Promise<void> {
+    const k8sPod = this.mcpServerIdToPodMap.get(mcpServerId);
+    if (!k8sPod) {
+      throw new Error(`Pod not found for MCP server ${mcpServerId}`);
+    }
+
+    await k8sPod.streamLogs(responseStream, lines);
+  }
+
+  /**
    * Get all available tools from all running MCP servers
    * Note: In the platform, tools are managed via the database and MCP client,
    * not directly through the runtime manager like in desktop app.

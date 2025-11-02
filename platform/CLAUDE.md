@@ -178,11 +178,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 - For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
-**Helm Chart RBAC**:
+**Helm Chart**:
 
-- ServiceAccount with configurable name/annotations for pod identity
-- Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
-- RoleBinding links ServiceAccount to Role for MCP server management
-- Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- RBAC: ServiceAccount with configurable name/annotations for pod identity
+- RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
+- RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
+- Optional Ingress with flexible configuration (`archestra.ingress.enabled`)
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

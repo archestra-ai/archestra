@@ -1,0 +1,28 @@
+archestra:
+  service:
+    annotations:
+      # GKE BackendConfig for custom health checks
+      cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config"}}'
+
+  ingress:
+    enabled: true
+    annotations:
+      # GKE Ingress Controller configuration
+      kubernetes.io/ingress.class: "gce"
+      kubernetes.io/ingress.global-static-ip-name: "archestra-staging-ip"
+      ingress.gcp.cloud.google.com/load-balancer-type: "External"
+      # SSL certificates and redirect (to be enabled when certificates are ready)
+      ingress.gcp.cloud.google.com/managed-certificates: "archestra-platform-ssl-2025"
+      ingress.gcp.cloud.google.com/ssl-redirect: "true"
+
+    hosts:
+      - host: frontend.archestra.dev
+        paths:
+          - path: /
+            port: 3000
+            pathType: Prefix
+      - host: backend.archestra.dev
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix

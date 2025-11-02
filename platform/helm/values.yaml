@@ -68,6 +68,14 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+  service:
+    annotations: {}
+
+  ingress:
+    enabled: false
+    annotations: {}
+    spec: {}
+
 # PostgreSQL configuration
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance

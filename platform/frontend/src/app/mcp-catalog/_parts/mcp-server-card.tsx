@@ -517,7 +517,7 @@ export function McpServerCard({
           {isAdmin && manageCatalogItemDropdownMenu}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-2 justify-end">
+      <CardContent className="flex flex-col gap-2">
         {isRemoteVariant ? remoteCardContent : localCardContent}
       </CardContent>
       {dialogs}

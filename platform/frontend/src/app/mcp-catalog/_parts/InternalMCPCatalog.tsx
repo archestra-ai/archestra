@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRole } from "@/lib/auth.hook";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
@@ -53,9 +52,7 @@ export function InternalMCPCatalog({
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"remote" | "local">("remote");
-  const [remoteSearchQuery, setRemoteSearchQuery] = useState("");
-  const [localSearchQuery, setLocalSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isRemoteServerDialogOpen, setIsRemoteServerDialogOpen] =
     useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] =
@@ -382,9 +379,17 @@ export function InternalMCPCatalog({
       const bInstalled = installedServers?.some(
         (server) => server.catalogId === b.id,
       );
+      const aIsRemote = a.serverType === "remote";
+      const bIsRemote = b.serverType === "remote";
 
+      // First sort by server type (remote before local)
+      if (aIsRemote && !bIsRemote) return -1;
+      if (!aIsRemote && bIsRemote) return 1;
+
+      // Then sort by installed status within each type
       if (aInstalled && !bInstalled) return -1;
       if (!aInstalled && bInstalled) return 1;
+
       return 0;
     });
 
@@ -402,18 +407,8 @@ export function InternalMCPCatalog({
     });
   };
 
-  const remoteCatalogItems = sortInstalledFirst(
-    filterCatalogItems(
-      (catalogItems || []).filter((item) => item.serverType === "remote"),
-      remoteSearchQuery,
-    ),
-  );
-
-  const localCatalogItems = sortInstalledFirst(
-    filterCatalogItems(
-      (catalogItems || []).filter((item) => item.serverType !== "remote"),
-      localSearchQuery,
-    ),
+  const filteredCatalogItems = sortInstalledFirst(
+    filterCatalogItems(catalogItems || [], searchQuery),
   );
 
   return (
@@ -438,122 +433,57 @@ export function InternalMCPCatalog({
             : "Request to add custom MCP Server"}
         </Button>
       </div>
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as "remote" | "local")}
-        className="space-y-4"
-      >
-        <TabsList className="mb-4 grid w-full max-w-sm grid-cols-2">
-          <TabsTrigger value="remote">Remote</TabsTrigger>
-          <TabsTrigger value="local">Local</TabsTrigger>
-        </TabsList>
+      <div className="space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search MCP servers by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {filteredCatalogItems.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-start">
+            {filteredCatalogItems.map((item) => {
+              const installedServer = getAggregatedInstallation(item.id);
+              const isInstallInProgress =
+                installedServer && installingServerIds.has(installedServer.id);
 
-        <TabsContent value="remote" className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search remote servers by name..."
-              value={remoteSearchQuery}
-              onChange={(e) => setRemoteSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+              return (
+                <McpServerCard
+                  variant={item.serverType === "remote" ? "remote" : "local"}
+                  key={item.id}
+                  item={item}
+                  installedServer={installedServer}
+                  installingItemId={installingItemId}
+                  installMutationPending={installMutation.isPending}
+                  installationStatus={
+                    isInstallInProgress
+                      ? mcpServerInstallationStatus.data
+                      : undefined
+                  }
+                  onInstall={() => handleInstall(item, false)}
+                  onInstallTeam={() => handleInstallTeam(item)}
+                  onInstallNoAuth={() => handleInstallNoAuth(item)}
+                  onReinstall={() => handleReinstall(item)}
+                  onEdit={() => setEditingItem(item)}
+                  onDelete={() => setDeletingItem(item)}
+                  isAdmin={isAdmin}
+                />
+              );
+            })}
           </div>
-          {remoteCatalogItems.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {remoteCatalogItems.map((item) => {
-                const installedServer = getAggregatedInstallation(item.id);
-                const isInstallInProgress =
-                  installedServer &&
-                  installingServerIds.has(installedServer.id);
-
-                return (
-                  <McpServerCard
-                    variant="remote"
-                    key={item.id}
-                    item={item}
-                    installedServer={installedServer}
-                    installingItemId={installingItemId}
-                    installMutationPending={installMutation.isPending}
-                    installationStatus={
-                      isInstallInProgress
-                        ? mcpServerInstallationStatus.data
-                        : undefined
-                    }
-                    onInstall={() => handleInstall(item, false)}
-                    onInstallTeam={() => handleInstallTeam(item)}
-                    onInstallNoAuth={() => handleInstallNoAuth(item)}
-                    onReinstall={() => handleReinstall(item)}
-                    onEdit={() => setEditingItem(item)}
-                    onDelete={() => setDeletingItem(item)}
-                    isAdmin={isAdmin}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-muted-foreground">
-                {remoteSearchQuery.trim()
-                  ? `No remote servers match "${remoteSearchQuery}".`
-                  : "No remote servers found."}
-              </p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="local" className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search local servers by name..."
-              value={localSearchQuery}
-              onChange={(e) => setLocalSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-muted-foreground">
+              {searchQuery.trim()
+                ? `No MCP servers match "${searchQuery}".`
+                : "No MCP servers found."}
+            </p>
           </div>
-          {localCatalogItems.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {localCatalogItems.map((item) => {
-                const installedServer = getAggregatedInstallation(item.id);
-                const isInstallInProgress =
-                  installedServer &&
-                  installingServerIds.has(installedServer.id);
-
-                return (
-                  <McpServerCard
-                    variant="local"
-                    key={item.id}
-                    item={item}
-                    installedServer={installedServer}
-                    installingItemId={installingItemId}
-                    installMutationPending={installMutation.isPending}
-                    installationStatus={
-                      isInstallInProgress
-                        ? mcpServerInstallationStatus.data
-                        : undefined
-                    }
-                    onInstall={() => handleInstall(item, false)}
-                    onInstallTeam={() => handleInstallTeam(item)}
-                    onInstallNoAuth={() => handleInstallNoAuth(item)}
-                    onReinstall={() => handleReinstall(item)}
-                    onEdit={() => setEditingItem(item)}
-                    onDelete={() => setDeletingItem(item)}
-                    isAdmin={isAdmin}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-muted-foreground">
-                {localSearchQuery.trim()
-                  ? `No local servers match "${localSearchQuery}".`
-                  : "No local servers found."}
-              </p>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <CreateCatalogDialog
         isOpen={isCreateDialogOpen}

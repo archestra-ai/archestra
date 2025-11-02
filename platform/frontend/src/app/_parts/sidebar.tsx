@@ -11,7 +11,6 @@ import {
   Bot,
   Bug,
   ClipboardList,
-  DollarSign,
   FileJson2,
   Github,
   Info,
@@ -23,6 +22,7 @@ import {
   ShieldCheck,
   Slack,
   Star,
+  Wrench,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -92,7 +92,7 @@ const getNavigationItems = (
           {
             title: "Tools",
             url: "/tools",
-            icon: FileJson2,
+            icon: Wrench,
           },
           {
             title: "MCP Registry",
@@ -193,7 +193,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SignedIn>
-          <WithRole requiredRole="admin">
+          <WithRole requiredExactRole="admin">
             <SidebarGroup className="px-4">
               <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
               <SidebarGroupContent>

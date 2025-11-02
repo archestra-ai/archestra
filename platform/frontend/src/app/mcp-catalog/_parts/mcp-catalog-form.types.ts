@@ -1,4 +1,4 @@
-import { LocalConfigFormSchema, type LocalConfigSchema } from "@shared";
+import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
 // Simplified OAuth config schema
@@ -16,7 +16,7 @@ export const formSchema = z
     serverType: z.enum(["remote", "local"]),
     serverUrl: z
       .string()
-      .url({ message: "Must be a valid URL" })
+      .url({ error: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
     authMethod: z.enum(["none", "pat", "oauth"]),
@@ -29,49 +29,31 @@ export const formSchema = z
       if (data.serverType === "remote") {
         return data.serverUrl && data.serverUrl.length > 0;
       }
-      // For local servers, localConfig is required
+      return true;
+    },
+    {
+      message: "Server URL is required for remote servers.",
+      path: ["serverUrl"],
+    },
+  )
+  .refine(
+    (data) => {
+      // For local servers, at least command or dockerImage is required
       if (data.serverType === "local") {
-        return data.localConfig?.command && data.localConfig.command.length > 0;
+        const hasCommand =
+          data.localConfig?.command &&
+          data.localConfig.command.trim().length > 0;
+        const hasDockerImage =
+          data.localConfig?.dockerImage &&
+          data.localConfig.dockerImage.trim().length > 0;
+        return hasCommand || hasDockerImage;
       }
       return true;
     },
     {
-      message:
-        "Server URL is required for remote servers, and command is required for local servers",
-      path: ["serverUrl"],
+      message: "Either command or Docker image must be provided.",
+      path: [],
     },
   );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
-
-// API data type - matches backend expectations
-export type McpCatalogApiData = {
-  name: string;
-  serverType: "remote" | "local";
-  serverUrl?: string;
-  localConfig?: z.infer<typeof LocalConfigSchema>;
-  oauthConfig?: {
-    name: string;
-    server_url: string;
-    client_id: string;
-    client_secret?: string;
-    redirect_uris: string[];
-    scopes: string[];
-    default_scopes: string[];
-    supports_resource_metadata: boolean;
-  };
-  userConfig?: Record<
-    string,
-    {
-      type: "string" | "number" | "boolean" | "directory" | "file";
-      title: string;
-      description: string;
-      required?: boolean;
-      sensitive?: boolean;
-      default?: string | number | boolean | string[];
-      multiple?: boolean;
-      min?: number;
-      max?: number;
-    }
-  >;
-};

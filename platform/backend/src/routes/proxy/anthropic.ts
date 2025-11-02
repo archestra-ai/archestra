@@ -461,12 +461,20 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (e) => e.type === "message_start",
         ) as AnthropicProvider.Messages.MessageStartEvent | undefined;
 
-        // Report token usage metrics for streaming
-        const usage = messageStartEvent?.message.usage;
-        if (usage) {
-          const { input, output } =
-            utils.adapters.anthropic.getUsageTokens(usage);
-          reportLLMTokens("anthropic", resolvedAgent, input, output);
+        // Extract token usage and report metrics for streaming
+        const usage = messageStartEvent?.message.usage || {
+          input_tokens: 0,
+          output_tokens: 0,
+        };
+        const tokenUsage = utils.adapters.anthropic.getUsageTokens(usage);
+
+        if (messageStartEvent?.message.usage) {
+          reportLLMTokens(
+            "anthropic",
+            resolvedAgent,
+            tokenUsage.input,
+            tokenUsage.output,
+          );
         }
 
         // Store the complete interaction
@@ -482,11 +490,11 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             model: body.model,
             stop_reason: "end_turn",
             stop_sequence: null,
-            usage: messageStartEvent?.message.usage || {
-              input_tokens: 0,
-              output_tokens: 0,
-            },
+            usage,
           },
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         // Send message_delta with stop_reason
@@ -561,12 +569,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ];
 
-            // Store the interaction with refusal
+            // Extract token usage and store the interaction with refusal
+            const tokenUsage = response.usage
+              ? utils.adapters.anthropic.getUsageTokens(response.usage)
+              : { input: null, output: null };
+
             await InteractionModel.create({
               agentId: resolvedAgentId,
               type: "anthropic:messages",
               request: body,
               response: response,
+              model: body.model,
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
             });
 
             return reply.send(response);
@@ -662,12 +677,19 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // Store the complete interaction
+        // Extract token usage and store the complete interaction
+        const tokenUsage = response.usage
+          ? utils.adapters.anthropic.getUsageTokens(response.usage)
+          : { input: null, output: null };
+
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "anthropic:messages",
           request: body,
           response: response,
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);

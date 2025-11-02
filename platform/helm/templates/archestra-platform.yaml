@@ -4,6 +4,10 @@ metadata:
   name: {{ include "archestra-platform.fullname" . }}
   labels:
     {{- include "archestra-platform.labels" . | nindent 4 }}
+  {{- with .Values.archestra.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: ClusterIP
   ports:

@@ -23,23 +23,47 @@ export const OAuthConfigSchema = z.object({
   streamable_http_port: z.number().optional(),
 });
 
-export const LocalConfigSchema = z.object({
-  command: z.string(),
-  arguments: z.array(z.string()),
-  environment: z.record(z.string(), z.string()).optional(),
-  dockerImage: z.string().optional(),
-  transportType: z.enum(["stdio", "streamable-http"]).optional(),
-  httpPort: z.number().optional(),
-  httpPath: z.string().optional(),
-});
+export const LocalConfigSchema = z
+  .object({
+    command: z.string().optional(),
+    arguments: z.array(z.string()).optional(),
+    environment: z.record(z.string(), z.string()).optional(),
+    dockerImage: z.string().optional(),
+    transportType: z.enum(["stdio", "streamable-http"]).optional(),
+    httpPort: z.number().optional(),
+    httpPath: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // At least one of command or dockerImage must be provided
+      return data.command || data.dockerImage;
+    },
+    {
+      message:
+        "Either command or dockerImage must be provided. If dockerImage is set, command is optional (Docker image's default CMD will be used).",
+      path: ["command"],
+    },
+  );
 
 // Form version of LocalConfigSchema for UI forms (using strings that get parsed)
-export const LocalConfigFormSchema = z.object({
-  command: z.string().min(1, "Command is required"),
-  arguments: z.string(), // UI uses string, gets parsed to array
-  environment: z.string(), // UI uses string, gets parsed to record
-  dockerImage: z.string().optional(), // Custom Docker image URL
-  transportType: z.enum(["stdio", "streamable-http"]).optional(),
-  httpPort: z.string().optional(), // UI uses string, gets parsed to number
-  httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
-});
+export const LocalConfigFormSchema = z
+  .object({
+    command: z.string().optional(),
+    arguments: z.string(), // UI uses string, gets parsed to array
+    environment: z.string(), // UI uses string, gets parsed to record
+    dockerImage: z.string().optional(), // Custom Docker image URL
+    transportType: z.enum(["stdio", "streamable-http"]).optional(),
+    httpPort: z.string().optional(), // UI uses string, gets parsed to number
+    httpPath: z.string().optional(), // HTTP endpoint path (e.g., /mcp)
+  })
+  .refine(
+    (data) => {
+      // At least one of command or dockerImage must be provided
+      return (data.command && data.command.trim().length > 0) || data.dockerImage;
+    },
+    {
+      message:
+        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
+      path: [],
+    },
+  );

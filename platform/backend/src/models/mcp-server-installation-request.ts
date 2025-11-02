@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import type { archestraCatalogTypes } from "@shared";
 import { archestraCatalogSdk } from "@shared";
 import { and, desc, eq } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -10,6 +12,31 @@ import type {
   UpdateMcpServerInstallationRequest,
 } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
+
+/**
+ * Rewrite OAuth redirect URIs to use the platform's callback URL
+ */
+function rewriteOAuthRedirectUris(
+  oauthConfig?: archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"],
+):
+  | archestraCatalogTypes.ArchestraMcpServerManifest["oauth_config"]
+  | undefined {
+  if (!oauthConfig || oauthConfig.requires_proxy) {
+    return oauthConfig;
+  }
+
+  // Use configured frontend URL or default to localhost:3000 for development
+  const platformBaseUrl = config.baseURL || "http://localhost:3000";
+
+  return {
+    ...oauthConfig,
+    redirect_uris: oauthConfig.redirect_uris?.map((uri) =>
+      uri === "http://localhost:8080/oauth/callback"
+        ? `${platformBaseUrl}/oauth-callback`
+        : uri,
+    ),
+  };
+}
 
 class McpServerInstallationRequestModel {
   static async create(
@@ -150,29 +177,29 @@ class McpServerInstallationRequestModel {
                 ? externalServer.server.docs_url
                 : undefined,
             userConfig: externalServer.user_config,
-            oauthConfig: externalServer.oauth_config,
+            oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
           });
         }
       } else if (currentRequest.customServerConfig) {
         // Custom server request - use provided config
-        const config = currentRequest.customServerConfig;
+        const customConfig = currentRequest.customServerConfig;
 
-        if (config.type === "remote") {
+        if (customConfig.type === "remote") {
           await InternalMcpCatalogModel.create({
-            name: config.name,
-            version: config.version,
+            name: customConfig.name,
+            version: customConfig.version,
             serverType: "remote",
-            serverUrl: config.serverUrl,
-            docsUrl: config.docsUrl,
-            userConfig: config.userConfig,
-            oauthConfig: config.oauthConfig,
+            serverUrl: customConfig.serverUrl,
+            docsUrl: customConfig.docsUrl,
+            userConfig: customConfig.userConfig,
+            oauthConfig: rewriteOAuthRedirectUris(customConfig.oauthConfig),
           });
-        } else if (config.type === "local") {
+        } else if (customConfig.type === "local") {
           await InternalMcpCatalogModel.create({
-            name: config.name,
-            version: config.version,
+            name: customConfig.name,
+            version: customConfig.version,
             serverType: "local",
-            localConfig: config.localConfig,
+            localConfig: customConfig.localConfig,
           });
         }
       }

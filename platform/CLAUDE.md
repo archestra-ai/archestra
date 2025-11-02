@@ -169,6 +169,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - Pod logs available via `/mcp_proxy/:id/logs`
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
+- When using Docker image, command is optional (uses image's default CMD if not specified)
 - Runtime manager at `backend/src/mcp-server-runtime/`
 
 **Configuring Transport Type**:
@@ -178,11 +179,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - HTTP servers get automatic K8s Service creation with ClusterIP DNS name
 - For streamable-http servers: K8s Service uses NodePort in local dev, ClusterIP in production
 
-**Helm Chart RBAC**:
+**Helm Chart**:
 
-- ServiceAccount with configurable name/annotations for pod identity
-- Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
-- RoleBinding links ServiceAccount to Role for MCP server management
-- Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- RBAC: ServiceAccount with configurable name/annotations for pod identity
+- RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
+- RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
+- Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
+- Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

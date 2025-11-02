@@ -109,6 +109,7 @@ export const RouteId = {
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
   UpdateAgentTool: "updateAgentTool",
+  GetAgentAvailableTokens: "getAgentAvailableTokens",
 
   // Features Routes
   GetFeatures: "getFeatures",
@@ -130,6 +131,10 @@ export const RouteId = {
   GetMcpServerLogs: "getMcpServerLogs",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  RevokeUserMcpServerAccess: "revokeUserMcpServerAccess",
+  GrantTeamMcpServerAccess: "grantTeamMcpServerAccess",
+  RevokeTeamMcpServerAccess: "revokeTeamMcpServerAccess",
+  RevokeAllTeamsMcpServerAccess: "revokeAllTeamsMcpServerAccess",
   RestartMcpServer: "restartMcpServer",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
 

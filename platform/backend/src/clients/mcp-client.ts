@@ -7,6 +7,7 @@ import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 
 import {
   InternalMcpCatalogModel,
+  McpServerModel,
   McpToolCallModel,
   SecretModel,
   ToolModel,
@@ -123,9 +124,22 @@ class McpClient {
     }
 
     // Load secrets from the secrets table
+    // The credential source MCP server must be explicitly selected (team or user token)
     let secrets: Record<string, unknown> = {};
-    if (firstTool.mcpServerSecretId) {
-      const secret = await SecretModel.findById(firstTool.mcpServerSecretId);
+    let secretId: string | null = null;
+
+    if (firstTool.credentialSourceMcpServerId) {
+      // User selected a specific token (team or user) to use
+      const credentialSourceServer = await McpServerModel.findById(
+        firstTool.credentialSourceMcpServerId,
+      );
+      if (credentialSourceServer?.secretId) {
+        secretId = credentialSourceServer.secretId;
+      }
+    }
+
+    if (secretId) {
+      const secret = await SecretModel.findById(secretId);
       if (secret?.secret) {
         secrets = secret.secret;
       }
@@ -435,6 +449,20 @@ class McpClient {
           firstTool.mcpServerCatalogId,
           config,
         );
+
+        if (catalogItem?.serverType === "remote" && catalogItem.serverUrl) {
+          // Generic remote server with catalog info
+          const config = this.createServerConfig({
+            name: firstTool.mcpServerName,
+            url: catalogItem.serverUrl,
+            secrets,
+          });
+          // Use catalog ID + secret ID as cache key to ensure different credentials = different connections
+          const connectionKey = secretId
+            ? `${firstTool.mcpServerCatalogId}:${secretId}`
+            : firstTool.mcpServerCatalogId;
+          client = await this.getOrCreateConnection(connectionKey, config);
+        }
       } else {
         throw new Error(`Unsupported server type: ${catalogItem.serverType}`);
       }
@@ -579,11 +607,11 @@ class McpClient {
    * Get or create a persistent connection to an MCP server
    */
   private async getOrCreateConnection(
-    serverId: string,
+    connectionKey: string,
     config: McpServerConfig,
   ): Promise<Client> {
     // Check if we already have an active connection
-    const existingClient = this.activeConnections.get(serverId);
+    const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
       return existingClient;
     }
@@ -610,7 +638,7 @@ class McpClient {
     await client.connect(transport);
 
     // Store the connection for reuse
-    this.activeConnections.set(serverId, client);
+    this.activeConnections.set(connectionKey, client);
 
     return client;
   }

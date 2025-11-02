@@ -36,8 +36,8 @@ const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   docsUrl: text("docs_url"), // Documentation URL for remote servers
   // Local server configuration
   localConfig: jsonb("local_config").$type<{
-    command: string;
-    arguments: Array<string>;
+    command?: string;
+    arguments?: Array<string>;
     environment?: Record<string, string>;
     dockerImage?: string;
     transportType?: "stdio" | "streamable-http";

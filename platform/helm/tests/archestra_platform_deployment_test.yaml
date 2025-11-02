@@ -419,3 +419,44 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.imagePullSecrets
+
+  # Service annotation tests
+  - it: should not have annotations when archestra.service.annotations is empty
+    documentIndex: 0
+    set:
+      archestra.service.annotations: {}
+    asserts:
+      - isNull:
+          path: metadata.annotations
+
+  - it: should apply service annotations when provided
+    documentIndex: 0
+    set:
+      archestra.service.annotations:
+        cloud.google.com/backend-config: '{"ports": {"9000":"backend-config"}}'
+        service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    asserts:
+      - equal:
+          path: metadata.annotations["cloud.google.com/backend-config"]
+          value: '{"ports": {"9000":"backend-config"}}'
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: "nlb"
+
+  - it: should apply multiple service annotations correctly
+    documentIndex: 0
+    set:
+      archestra.service.annotations:
+        annotation1: "value1"
+        annotation2: "value2"
+        annotation3: "value3"
+    asserts:
+      - equal:
+          path: metadata.annotations["annotation1"]
+          value: "value1"
+      - equal:
+          path: metadata.annotations["annotation2"]
+          value: "value2"
+      - equal:
+          path: metadata.annotations["annotation3"]
+          value: "value3"

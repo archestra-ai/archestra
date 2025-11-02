@@ -689,6 +689,9 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
               },
             ],
           },
+          model: body.model,
+          inputTokens: usageTokens?.input || null,
+          outputTokens: usageTokens?.output || null,
         });
 
         reply.raw.write("data: [DONE]\n\n");
@@ -853,12 +856,20 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // Extract token usage from response
+        const tokenUsage = response.usage
+          ? utils.adapters.openai.getUsageTokens(response.usage)
+          : { input: null, output: null };
+
         // Store the complete interaction
         await InteractionModel.create({
           agentId: resolvedAgentId,
           type: "openai:chatCompletions",
           request: body,
           response,
+          model: body.model,
+          inputTokens: tokenUsage.input,
+          outputTokens: tokenUsage.output,
         });
 
         return reply.send(response);

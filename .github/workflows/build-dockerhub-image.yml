@@ -38,9 +38,9 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         include:
-          - platform: ubuntu-latest
+          - platform: blacksmith-4vcpu-ubuntu-2404
             os_and_arch: linux/amd64
-          - platform: ubuntu-24.04-arm
+          - platform: blacksmith-4vcpu-ubuntu-2404-arm
             os_and_arch: linux/arm64
     permissions:
       contents: read
@@ -60,7 +60,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Build and push Docker image
         id: build
@@ -70,6 +70,8 @@ jobs:
           file: ${{ inputs.image_directory }}/Dockerfile
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
+          build-args: |
+            VERSION=${{ inputs.version }}
           outputs: type=image,name=docker.io/archestra/${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push_image }}
 
       - name: Export digest
@@ -108,7 +110,7 @@ jobs:
           merge-multiple: true
 
       - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@9254c55ed64db132cfb5dadd9d781b3fd20821f6 # v1
+        uses: useblacksmith/setup-docker-builder@78f41686563c732ccc097f7baac2f092f67538f0 # v1
 
       - name: Log in to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0

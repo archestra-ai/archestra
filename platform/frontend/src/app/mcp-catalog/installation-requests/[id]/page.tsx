@@ -255,26 +255,28 @@ export default function InstallationRequestDetailPage({
                                 </p>
                               </div>
 
-                              {request.customServerConfig.localConfig.arguments
-                                .length > 0 && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                                    Arguments
-                                  </p>
-                                  <div className="space-y-1">
-                                    {request.customServerConfig.localConfig.arguments.map(
-                                      (arg) => (
-                                        <p
-                                          key={arg}
-                                          className="text-sm font-mono bg-muted px-2 py-1 rounded"
-                                        >
-                                          {arg}
-                                        </p>
-                                      ),
-                                    )}
+                              {request.customServerConfig.localConfig
+                                .arguments &&
+                                request.customServerConfig.localConfig.arguments
+                                  .length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                                      Arguments
+                                    </p>
+                                    <div className="space-y-1">
+                                      {request.customServerConfig.localConfig.arguments.map(
+                                        (arg) => (
+                                          <p
+                                            key={arg}
+                                            className="text-sm font-mono bg-muted px-2 py-1 rounded"
+                                          >
+                                            {arg}
+                                          </p>
+                                        ),
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
 
                               {request.customServerConfig.localConfig
                                 .environment &&

@@ -1,8 +1,8 @@
 import type { archestraApiTypes } from "@shared";
-import type {
-  McpCatalogApiData,
-  McpCatalogFormValues,
-} from "./mcp-catalog-form.types";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+
+type McpCatalogApiData =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
 // Transform function to convert form values to API format
 export function transformFormToApiData(
@@ -21,13 +21,15 @@ export function transformFormToApiData(
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
     const argumentsArray = values.localConfig.arguments
-      .split("\n")
-      .map((arg) => arg.trim())
-      .filter((arg) => arg.length > 0);
+      ? values.localConfig.arguments
+          .split("\n")
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0)
+      : [];
 
     // Parse environment string into key-value pairs
     let environment: Record<string, string> | undefined;
-    if (values.localConfig.environment.trim()) {
+    if (values.localConfig.environment?.trim()) {
       environment = {};
       values.localConfig.environment
         .split("\n")
@@ -36,16 +38,14 @@ export function transformFormToApiData(
         .forEach((line) => {
           const [key, ...valueParts] = line.split("=");
           if (key && environment) {
-            // Strip surrounding quotes from the value to prevent double-quoting
-            const rawValue = valueParts.join("=");
-            environment[key] = stripEnvVarQuotes(rawValue);
+            environment[key] = valueParts.join("=");
           }
         });
     }
 
     data.localConfig = {
-      command: values.localConfig.command,
-      arguments: argumentsArray,
+      command: values.localConfig.command || undefined,
+      arguments: argumentsArray.length > 0 ? argumentsArray : undefined,
       environment,
       dockerImage: values.localConfig.dockerImage || undefined,
       transportType: values.localConfig.transportType || undefined,
@@ -147,7 +147,7 @@ export function transformCatalogItemToFormValues(
   // Extract local config if present
   let localConfig:
     | {
-        command: string;
+        command?: string;
         arguments: string;
         environment: string;
         dockerImage?: string;
@@ -167,11 +167,10 @@ export function transformCatalogItemToFormValues(
           .join("\n")
       : "";
 
-    // biome-ignore lint/suspicious/noExplicitAny: LocalConfig type doesn't have new fields yet
-    const config = item.localConfig as any;
+    const config = item.localConfig;
 
     localConfig = {
-      command: item.localConfig.command,
+      command: item.localConfig.command || "",
       arguments: argumentsString,
       environment: environmentString,
       dockerImage: item.localConfig.dockerImage || "",

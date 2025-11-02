@@ -66,7 +66,9 @@ class AuthMiddleware {
        * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
        * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
        */
-      url.includes("/mcp_proxy")
+      url.includes("/mcp_proxy") ||
+      // Skip ACME challenge paths for SSL certificate domain validation
+      url.startsWith("/.well-known/acme-challenge/")
     )
       return true;
     return false;
@@ -188,6 +190,9 @@ const routePermissionsConfig: Partial<
     agent: ["read"],
     tool: ["read"],
   },
+  [RouteId.GetAgentAvailableTokens]: {
+    agent: ["read"],
+  },
   [RouteId.GetUnassignedTools]: {
     tool: ["read"],
   },
@@ -301,6 +306,18 @@ const routePermissionsConfig: Partial<
     mcpServer: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeUserMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.GrantTeamMcpServerAccess]: {
+    mcpServer: ["create"],
+  },
+  [RouteId.RevokeTeamMcpServerAccess]: {
+    mcpServer: ["delete"],
+  },
+  [RouteId.RevokeAllTeamsMcpServerAccess]: {
     mcpServer: ["delete"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {

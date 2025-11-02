@@ -320,16 +320,12 @@ class McpServerRuntimeManager {
       throw new Error(`Pod not found for MCP server ${mcpServerId}`);
     }
 
-    const logs = await k8sPod.getRecentLogs(lines);
-    const podName = k8sPod.containerName;
-
-    // Construct the kubectl command to get logs
-    const command = `kubectl logs -n ${this.namespace} ${podName} --tail=${lines}`;
-
+    const containerName = k8sPod.containerName;
     return {
-      logs,
-      containerName: k8sPod.containerName,
-      command,
+      logs: await k8sPod.getRecentLogs(lines),
+      containerName,
+      // Construct the kubectl command for the user to manually get the logs if they'd like
+      command: `kubectl logs -n ${this.namespace} ${containerName} --tail=${lines}`,
       namespace: this.namespace,
     };
   }

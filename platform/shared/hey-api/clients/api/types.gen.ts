@@ -2138,6 +2138,12 @@ export type GetAgentsResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     }>;
 };
 
@@ -2149,6 +2155,12 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -2214,6 +2226,12 @@ export type CreateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2285,6 +2303,12 @@ export type GetDefaultAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2410,6 +2434,12 @@ export type GetAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2421,6 +2451,12 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -2488,10 +2524,94 @@ export type UpdateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/keys';
+};
+
+export type GetLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelKeysError = GetLabelKeysErrors[keyof GetLabelKeysErrors];
+
+export type GetLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysResponses];
+
+export type GetLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/values';
+};
+
+export type GetLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
+
+export type GetLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -2532,6 +2652,7 @@ export type GetAllAgentToolsResponses = {
         allowUsageWhenUntrustedDataIsPresent: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate: string | null;
+        credentialSourceMcpServerId: string | null;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -2561,6 +2682,7 @@ export type GetAllAgentToolsResponses = {
             updatedAt: string;
             mcpServerId: string | null;
             mcpServerName: string | null;
+            mcpServerCatalogId: string | null;
         };
     }>;
 };
@@ -2603,7 +2725,9 @@ export type UnassignToolFromAgentResponses = {
 export type UnassignToolFromAgentResponse = UnassignToolFromAgentResponses[keyof UnassignToolFromAgentResponses];
 
 export type AssignToolToAgentData = {
-    body?: never;
+    body?: {
+        credentialSourceMcpServerId?: string | null;
+    } | null;
     path: {
         agentId: string;
         toolId: string;
@@ -2613,6 +2737,15 @@ export type AssignToolToAgentData = {
 };
 
 export type AssignToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -2715,6 +2848,7 @@ export type UpdateAgentToolData = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment?: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
     };
     path: {
         id: string;
@@ -2724,6 +2858,15 @@ export type UpdateAgentToolData = {
 };
 
 export type UpdateAgentToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -2757,12 +2900,85 @@ export type UpdateAgentToolResponses = {
         allowUsageWhenUntrustedDataIsPresent?: boolean;
         toolResultTreatment: 'trusted' | 'sanitize_with_dual_llm' | 'untrusted';
         responseModifierTemplate?: string | null;
+        credentialSourceMcpServerId?: string | null;
         createdAt?: string;
         updatedAt?: string;
     };
 };
 
 export type UpdateAgentToolResponse = UpdateAgentToolResponses[keyof UpdateAgentToolResponses];
+
+export type GetAgentAvailableTokensData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentIds: string;
+        catalogId?: string;
+    };
+    url: '/api/agents/available-tokens';
+};
+
+export type GetAgentAvailableTokensErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetAgentAvailableTokensError = GetAgentAvailableTokensErrors[keyof GetAgentAvailableTokensErrors];
+
+export type GetAgentAvailableTokensResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        authType: 'personal' | 'team';
+        catalogId: string | null;
+        ownerId: string | null;
+        ownerEmail: string | null;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetAgentAvailableTokensResponse = GetAgentAvailableTokensResponses[keyof GetAgentAvailableTokensResponses];
 
 export type AnthropicMessagesWithDefaultAgentData = {
     body?: AnthropicMessagesRequestInput;
@@ -4275,7 +4491,6 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4348,7 +4563,6 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
-        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -4438,7 +4652,6 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4590,7 +4803,6 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4663,7 +4875,6 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
-        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -4764,7 +4975,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -5945,7 +6155,9 @@ export type AddMcpServerInstallationRequestNoteResponse = AddMcpServerInstallati
 export type GetMcpServersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        authType?: 'personal' | 'team';
+    };
     url: '/api/mcp_server';
 };
 
@@ -5981,12 +6193,26 @@ export type GetMcpServersResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     }>;
 };
 
@@ -5997,10 +6223,13 @@ export type InstallMcpServerData = {
         name: string;
         catalogId: string;
         secretId?: string;
+        ownerId?: string | null;
+        authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
-        localInstallationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
         teams?: Array<string>;
+        userId?: string;
         agentIds?: Array<string>;
         accessToken?: string;
     };
@@ -6014,6 +6243,24 @@ export type InstallMcpServerErrors = {
      * Default Response
      */
     400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -6041,12 +6288,26 @@ export type InstallMcpServerResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -6145,12 +6406,26 @@ export type GetMcpServerResponses = {
         name: string;
         catalogId: string;
         secretId: string | null;
+        ownerId: string | null;
+        authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
+        ownerEmail?: string | null;
         teams?: Array<string>;
+        users?: Array<string>;
+        userDetails?: Array<{
+            userId: string;
+            email: string;
+            createdAt: string;
+        }>;
+        teamDetails?: Array<{
+            teamId: string;
+            name: string;
+            createdAt: string;
+        }>;
     };
 };
 
@@ -6193,7 +6468,7 @@ export type GetMcpServerInstallationStatusResponses = {
      * Default Response
      */
     200: {
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
     };
 };
@@ -6343,6 +6618,219 @@ export type RestartMcpServerResponses = {
 };
 
 export type RestartMcpServerResponse = RestartMcpServerResponses[keyof RestartMcpServerResponses];
+
+export type RevokeUserMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/user/{userId}';
+};
+
+export type RevokeUserMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeUserMcpServerAccessError = RevokeUserMcpServerAccessErrors[keyof RevokeUserMcpServerAccessErrors];
+
+export type RevokeUserMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeUserMcpServerAccessResponse = RevokeUserMcpServerAccessResponses[keyof RevokeUserMcpServerAccessResponses];
+
+export type RevokeAllTeamsMcpServerAccessData = {
+    body?: never;
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type RevokeAllTeamsMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessError = RevokeAllTeamsMcpServerAccessErrors[keyof RevokeAllTeamsMcpServerAccessErrors];
+
+export type RevokeAllTeamsMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeAllTeamsMcpServerAccessResponse = RevokeAllTeamsMcpServerAccessResponses[keyof RevokeAllTeamsMcpServerAccessResponses];
+
+export type GrantTeamMcpServerAccessData = {
+    body: {
+        teamIds: Array<string>;
+        userId?: string;
+    };
+    path: {
+        catalogId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/catalog/{catalogId}/teams';
+};
+
+export type GrantTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GrantTeamMcpServerAccessError = GrantTeamMcpServerAccessErrors[keyof GrantTeamMcpServerAccessErrors];
+
+export type GrantTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantTeamMcpServerAccessResponse = GrantTeamMcpServerAccessResponses[keyof GrantTeamMcpServerAccessResponses];
+
+export type RevokeTeamMcpServerAccessData = {
+    body?: never;
+    path: {
+        id: string;
+        teamId: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/team/{teamId}';
+};
+
+export type RevokeTeamMcpServerAccessErrors = {
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type RevokeTeamMcpServerAccessError = RevokeTeamMcpServerAccessErrors[keyof RevokeTeamMcpServerAccessErrors];
+
+export type RevokeTeamMcpServerAccessResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeTeamMcpServerAccessResponse = RevokeTeamMcpServerAccessResponses[keyof RevokeTeamMcpServerAccessResponses];
 
 export type GetMcpToolCallsData = {
     body?: never;

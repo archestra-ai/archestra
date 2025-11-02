@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDatabaseUrl } from "./config";
 
 describe("getDatabaseUrl", () => {

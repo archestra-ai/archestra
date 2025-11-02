@@ -2,10 +2,11 @@
 
 import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Plug, Plus, Trash2, Wrench, X } from "lucide-react";
+import { Pencil, Plug, Plus, Tag, Trash2, Wrench, X } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { type AgentLabel, AgentLabels } from "@/components/agent-labels";
 import { LoadingSpinner } from "@/components/loading";
 import { McpConnectionInstructions } from "@/components/mcp-connection-instructions";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
@@ -54,6 +55,8 @@ import {
   useAgents,
   useCreateAgent,
   useDeleteAgent,
+  useLabelKeys,
+  useLabelValues,
   useUpdateAgent,
 } from "@/lib/agent.query";
 import { AssignToolsDialog } from "./assign-tools-dialog";
@@ -158,6 +161,7 @@ function Agents({
     id: string;
     name: string;
     teams: string[];
+    labels: AgentLabel[];
   } | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
@@ -238,6 +242,35 @@ function Agents({
                               DEFAULT
                             </Badge>
                           )}
+                          {agent.labels && agent.labels.length > 0 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="inline-flex">
+                                    <Tag className="h-4 w-4 text-muted-foreground" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="flex flex-wrap gap-1 max-w-xs">
+                                    {agent.labels.map((label) => (
+                                      <Badge
+                                        key={label.key}
+                                        variant="secondary"
+                                        className="text-xs"
+                                      >
+                                        <span className="font-semibold">
+                                          {label.key}:
+                                        </span>
+                                        <span className="ml-1">
+                                          {label.value}
+                                        </span>
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -303,6 +336,7 @@ function Agents({
                                         id: agent.id,
                                         name: agent.name,
                                         teams: agent.teams || [],
+                                        labels: agent.labels || [],
                                       })
                                     }
                                   >
@@ -389,6 +423,7 @@ function CreateAgentDialog({
 }) {
   const [name, setName] = useState("");
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  const [labels, setLabels] = useState<AgentLabel[]>([]);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -396,6 +431,8 @@ function CreateAgentDialog({
       return response.data || [];
     },
   });
+  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [createdAgent, setCreatedAgent] = useState<{
     id: string;
@@ -444,6 +481,7 @@ function CreateAgentDialog({
         const agent = await createAgent.mutateAsync({
           name: name.trim(),
           teams: assignedTeamIds,
+          labels,
         });
         if (!agent) {
           throw new Error("Failed to create agent");
@@ -454,12 +492,13 @@ function CreateAgentDialog({
         toast.error("Failed to create agent");
       }
     },
-    [name, assignedTeamIds, createAgent],
+    [name, assignedTeamIds, labels, createAgent],
   );
 
   const handleClose = useCallback(() => {
     setName("");
     setAssignedTeamIds([]);
+    setLabels([]);
     setSelectedTeamId("");
     setCreatedAgent(null);
     onOpenChange(false);
@@ -546,6 +585,13 @@ function CreateAgentDialog({
                     </p>
                   )}
                 </div>
+
+                <AgentLabels
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                  availableKeys={availableKeys}
+                  availableValues={availableValues}
+                />
               </div>
               <DialogFooter className="mt-4">
                 <Button type="button" variant="outline" onClick={handleClose}>
@@ -588,7 +634,12 @@ function EditAgentDialog({
   open,
   onOpenChange,
 }: {
-  agent: { id: string; name: string; teams: string[] };
+  agent: {
+    id: string;
+    name: string;
+    teams: string[];
+    labels: AgentLabel[];
+  };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -596,6 +647,7 @@ function EditAgentDialog({
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>(
     agent.teams || [],
   );
+  const [labels, setLabels] = useState<AgentLabel[]>(agent.labels || []);
   const { data: teams } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -603,6 +655,8 @@ function EditAgentDialog({
       return response.data || [];
     },
   });
+  const { data: availableKeys = [] } = useLabelKeys();
+  const { data: availableValues = [] } = useLabelValues();
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const updateAgent = useUpdateAgent();
 
@@ -637,6 +691,7 @@ function EditAgentDialog({
           data: {
             name: name.trim(),
             teams: assignedTeamIds,
+            labels,
           },
         });
         toast.success("Agent updated successfully");
@@ -645,7 +700,7 @@ function EditAgentDialog({
         toast.error("Failed to update agent");
       }
     },
-    [agent.id, name, assignedTeamIds, updateAgent, onOpenChange],
+    [agent.id, name, assignedTeamIds, labels, updateAgent, onOpenChange],
   );
 
   const getUnassignedTeams = useCallback(() => {
@@ -739,6 +794,13 @@ function EditAgentDialog({
                 </p>
               )}
             </div>
+
+            <AgentLabels
+              labels={labels}
+              onLabelsChange={setLabels}
+              availableKeys={availableKeys}
+              availableValues={availableValues}
+            />
           </div>
           <DialogFooter className="mt-4">
             <Button

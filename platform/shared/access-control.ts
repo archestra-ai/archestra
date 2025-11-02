@@ -61,7 +61,8 @@ export const adminRole = ac.newRole({
 // - read-only access for agents
 // - full access to tools, policies, interactions
 // - read-only access to dual LLM configs and results
-// - read-only access to MCP catalog and servers
+// - read-only access to MCP catalog
+// - can create MCP servers (personal auth only), read, and delete (personal auth only)
 // - can create and read MCP server installation requests
 // - read-only access to teams
 export const memberRole = ac.newRole({
@@ -72,7 +73,7 @@ export const memberRole = ac.newRole({
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
   internalMcpCatalog: ["read"],
-  mcpServer: ["read"],
+  mcpServer: ["create", "read", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
   mcpToolCall: ["read"],

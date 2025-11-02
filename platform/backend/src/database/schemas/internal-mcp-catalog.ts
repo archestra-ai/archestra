@@ -10,8 +10,6 @@ import type { InternalMcpCatalogServerType } from "@/types/mcp-catalog";
 
 const internalMcpCatalogTable = pgTable("internal_mcp_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // Human-friendly display label for UI cards
-  label: text("label"),
   name: text("name").notNull(),
   version: text("version"),
   description: text("description"),

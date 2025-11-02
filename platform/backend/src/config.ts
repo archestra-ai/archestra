@@ -111,7 +111,7 @@ export default {
     host: "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
-    version: packageJson.version,
+    version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
   },

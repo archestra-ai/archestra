@@ -2,6 +2,7 @@ import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { LocalMcpServerInstallationStatus } from "@/types/mcp-server";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
+import usersTable from "./user";
 
 const mcpServerTable = pgTable("mcp_server", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -13,6 +14,12 @@ const mcpServerTable = pgTable("mcp_server", {
     .notNull(),
   secretId: uuid("secret_id").references(() => secretTable.id, {
     onDelete: "set null",
+  }),
+  ownerId: text("owner_id").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  authType: text("auth_type", {
+    enum: ["personal", "team"],
   }),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),
   localInstallationStatus: text("local_installation_status")

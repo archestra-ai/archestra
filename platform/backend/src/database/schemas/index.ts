@@ -1,4 +1,5 @@
 export { default as agentsTable } from "./agent";
+export { default as agentLabelTable } from "./agent-label";
 export { default as agentTeamTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export {
@@ -13,9 +14,12 @@ export { default as dualLlmConfigTable } from "./dual-llm-config";
 export { default as dualLlmResultsTable } from "./dual-llm-result";
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
+export { default as labelKeyTable } from "./label-key";
+export { default as labelValueTable } from "./label-value";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestTable } from "./mcp-server-installation-request";
 export { default as mcpServerTeamTable } from "./mcp-server-team";
+export { default as mcpServerUserTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as organizationsTable } from "./organization";
 export { default as secretsTable } from "./secret";

@@ -291,6 +291,12 @@ export const auth = betterAuth({
               createdAt: new Date(),
             });
 
+            // Update user role to match the invitation role
+            await db
+              .update(schema.usersTable)
+              .set({ role: invitation[0].role || "member" })
+              .where(eq(schema.usersTable.id, user.id));
+
             // Mark invitation as accepted
             await db
               .update(schema.invitation)

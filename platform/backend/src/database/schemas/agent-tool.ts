@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { ToolResultTreatment } from "@/types";
 import agentsTable from "./agent";
+import mcpServerTable from "./mcp-server";
 import toolsTable from "./tool";
 
 const agentToolsTable = pgTable(
@@ -30,6 +31,9 @@ const agentToolsTable = pgTable(
       .notNull()
       .default("untrusted"),
     responseModifierTemplate: text("response_modifier_template"),
+    credentialSourceMcpServerId: uuid(
+      "credential_source_mcp_server_id",
+    ).references(() => mcpServerTable.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

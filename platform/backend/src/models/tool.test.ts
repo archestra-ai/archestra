@@ -342,6 +342,7 @@ describe("ToolModel", () => {
         mcpServerCatalogId: catalogItem.id,
         mcpServerId: mcpServer.id,
         responseModifierTemplate: null,
+        credentialSourceMcpServerId: null,
       });
     });
 

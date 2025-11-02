@@ -155,6 +155,32 @@ class AgentTeamModel {
 
     return result.rowCount !== null && result.rowCount > 0;
   }
+
+  /**
+   * Check if an agent and MCP server share any teams
+   * Returns true if there's at least one team that both the agent and MCP server are assigned to
+   */
+  static async agentAndMcpServerShareTeam(
+    agentId: string,
+    mcpServerId: string,
+  ): Promise<boolean> {
+    const result = await db
+      .select({ teamId: schema.agentTeamTable.teamId })
+      .from(schema.agentTeamTable)
+      .innerJoin(
+        schema.mcpServerTeamTable,
+        eq(schema.agentTeamTable.teamId, schema.mcpServerTeamTable.teamId),
+      )
+      .where(
+        and(
+          eq(schema.agentTeamTable.agentId, agentId),
+          eq(schema.mcpServerTeamTable.mcpServerId, mcpServerId),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0;
+  }
 }
 
 export default AgentTeamModel;

@@ -7,6 +7,7 @@ import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import type { InsertMcpServer, McpServer, UpdateMcpServer } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerTeamModel from "./mcp-server-team";
+import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
 
 // Get the API base URL from config
@@ -15,8 +16,9 @@ const API_BASE_URL =
 
 class McpServerModel {
   static async create(server: InsertMcpServer): Promise<McpServer> {
-    const { teams, ...serverData } = server;
+    const { teams, userId, ...serverData } = server;
 
+    // ownerId and authType are part of serverData and will be inserted
     const [createdServer] = await db
       .insert(schema.mcpServersTable)
       .values(serverData)
@@ -27,9 +29,15 @@ class McpServerModel {
       await McpServerTeamModel.assignTeamsToMcpServer(createdServer.id, teams);
     }
 
+    // Assign user to the MCP server if provided (personal auth)
+    if (userId) {
+      await McpServerUserModel.assignUserToMcpServer(createdServer.id, userId);
+    }
+
     return {
       ...createdServer,
       teams: teams || [],
+      users: userId ? [userId] : [],
     };
   }
 
@@ -37,12 +45,32 @@ class McpServerModel {
     userId?: string,
     isAdmin?: boolean,
   ): Promise<McpServer[]> {
-    let query = db.select().from(schema.mcpServersTable).$dynamic();
+    let query = db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .$dynamic();
 
     // Apply access control filtering for non-admins
     if (userId && !isAdmin) {
-      const accessibleMcpServerIds =
+      // Get MCP servers accessible through team membership
+      const teamAccessibleMcpServerIds =
         await McpServerTeamModel.getUserAccessibleMcpServerIds(userId, false);
+
+      // Get MCP servers with personal access
+      const personalMcpServerIds =
+        await McpServerUserModel.getUserPersonalMcpServerIds(userId);
+
+      // Combine both lists
+      const accessibleMcpServerIds = [
+        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+      ];
 
       if (accessibleMcpServerIds.length === 0) {
         return [];
@@ -53,17 +81,29 @@ class McpServerModel {
       );
     }
 
-    const servers = await query;
+    const results = await query;
 
-    // Populate teams for each MCP server
-    const serversWithTeams: McpServer[] = await Promise.all(
-      servers.map(async (server) => ({
-        ...server,
-        teams: await McpServerTeamModel.getTeamsForMcpServer(server.id),
-      })),
+    // Populate teams and user details for each MCP server
+    const serversWithRelations: McpServer[] = await Promise.all(
+      results.map(async (result) => {
+        const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(
+          result.server.id,
+        );
+        const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(
+          result.server.id,
+        );
+        return {
+          ...result.server,
+          ownerEmail: result.ownerEmail,
+          teams: teamDetails.map((t) => t.teamId),
+          users: userDetails.map((u) => u.userId),
+          userDetails,
+          teamDetails,
+        };
+      }),
     );
 
-    return serversWithTeams;
+    return serversWithRelations;
   }
 
   static async findById(
@@ -73,30 +113,45 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-admins
     if (userId && !isAdmin) {
-      const hasAccess = await McpServerTeamModel.userHasMcpServerAccess(
+      const hasTeamAccess = await McpServerTeamModel.userHasMcpServerAccess(
         userId,
         id,
         false,
       );
-      if (!hasAccess) {
+      const hasPersonalAccess =
+        await McpServerUserModel.userHasPersonalMcpServerAccess(userId, id);
+
+      if (!hasTeamAccess && !hasPersonalAccess) {
         return null;
       }
     }
 
-    const [server] = await db
-      .select()
+    const [result] = await db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+      })
       .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
       .where(eq(schema.mcpServersTable.id, id));
 
-    if (!server) {
+    if (!result) {
       return null;
     }
 
-    const teams = await McpServerTeamModel.getTeamsForMcpServer(id);
+    const teamDetails = await McpServerTeamModel.getTeamDetailsForMcpServer(id);
+    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
 
     return {
-      ...server,
-      teams,
+      ...result.server,
+      ownerEmail: result.ownerEmail,
+      teams: teamDetails.map((t) => t.teamId),
+      users: userDetails.map((u) => u.userId),
+      userDetails,
+      teamDetails,
     };
   }
 

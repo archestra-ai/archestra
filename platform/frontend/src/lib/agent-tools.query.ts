@@ -45,12 +45,17 @@ export function useAssignTool() {
     mutationFn: async ({
       agentId,
       toolId,
+      credentialSourceMcpServerId,
     }: {
       agentId: string;
       toolId: string;
+      credentialSourceMcpServerId?: string | null;
     }) => {
       const { data } = await assignToolToAgent({
         path: { agentId, toolId },
+        body: credentialSourceMcpServerId
+          ? { credentialSourceMcpServerId }
+          : undefined,
       });
       return data?.success ?? false;
     },

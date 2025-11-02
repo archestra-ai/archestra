@@ -148,6 +148,33 @@ export function McpCatalogForm({
             <>
               <FormField
                 control={form.control}
+                name="localConfig.command"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Command{" "}
+                      {!form.watch("localConfig.dockerImage") && (
+                        <span className="text-destructive">*</span>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="node"
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      The executable command to run. Optional if Docker Image is
+                      set (will use image's default <code>CMD</code>).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="localConfig.dockerImage"
                 render={({ field }) => (
                   <FormItem>
@@ -160,31 +187,8 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      Custom Docker image URL. If not specified, the default
-                      base image will be used.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="localConfig.command"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Command <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="node"
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      The executable command to run
+                      Custom Docker image URL. If not specified, Archestra's
+                      default base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -4509,8 +4509,8 @@ export type GetInternalMcpCatalogResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -4581,8 +4581,8 @@ export type CreateInternalMcpCatalogItemData = {
         serverUrl?: string | null;
         docsUrl?: string | null;
         localConfig?: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -4670,8 +4670,8 @@ export type CreateInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -4821,8 +4821,8 @@ export type GetInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -4893,8 +4893,8 @@ export type UpdateInternalMcpCatalogItemData = {
         serverUrl?: string | null;
         docsUrl?: string | null;
         localConfig?: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -4993,8 +4993,8 @@ export type UpdateInternalMcpCatalogItemResponses = {
         serverUrl: string | null;
         docsUrl: string | null;
         localConfig: {
-            command: string;
-            arguments: Array<string>;
+            command?: string;
+            arguments?: Array<string>;
             environment?: {
                 [key: string]: string;
             };
@@ -5182,8 +5182,8 @@ export type GetMcpServerInstallationRequestsResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5254,8 +5254,8 @@ export type CreateMcpServerInstallationRequestData = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5353,8 +5353,8 @@ export type CreateMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5542,8 +5542,8 @@ export type GetMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5614,8 +5614,8 @@ export type UpdateMcpServerInstallationRequestData = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5734,8 +5734,8 @@ export type UpdateMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5864,8 +5864,8 @@ export type ApproveMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -5994,8 +5994,8 @@ export type DeclineMcpServerInstallationRequestResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };
@@ -6124,8 +6124,8 @@ export type AddMcpServerInstallationRequestNoteResponses = {
             version?: string;
             serverType: 'local';
             localConfig: {
-                command: string;
-                arguments: Array<string>;
+                command?: string;
+                arguments?: Array<string>;
                 environment?: {
                     [key: string]: string;
                 };

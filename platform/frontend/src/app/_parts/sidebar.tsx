@@ -75,18 +75,6 @@ const getNavigationItems = (
             title: "Logs",
             url: "/logs/llm-proxy",
             icon: MessagesSquare,
-            subItems: [
-              {
-                title: "LLM Proxy",
-                url: "/logs/llm-proxy",
-                icon: MessagesSquare,
-              },
-              {
-                title: "MCP Gateway",
-                url: "/logs/mcp-gateway",
-                icon: Router,
-              },
-            ],
           },
           {
             title: "Tools",

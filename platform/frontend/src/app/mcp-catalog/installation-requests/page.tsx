@@ -32,14 +32,6 @@ export default function InstallationRequestsPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
-      {/* <div className="mb-4">
-        <h2 className="text-lg font-semibold">
-          MCP Server Installation Requests
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Review and manage installation requests from your team members.
-        </p>
-      </div> */}
       <Tabs
         value={statusFilter}
         onValueChange={(v) =>

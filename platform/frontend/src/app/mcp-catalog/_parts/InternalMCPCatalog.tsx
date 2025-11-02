@@ -418,9 +418,7 @@ export function InternalMCPCatalog({
           }
         >
           <Plus className="mr-2 h-4 w-4" />
-          {isAdmin
-            ? "Add MCP server using config"
-            : "Request to add custom MCP Server"}
+          {isAdmin ? "Add MCP Server" : "Request to add custom MCP Server"}
         </Button>
       </div>
       <div className="space-y-4">

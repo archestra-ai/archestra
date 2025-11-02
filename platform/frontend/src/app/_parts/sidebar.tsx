@@ -94,9 +94,11 @@ const getNavigationItems = (
           ...(role === "admin"
             ? [
                 {
-                  title: "LLM & MCP Gateways",
-                  url: "/gateways",
+                  title: "Settings",
+                  url: "/settings",
                   icon: Settings,
+                  customIsActive: (pathname: string) =>
+                    pathname.startsWith("/settings"),
                 },
               ]
             : []),
@@ -273,7 +275,11 @@ export function AppSidebar() {
               <UserButton
                 align="center"
                 className="w-full bg-transparent hover:bg-transparent text-foreground"
-                localization={{ ...authLocalization, SETTINGS: "Account" }}
+                localization={{
+                  ...authLocalization,
+                  SETTINGS: "",
+                  ACCOUNT: "",
+                }}
               />
             </SidebarGroupContent>
           </SidebarGroup>

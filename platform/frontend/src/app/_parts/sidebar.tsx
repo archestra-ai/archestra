@@ -187,7 +187,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SignedIn>
-          <WithRole requiredRole="admin">
+          <WithRole requiredExactRole="admin">
             <SidebarGroup className="px-4">
               <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
               <SidebarGroupContent>

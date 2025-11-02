@@ -285,7 +285,7 @@ export function McpServerCard({
 
   const remoteCardContent = (
     <>
-      <WithRole requiredRole="admin">
+      <WithRole requiredExactRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           {[
             { id: "1", content: usersAuthenticated },
@@ -344,7 +344,7 @@ export function McpServerCard({
           Revoke personal token
         </Button>
       )}
-      <WithRole requiredRole="admin">
+      <WithRole requiredExactRole="admin">
         {currentUserHasTeamAuth && (
           <Button
             onClick={handleRevokeTeamAccess}
@@ -356,18 +356,27 @@ export function McpServerCard({
           </Button>
         )}
       </WithRole>
-      <WithRole requiredRole="admin">
+      <WithRole requiredExactRole="admin">
         {requiresAuth && !currentUserHasTeamAuth && (
-          <Button
-            onClick={onInstallTeam}
-            disabled={isInstalling}
-            size="sm"
-            variant="outline"
-            className="w-full"
-          >
-            <Building2 className="mr-2 h-4 w-4" />
-            {isInstalling ? "Adding..." : "Auth for teams"}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onInstallTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? "Adding..." : "Auth for teams"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Authenticate and allow teams to use my token</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </WithRole>
     </>
@@ -375,7 +384,7 @@ export function McpServerCard({
 
   const localCardContent = (
     <>
-      <WithRole requiredRole="admin">
+      <WithRole requiredExactRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
             {toolsAssigned}
@@ -394,7 +403,7 @@ export function McpServerCard({
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
         </Button>
       )}
-      <WithRole requiredRole="member">
+      <WithRole requiredExactRole="member">
         {installed ? (
           <Button disabled size="sm" variant="outline" className="w-full">
             Installed
@@ -421,7 +430,7 @@ export function McpServerCard({
           </TooltipProvider>
         )}
       </WithRole>
-      <WithRole requiredRole="admin">
+      <WithRole requiredExactRole="admin">
         {installed ? (
           <Button
             onClick={() =>

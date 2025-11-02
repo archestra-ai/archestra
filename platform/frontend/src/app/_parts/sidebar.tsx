@@ -11,6 +11,7 @@ import {
   Bot,
   Bug,
   ClipboardList,
+  DollarSign,
   FileJson2,
   Github,
   Info,

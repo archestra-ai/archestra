@@ -1,6 +1,13 @@
 "use client";
 
-import { Copy, Play, RefreshCw, Square, Terminal } from "lucide-react";
+import {
+  ArrowDown,
+  Copy,
+  Play,
+  RefreshCw,
+  Square,
+  Terminal,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,6 +46,7 @@ export function McpLogsDialog({
   const [isFollowing, setIsFollowing] = useState(false);
   const [streamedLogs, setStreamedLogs] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -90,17 +98,25 @@ export function McpLogsDialog({
         }
 
         const chunk = decoder.decode(value, { stream: true });
-        setStreamedLogs((prev) => prev + chunk);
+        setStreamedLogs((prev) => {
+          const newLogs = prev + chunk;
 
-        // Auto-scroll to bottom when new logs arrive
-        if (scrollAreaRef.current) {
-          const scrollContainer = scrollAreaRef.current.querySelector(
-            "[data-radix-scroll-area-viewport]",
-          );
-          if (scrollContainer) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+          // Auto-scroll to bottom when new logs arrive (with a slight delay to ensure DOM update)
+          if (autoScroll) {
+            setTimeout(() => {
+              if (scrollAreaRef.current) {
+                const scrollContainer = scrollAreaRef.current.querySelector(
+                  "[data-radix-scroll-area-viewport]",
+                );
+                if (scrollContainer) {
+                  scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }
+              }
+            }, 10);
           }
-        }
+
+          return newLogs;
+        });
       }
     } catch (err) {
       if (err instanceof Error && err.name !== "AbortError") {
@@ -111,7 +127,7 @@ export function McpLogsDialog({
       setIsFollowing(false);
       abortControllerRef.current = null;
     }
-  }, [serverId]);
+  }, [serverId, autoScroll]);
 
   const stopFollowing = useCallback(() => {
     if (abortControllerRef.current) {
@@ -121,12 +137,31 @@ export function McpLogsDialog({
     setIsFollowing(false);
   }, []);
 
+  // Auto-scroll management: detect when user scrolls up manually
+  useEffect(() => {
+    const scrollContainer = scrollAreaRef.current?.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    );
+
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px tolerance
+      setAutoScroll(isAtBottom);
+    };
+
+    scrollContainer.addEventListener("scroll", handleScroll);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
+  }, []);
+
   // Clean up when dialog closes
   useEffect(() => {
     if (!open) {
       stopFollowing();
       setStreamedLogs("");
       setStreamError(null);
+      setAutoScroll(true); // Reset auto-scroll when dialog reopens
     }
   }, [open, stopFollowing]);
 
@@ -158,6 +193,18 @@ export function McpLogsDialog({
       toast.error("Failed to copy command");
     }
   }, [command]);
+
+  const scrollToBottom = useCallback(() => {
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]",
+      );
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        setAutoScroll(true);
+      }
+    }
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -214,6 +261,17 @@ export function McpLogsDialog({
                   <Copy className="mr-2 h-3 w-3" />
                   {copied ? "Copied!" : "Copy"}
                 </Button>
+                {isFollowing && !autoScroll && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={scrollToBottom}
+                    className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                  >
+                    <ArrowDown className="mr-2 h-3 w-3" />
+                    Scroll to Bottom
+                  </Button>
+                )}
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { Readable, Writable } from "node:stream";
+import { PassThrough, Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach } from "@kubernetes/client-node";
 import type { LocalConfigSchema } from "@shared";
@@ -21,8 +21,8 @@ const {
 export default class K8sPod {
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
-  private k8sExec: k8s.Exec;
   private k8sAttach: Attach;
+  private k8sLog: k8s.Log;
   private namespace: string;
   private podName: string;
   private state: K8sPodState = "not_created";
@@ -39,14 +39,14 @@ export default class K8sPod {
   constructor(
     mcpServer: McpServer,
     k8sApi: k8s.CoreV1Api,
-    k8sExec: k8s.Exec,
     k8sAttach: Attach,
+    k8sLog: k8s.Log,
     namespace: string,
   ) {
     this.mcpServer = mcpServer;
     this.k8sApi = k8sApi;
-    this.k8sExec = k8sExec;
     this.k8sAttach = k8sAttach;
+    this.k8sLog = k8sLog;
     this.namespace = namespace;
     this.podName = `mcp-${mcpServer.id.toLowerCase()}`;
   }
@@ -637,27 +637,91 @@ export default class K8sPod {
     lines: number = 100,
   ): Promise<void> {
     try {
-      const logStream = await this.k8sApi.readNamespacedPodLog({
-        name: this.podName,
-        namespace: this.namespace,
-        tailLines: lines,
-        follow: true,
+      // Create a PassThrough stream to handle the log data
+      const logStream = new PassThrough();
+
+      // Handle log data by piping to the response stream
+      logStream.on("data", (chunk) => {
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.write(chunk);
+        }
       });
 
-      // The K8s client returns a string when follow is enabled, but we need to
-      // handle it as a stream. We'll write it to the response stream.
-      if (typeof logStream === "string") {
-        responseStream.write(logStream);
-        responseStream.end();
-      } else {
-        // If it's already a stream, pipe it
-        (logStream as unknown as NodeJS.ReadableStream).pipe(responseStream);
-      }
+      // Handle stream errors
+      logStream.on("error", (error) => {
+        logger.error(
+          { err: error },
+          `Log stream error for pod ${this.podName}:`,
+        );
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          if (
+            "destroy" in responseStream &&
+            typeof responseStream.destroy === "function"
+          ) {
+            responseStream.destroy(error);
+          }
+        }
+      });
+
+      // Handle stream end
+      logStream.on("end", () => {
+        if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+          responseStream.end();
+        }
+      });
+
+      // Handle response stream errors and cleanup
+      responseStream.on("error", (error) => {
+        logger.error(
+          { err: error },
+          `Response stream error for pod ${this.podName}:`,
+        );
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+      });
+
+      responseStream.on("close", () => {
+        if (logStream.destroy) {
+          logStream.destroy();
+        }
+      });
+
+      // Use the Log client to stream logs with follow=true
+      const req = await this.k8sLog.log(
+        this.namespace,
+        this.podName,
+        "mcp-server", // container name
+        logStream,
+        {
+          follow: true,
+          tailLines: lines,
+          pretty: false,
+          timestamps: false,
+        },
+      );
+
+      // Handle cleanup when response stream closes
+      responseStream.on("close", () => {
+        if (req) {
+          req.abort();
+        }
+      });
     } catch (error: unknown) {
       logger.error(
         { err: error },
         `Failed to stream logs for pod ${this.podName}:`,
       );
+
+      if (!("destroyed" in responseStream) || !responseStream.destroyed) {
+        if (
+          "destroy" in responseStream &&
+          typeof responseStream.destroy === "function"
+        ) {
+          responseStream.destroy(error as Error);
+        }
+      }
+
       throw error;
     }
   }

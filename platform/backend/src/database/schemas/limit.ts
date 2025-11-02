@@ -12,8 +12,6 @@ const limitsTable = pgTable(
   "limits",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    name: text("name").notNull(),
-    description: text("description"),
     entityType: varchar("entity_type", {
       enum: ["organization", "team", "agent"],
     }).notNull(),

@@ -13,7 +13,17 @@ import {
   type TooltipItem,
 } from "chart.js";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Clock, Info } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  Clock,
+  Edit,
+  Info,
+  Plus,
+  Save,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
@@ -30,6 +40,18 @@ ChartJS.register(
   Filler,
 );
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -47,8 +69,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -65,6 +94,405 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Tooltip as UITooltip,
+} from "@/components/ui/tooltip";
+import {
+  useCreateLimit,
+  useDeleteLimit,
+  useLimits,
+  useUpdateLimit,
+} from "@/lib/limits.query";
+import { useMcpServers } from "@/lib/mcp-server.query";
+import { useTeams } from "@/lib/team.query";
+
+// Inline Form Component for adding/editing limits
+function LimitInlineForm({
+  initialData,
+  limitType,
+  onSave,
+  onCancel,
+  teams,
+  mcpServers,
+  hasOrganizationLimit,
+  getTeamsWithLimits,
+}: {
+  initialData?: any;
+  limitType: "token_cost" | "mcp_server_calls" | "tool_calls";
+  onSave: (data: any) => void;
+  onCancel: () => void;
+  teams: any[];
+  mcpServers: any[];
+  hasOrganizationLimit: (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => boolean;
+  getTeamsWithLimits: (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => string[];
+}) {
+  const [formData, setFormData] = useState({
+    name: initialData?.name || "",
+    description: initialData?.description || "",
+    entityType: initialData?.entityType || "team",
+    entityId: initialData?.entityId || "",
+    mcpServerName: initialData?.mcpServerName || "",
+    toolName: initialData?.toolName || "",
+    limitValue: initialData?.limitValue?.toString() || "",
+  });
+
+  const selectedServer = mcpServers.find(
+    (s) => s.name === formData.mcpServerName,
+  );
+  const availableTools = selectedServer?.tools || [];
+
+  // Get teams with existing limits for this limit type
+  const teamsWithLimits = getTeamsWithLimits(limitType);
+  const organizationHasLimit = hasOrganizationLimit(limitType);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      ...formData,
+      limitType,
+      limitValue: parseInt(formData.limitValue, 10),
+      entityId:
+        formData.entityType === "organization" ? "org" : formData.entityId,
+    });
+  };
+
+  const isValid =
+    formData.limitValue &&
+    (formData.entityType === "organization" || formData.entityId) &&
+    (limitType === "token_cost" || formData.mcpServerName) &&
+    (limitType !== "tool_calls" || formData.toolName);
+
+  return (
+    <tr className="border-b">
+      <td
+        colSpan={limitType === "token_cost" ? 4 : 6}
+        className="p-4 bg-muted/30"
+      >
+        <TooltipProvider>
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-wrap items-center gap-4"
+          >
+            <div className="flex items-center gap-2">
+              <Label htmlFor="entityType" className="text-sm whitespace-nowrap">
+                Apply To
+              </Label>
+              <Select
+                value={formData.entityType}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, entityType: value, entityId: "" })
+                }
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="team">Team</SelectItem>
+                  <SelectItem
+                    value="organization"
+                    disabled={organizationHasLimit}
+                  >
+                    The whole organization
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.entityType === "team" && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="team" className="text-sm whitespace-nowrap">
+                  Team
+                </Label>
+                <Select
+                  value={formData.entityId}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, entityId: value })
+                  }
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No teams available
+                      </div>
+                    ) : (
+                      teams.map((team) => (
+                        <SelectItem
+                          key={team.id}
+                          value={team.id}
+                          disabled={teamsWithLimits.includes(team.id)}
+                        >
+                          {team.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {limitType !== "token_cost" && (
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor="mcpServer"
+                  className="text-sm whitespace-nowrap"
+                >
+                  MCP Server
+                </Label>
+                <Select
+                  value={formData.mcpServerName}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      mcpServerName: value,
+                      toolName: "",
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select an MCP server" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mcpServers.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No MCP servers available
+                      </div>
+                    ) : (
+                      mcpServers.map((server) => (
+                        <SelectItem key={server.id} value={server.name}>
+                          {server.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {limitType === "tool_calls" && formData.mcpServerName && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="tool" className="text-sm whitespace-nowrap">
+                  Tool
+                </Label>
+                <Select
+                  value={formData.toolName}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, toolName: value })
+                  }
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select a tool" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableTools.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No tools available for this server
+                      </div>
+                    ) : (
+                      availableTools.map((tool: any) => (
+                        <SelectItem key={tool.name} value={tool.name}>
+                          {tool.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Label htmlFor="limitValue" className="text-sm whitespace-nowrap">
+                Limit Value ({limitType === "token_cost" ? "cost $" : "calls"})
+              </Label>
+              <Input
+                id="limitValue"
+                type="number"
+                value={formData.limitValue}
+                onChange={(e) =>
+                  setFormData({ ...formData, limitValue: e.target.value })
+                }
+                placeholder={
+                  limitType === "token_cost" ? "e.g. 100" : "e.g. 1000"
+                }
+                min="1"
+                required
+                className="w-24"
+              />
+            </div>
+
+            <div className="flex gap-2 flex-shrink-0">
+              <Button type="submit" disabled={!isValid} size="sm">
+                <Save className="h-4 w-4 mr-1" />
+                Save
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                size="sm"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </TooltipProvider>
+      </td>
+    </tr>
+  );
+}
+
+// Limit Row Component for displaying/editing individual limits
+function LimitRow({
+  limit,
+  isEditing,
+  onEdit,
+  onSave,
+  onCancel,
+  onDelete,
+  teams,
+  mcpServers,
+  getEntityName,
+  getMcpServerName,
+  getUsageStatus,
+  hasOrganizationLimit,
+  getTeamsWithLimits,
+}: {
+  limit: any;
+  isEditing: boolean;
+  onEdit: () => void;
+  onSave: (data: any) => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  teams: any[];
+  mcpServers: any[];
+  getEntityName: (limit: any) => string;
+  getMcpServerName: (limit: any) => string;
+  getUsageStatus: (
+    currentUsage: number,
+    limitValue: number,
+  ) => { percentage: number; status: string };
+  hasOrganizationLimit: (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => boolean;
+  getTeamsWithLimits: (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => string[];
+}) {
+  if (isEditing) {
+    return (
+      <LimitInlineForm
+        initialData={limit}
+        limitType={limit.limitType}
+        onSave={onSave}
+        onCancel={onCancel}
+        teams={teams}
+        mcpServers={mcpServers}
+        hasOrganizationLimit={hasOrganizationLimit}
+        getTeamsWithLimits={getTeamsWithLimits}
+      />
+    );
+  }
+
+  const { percentage, status } = getUsageStatus(
+    limit.currentUsage,
+    limit.limitValue,
+  );
+
+  return (
+    <tr className="border-b hover:bg-muted/30">
+      <td className="p-4">
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={
+              status === "danger"
+                ? "destructive"
+                : status === "warning"
+                  ? "secondary"
+                  : "default"
+            }
+          >
+            {status === "danger"
+              ? "Exceeded"
+              : status === "warning"
+                ? "Near Limit"
+                : "Safe"}
+          </Badge>
+        </div>
+      </td>
+      <td className="p-4 text-sm text-muted-foreground">
+        {getEntityName(limit)}
+      </td>
+      <td className="p-4">
+        <div className="space-y-1">
+          <div className="flex justify-between text-sm">
+            <span>
+              {limit.limitType === "token_cost"
+                ? `$${limit.currentUsage.toFixed(2)} / $${limit.limitValue.toFixed(2)}`
+                : `${limit.currentUsage.toLocaleString()} / ${limit.limitValue.toLocaleString()} calls`}
+            </span>
+            <span>{percentage.toFixed(1)}%</span>
+          </div>
+          <Progress
+            value={Math.min(percentage, 100)}
+            className={`h-2 ${
+              status === "danger"
+                ? "bg-red-100"
+                : status === "warning"
+                  ? "bg-orange-100"
+                  : ""
+            }`}
+          />
+        </div>
+      </td>
+      <td className="p-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Edit className="h-4 w-4" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Limit</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this limit? This action cannot
+                  be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 export default function CostPage() {
   const router = useRouter();
@@ -76,6 +504,102 @@ export default function CostPage() {
   const [fromTime, setFromTime] = useState("00:00");
   const [toTime, setToTime] = useState("23:59");
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
+  const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
+  const [isAddingLlmLimit, setIsAddingLlmLimit] = useState(false);
+  const [isAddingMcpLimit, setIsAddingMcpLimit] = useState(false);
+
+  // Data fetching hooks
+  const { data: limits = [], isLoading: limitsLoading } = useLimits();
+  const { data: mcpServers = [] } = useMcpServers();
+  const { data: teams = [] } = useTeams();
+  const deleteLimit = useDeleteLimit();
+  const createLimit = useCreateLimit();
+  const updateLimit = useUpdateLimit();
+
+  // Filter limits by type
+  const llmLimits = limits.filter((limit) => limit.limitType === "token_cost");
+  const mcpLimits = limits.filter((limit) =>
+    ["mcp_server_calls", "tool_calls"].includes(limit.limitType),
+  );
+
+  // Helper functions to detect existing limits
+  const hasOrganizationLimit = (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => {
+    return limits.some(
+      (limit) =>
+        limit.limitType === limitType && limit.entityType === "organization",
+    );
+  };
+
+  const getTeamsWithLimits = (
+    limitType: "token_cost" | "mcp_server_calls" | "tool_calls",
+  ) => {
+    return limits
+      .filter(
+        (limit) => limit.limitType === limitType && limit.entityType === "team",
+      )
+      .map((limit) => limit.entityId);
+  };
+
+  // Helper function to get entity name
+  const getEntityName = (limit: any) => {
+    if (limit.entityType === "team") {
+      const team = teams.find((t) => t.id === limit.entityId);
+      return team?.name || "Unknown Team";
+    }
+    if (limit.entityType === "organization") {
+      return "The whole organization";
+    }
+    return "Unknown Agent";
+  };
+
+  // Helper function to get MCP server name
+  const getMcpServerName = (limit: any) => {
+    if (!limit.mcpServerName) return "-";
+    const server = mcpServers.find((s) => s.name === limit.mcpServerName);
+    return server?.name || limit.mcpServerName;
+  };
+
+  // Helper function to get usage percentage and status
+  const getUsageStatus = (currentUsage: number, limitValue: number) => {
+    const percentage = (currentUsage / limitValue) * 100;
+    let status: "safe" | "warning" | "danger" = "safe";
+
+    if (percentage >= 90) status = "danger";
+    else if (percentage >= 75) status = "warning";
+
+    return { percentage, status };
+  };
+
+  const handleDeleteLimit = async (id: string) => {
+    await deleteLimit.mutateAsync({ id });
+  };
+
+  const handleCreateLimit = async (data: any) => {
+    try {
+      await createLimit.mutateAsync(data);
+      setIsAddingLlmLimit(false);
+      setIsAddingMcpLimit(false);
+    } catch (error) {
+      console.error("Failed to create limit:", error);
+    }
+  };
+
+  const handleUpdateLimit = async (id: string, data: any) => {
+    try {
+      await updateLimit.mutateAsync({ id, ...data });
+      setEditingLimitId(null);
+    } catch (error) {
+      console.error("Failed to update limit:", error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLimitId(null);
+    setIsAddingLlmLimit(false);
+    setIsAddingMcpLimit(false);
+  };
 
   // Initialize from URL parameters
   useEffect(() => {
@@ -968,14 +1492,190 @@ export default function CostPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="limits" className="mt-0">
+          <TabsContent value="limits" className="mt-0 space-y-6">
+            {/* LLM Limits Section */}
             <Card>
               <CardHeader>
-                <CardTitle>Limits Configuration</CardTitle>
-                <CardDescription>Set spending and usage limits</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl">LLM Limits</CardTitle>
+                    <CardDescription>
+                      Token cost limits for LLM usage across teams and
+                      organization
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setIsAddingLlmLimit(true)}
+                    size="sm"
+                    disabled={isAddingLlmLimit || editingLimitId !== null}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add LLM Limit
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">Coming soon...</p>
+                {limitsLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-16 bg-muted animate-pulse rounded"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Applied to</TableHead>
+                        <TableHead>Usage</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isAddingLlmLimit && (
+                        <LimitInlineForm
+                          limitType="token_cost"
+                          onSave={handleCreateLimit}
+                          onCancel={handleCancelEdit}
+                          teams={teams}
+                          mcpServers={mcpServers}
+                          hasOrganizationLimit={hasOrganizationLimit}
+                          getTeamsWithLimits={getTeamsWithLimits}
+                        />
+                      )}
+                      {llmLimits.length === 0 && !isAddingLlmLimit ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p>No LLM limits configured</p>
+                            <p className="text-sm">
+                              Click "Add LLM Limit" to get started
+                            </p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        llmLimits.map((limit) => (
+                          <LimitRow
+                            key={limit.id}
+                            limit={limit}
+                            isEditing={editingLimitId === limit.id}
+                            onEdit={() => setEditingLimitId(limit.id)}
+                            onSave={(data) => handleUpdateLimit(limit.id, data)}
+                            onCancel={handleCancelEdit}
+                            onDelete={() => handleDeleteLimit(limit.id)}
+                            teams={teams}
+                            mcpServers={mcpServers}
+                            getEntityName={getEntityName}
+                            getMcpServerName={getMcpServerName}
+                            getUsageStatus={getUsageStatus}
+                            hasOrganizationLimit={hasOrganizationLimit}
+                            getTeamsWithLimits={getTeamsWithLimits}
+                          />
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* MCP Limits Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl">MCP Limits</CardTitle>
+                    <CardDescription>
+                      MCP server and tool call limits across teams and
+                      organization
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setIsAddingMcpLimit(true)}
+                    size="sm"
+                    disabled={isAddingMcpLimit || editingLimitId !== null}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add MCP Limit
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {limitsLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-16 bg-muted animate-pulse rounded"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Applied to</TableHead>
+                        <TableHead>MCP Server</TableHead>
+                        <TableHead>Tool</TableHead>
+                        <TableHead>Usage</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isAddingMcpLimit && (
+                        <LimitInlineForm
+                          limitType="mcp_server_calls"
+                          onSave={handleCreateLimit}
+                          onCancel={handleCancelEdit}
+                          teams={teams}
+                          mcpServers={mcpServers}
+                          hasOrganizationLimit={hasOrganizationLimit}
+                          getTeamsWithLimits={getTeamsWithLimits}
+                        />
+                      )}
+                      {mcpLimits.length === 0 && !isAddingMcpLimit ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p>No MCP limits configured</p>
+                            <p className="text-sm">
+                              Click "Add MCP Limit" to get started
+                            </p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        mcpLimits.map((limit) => (
+                          <LimitRow
+                            key={limit.id}
+                            limit={limit}
+                            isEditing={editingLimitId === limit.id}
+                            onEdit={() => setEditingLimitId(limit.id)}
+                            onSave={(data) => handleUpdateLimit(limit.id, data)}
+                            onCancel={handleCancelEdit}
+                            onDelete={() => handleDeleteLimit(limit.id)}
+                            teams={teams}
+                            mcpServers={mcpServers}
+                            getEntityName={getEntityName}
+                            getMcpServerName={getMcpServerName}
+                            getUsageStatus={getUsageStatus}
+                            hasOrganizationLimit={hasOrganizationLimit}
+                            getTeamsWithLimits={getTeamsWithLimits}
+                          />
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

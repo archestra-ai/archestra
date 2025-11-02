@@ -207,5 +207,12 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+
+  // Limits Routes
+  GetLimits: "getLimits",
+  CreateLimit: "createLimit",
+  GetLimit: "getLimit",
+  UpdateLimit: "updateLimit",
+  DeleteLimit: "deleteLimit",
 } as const;
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

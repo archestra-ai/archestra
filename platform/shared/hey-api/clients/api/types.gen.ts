@@ -4373,6 +4373,9 @@ export type GetInteractionsResponses = {
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4380,6 +4383,9 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4387,6 +4393,9 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -4444,6 +4453,9 @@ export type GetInteractionResponses = {
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4451,6 +4463,9 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4458,6 +4473,9 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     };
 };
@@ -5044,6 +5062,325 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetLimitsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+    };
+    url: '/api/limits';
+};
+
+export type GetLimitsErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitsError = GetLimitsErrors[keyof GetLimitsErrors];
+
+export type GetLimitsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsage: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
+
+export type CreateLimitData = {
+    body: {
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/limits';
+};
+
+export type CreateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type CreateLimitError = CreateLimitErrors[keyof CreateLimitErrors];
+
+export type CreateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsage: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateLimitResponse = CreateLimitResponses[keyof CreateLimitResponses];
+
+export type DeleteLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type DeleteLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type DeleteLimitError = DeleteLimitErrors[keyof DeleteLimitErrors];
+
+export type DeleteLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteLimitResponse = DeleteLimitResponses[keyof DeleteLimitResponses];
+
+export type GetLimitData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type GetLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLimitError = GetLimitErrors[keyof GetLimitErrors];
+
+export type GetLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsage: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetLimitResponse = GetLimitResponses[keyof GetLimitResponses];
+
+export type UpdateLimitData = {
+    body?: {
+        entityType?: 'organization' | 'team' | 'agent';
+        entityId?: string;
+        limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue?: number;
+        mcpServerName?: string | null;
+        toolName?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/limits/{id}';
+};
+
+export type UpdateLimitErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateLimitError = UpdateLimitErrors[keyof UpdateLimitErrors];
+
+export type UpdateLimitResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        entityType: 'organization' | 'team' | 'agent';
+        entityId: string;
+        limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        limitValue: number;
+        currentUsage: number;
+        mcpServerName: string | null;
+        toolName: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateLimitResponse = UpdateLimitResponses[keyof UpdateLimitResponses];
 
 export type GetV1McpData = {
     body?: never;

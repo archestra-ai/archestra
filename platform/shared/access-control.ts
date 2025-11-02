@@ -19,6 +19,7 @@ export type Resource =
   | "mcpServerInstallationRequest"
   | "mcpToolCall"
   | "team"
+  | "limit"
 
 /**
  * Available actions
@@ -49,6 +50,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   team: ["create", "read", "update", "delete"],
   mcpToolCall: ["read"],
+  limit: ["create", "read", "update", "delete"],
 };
 
 export const ac = createAccessControl(allAvailableActions);
@@ -77,5 +79,6 @@ export const memberRole = ac.newRole({
   mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
   mcpToolCall: ["read"],
+  limit: ["read"],
 });
 

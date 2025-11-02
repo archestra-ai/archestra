@@ -383,6 +383,21 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
+  [RouteId.GetLimits]: {
+    limit: ["read"],
+  },
+  [RouteId.CreateLimit]: {
+    limit: ["create"],
+  },
+  [RouteId.GetLimit]: {
+    limit: ["read"],
+  },
+  [RouteId.UpdateLimit]: {
+    limit: ["update"],
+  },
+  [RouteId.DeleteLimit]: {
+    limit: ["delete"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

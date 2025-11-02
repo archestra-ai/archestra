@@ -30,12 +30,12 @@ import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
+import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
 type ServerType = "all" | "remote" | "local";
-type SelectedCategory = "all" | string;
 
 export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
@@ -158,28 +158,24 @@ export function ArchestraCatalogTab({
     [catalogItems],
   );
 
-  // Use filtered servers
-  const displayedServers = filteredServers;
-
   return (
-    <div className="w-full space-y-4 mt-4">
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <DebouncedInput
-          placeholder="Search servers by name..."
-          initialValue={searchQuery}
-          onChange={setSearchQuery}
-          className="pl-9"
-        />
-      </div>
+    <div className="w-full space-y-2 mt-4">
+      <div className="flex items-end gap-4">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <DebouncedInput
+              placeholder="Search servers by name..."
+              initialValue={searchQuery}
+              onChange={setSearchQuery}
+              className="pl-9"
+            />
+          </div>
+        </div>
 
-      {/* Filters */}
-      <div className="space-y-3">
-        {/* Type Filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-muted-foreground">
-            Type:
+            Type
           </span>
           <Select
             value={filters.type}
@@ -187,7 +183,7 @@ export function ArchestraCatalogTab({
               setFilters({ ...filters, type: value as ServerType })
             }
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
             <SelectContent>
@@ -198,18 +194,17 @@ export function ArchestraCatalogTab({
           </Select>
         </div>
 
-        {/* Category Filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-muted-foreground">
-            Category:
+            Category
           </span>
           <Select
             value={filters.category}
             onValueChange={(value) =>
-              setFilters({ ...filters, category: value })
+              setFilters({ ...filters, category: value as SelectedCategory })
             }
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
@@ -224,27 +219,26 @@ export function ArchestraCatalogTab({
         </div>
       </div>
 
-      {/* Loading State */}
       {isLoading && (
         <div className="grid gap-4 md:grid-cols-2">
-          {Array.from({ length: 4 }, (_, i) => `skeleton-${i}-${Date.now()}`).map(
-            (key) => (
-              <Card key={key}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-1/2 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-full mt-2" />
-                </CardContent>
-              </Card>
-            ),
-          )}
+          {Array.from(
+            { length: 4 },
+            (_, i) => `skeleton-${i}-${Date.now()}`,
+          ).map((key) => (
+            <Card key={key}>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full mt-2" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Error State */}
       {error && (
         <div className="text-center py-12">
           <p className="text-destructive mb-2">
@@ -256,17 +250,16 @@ export function ArchestraCatalogTab({
         </div>
       )}
 
-      {/* Server Cards */}
-      {!isLoading && !error && displayedServers && (
+      {!isLoading && !error && filteredServers && (
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {displayedServers.length}{" "}
-              {displayedServers.length === 1 ? "server" : "servers"} found
+              {filteredServers.length}{" "}
+              {filteredServers.length === 1 ? "server" : "servers"} found
             </p>
           </div>
 
-          {displayedServers.length === 0 ? (
+          {filteredServers.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">
                 No servers match your search criteria.
@@ -275,7 +268,7 @@ export function ArchestraCatalogTab({
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-2 max-h-[400px] overflow-y-auto pr-2">
-                {displayedServers.map((server, index) => (
+                {filteredServers.map((server, index) => (
                   <ServerCard
                     key={`${server.name}-${index}`}
                     server={server}
@@ -289,7 +282,6 @@ export function ArchestraCatalogTab({
                 ))}
               </div>
 
-              {/* Load More Button */}
               {hasNextPage && (
                 <div className="flex justify-center mt-6">
                   <Button
@@ -314,13 +306,11 @@ export function ArchestraCatalogTab({
         </>
       )}
 
-      {/* README Dialog */}
       <DetailsDialog
         server={readmeServer}
         onClose={() => setReadmeServer(null)}
       />
 
-      {/* Request Installation Dialog */}
       <RequestInstallationDialog
         server={requestServer}
         onClose={() => setRequestServer(null)}

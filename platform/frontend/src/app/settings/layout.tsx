@@ -13,6 +13,7 @@ export default function SettingsLayout({
 
   const tabs = [
     { label: "LLM & MCP Gateways", href: "/settings/gateways" },
+    { label: "Dual LLM", href: "/settings/dual-llm" },
     { label: "Your Account", href: "/settings/account" },
     ...(showAdminTabs
       ? [

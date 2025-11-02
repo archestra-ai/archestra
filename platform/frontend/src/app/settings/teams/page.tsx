@@ -7,7 +7,7 @@ import { TeamsList } from "@/components/teams/teams-list";
 
 function TeamsSettingsContent() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <TeamsList />
     </div>
   );

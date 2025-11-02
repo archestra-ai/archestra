@@ -12,7 +12,6 @@ import {
   MessagesSquare,
   Router,
   Settings,
-  ShieldCheck,
   Slack,
   Star,
   Wrench,
@@ -37,7 +36,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { WithRole } from "@/components/with-permission";
 import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
 
@@ -100,14 +98,6 @@ const getNavigationItems = (
       : []),
   ];
 };
-
-const actionItems: MenuItem[] = [
-  {
-    title: "Dual LLM",
-    url: "/dual-llm",
-    icon: ShieldCheck,
-  },
-];
 
 const userItems: MenuItem[] = [
   {
@@ -173,31 +163,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SignedIn>
-          <WithRole requiredExactRole="admin">
-            <SidebarGroup className="px-4">
-              <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {actionItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={item.url === pathname}
-                      >
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </WithRole>
-        </SignedIn>
 
         <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>

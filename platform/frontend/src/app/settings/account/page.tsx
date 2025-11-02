@@ -11,12 +11,25 @@ import { LoadingSpinner } from "@/components/loading";
 
 function AccountSettingsContent() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 md:px-8">
-      <div className="space-y-6">
-        <SecuritySettingsCards />
-        <ApiKeysCard />
-        <DeleteAccountCard />
-      </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
+      <SecuritySettingsCards
+        classNames={{
+          cards: "w-full",
+          card: {
+            base: "w-full",
+          },
+        }}
+      />
+      <ApiKeysCard
+        classNames={{
+          base: "w-full",
+        }}
+      />
+      <DeleteAccountCard
+        classNames={{
+          base: "w-full",
+        }}
+      />
     </div>
   );
 }

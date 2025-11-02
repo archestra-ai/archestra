@@ -1,7 +1,5 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,21 +10,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  useCreateInternalMcpCatalogItem,
+  useInternalMcpCatalog,
+} from "@/lib/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
 import { ArchestraCatalogTab } from "./archestra-catalog-tab";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
-import { useCreateInternalMcpCatalogItem } from "@/lib/internal-mcp-catalog.query";
 
 interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-type ServerType =
-  archestraApiTypes.CreateInternalMcpCatalogItemData["body"]["serverType"];
 
 type TabType = "archestra-catalog" | "remote" | "local";
 
@@ -61,7 +58,6 @@ export function CreateCatalogDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Page-style tabs */}
         <div className="border-b border-border">
           <div className="flex gap-4">
             {[
@@ -70,6 +66,7 @@ export function CreateCatalogDialog({
               { value: "local", label: "Local" },
             ].map((tab) => (
               <button
+                type="button"
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value as TabType)}
                 className={cn(
@@ -88,7 +85,6 @@ export function CreateCatalogDialog({
           </div>
         </div>
 
-        {/* Tab content */}
         <div className="min-h-[400px]">
           {activeTab === "archestra-catalog" && (
             <ArchestraCatalogTab
@@ -98,25 +94,21 @@ export function CreateCatalogDialog({
           )}
 
           {activeTab === "remote" && (
-            <div className="space-y-4 mt-4">
-              <McpCatalogForm
-                mode="create"
-                onSubmit={onSubmit}
-                submitButtonRef={submitButtonRef}
-                serverType="remote"
-              />
-            </div>
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              submitButtonRef={submitButtonRef}
+              serverType="remote"
+            />
           )}
 
           {activeTab === "local" && (
-            <div className="space-y-4 mt-4">
-              <McpCatalogForm
-                mode="create"
-                onSubmit={onSubmit}
-                submitButtonRef={submitButtonRef}
-                serverType="local"
-              />
-            </div>
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              submitButtonRef={submitButtonRef}
+              serverType="local"
+            />
           )}
         </div>
 

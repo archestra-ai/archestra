@@ -22,7 +22,6 @@ import { DeleteCatalogDialog } from "./delete-catalog-dialog";
 import { EditCatalogDialog } from "./edit-catalog-dialog";
 import {
   type CatalogItem,
-  type CatalogItemWithOptionalLabel,
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";

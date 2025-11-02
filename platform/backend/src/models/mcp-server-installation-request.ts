@@ -186,7 +186,6 @@ class McpServerInstallationRequestModel {
 
         if (customConfig.type === "remote") {
           await InternalMcpCatalogModel.create({
-            label: customConfig.label,
             name: customConfig.name,
             version: customConfig.version,
             serverType: "remote",
@@ -197,7 +196,6 @@ class McpServerInstallationRequestModel {
           });
         } else if (customConfig.type === "local") {
           await InternalMcpCatalogModel.create({
-            label: customConfig.label,
             name: customConfig.name,
             version: customConfig.version,
             serverType: "local",

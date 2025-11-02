@@ -172,7 +172,7 @@ export function RemoteServerInstallDialog({
               <span>
                 {isTeamMode ? "Team" : "Personal"} Authentication
                 <span className="text-muted-foreground ml-2 font-normal">
-                  {catalogItem.label}
+                  {catalogItem.name}
                 </span>
               </span>
             </div>

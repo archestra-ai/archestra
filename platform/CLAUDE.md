@@ -19,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Frontend**: <http://localhost:3000/>
 - **Tools Inspector**: <http://localhost:3000/tools>
 - **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
+- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Customize organization theme, logo, and fonts)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)
@@ -90,7 +91,7 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (agents and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (custom themes, logos, fonts)
 
 **Workspaces**:
 
@@ -187,5 +188,12 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
 - Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
+
+**Organization Appearance**:
+- Admin-only customization via `/api/organization/appearance` endpoints
+- Supports custom logos (PNG, max 2MB, stored as base64)
+- 18 predefined themes across 3 categories (single color, vision assistive, fun)
+- 5 font options: Lato, Inter, Open Sans, Roboto, Source Sans Pro
+- Theme provider applies CSS variables dynamically
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

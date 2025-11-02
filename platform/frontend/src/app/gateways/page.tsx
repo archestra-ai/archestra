@@ -5,11 +5,9 @@ import { McpConnectionInstructions } from "@/components/mcp-connection-instructi
 import { MermaidDiagram } from "@/components/mermaid-wrapper";
 import { ProxyConnectionInstructions } from "@/components/proxy-connection-instructions";
 import { useDefaultAgent } from "@/lib/agent.query";
-import { useHealth } from "@/lib/health.query";
 
 export default function SettingsPage() {
   const { data: defaultAgent } = useDefaultAgent();
-  const { data: health } = useHealth();
 
   const mermaidChart = `flowchart LR
     subgraph Agents
@@ -310,14 +308,6 @@ export default function SettingsPage() {
                 </a>
               </div>
             </div>
-
-            {health?.version && (
-              <div className="border-t pt-6 mt-6">
-                <p className="text-xs text-muted-foreground text-center">
-                  Version {health.version}
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </div>

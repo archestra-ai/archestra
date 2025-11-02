@@ -1,6 +1,5 @@
 "use client";
 import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
-import type { Role } from "@shared";
 import {
   BookOpen,
   Bot,
@@ -36,7 +35,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
 
 interface MenuItem {
@@ -47,10 +46,7 @@ interface MenuItem {
   customIsActive?: (pathname: string) => boolean;
 }
 
-const getNavigationItems = (
-  isAuthenticated: boolean,
-  role: Role,
-): MenuItem[] => {
+const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   return [
     {
       title: "How security works",
@@ -83,17 +79,13 @@ const getNavigationItems = (
             customIsActive: (pathname: string) =>
               pathname.startsWith("/mcp-catalog"),
           },
-          ...(role === "admin"
-            ? [
-                {
-                  title: "Settings",
-                  url: "/settings",
-                  icon: Settings,
-                  customIsActive: (pathname: string) =>
-                    pathname.startsWith("/settings"),
-                },
-              ]
-            : []),
+          {
+            title: "Settings",
+            url: "/settings",
+            icon: Settings,
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/settings"),
+          },
         ]
       : []),
   ];
@@ -111,7 +103,6 @@ const userItems: MenuItem[] = [
 export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
-  const role = useRole();
   const { data: starCount } = useGithubStars();
 
   return (
@@ -127,7 +118,7 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated, role).map((item) => (
+              {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

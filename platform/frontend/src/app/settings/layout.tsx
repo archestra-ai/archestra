@@ -19,9 +19,9 @@ export default function SettingsLayout({
       ? [
           { label: "Members", href: "/settings/members" },
           { label: "Teams", href: "/settings/teams" },
+          { label: "Appearance", href: "/settings/appearance" },
         ]
       : []),
-    { label: "Appearance", href: "/settings/appearance" },
   ];
 
   return (

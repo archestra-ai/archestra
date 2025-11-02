@@ -89,6 +89,28 @@ export default function ChatPage() {
     },
   });
 
+  // Delete conversation mutation
+  const deleteConversation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/chat/conversations/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete conversation");
+      return res.json();
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.removeQueries({ queryKey: ["conversation", deletedId] });
+
+      // If we deleted the selected conversation, clear the selection
+      if (conversationId === deletedId) {
+        setConversationId(undefined);
+        setMessages([]);
+        router.push(pathname);
+      }
+    },
+  });
+
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
   const { messages, sendMessage, status, stop, setMessages } = useChat({
     transport: new DefaultChatTransport({
@@ -131,6 +153,7 @@ export default function ChatPage() {
         selectedConversationId={conversationId}
         onSelectConversation={selectConversation}
         onCreateConversation={() => createConversation.mutate()}
+        onDeleteConversation={(id) => deleteConversation.mutate(id)}
         isCreatingConversation={createConversation.isPending}
       />
 

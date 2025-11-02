@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { convertToModelMessages, streamText } from "ai";
+import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -94,20 +94,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const openai = createOpenAI({
         apiKey: config.chat.openai.apiKey,
         baseURL: config.chat.openai.baseUrl,
-        fetch: async (url, init) => {
-          // Add custom header to bypass strict validation for streaming tool calls
-          const headers = new Headers(init?.headers);
-          headers.set("X-Stainless-Raw-Response", "true");
-          return fetch(url, { ...init, headers });
-        },
       });
 
-      // Stream with AI SDK - use .chat() to explicitly use /chat/completions endpoint
+      // Stream with AI SDK
       const result = streamText({
-        model: openai.chat(conversation.selectedModel),
+        model: openai(conversation.selectedModel),
         messages: convertToModelMessages(messages),
         tools: mcpTools,
-        maxSteps: 5, // Enable multi-step tool calling
+        stopWhen: stepCountIs(5),
         onFinish: async ({ usage, finishReason }) => {
           fastify.log.info(
             {

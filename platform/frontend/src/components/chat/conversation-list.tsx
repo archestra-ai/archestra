@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -16,6 +17,7 @@ interface ConversationListProps {
   selectedConversationId?: string;
   onSelectConversation: (id: string) => void;
   onCreateConversation: () => void;
+  onDeleteConversation: (id: string) => void;
   isCreatingConversation?: boolean;
 }
 
@@ -24,6 +26,7 @@ export function ConversationList({
   selectedConversationId,
   onSelectConversation,
   onCreateConversation,
+  onDeleteConversation,
   isCreatingConversation = false,
 }: ConversationListProps) {
   return (
@@ -40,16 +43,31 @@ export function ConversationList({
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
           {conversations.map((conv) => (
-            <button
+            <div
               key={conv.id}
-              type="button"
-              onClick={() => onSelectConversation(conv.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors ${
+              className={`group relative flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors ${
                 selectedConversationId === conv.id ? "bg-accent" : ""
               }`}
             >
-              {conv.title || "New conversation"}
-            </button>
+              <button
+                type="button"
+                onClick={() => onSelectConversation(conv.id)}
+                className="flex-1 text-left truncate"
+              >
+                {conv.title || "New conversation"}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteConversation(conv.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
+                title="Delete conversation"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </button>
+            </div>
           ))}
         </div>
       </ScrollArea>

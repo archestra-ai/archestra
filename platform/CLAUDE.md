@@ -184,6 +184,6 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 - RBAC: Role with permissions: pods (all verbs), pods/exec, pods/log, pods/attach
 - RBAC: Configure via `serviceAccount.create`, `rbac.create` in values.yaml
 - Service annotations via `archestra.service.annotations` (e.g., GKE BackendConfig)
-- Optional Ingress with flexible configuration (`archestra.ingress.enabled`)
+- Optional Ingress: Enable with `archestra.ingress.enabled`, supports custom hosts, paths, TLS, annotations, or full spec override
 
 **Testing**: Vitest with PGLite for in-memory PostgreSQL testing, Playwright e2e tests with WireMock for API mocking

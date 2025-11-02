@@ -47,7 +47,7 @@ export function McpLogsDialog({
   const displayError = isFollowing ? streamError : initialError?.message;
   const displayIsLoading = isFollowing ? false : initialIsLoading;
 
-  const startFollowing = async () => {
+  const startFollowing = useCallback(async () => {
     if (!serverId) {
       toast.error("Server ID is required for streaming logs");
       return;
@@ -65,7 +65,7 @@ export function McpLogsDialog({
         `/api/mcp_server/${serverId}/logs?lines=500&follow=true`,
         {
           signal: abortController.signal,
-        }
+        },
       );
 
       if (!response.ok) {
@@ -95,7 +95,7 @@ export function McpLogsDialog({
         // Auto-scroll to bottom when new logs arrive
         if (scrollAreaRef.current) {
           const scrollContainer = scrollAreaRef.current.querySelector(
-            "[data-radix-scroll-area-viewport]"
+            "[data-radix-scroll-area-viewport]",
           );
           if (scrollContainer) {
             scrollContainer.scrollTop = scrollContainer.scrollHeight;
@@ -111,15 +111,15 @@ export function McpLogsDialog({
       setIsFollowing(false);
       abortControllerRef.current = null;
     }
-  };
+  }, [serverId]);
 
-  const stopFollowing = () => {
+  const stopFollowing = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     setIsFollowing(false);
-  };
+  }, []);
 
   // Clean up when dialog closes
   useEffect(() => {
@@ -128,14 +128,14 @@ export function McpLogsDialog({
       setStreamedLogs("");
       setStreamError(null);
     }
-  }, [open]);
+  }, [open, stopFollowing]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopFollowing();
     };
-  }, []);
+  }, [stopFollowing]);
 
   const handleCopyLogs = useCallback(async () => {
     try {

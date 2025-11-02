@@ -11,6 +11,7 @@ import {
   Bot,
   Bug,
   ClipboardList,
+  DollarSign,
   FileJson2,
   Github,
   Info,
@@ -104,6 +105,11 @@ const getNavigationItems = (
                 icon: ClipboardList,
               },
             ],
+          },
+          {
+            title: "Cost",
+            url: "/cost",
+            icon: DollarSign,
           },
           ...(role === "admin"
             ? [

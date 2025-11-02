@@ -82,19 +82,7 @@ export default function SettingsPage() {
             LLM & MCP Gateways
           </h1>
           <p className="text-sm text-muted-foreground">
-            Archestra provides two ways to connect your agent: via LLM Proxy
-            (for AI conversations) or MCP Gateway (for tool access). It will
-            collect information about your agent, tools, and data from the
-            traffic.
-            <br />
-            <br />
-            Below are instructions for how to connect to Archestra using a
-            default agent. If you'd like to configure a specific agent, you can
-            do so in the{" "}
-            <Link href="/agents" className="text-blue-500">
-              Agents
-            </Link>{" "}
-            page.
+            Use LLM Proxy for secutiry, or MCP Gateway for tool access.
           </p>
         </div>
       </div>

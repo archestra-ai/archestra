@@ -173,11 +173,11 @@ export default class K8sPod {
         `Creating pod ${this.podName} for MCP server ${this.mcpServer.name}`,
       );
       if (catalogItem.localConfig.command) {
-        console.log(
+        logger.info(
           `Using command: ${catalogItem.localConfig.command} ${(catalogItem.localConfig.arguments || []).join(" ")}`,
         );
       } else {
-        console.log("Using Docker image's default CMD");
+        logger.info("Using Docker image's default CMD");
       }
       this.state = "pending";
 

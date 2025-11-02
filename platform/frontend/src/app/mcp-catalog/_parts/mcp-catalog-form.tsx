@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import type { archestraApiTypes } from '@shared';
-import { AlertCircle, Info } from 'lucide-react';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { archestraApiTypes } from "@shared";
+import { AlertCircle, Info } from "lucide-react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -15,28 +15,28 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from "@/components/ui/tooltip";
 import {
   formSchema,
   type McpCatalogFormValues,
-} from './mcp-catalog-form.types';
-import { transformCatalogItemToFormValues } from './mcp-catalog-form.utils';
+} from "./mcp-catalog-form.types";
+import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
 
 interface McpCatalogFormProps {
-  mode: 'create' | 'edit';
-  initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses['200'][number];
+  mode: "create" | "edit";
+  initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void;
   submitButtonRef?: React.RefObject<HTMLButtonElement | null>;
-  serverType?: 'remote' | 'local';
+  serverType?: "remote" | "local";
 }
 
 export function McpCatalogForm({
@@ -44,41 +44,41 @@ export function McpCatalogForm({
   initialValues,
   onSubmit,
   submitButtonRef,
-  serverType = 'remote',
+  serverType = "remote",
 }: McpCatalogFormProps) {
   const form = useForm<McpCatalogFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialValues
       ? transformCatalogItemToFormValues(initialValues)
       : {
-          name: '',
+          name: "",
           serverType: serverType,
-          serverUrl: '',
-          authMethod: 'none',
+          serverUrl: "",
+          authMethod: "none",
           oauthConfig: {
-            client_id: '',
-            client_secret: '',
+            client_id: "",
+            client_secret: "",
             redirect_uris:
-              typeof window !== 'undefined'
+              typeof window !== "undefined"
                 ? `${window.location.origin}/oauth-callback`
-                : '',
-            scopes: 'read, write',
+                : "",
+            scopes: "read, write",
             supports_resource_metadata: true,
           },
           localConfig: {
-            command: '',
-            arguments: '',
-            environment: '',
-            dockerImage: '',
-            transportType: 'stdio',
-            httpPort: '',
-            httpPath: '/mcp',
+            command: "",
+            arguments: "",
+            environment: "",
+            dockerImage: "",
+            transportType: "stdio",
+            httpPort: "",
+            httpPath: "/mcp",
           },
         },
   });
 
-  const authMethod = form.watch('authMethod');
-  const currentServerType = form.watch('serverType');
+  const authMethod = form.watch("authMethod");
+  const currentServerType = form.watch("serverType");
 
   // Reset form when initial values change (for edit mode)
   useEffect(() => {
@@ -90,7 +90,7 @@ export function McpCatalogForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {mode === 'edit' && (
+        {mode === "edit" && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
@@ -119,7 +119,7 @@ export function McpCatalogForm({
           />
 
           {/* Conditional fields based on server type */}
-          {currentServerType === 'remote' && (
+          {currentServerType === "remote" && (
             <FormField
               control={form.control}
               name="serverUrl"
@@ -144,7 +144,7 @@ export function McpCatalogForm({
             />
           )}
 
-          {currentServerType === 'local' && (
+          {currentServerType === "local" && (
             <>
               <FormField
                 control={form.control}
@@ -174,8 +174,8 @@ export function McpCatalogForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Command{' '}
-                      {!form.watch('localConfig.dockerImage') && (
+                      Command{" "}
+                      {!form.watch("localConfig.dockerImage") && (
                         <span className="text-destructive">*</span>
                       )}
                     </FormLabel>
@@ -248,7 +248,7 @@ export function McpCatalogForm({
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
-                        value={field.value || 'stdio'}
+                        value={field.value || "stdio"}
                         className="space-y-2"
                       >
                         <div className="flex items-center space-x-2">
@@ -284,8 +284,8 @@ export function McpCatalogForm({
                 )}
               />
 
-              {form.watch('localConfig.transportType') ===
-                'streamable-http' && (
+              {form.watch("localConfig.transportType") ===
+                "streamable-http" && (
                 <>
                   <FormField
                     control={form.control}
@@ -336,7 +336,7 @@ export function McpCatalogForm({
         </div>
 
         {/* Authentication Section - Only for remote servers */}
-        {currentServerType === 'remote' && (
+        {currentServerType === "remote" && (
           <div className="space-y-4 pt-4 border-t">
             <div className="flex items-center gap-2">
               <FormLabel>Authentication</FormLabel>
@@ -400,7 +400,7 @@ export function McpCatalogForm({
               )}
             />
 
-            {authMethod === 'pat' && (
+            {authMethod === "pat" && (
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm text-muted-foreground">
                   Users will be prompted to provide their personal access token
@@ -409,7 +409,7 @@ export function McpCatalogForm({
               </div>
             )}
 
-            {authMethod === 'oauth' && (
+            {authMethod === "oauth" && (
               <div className="space-y-4 pl-6 border-l-2">
                 <FormField
                   control={form.control}
@@ -458,7 +458,7 @@ export function McpCatalogForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Redirect URIs{' '}
+                        Redirect URIs{" "}
                         <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>

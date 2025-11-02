@@ -83,17 +83,13 @@ const getNavigationItems = (
             customIsActive: (pathname: string) =>
               pathname.startsWith("/mcp-catalog"),
           },
-          ...(role === "admin"
-            ? [
-                {
-                  title: "Settings",
-                  url: "/settings",
-                  icon: Settings,
-                  customIsActive: (pathname: string) =>
-                    pathname.startsWith("/settings"),
-                },
-              ]
-            : []),
+          {
+            title: "Settings",
+            url: "/settings",
+            icon: Settings,
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/settings"),
+          },
         ]
       : []),
   ];

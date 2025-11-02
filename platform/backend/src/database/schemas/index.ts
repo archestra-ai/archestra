@@ -16,6 +16,7 @@ export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as labelKeyTable } from "./label-key";
 export { default as labelValueTable } from "./label-value";
+export { default as limitsTable } from "./limit";
 export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestTable } from "./mcp-server-installation-request";
 export { default as mcpServerTeamTable } from "./mcp-server-team";

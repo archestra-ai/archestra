@@ -148,28 +148,6 @@ export function McpCatalogForm({
             <>
               <FormField
                 control={form.control}
-                name="localConfig.dockerImage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Docker Image (optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="registry.example.com/my-mcp-server:latest"
-                        className="font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Custom Docker image URL. If not specified, Archestra's
-                      default base image will be used.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
                 name="localConfig.command"
                 render={({ field }) => (
                   <FormItem>
@@ -187,8 +165,30 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      The executable command to run. Optional if Docker image is
-                      set (will use image's default CMD).
+                      The executable command to run. Optional if Docker Image is
+                      set (will use image's default <code>CMD</code>).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="localConfig.dockerImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Docker Image (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="registry.example.com/my-mcp-server:latest"
+                        className="font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Custom Docker image URL. If not specified, Archestra's
+                      default base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

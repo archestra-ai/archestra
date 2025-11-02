@@ -68,12 +68,20 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+  # Service configuration
   service:
+    # Annotations to add to the Kubernetes Service
     annotations: {}
 
+  # Ingress configuration
   ingress:
+    # Enable or disable ingress creation
     enabled: false
+
+    # Annotations for the ingress resource
     annotations: {}
+
+    # Complete ingress specification
     spec: {}
 
 # PostgreSQL configuration

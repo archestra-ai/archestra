@@ -1,8 +1,8 @@
 import type { archestraApiTypes } from "@shared";
-import type {
-  McpCatalogApiData,
-  McpCatalogFormValues,
-} from "./mcp-catalog-form.types";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+
+type McpCatalogApiData =
+  archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
 // Transform function to convert form values to API format
 export function transformFormToApiData(
@@ -167,8 +167,7 @@ export function transformCatalogItemToFormValues(
           .join("\n")
       : "";
 
-    // biome-ignore lint/suspicious/noExplicitAny: LocalConfig type doesn't have new fields yet
-    const config = item.localConfig as any;
+    const config = item.localConfig;
 
     localConfig = {
       command: item.localConfig.command || "",

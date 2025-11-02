@@ -64,6 +64,6 @@ export const LocalConfigFormSchema = z
     {
       message:
         "Either command or Docker image must be provided. If Docker image is set, command is optional.",
-      path: ["command"],
+      path: [],
     },
   );

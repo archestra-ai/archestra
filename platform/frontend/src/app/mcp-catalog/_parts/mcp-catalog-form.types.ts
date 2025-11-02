@@ -1,4 +1,4 @@
-import { LocalConfigFormSchema, type LocalConfigSchema } from "@shared";
+import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
 // Simplified OAuth config schema
@@ -29,6 +29,15 @@ export const formSchema = z
       if (data.serverType === "remote") {
         return data.serverUrl && data.serverUrl.length > 0;
       }
+      return true;
+    },
+    {
+      message: "Server URL is required for remote servers.",
+      path: ["serverUrl"],
+    },
+  )
+  .refine(
+    (data) => {
       // For local servers, at least command or dockerImage is required
       if (data.serverType === "local") {
         const hasCommand =
@@ -42,42 +51,9 @@ export const formSchema = z
       return true;
     },
     {
-      message:
-        "Server URL is required for remote servers. For local servers, either command or Docker image must be provided.",
-      path: ["serverUrl"],
+      message: "Either command or Docker image must be provided.",
+      path: [],
     },
   );
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
-
-// API data type - matches backend expectations
-export type McpCatalogApiData = {
-  name: string;
-  serverType: "remote" | "local";
-  serverUrl?: string;
-  localConfig?: z.infer<typeof LocalConfigSchema>;
-  oauthConfig?: {
-    name: string;
-    server_url: string;
-    client_id: string;
-    client_secret?: string;
-    redirect_uris: string[];
-    scopes: string[];
-    default_scopes: string[];
-    supports_resource_metadata: boolean;
-  };
-  userConfig?: Record<
-    string,
-    {
-      type: "string" | "number" | "boolean" | "directory" | "file";
-      title: string;
-      description: string;
-      required?: boolean;
-      sensitive?: boolean;
-      default?: string | number | boolean | string[];
-      multiple?: boolean;
-      min?: number;
-      max?: number;
-    }
-  >;
-};

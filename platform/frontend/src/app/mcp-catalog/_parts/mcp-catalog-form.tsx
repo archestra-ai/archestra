@@ -160,8 +160,8 @@ export function McpCatalogForm({
                       />
                     </FormControl>
                     <FormDescription>
-                      Custom Docker image URL. If not specified, the default
-                      base image will be used.
+                      Custom Docker image URL. If not specified, Archestra's
+                      default base image will be used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

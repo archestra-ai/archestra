@@ -2,7 +2,7 @@ import { LocalConfigFormSchema, type LocalConfigSchema } from "@shared";
 import { z } from "zod";
 
 // Simplified OAuth config schema
-const oauthConfigSchema = z.object({
+export const oauthConfigSchema = z.object({
   client_id: z.string().optional().or(z.literal("")),
   client_secret: z.string().optional().or(z.literal("")),
   redirect_uris: z.string().min(1, "At least one redirect URI is required"),
@@ -10,7 +10,7 @@ const oauthConfigSchema = z.object({
   supports_resource_metadata: z.boolean(),
 });
 
-const formSchema = z
+export const formSchema = z
   .object({
     name: z.string().min(1, "Name is required"),
     serverType: z.enum(["remote", "local"]),

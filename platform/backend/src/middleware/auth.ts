@@ -66,7 +66,9 @@ class AuthMiddleware {
        * [02:59:53 UTC] INFO: Started K8s pod for local MCP server: context7-local-mcp-server
        * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
        */
-      url.includes("/mcp_proxy")
+      url.includes("/mcp_proxy") ||
+      // Skip ACME challenge paths for SSL certificate domain validation
+      url.startsWith("/.well-known/acme-challenge/")
     )
       return true;
     return false;

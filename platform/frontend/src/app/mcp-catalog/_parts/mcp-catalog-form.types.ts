@@ -16,7 +16,7 @@ export const formSchema = z
     serverType: z.enum(["remote", "local"]),
     serverUrl: z
       .string()
-      .url("Must be a valid URL")
+      .url({ error: "Must be a valid URL" })
       .optional()
       .or(z.literal("")),
     authMethod: z.enum(["none", "pat", "oauth"]),

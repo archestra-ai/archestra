@@ -4373,6 +4373,9 @@ export type GetInteractionsResponses = {
             request: OpenAiChatCompletionRequest;
             response: OpenAiChatCompletionResponse;
             type: 'openai:chatCompletions';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4380,6 +4383,9 @@ export type GetInteractionsResponses = {
             request: GeminiGenerateContentRequest;
             response: GeminiGenerateContentResponse;
             type: 'gemini:generateContent';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         } | {
             id: string;
@@ -4387,6 +4393,9 @@ export type GetInteractionsResponses = {
             request: AnthropicMessagesRequest;
             response: AnthropicMessagesResponse;
             type: 'anthropic:messages';
+            model: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
             createdAt: string;
         }>;
         pagination: {
@@ -4444,6 +4453,9 @@ export type GetInteractionResponses = {
         request: OpenAiChatCompletionRequest;
         response: OpenAiChatCompletionResponse;
         type: 'openai:chatCompletions';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4451,6 +4463,9 @@ export type GetInteractionResponses = {
         request: GeminiGenerateContentRequest;
         response: GeminiGenerateContentResponse;
         type: 'gemini:generateContent';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     } | {
         id: string;
@@ -4458,6 +4473,9 @@ export type GetInteractionResponses = {
         request: AnthropicMessagesRequest;
         response: AnthropicMessagesResponse;
         type: 'anthropic:messages';
+        model: string | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
         createdAt: string;
     };
 };
@@ -6570,6 +6588,8 @@ export type GetMcpServerLogsResponses = {
     200: {
         logs: string;
         containerName: string;
+        command: string;
+        namespace: string;
     };
 };
 

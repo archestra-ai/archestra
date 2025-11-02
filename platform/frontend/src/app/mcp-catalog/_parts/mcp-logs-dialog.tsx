@@ -1,7 +1,8 @@
 "use client";
 
 import { Copy, Terminal } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
 
 interface McpLogsDialogProps {
   open: boolean;
@@ -35,27 +35,27 @@ export function McpLogsDialog({
   const [copied, setCopied] = useState(false);
   const [commandCopied, setCommandCopied] = useState(false);
 
-  const handleCopyLogs = async () => {
+  const handleCopyLogs = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(logs);
       setCopied(true);
       toast.success("Logs copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to copy logs");
     }
-  };
+  }, [logs]);
 
-  const handleCopyCommand = async () => {
+  const handleCopyCommand = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(command);
       setCommandCopied(true);
       toast.success("Command copied to clipboard");
       setTimeout(() => setCommandCopied(false), 2000);
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to copy command");
     }
-  };
+  }, [command]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -520,15 +520,17 @@ export function McpServerCard({
         }}
       />
 
-      <McpLogsDialog
-        open={isLogsDialogOpen}
-        onOpenChange={setIsLogsDialogOpen}
-        serverName={installedServer?.name ?? item.name}
-        logs={logsData?.logs ?? ""}
-        command={logsData?.command ?? ""}
-        isLoading={isLoadingLogs}
-        error={logsError}
-      />
+      {logsData && (
+        <McpLogsDialog
+          open={isLogsDialogOpen}
+          onOpenChange={setIsLogsDialogOpen}
+          serverName={installedServer?.name ?? item.name}
+          logs={logsData.logs}
+          command={logsData.command}
+          isLoading={isLoadingLogs}
+          error={logsError}
+        />
+      )}
 
       <BulkAssignAgentDialog
         tools={bulkAssignTools.length > 0 ? bulkAssignTools : null}

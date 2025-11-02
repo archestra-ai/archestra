@@ -21,6 +21,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { WithRole } from "@/components/with-permission";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import {
@@ -308,16 +314,25 @@ export function McpServerCard({
         </Button>
       )}
       {requiresAuth && !isCurrentUserAuthenticated && (
-        <Button
-          onClick={onInstall}
-          disabled={isInstalling}
-          size="sm"
-          variant="outline"
-          className="w-full"
-        >
-          <User className="mr-2 h-4 w-4" />
-          {isInstalling ? "Adding..." : "Authenticate"}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onInstall}
+                disabled={isInstalling}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <User className="mr-2 h-4 w-4" />
+                {isInstalling ? "Adding..." : "Auth for myself"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Authenticate to create a token for my personal usage</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       {isCurrentUserAuthenticated && (
         <Button
@@ -343,16 +358,25 @@ export function McpServerCard({
       </WithRole>
       <WithRole requiredRole="admin">
         {requiresAuth && !currentUserHasTeamAuth && (
-          <Button
-            onClick={onInstallTeam}
-            disabled={isInstalling}
-            size="sm"
-            variant="outline"
-            className="w-full"
-          >
-            <Building2 className="mr-2 h-4 w-4" />
-            {isInstalling ? "Adding..." : "Authorize teams"}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onInstallTeam}
+                  disabled={isInstalling}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {isInstalling ? "Adding..." : "Auth for teams"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Authenticate and allow teams to use my token</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </WithRole>
     </>

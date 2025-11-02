@@ -674,6 +674,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           200: z.object({
             logs: z.string(),
             containerName: z.string(),
+            command: z.string(),
+            namespace: z.string(),
           }),
           404: ErrorResponseSchema,
           500: ErrorResponseSchema,

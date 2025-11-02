@@ -49,6 +49,8 @@ export type AvailableTool = z.infer<typeof AvailableToolSchema>;
 export const McpServerContainerLogsSchema = z.object({
   logs: z.string(),
   containerName: z.string(),
+  command: z.string(),
+  namespace: z.string(),
 });
 
 export type McpServerContainerLogs = z.infer<

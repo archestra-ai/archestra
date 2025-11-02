@@ -321,9 +321,16 @@ class McpServerRuntimeManager {
     }
 
     const logs = await k8sPod.getRecentLogs(lines);
+    const podName = k8sPod.containerName;
+
+    // Construct the kubectl command to get logs
+    const command = `kubectl logs -n ${this.namespace} ${podName} --tail=${lines}`;
+
     return {
       logs,
       containerName: k8sPod.containerName,
+      command,
+      namespace: this.namespace,
     };
   }
 

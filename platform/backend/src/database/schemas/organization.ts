@@ -10,6 +10,9 @@ const organizationsTable = pgTable("organization", {
   hasSeededMcpCatalog: boolean("has_seeded_mcp_catalog")
     .default(false)
     .notNull(),
+  theme: text("theme").default("cosmic-night"),
+  customFont: text("custom_font").default("lato"),
+  logoType: text("logo_type").default("default"),
 });
 
 export default organizationsTable;

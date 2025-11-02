@@ -1,0 +1,3 @@
+ALTER TABLE "organization" ADD COLUMN "theme" text DEFAULT 'cosmic-night';
+ALTER TABLE "organization" ADD COLUMN "custom_font" text DEFAULT 'lato';
+ALTER TABLE "organization" ADD COLUMN "logo_type" text DEFAULT 'default';

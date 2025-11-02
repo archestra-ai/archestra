@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
+import { useOrganizationAppearance } from "@/lib/organization.query";
 
 interface MenuItem {
   title: string;
@@ -104,13 +105,36 @@ export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
   const { data: starCount } = useGithubStars();
+  const { data: appearance } = useOrganizationAppearance();
+
+  const hasCustomLogo =
+    appearance?.logoType === "custom" && appearance?.logo;
 
   return (
     <Sidebar>
       <SidebarHeader className="flex items-center flex-row justify-between">
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Image src="/logo.png" alt="Logo" width={28} height={28} />
-          <span className="text-base font-semibold">Archestra.AI</span>
+        <div className="flex flex-col gap-1 px-2 py-2">
+          <div className="flex items-center gap-2">
+            {hasCustomLogo ? (
+              <Image
+                src={appearance.logo || "/logo.png"}
+                alt="Organization logo"
+                width={120}
+                height={36}
+                className="object-contain max-h-9"
+              />
+            ) : (
+              <>
+                <Image src="/logo.png" alt="Logo" width={28} height={28} />
+                <span className="text-base font-semibold">Archestra.AI</span>
+              </>
+            )}
+          </div>
+          {hasCustomLogo && (
+            <p className="text-[10px] text-muted-foreground pl-1">
+              Powered by Archestra
+            </p>
+          )}
         </div>
         <ColorModeToggle />
       </SidebarHeader>

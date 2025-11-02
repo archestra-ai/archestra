@@ -6,6 +6,7 @@ import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
+import { OrganizationThemeProvider } from "./_parts/organization-theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import pjson from "../../../package.json";
@@ -43,25 +44,27 @@ export default function RootLayout({
           >
             <PostHogProviderWrapper>
               <ArchestraQueryClientProvider>
-                <WithAuthCheck>
-                  <SidebarProvider>
-                    <AppSidebar />
-                    <main className="h-screen w-full flex flex-col bg-background min-w-0">
-                      <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-                        <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
-                      </header>
-                      <div className="flex-1 min-w-0 overflow-auto flex flex-col">
-                        <div className="flex-1">{children}</div>
-                        {pjson.version && (
-                          <div className="text-xs text-muted-foreground text-center py-4">
-                            Version: {pjson.version}
-                          </div>
-                        )}
-                      </div>
-                    </main>
-                    <Toaster />
-                  </SidebarProvider>
-                </WithAuthCheck>
+                <OrganizationThemeProvider>
+                  <WithAuthCheck>
+                    <SidebarProvider>
+                      <AppSidebar />
+                      <main className="h-screen w-full flex flex-col bg-background min-w-0">
+                        <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
+                          <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
+                        </header>
+                        <div className="flex-1 min-w-0 overflow-auto flex flex-col">
+                          <div className="flex-1">{children}</div>
+                          {pjson.version && (
+                            <div className="text-xs text-muted-foreground text-center py-4">
+                              Version: {pjson.version}
+                            </div>
+                          )}
+                        </div>
+                      </main>
+                      <Toaster />
+                    </SidebarProvider>
+                  </WithAuthCheck>
+                </OrganizationThemeProvider>
               </ArchestraQueryClientProvider>
             </PostHogProviderWrapper>
           </ThemeProvider>

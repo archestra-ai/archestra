@@ -54,6 +54,28 @@ class OrganizationModel {
   ): Promise<Organization | null> {
     return OrganizationModel.update(id, { hasSeededMcpCatalog: hasSeeded });
   }
+
+  static async getById(id: string): Promise<Organization | null> {
+    const [organization] = await db
+      .select()
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    return organization || null;
+  }
+
+  static async updateAppearance(
+    id: string,
+    appearance: {
+      theme?: string;
+      customFont?: string;
+      logoType?: string;
+      logo?: string | null;
+    },
+  ): Promise<Organization | null> {
+    return OrganizationModel.update(id, appearance);
+  }
 }
 
 export default OrganizationModel;

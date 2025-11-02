@@ -386,6 +386,18 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
+  [RouteId.GetOrganizationAppearance]: {
+    organization: ["read"],
+  },
+  [RouteId.UpdateOrganizationAppearance]: {
+    organization: ["update"],
+  },
+  [RouteId.UploadOrganizationLogo]: {
+    organization: ["update"],
+  },
+  [RouteId.DeleteOrganizationLogo]: {
+    organization: ["update"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

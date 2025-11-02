@@ -2138,6 +2138,12 @@ export type GetAgentsResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     }>;
 };
 
@@ -2149,6 +2155,12 @@ export type CreateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -2214,6 +2226,12 @@ export type CreateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2285,6 +2303,12 @@ export type GetDefaultAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2410,6 +2434,12 @@ export type GetAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -2421,6 +2451,12 @@ export type UpdateAgentData = {
         isDemo?: boolean;
         isDefault?: boolean;
         teams?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -2488,10 +2524,94 @@ export type UpdateAgentResponses = {
             updatedAt: string;
         }>;
         teams: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+
+export type GetLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/keys';
+};
+
+export type GetLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelKeysError = GetLabelKeysErrors[keyof GetLabelKeysErrors];
+
+export type GetLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelKeysResponse = GetLabelKeysResponses[keyof GetLabelKeysResponses];
+
+export type GetLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/labels/values';
+};
+
+export type GetLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type GetLabelValuesError = GetLabelValuesErrors[keyof GetLabelValuesErrors];
+
+export type GetLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetLabelValuesResponse = GetLabelValuesResponses[keyof GetLabelValuesResponses];
 
 export type GetAllAgentToolsData = {
     body?: never;
@@ -4371,7 +4491,6 @@ export type GetInternalMcpCatalogResponses = {
      */
     200: Array<{
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4396,6 +4515,9 @@ export type GetInternalMcpCatalogResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4441,7 +4563,6 @@ export type GetInternalMcpCatalogResponse = GetInternalMcpCatalogResponses[keyof
 
 export type CreateInternalMcpCatalogItemData = {
     body: {
-        label?: string | null;
         name: string;
         version?: string | null;
         description?: string | null;
@@ -4466,6 +4587,9 @@ export type CreateInternalMcpCatalogItemData = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4528,7 +4652,6 @@ export type CreateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4553,6 +4676,9 @@ export type CreateInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4677,7 +4803,6 @@ export type GetInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4702,6 +4827,9 @@ export type GetInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -4747,7 +4875,6 @@ export type GetInternalMcpCatalogItemResponse = GetInternalMcpCatalogItemRespons
 
 export type UpdateInternalMcpCatalogItemData = {
     body?: {
-        label?: string | null;
         name?: string;
         version?: string | null;
         description?: string | null;
@@ -4772,6 +4899,9 @@ export type UpdateInternalMcpCatalogItemData = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig?: {
             [key: string]: {
@@ -4845,7 +4975,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
      */
     200: {
         id: string;
-        label: string | null;
         name: string;
         version: string | null;
         description: string | null;
@@ -4870,6 +4999,9 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 [key: string]: string;
             };
             dockerImage?: string;
+            transportType?: 'stdio' | 'streamable-http';
+            httpPort?: number;
+            httpPath?: string;
         } | null;
         userConfig: {
             [key: string]: {
@@ -5056,6 +5188,9 @@ export type GetMcpServerInstallationRequestsResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5125,6 +5260,9 @@ export type CreateMcpServerInstallationRequestData = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
     };
@@ -5221,6 +5359,9 @@ export type CreateMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5407,6 +5548,9 @@ export type GetMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5476,6 +5620,9 @@ export type UpdateMcpServerInstallationRequestData = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse?: string | null;
@@ -5593,6 +5740,9 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5720,6 +5870,9 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5847,6 +6000,9 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;
@@ -5974,6 +6130,9 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     [key: string]: string;
                 };
                 dockerImage?: string;
+                transportType?: 'stdio' | 'streamable-http';
+                httpPort?: number;
+                httpPath?: string;
             };
         } | null;
         adminResponse: string | null;

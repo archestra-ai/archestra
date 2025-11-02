@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import db, { schema } from "@/database";
 import { seedAdminUserAndDefaultOrg } from "@/database/seed";
+import logger from "@/logging";
 import {
   generateMockAgents,
   generateMockInteractions,
@@ -8,37 +9,37 @@ import {
 } from "./mocks";
 
 async function seedMockData() {
-  console.log("\n🌱 Starting mock data seed...\n");
+  logger.info("\n🌱 Starting mock data seed...\n");
 
   // Step 0: Clean existing mock data (in correct order due to foreign keys)
-  console.log("Cleaning existing data...");
+  logger.info("Cleaning existing data...");
   for (const table of Object.values(schema)) {
     await db.delete(table);
   }
-  console.log("✅ Cleaned existing data");
+  logger.info("✅ Cleaned existing data");
 
   // Default user and org
   await seedAdminUserAndDefaultOrg();
 
   // Step 1: Create agents
-  console.log("\nCreating agents...");
+  logger.info("\nCreating agents...");
   const agentData = generateMockAgents();
 
   await db.insert(schema.agentsTable).values(agentData);
-  console.log(`✅ Created ${agentData.length} agents`);
+  logger.info(`✅ Created ${agentData.length} agents`);
 
   // Step 2: Create tools linked to agents
-  console.log("\nCreating tools...");
+  logger.info("\nCreating tools...");
   const agentIds = agentData
     .map((agent) => agent.id)
     .filter((id): id is string => !!id);
   const toolData = generateMockTools(agentIds);
 
   await db.insert(schema.toolsTable).values(toolData);
-  console.log(`✅ Created ${toolData.length} tools`);
+  logger.info(`✅ Created ${toolData.length} tools`);
 
   // Step 3: Create agent-tool relationships
-  console.log("\nCreating agent-tool relationships...");
+  logger.info("\nCreating agent-tool relationships...");
   const agentToolData = toolData.map((tool) => ({
     agentId: tool.agentId,
     toolId: tool.id,
@@ -50,10 +51,10 @@ async function seedMockData() {
   }));
 
   await db.insert(schema.agentToolsTable).values(agentToolData);
-  console.log(`✅ Created ${agentToolData.length} agent-tool relationships`);
+  logger.info(`✅ Created ${agentToolData.length} agent-tool relationships`);
 
   // Step 4: Create 200 mock interactions
-  console.log("\nCreating interactions...");
+  logger.info("\nCreating interactions...");
 
   // Group tools by agent for efficient lookup
   const toolsByAgent = new Map<string, typeof toolData>();
@@ -71,7 +72,7 @@ async function seedMockData() {
 
   // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
   await db.insert(schema.interactionsTable).values(interactionData as any);
-  console.log(`✅ Created ${interactionData.length} interactions`);
+  logger.info(`✅ Created ${interactionData.length} interactions`);
 
   // Show statistics
   const blockedCount = interactionData.filter((i) => {
@@ -80,8 +81,8 @@ async function seedMockData() {
     }
     return false;
   }).length;
-  console.log(`   - ${blockedCount} blocked by policy`);
-  console.log(`   - ${interactionData.length - blockedCount} allowed`);
+  logger.info(`   - ${blockedCount} blocked by policy`);
+  logger.info(`   - ${interactionData.length - blockedCount} allowed`);
 }
 
 /**
@@ -90,11 +91,11 @@ async function seedMockData() {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   seedMockData()
     .then(() => {
-      console.log("\n✅ Mock data seeded successfully!\n");
+      logger.info("\n✅ Mock data seeded successfully!\n");
       process.exit(0);
     })
     .catch((error) => {
-      console.error("\n❌ Error seeding database:", error);
+      logger.error({ err: error }, "\n❌ Error seeding database:");
       process.exit(1);
     });
 }

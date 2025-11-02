@@ -111,7 +111,7 @@ export default {
     host: "0.0.0.0",
     port: getPortFromUrl(),
     name: "Archestra Platform API",
-    version: packageJson.version,
+    version: process.env.ARCHESTRA_VERSION || packageJson.version,
     corsOrigins: getCorsOrigins(),
     apiKeyAuthorizationHeaderName: "Authorization",
   },
@@ -168,6 +168,9 @@ export default {
     },
   },
   debug: isDevelopment,
+  logging: {
+    level: process.env.ARCHESTRA_LOGGING_LEVEL?.toLowerCase() || "info",
+  },
   production: isProduction,
   benchmark: {
     mockMode: process.env.BENCHMARK_MOCK_MODE === "true",

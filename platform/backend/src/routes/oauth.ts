@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import logger from "@/logging";
 import { InternalMcpCatalogModel, SecretModel } from "@/models";
 import { ErrorResponseSchema, RouteId, UuidIdSchema } from "@/types";
 
@@ -73,7 +74,7 @@ async function discoverScopes(
         return resourceMetadata.scopes_supported;
       }
     } catch (error) {
-      console.error(error);
+      logger.error(error);
     }
   }
 
@@ -88,7 +89,7 @@ async function discoverScopes(
       return metadata.scopes_supported;
     }
   } catch (error) {
-    console.error(error);
+    logger.error(error);
   }
 
   // Fall back to default scopes

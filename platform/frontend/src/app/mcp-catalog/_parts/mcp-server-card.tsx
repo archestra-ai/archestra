@@ -492,20 +492,18 @@ export function McpServerCard({
         <div className="flex items-start justify-between">
           <div className="min-w-0">
             <CardTitle className="text-lg truncate mb-1 flex items-center">
-              {item.label || item.name}
+              {item.name}
             </CardTitle>
-            {item.label && item.label !== item.name && (
-              <p className="text-xs text-muted-foreground font-mono truncate mb-2">
-                {item.name}
-              </p>
-            )}
             <div className="flex items-center gap-2">
               {item.oauthConfig && (
                 <Badge variant="secondary" className="text-xs">
                   OAuth
                 </Badge>
               )}
-              <TransportBadges isRemote={isRemoteVariant} />
+              <TransportBadges
+                isRemote={isRemoteVariant}
+                transportType={item.localConfig?.transportType}
+              />
               {isRemoteVariant && !requiresAuth && (
                 <Badge
                   variant="secondary"

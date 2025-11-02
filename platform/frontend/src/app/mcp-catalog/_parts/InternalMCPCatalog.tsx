@@ -395,7 +395,7 @@ export function InternalMCPCatalog({
 
     return items.filter((item) => {
       const labelText =
-        typeof item.label === "string" ? item.label.toLowerCase() : "";
+        typeof item.name === "string" ? item.name.toLowerCase() : "";
       return (
         item.name.toLowerCase().includes(normalizedQuery) ||
         labelText.includes(normalizedQuery)
@@ -463,7 +463,6 @@ export function InternalMCPCatalog({
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {remoteCatalogItems.map((item) => {
                 const installedServer = getAggregatedInstallation(item.id);
-                const itemWithLabel = item as CatalogItemWithOptionalLabel;
                 const isInstallInProgress =
                   installedServer &&
                   installingServerIds.has(installedServer.id);
@@ -472,7 +471,7 @@ export function InternalMCPCatalog({
                   <McpServerCard
                     variant="remote"
                     key={item.id}
-                    item={itemWithLabel}
+                    item={item}
                     installedServer={installedServer}
                     installingItemId={installingItemId}
                     installMutationPending={installMutation.isPending}
@@ -517,7 +516,6 @@ export function InternalMCPCatalog({
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {localCatalogItems.map((item) => {
                 const installedServer = getAggregatedInstallation(item.id);
-                const itemWithLabel = item as CatalogItemWithOptionalLabel;
                 const isInstallInProgress =
                   installedServer &&
                   installingServerIds.has(installedServer.id);
@@ -526,7 +524,7 @@ export function InternalMCPCatalog({
                   <McpServerCard
                     variant="local"
                     key={item.id}
-                    item={itemWithLabel}
+                    item={item}
                     installedServer={installedServer}
                     installingItemId={installingItemId}
                     installMutationPending={installMutation.isPending}
@@ -602,7 +600,7 @@ export function InternalMCPCatalog({
       <OAuthConfirmationDialog
         open={isOAuthDialogOpen}
         onOpenChange={setIsOAuthDialogOpen}
-        serverName={selectedCatalogItem?.label || ""}
+        serverName={selectedCatalogItem?.name || ""}
         onConfirm={handleOAuthConfirm}
         onCancel={() => {
           setIsOAuthDialogOpen(false);
@@ -627,9 +625,7 @@ export function InternalMCPCatalog({
             setCatalogItemForReinstall(null);
           }
         }}
-        serverName={
-          catalogItemForReinstall?.label || catalogItemForReinstall?.name || ""
-        }
+        serverName={catalogItemForReinstall?.name || ""}
         isReinstalling={installMutation.isPending}
       />
 

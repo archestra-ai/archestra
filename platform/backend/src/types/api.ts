@@ -100,6 +100,8 @@ export const RouteId = {
   GetDefaultAgent: "getDefaultAgent",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  GetLabelKeys: "getLabelKeys",
+  GetLabelValues: "getLabelValues",
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",

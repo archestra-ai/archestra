@@ -201,12 +201,6 @@ function DualLLMContent({
     });
   };
 
-  const _hasChanges =
-    mainAgentPrompt !== config?.mainAgentPrompt ||
-    quarantinedAgentPrompt !== config?.quarantinedAgentPrompt ||
-    summaryPrompt !== config?.summaryPrompt ||
-    maxRounds !== config?.maxRounds;
-
   return (
     <div className="w-full h-full">
       <div className="border-b border-border bg-card/30">

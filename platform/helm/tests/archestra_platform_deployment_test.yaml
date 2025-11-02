@@ -377,7 +377,7 @@ tests:
   - it: should use default ServiceAccount name when serviceAccount.create is true
     documentIndex: 1
     set:
-      archestra.serviceAccount.create: true
+      archestra.orchestrator.kubernetes.serviceAccount.create: true
     asserts:
       - matchRegex:
           path: spec.template.spec.serviceAccountName
@@ -386,8 +386,8 @@ tests:
   - it: should use custom ServiceAccount name when provided
     documentIndex: 1
     set:
-      archestra.serviceAccount.create: true
-      archestra.serviceAccount.name: "custom-sa-name"
+      archestra.orchestrator.kubernetes.serviceAccount.create: true
+      archestra.orchestrator.kubernetes.serviceAccount.name: "custom-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -396,7 +396,7 @@ tests:
   - it: should use default ServiceAccount when serviceAccount.create is false
     documentIndex: 1
     set:
-      archestra.serviceAccount.create: false
+      archestra.orchestrator.kubernetes.serviceAccount.create: false
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
@@ -405,46 +405,17 @@ tests:
   - it: should use custom ServiceAccount name even when create is false
     documentIndex: 1
     set:
-      archestra.serviceAccount.create: false
-      archestra.serviceAccount.name: "existing-sa-name"
+      archestra.orchestrator.kubernetes.serviceAccount.create: false
+      archestra.orchestrator.kubernetes.serviceAccount.name: "existing-sa-name"
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: "existing-sa-name"
 
   # ImagePullSecrets tests
-  - it: should not have imagePullSecrets when not configured
+  # Note: imagePullSecrets are now handled via ServiceAccount configuration, not directly on the Deployment
+  - it: should not have imagePullSecrets in deployment spec (handled via ServiceAccount)
     documentIndex: 1
     asserts:
       - isNull:
           path: spec.template.spec.imagePullSecrets
-
-  - it: should add imagePullSecrets to pod when configured
-    documentIndex: 1
-    set:
-      archestra.imagePullSecrets:
-        - name: myregistrykey
-        - name: anotherregistrykey
-    asserts:
-      - equal:
-          path: spec.template.spec.imagePullSecrets[0].name
-          value: myregistrykey
-      - equal:
-          path: spec.template.spec.imagePullSecrets[1].name
-          value: anotherregistrykey
-
-  # Integration test with ServiceAccount and imagePullSecrets
-  - it: should configure both ServiceAccount and imagePullSecrets
-    documentIndex: 1
-    set:
-      archestra.serviceAccount.create: true
-      archestra.serviceAccount.name: "custom-archestra-sa"
-      archestra.imagePullSecrets:
-        - name: private-registry-secret
-    asserts:
-      - equal:
-          path: spec.template.spec.serviceAccountName
-          value: "custom-archestra-sa"
-      - equal:
-          path: spec.template.spec.imagePullSecrets[0].name
-          value: private-registry-secret

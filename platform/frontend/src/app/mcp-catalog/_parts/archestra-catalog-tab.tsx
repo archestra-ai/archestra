@@ -13,26 +13,36 @@ import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRole } from "@/lib/auth.hook";
-import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
+import {
+  useMcpRegistryServersInfinite,
+  useMcpServerCategories,
+} from "@/lib/external-mcp-catalog.query";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/internal-mcp-catalog.query";
-import {
-  CatalogFilters,
-  type SelectedCategory,
-  type ServerType,
-} from "./CatalogFilters";
+import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import { RequestInstallationDialog } from "./request-installation-dialog";
 import { TransportBadges } from "./transport-badges";
 
-export function ExternalMCPCatalog({
+type ServerType = "all" | "remote" | "local";
+
+export function ArchestraCatalogTab({
   catalogItems: initialCatalogItems,
+  onClose,
 }: {
   catalogItems?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
+  onClose: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [readmeServer, setReadmeServer] =
@@ -53,6 +63,9 @@ export function ExternalMCPCatalog({
   const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
   });
+
+  // Fetch available categories
+  const { data: availableCategories = [] } = useMcpServerCategories();
 
   // Use server-side search and category filtering
   const {
@@ -107,6 +120,9 @@ export function ExternalMCPCatalog({
       userConfig: server.user_config,
       oauthConfig: rewrittenOauth,
     });
+
+    // Close the dialog after adding
+    onClose();
   };
 
   const handleRequestInstallation = async (
@@ -142,146 +158,163 @@ export function ExternalMCPCatalog({
     [catalogItems],
   );
 
-  // Use filtered servers
-  const displayedServers = filteredServers;
-
   return (
-    <div className="w-full">
-      <div className="">
-        <h1 className="text-lg font-semibold tracking-tight mb-2">
-          External MCP Registry
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          MCP Servers listed below are not available for your agents unless they
-          are added to the private registry. Based on{" "}
-          <a
-            href="https://www.archestra.ai/mcp-catalog"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-primary"
-          >
-            Archestra MCP Catalog
-          </a>
-        </p>
-      </div>
-      <div className="mx-auto py-4 space-y-6">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <DebouncedInput
-            placeholder="Search servers by name..."
-            initialValue={searchQuery}
-            onChange={setSearchQuery}
-            className="pl-9"
-          />
+    <div className="w-full space-y-2 mt-4">
+      <div className="flex items-end gap-4">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <DebouncedInput
+              placeholder="Search servers by name..."
+              initialValue={searchQuery}
+              onChange={setSearchQuery}
+              className="pl-9"
+            />
+          </div>
         </div>
 
-        {/* Filters */}
-        <CatalogFilters onFiltersChange={setFilters} />
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-muted-foreground">
+            Type
+          </span>
+          <Select
+            value={filters.type}
+            onValueChange={(value) =>
+              setFilters({ ...filters, type: value as ServerType })
+            }
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="remote">Remote</SelectItem>
+              <SelectItem value="local">Local</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        {/* Loading State */}
-        {isLoading && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from(
-              { length: 6 },
-              (_, i) => `skeleton-${i}-${Date.now()}`,
-            ).map((key) => (
-              <Card key={key}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-1/2 mt-2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-full mt-2" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-muted-foreground">
+            Category
+          </span>
+          <Select
+            value={filters.category}
+            onValueChange={(value) =>
+              setFilters({ ...filters, category: value as SelectedCategory })
+            }
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {availableCategories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="text-center py-12">
-            <p className="text-destructive mb-2">
-              Failed to load servers from the external catalog
-            </p>
+      {isLoading && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from(
+            { length: 4 },
+            (_, i) => `skeleton-${i}-${Date.now()}`,
+          ).map((key) => (
+            <Card key={key}>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full mt-2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="text-center py-12">
+          <p className="text-destructive mb-2">
+            Failed to load servers from the external catalog
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : "Unknown error"}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !error && filteredServers && (
+        <>
+          <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : "Unknown error"}
+              {filteredServers.length}{" "}
+              {filteredServers.length === 1 ? "server" : "servers"} found
             </p>
           </div>
-        )}
 
-        {/* Server Cards */}
-        {!isLoading && !error && displayedServers && (
-          <>
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {displayedServers.length}{" "}
-                {displayedServers.length === 1 ? "server" : "servers"} found
+          {filteredServers.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">
+                No servers match your search criteria.
               </p>
             </div>
-
-            {displayedServers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  No servers match your search criteria.
-                </p>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 max-h-[400px] overflow-y-auto pr-2">
+                {filteredServers.map((server, index) => (
+                  <ServerCard
+                    key={`${server.name}-${index}`}
+                    server={server}
+                    onAddToCatalog={handleAddToCatalog}
+                    onRequestInstallation={handleRequestInstallation}
+                    isAdding={createMutation.isPending}
+                    onOpenReadme={setReadmeServer}
+                    isInCatalog={catalogServerNames.has(server.name)}
+                    userRole={userRole}
+                  />
+                ))}
               </div>
-            ) : (
-              <>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {displayedServers.map((server, index) => (
-                    <ServerCard
-                      key={`${server.name}-${index}`}
-                      server={server}
-                      onAddToCatalog={handleAddToCatalog}
-                      onRequestInstallation={handleRequestInstallation}
-                      isAdding={createMutation.isPending}
-                      onOpenReadme={setReadmeServer}
-                      isInCatalog={catalogServerNames.has(server.name)}
-                      userRole={userRole}
-                    />
-                  ))}
+
+              {hasNextPage && (
+                <div className="flex justify-center mt-6">
+                  <Button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    variant="outline"
+                    size="lg"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Loading more...
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
                 </div>
+              )}
+            </>
+          )}
+        </>
+      )}
 
-                {/* Load More Button */}
-                {hasNextPage && (
-                  <div className="flex justify-center mt-6">
-                    <Button
-                      onClick={() => fetchNextPage()}
-                      disabled={isFetchingNextPage}
-                      variant="outline"
-                      size="lg"
-                    >
-                      {isFetchingNextPage ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Loading more...
-                        </>
-                      ) : (
-                        "Load more"
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
+      <DetailsDialog
+        server={readmeServer}
+        onClose={() => setReadmeServer(null)}
+      />
 
-        {/* README Dialog */}
-        <DetailsDialog
-          server={readmeServer}
-          onClose={() => setReadmeServer(null)}
-        />
-
-        {/* Request Installation Dialog */}
-        <RequestInstallationDialog
-          server={requestServer}
-          onClose={() => setRequestServer(null)}
-        />
-      </div>
+      <RequestInstallationDialog
+        server={requestServer}
+        onClose={() => setRequestServer(null)}
+      />
     </div>
   );
 }
@@ -323,10 +356,10 @@ function ServerCard({
                 className="w-8 h-8 rounded flex-shrink-0 mt-0.5"
               />
             )}
-            <CardTitle className="text-lg">
+            <CardTitle className="text-base">
               <TruncatedText
                 message={server.display_name || server.name}
-                maxLength={60}
+                maxLength={40}
               />
             </CardTitle>
           </div>
@@ -339,11 +372,6 @@ function ServerCard({
             {!server.oauth_config?.requires_proxy && (
               <Badge variant="secondary" className="text-xs">
                 OAuth
-              </Badge>
-            )}
-            {server.quality_score !== null && (
-              <Badge variant="secondary" className="text-xs">
-                Quality: {Math.round(server.quality_score)}
               </Badge>
             )}
           </div>
@@ -360,7 +388,7 @@ function ServerCard({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-3">
         {server.description && (
-          <p className="text-sm text-muted-foreground line-clamp-3">
+          <p className="text-sm text-muted-foreground line-clamp-2">
             {server.description}
           </p>
         )}

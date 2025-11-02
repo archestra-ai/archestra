@@ -1,16 +1,9 @@
 "use client";
-import {
-  authLocalization,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@daveyplate/better-auth-ui";
-import type { Role } from "@shared";
+import { SignedIn, SignedOut, UserButton } from "@daveyplate/better-auth-ui";
 import {
   BookOpen,
   Bot,
   Bug,
-  ClipboardList,
   Github,
   Info,
   LogIn,
@@ -18,7 +11,6 @@ import {
   MessagesSquare,
   Router,
   Settings,
-  ShieldCheck,
   Slack,
   Star,
   Wrench,
@@ -43,8 +35,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { WithRole } from "@/components/with-permission";
-import { useIsAuthenticated, useRole } from "@/lib/auth.hook";
+import { useIsAuthenticated } from "@/lib/auth.hook";
 import { useGithubStars } from "@/lib/github.query";
 
 interface MenuItem {
@@ -55,10 +46,7 @@ interface MenuItem {
   customIsActive?: (pathname: string) => boolean;
 }
 
-const getNavigationItems = (
-  isAuthenticated: boolean,
-  role: Role,
-): MenuItem[] => {
+const getNavigationItems = (isAuthenticated: boolean): MenuItem[] => {
   return [
     {
       title: "How security works",
@@ -91,27 +79,17 @@ const getNavigationItems = (
             customIsActive: (pathname: string) =>
               pathname.startsWith("/mcp-catalog"),
           },
-          ...(role === "admin"
-            ? [
-                {
-                  title: "LLM & MCP Gateways",
-                  url: "/gateways",
-                  icon: Settings,
-                },
-              ]
-            : []),
+          {
+            title: "Settings",
+            url: "/settings",
+            icon: Settings,
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/settings"),
+          },
         ]
       : []),
   ];
 };
-
-const actionItems: MenuItem[] = [
-  {
-    title: "Dual LLM",
-    url: "/dual-llm",
-    icon: ShieldCheck,
-  },
-];
 
 const userItems: MenuItem[] = [
   {
@@ -125,7 +103,6 @@ const userItems: MenuItem[] = [
 export function AppSidebar() {
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
-  const role = useRole();
   const { data: starCount } = useGithubStars();
 
   return (
@@ -141,7 +118,7 @@ export function AppSidebar() {
         <SidebarGroup className="px-4">
           <SidebarGroupContent>
             <SidebarMenu>
-              {getNavigationItems(isAuthenticated, role).map((item) => (
+              {getNavigationItems(isAuthenticated).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -177,31 +154,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SignedIn>
-          <WithRole requiredExactRole="admin">
-            <SidebarGroup className="px-4">
-              <SidebarGroupLabel>Security sub-agents</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {actionItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={item.url === pathname}
-                      >
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </WithRole>
-        </SignedIn>
 
         <SidebarGroup className="px-4">
           <SidebarGroupLabel>Community</SidebarGroupLabel>
@@ -273,7 +225,7 @@ export function AppSidebar() {
               <UserButton
                 align="center"
                 className="w-full bg-transparent hover:bg-transparent text-foreground"
-                localization={{ ...authLocalization, SETTINGS: "Account" }}
+                disableDefaultLinks
               />
             </SidebarGroupContent>
           </SidebarGroup>

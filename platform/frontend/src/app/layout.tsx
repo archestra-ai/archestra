@@ -8,6 +8,7 @@ import { AppSidebar } from "./_parts/sidebar";
 import { ThemeProvider } from "./_parts/theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import pjson from "../../../package.json";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { AuthProvider } from "./auth/auth-provider";
 
@@ -49,7 +50,14 @@ export default function RootLayout({
                       <header className="h-14 border-b border-border flex md:hidden items-center px-6 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
                         <SidebarTrigger className="cursor-pointer hover:bg-accent transition-colors rounded-md p-2 -ml-2" />
                       </header>
-                      <div className="flex-1 min-w-0">{children}</div>
+                      <div className="flex-1 min-w-0 overflow-auto flex flex-col">
+                        <div className="flex-1">{children}</div>
+                        {pjson.version && (
+                          <div className="text-xs text-muted-foreground text-center py-4">
+                            Version: {pjson.version}
+                          </div>
+                        )}
+                      </div>
                     </main>
                     <Toaster />
                   </SidebarProvider>

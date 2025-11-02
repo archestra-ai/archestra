@@ -11,7 +11,7 @@ export default function McpCatalogLayout({
   const a = useRole();
   return (
     <PageLayout
-      title="MCP Catalog"
+      title="MCP Registry"
       description={
         <>
           <p>

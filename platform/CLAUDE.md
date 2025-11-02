@@ -18,8 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: <http://localhost:3000/>
 - **Tools Inspector**: <http://localhost:3000/tools>
-- **Dual LLM Config**: <http://localhost:3000/dual-llm>
-- **Settings/Teams**: <http://localhost:3000/account/settings>
+- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
 - **MCP Catalog**: <http://localhost:3000/mcp-catalog> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp-catalog/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/logs/llm-proxy> (View LLM proxy request logs)

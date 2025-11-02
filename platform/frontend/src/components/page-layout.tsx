@@ -11,7 +11,7 @@ export function PageLayout({
   children: React.ReactNode;
   tabs?: { label: string; href: string }[];
   title: string;
-  description: string;
+  description: React.ReactNode;
 }) {
   const pathname = usePathname();
   return (

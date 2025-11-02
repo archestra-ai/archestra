@@ -525,6 +525,7 @@ export function McpServerCard({
           open={isLogsDialogOpen}
           onOpenChange={setIsLogsDialogOpen}
           serverName={installedServer?.name ?? item.name}
+          serverId={installedServer?.id}
           logs={logsData.logs}
           command={logsData.command}
           isLoading={isLoadingLogs}

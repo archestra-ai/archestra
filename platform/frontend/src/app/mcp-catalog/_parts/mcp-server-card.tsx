@@ -358,25 +358,16 @@ export function McpServerCard({
       </WithRole>
       <WithRole requiredRole="admin">
         {requiresAuth && !currentUserHasTeamAuth && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={onInstallTeam}
-                  disabled={isInstalling}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {isInstalling ? "Adding..." : "Auth for teams"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Authenticate and allow teams to use my token</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            onClick={onInstallTeam}
+            disabled={isInstalling}
+            size="sm"
+            variant="outline"
+            className="w-full"
+          >
+            <Building2 className="mr-2 h-4 w-4" />
+            {isInstalling ? "Adding..." : "Auth for teams"}
+          </Button>
         )}
       </WithRole>
     </>
@@ -403,6 +394,33 @@ export function McpServerCard({
           {isInstalling ? "Reinstalling..." : "Reinstall Required"}
         </Button>
       )}
+      <WithRole requiredRole="member">
+        {installed ? (
+          <Button disabled size="sm" variant="outline" className="w-full">
+            Installed
+          </Button>
+        ) : (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    disabled
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Not installed
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Only Admins can install MCP servers</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </WithRole>
       <WithRole requiredRole="admin">
         {installed ? (
           <Button

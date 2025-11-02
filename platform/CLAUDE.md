@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp> (GET for discovery, POST for JSON-RPC with session support, requires Bearer token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
-- **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET pod logs)
+- **MCP Logs**: <http://localhost:9000/mcp_proxy/:id/logs> (GET container logs for local MCP servers)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
 - **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)

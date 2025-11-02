@@ -239,7 +239,11 @@ export function useMcpServerInstallationStatus(
     },
     refetchInterval: (query) => {
       const status = query.state.data;
-      return status === "pending" || status === null ? 2000 : false;
+      return status === "pending" ||
+        status === "discovering-tools" ||
+        status === null
+        ? 2000
+        : false;
     },
     enabled: !!installingMcpServerId,
   });

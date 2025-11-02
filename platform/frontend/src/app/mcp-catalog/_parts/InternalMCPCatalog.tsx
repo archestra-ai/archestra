@@ -373,22 +373,12 @@ export function InternalMCPCatalog({
 
   const sortInstalledFirst = (items: CatalogItem[]) =>
     [...items].sort((a, b) => {
-      const aInstalled = installedServers?.some(
-        (server) => server.catalogId === a.id,
-      );
-      const bInstalled = installedServers?.some(
-        (server) => server.catalogId === b.id,
-      );
       const aIsRemote = a.serverType === "remote";
       const bIsRemote = b.serverType === "remote";
 
       // First sort by server type (remote before local)
       if (aIsRemote && !bIsRemote) return -1;
       if (!aIsRemote && bIsRemote) return 1;
-
-      // Then sort by installed status within each type
-      if (aInstalled && !bInstalled) return -1;
-      if (!aInstalled && bInstalled) return 1;
 
       return 0;
     });
@@ -457,7 +447,6 @@ export function InternalMCPCatalog({
                   item={item}
                   installedServer={installedServer}
                   installingItemId={installingItemId}
-                  installMutationPending={installMutation.isPending}
                   installationStatus={
                     isInstallInProgress
                       ? mcpServerInstallationStatus.data

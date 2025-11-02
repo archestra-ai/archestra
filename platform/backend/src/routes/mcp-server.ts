@@ -270,9 +270,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Start async tool fetching in the background (non-blocking)
               (async () => {
                 try {
+                  await McpServerModel.update(mcpServer.id, {
+                    localInstallationStatus: "discovering-tools",
+                    localInstallationError: null,
+                  });
+
                   // Wait a bit for the pod to be fully ready
                   await new Promise((resolve) => setTimeout(resolve, 3000));
-
                   fastify.log.info(
                     `Attempting to fetch tools from local server: ${mcpServer.name}`,
                   );

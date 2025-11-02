@@ -71,8 +71,13 @@ export type McpServerCardProps = {
       })
     | null;
   installingItemId: string | null;
-  installMutationPending: boolean;
-  installationStatus?: "error" | "pending" | "success" | "idle" | null;
+  installationStatus?:
+    | "error"
+    | "pending"
+    | "success"
+    | "idle"
+    | "discovering-tools"
+    | null;
   onInstall: () => void;
   onInstallTeam: () => void;
   onInstallNoAuth: () => void;
@@ -93,7 +98,6 @@ export function McpServerCard({
   item,
   installedServer,
   installingItemId,
-  installMutationPending,
   installationStatus,
   onInstall,
   onInstallTeam,
@@ -134,9 +138,14 @@ export function McpServerCard({
   const installed = !!installedServer && toolsDiscoveredCount > 0;
   const isInstalling = Boolean(
     installingItemId === item.id ||
-      installMutationPending ||
-      (installationStatus === "pending" && installedServer),
+      installationStatus === "pending" ||
+      (installationStatus === "discovering-tools" && installedServer),
   );
+
+  const localInstalllingLabel =
+    installationStatus === "discovering-tools"
+      ? "Discovering tools..."
+      : "Installing...";
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
       ? installedServer.users.includes(currentUserId)
@@ -349,7 +358,7 @@ export function McpServerCard({
     </>
   );
 
-  const localCardContent = installed ? (
+  const localCardContent = (
     <>
       <WithRole requiredRole="admin">
         <div className="bg-muted/50 rounded-md mb-2 overflow-hidden flex flex-col">
@@ -371,32 +380,34 @@ export function McpServerCard({
         </Button>
       )}
       <WithRole requiredRole="admin">
-        <Button
-          onClick={() =>
-            installedServer &&
-            setUninstallingServer({
-              id: installedServer.id,
-              name: item.label || item.name,
-            })
-          }
-          size="sm"
-          variant="outline"
-          className="w-full"
-        >
-          Uninstall
-        </Button>
+        {installed ? (
+          <Button
+            onClick={() =>
+              installedServer &&
+              setUninstallingServer({
+                id: installedServer.id,
+                name: item.label || item.name,
+              })
+            }
+            size="sm"
+            variant="outline"
+            className="w-full"
+          >
+            Uninstall
+          </Button>
+        ) : (
+          <Button
+            onClick={onInstallNoAuth}
+            disabled={isInstalling}
+            size="sm"
+            variant="outline"
+            className="w-full"
+          >
+            {isInstalling ? localInstalllingLabel : "Install"}
+          </Button>
+        )}
       </WithRole>
     </>
-  ) : (
-    <Button
-      onClick={onInstallNoAuth}
-      disabled={isInstalling}
-      size="sm"
-      variant="outline"
-      className="w-full"
-    >
-      {isInstalling ? "Installing..." : "Install"}
-    </Button>
   );
 
   const dialogs = (

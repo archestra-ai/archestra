@@ -6196,7 +6196,7 @@ export type GetMcpServersResponses = {
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
@@ -6226,7 +6226,7 @@ export type InstallMcpServerData = {
         ownerId?: string | null;
         authType?: 'personal' | 'team';
         reinstallRequired?: boolean;
-        localInstallationStatus?: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus?: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError?: string | null;
         teams?: Array<string>;
         userId?: string;
@@ -6291,7 +6291,7 @@ export type InstallMcpServerResponses = {
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
@@ -6409,7 +6409,7 @@ export type GetMcpServerResponses = {
         ownerId: string | null;
         authType: 'personal' | 'team';
         reinstallRequired: boolean;
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         createdAt: string;
         updatedAt: string;
@@ -6468,7 +6468,7 @@ export type GetMcpServerInstallationStatusResponses = {
      * Default Response
      */
     200: {
-        localInstallationStatus: 'idle' | 'pending' | 'success' | 'error';
+        localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
     };
 };

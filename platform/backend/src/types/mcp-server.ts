@@ -9,6 +9,7 @@ import { schema } from "@/database";
 export const LocalMcpServerInstallationStatusSchema = z.enum([
   "idle",
   "pending",
+  "discovering-tools",
   "success",
   "error",
 ]);

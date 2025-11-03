@@ -386,6 +386,27 @@ const routePermissionsConfig: Partial<
   [RouteId.GetMcpToolCall]: {
     mcpToolCall: ["read"],
   },
+  [RouteId.StreamChat]: {
+    conversation: ["read"],
+  },
+  [RouteId.GetChatConversations]: {
+    conversation: ["read"],
+  },
+  [RouteId.GetChatConversation]: {
+    conversation: ["read"],
+  },
+  [RouteId.CreateChatConversation]: {
+    conversation: ["create"],
+  },
+  [RouteId.UpdateChatConversation]: {
+    conversation: ["update"],
+  },
+  [RouteId.DeleteChatConversation]: {
+    conversation: ["delete"],
+  },
+  [RouteId.GetChatMcpTools]: {
+    conversation: ["read"],
+  },
   [RouteId.GetLimits]: {
     limit: ["read"],
   },

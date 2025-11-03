@@ -208,6 +208,14 @@ export const RouteId = {
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
 
+  // Chat Routes
+  StreamChat: "streamChat",
+  GetChatConversations: "getChatConversations",
+  GetChatConversation: "getChatConversation",
+  CreateChatConversation: "createChatConversation",
+  UpdateChatConversation: "updateChatConversation",
+  DeleteChatConversation: "deleteChatConversation",
+  GetChatMcpTools: "getChatMcpTools",
   // Limits Routes
   GetLimits: "getLimits",
   CreateLimit: "createLimit",

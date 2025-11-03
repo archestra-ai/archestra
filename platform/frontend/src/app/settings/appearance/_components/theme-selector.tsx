@@ -13,7 +13,7 @@ import {
 import {
   getThemeCategories,
   getThemesByCategory,
-  type Theme,
+  type ThemeMetadata,
 } from "@/config/themes";
 
 interface ThemeSelectorProps {
@@ -32,7 +32,8 @@ export function ThemeSelector({
       <CardHeader>
         <CardTitle>Color Theme</CardTitle>
         <CardDescription>
-          Choose a color theme for your organization
+          Choose a color theme for your organization. Changes are previewed in
+          real-time.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -62,7 +63,7 @@ export function ThemeSelector({
 }
 
 interface ThemeOptionProps {
-  theme: Theme;
+  theme: ThemeMetadata;
   isSelected: boolean;
   onClick: () => void;
 }
@@ -71,29 +72,13 @@ function ThemeOption({ theme, isSelected, onClick }: ThemeOptionProps) {
   return (
     <Button
       variant={isSelected ? "default" : "outline"}
-      className="h-auto p-3 flex-col items-start gap-2 relative"
+      className="h-auto p-3 flex-col items-center gap-2 relative"
       onClick={onClick}
     >
-      <div className="flex items-center gap-2 w-full">
-        <div className="flex gap-1 flex-1">
-          <div
-            className="h-6 w-6 rounded-sm border border-border"
-            style={{ background: theme.colors.dark.primary }}
-          />
-          <div
-            className="h-6 w-6 rounded-sm border border-border"
-            style={{ background: theme.colors.dark.secondary }}
-          />
-          {theme.colors.dark.accent && (
-            <div
-              className="h-6 w-6 rounded-sm border border-border"
-              style={{ background: theme.colors.dark.accent }}
-            />
-          )}
-        </div>
-        {isSelected && <Check className="h-4 w-4" />}
-      </div>
-      <span className="text-xs font-normal text-left w-full">{theme.name}</span>
+      {isSelected && <Check className="h-4 w-4 absolute top-2 right-2" />}
+      <span className="text-sm font-medium text-center w-full">
+        {theme.name}
+      </span>
     </Button>
   );
 }

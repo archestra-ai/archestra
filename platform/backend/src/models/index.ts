@@ -1,6 +1,7 @@
 export { default as AgentModel } from "./agent";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
+export { default as ConversationModel } from "./conversation";
 export { default as DualLlmConfigModel } from "./dual-llm-config";
 export { default as DualLlmResultModel } from "./dual-llm-result";
 export { default as InteractionModel } from "./interaction";
@@ -10,6 +11,7 @@ export { default as McpServerInstallationRequestModel } from "./mcp-server-insta
 export { default as McpServerTeamModel } from "./mcp-server-team";
 export { default as McpServerUserModel } from "./mcp-server-user";
 export { default as McpToolCallModel } from "./mcp-tool-call";
+export { default as MessageModel } from "./message";
 export { default as OrganizationModel } from "./organization";
 export { default as SecretModel } from "./secret";
 export { default as TeamModel } from "./team";

@@ -8,7 +8,8 @@
     ".": "./index.ts"
   },
   "scripts": {
-    "codegen:api-client": "tsx hey-api/openapi-ts.ts"
+    "codegen:api-client": "tsx hey-api/openapi-ts.ts",
+    "codegen:theme-css": "tsx ./themes/generate-theme-css.ts"
   },
   "keywords": [],
   "author": "",

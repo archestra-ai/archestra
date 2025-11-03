@@ -24,6 +24,9 @@
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.40",
+    "@ai-sdk/mcp": "^0.0.5",
+    "@ai-sdk/openai": "^2.0.59",
     "@anthropic-ai/sdk": "^0.67.0",
     "@better-auth/core": "^1.3.27",
     "@fastify/cors": "^11.1.0",

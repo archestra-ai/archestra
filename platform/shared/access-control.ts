@@ -19,6 +19,7 @@ export type Resource =
   | "mcpServerInstallationRequest"
   | "mcpToolCall"
   | "team"
+  | "conversation"
   | "limit"
   | "tokenPrice"
 
@@ -51,6 +52,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   team: ["create", "read", "update", "delete"],
   mcpToolCall: ["read"],
+  conversation: ["create", "read", "update", "delete"],
   limit: ["create", "read", "update", "delete"],
   tokenPrice: ["create", "read", "update", "delete"],
 };
@@ -69,6 +71,7 @@ export const adminRole = ac.newRole({
 // - can create MCP servers (personal auth only), read, and delete (personal auth only)
 // - can create and read MCP server installation requests
 // - read-only access to teams
+// - full access to conversations
 export const memberRole = ac.newRole({
   agent: ["read"],
   tool: ["create", "read", "update", "delete"],
@@ -81,6 +84,7 @@ export const memberRole = ac.newRole({
   mcpServerInstallationRequest: ["create", "read", "update"],
   team: ["read"],
   mcpToolCall: ["read"],
+  conversation: ["create", "read", "update", "delete"],
   limit: ["read"],
   tokenPrice: ["read"],
 });

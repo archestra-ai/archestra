@@ -141,6 +141,28 @@ export default {
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
     },
   },
+  chat: {
+    openai: {
+      apiKey: process.env.ARCHESTRA_CHAT_OPENAI_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_OPENAI_BASE_URL ||
+        "https://api.openai.com/v1",
+    },
+    anthropic: {
+      apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",
+      baseUrl:
+        process.env.ARCHESTRA_CHAT_ANTHROPIC_BASE_URL ||
+        "https://api.anthropic.com",
+    },
+    mcp: {
+      remoteServerUrl: process.env.ARCHESTRA_CHAT_MCP_SERVER_URL || "",
+      remoteServerHeaders: process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS
+        ? JSON.parse(process.env.ARCHESTRA_CHAT_MCP_SERVER_HEADERS)
+        : undefined,
+    },
+    defaultModel:
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+  },
   features: {
     /**
      * NOTE: use this object to read in environment variables pertaining to "feature flagged" features.. Example:

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { THEME_IDS } from "./themes/theme-config";
 
 export const OAuthConfigSchema = z.object({
   name: z.string(),
@@ -69,34 +70,10 @@ export const LocalConfigFormSchema = z
   );
 
 // Organization Appearance Schemas
-export const OrganizationThemeSchema = z.enum([
-  // Single Color Themes
-  "cosmic-night",
-  "aubergine",
-  "clementine",
-  "banana",
-  "jade",
-  "lagoon",
-  "barbra",
-  "gray",
-  "mood-indigo",
-  // Vision Assistive Themes
-  "tritanopia",
-  "protanopia-deuteranopia",
-  // Fun and New Themes
-  "raspberry-beret",
-  "big-business",
-  "pog",
-  "mint-chip",
-  "pbj",
-  "chill-vibes",
-  "forest-floor",
-  "slackr",
-  "sea-glass",
-  "lemon-lime",
-  "falling-leaves",
-  "sunrise",
-]);
+// All themes from https://github.com/jnsahaj/tweakcn
+// Theme IDs are generated from shared/themes/theme-config.ts
+
+export const OrganizationThemeSchema = z.enum(THEME_IDS);
 
 export const OrganizationCustomFontSchema = z.enum([
   "lato",

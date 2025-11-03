@@ -92,19 +92,10 @@ const getNavigationItems = (
               pathname.startsWith("/settings"),
           },
           {
-            title: "Cost",
+            title: "Cost & Limits",
             url: "/cost",
             icon: DollarSign,
           },
-          ...(role === "admin"
-            ? [
-                {
-                  title: "LLM & MCP Gateways",
-                  url: "/gateways",
-                  icon: Settings,
-                },
-              ]
-            : []),
         ]
       : []),
   ];

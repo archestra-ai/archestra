@@ -73,29 +73,19 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Appearance</h1>
-          <p className="text-muted-foreground mt-2">
-            Customize the look and feel of your organization
-          </p>
-        </div>
-
         <LogoUpload
           currentLogo={appearance?.logo}
           logoType={appearance?.logoType}
           onLogoChange={handleLogoChange}
         />
-
         <ThemeSelector
           selectedTheme={selectedTheme}
           onThemeSelect={setSelectedTheme}
         />
-
         <FontSelector
           selectedFont={selectedFont}
           onFontSelect={setSelectedFont}
         />
-
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-6 bg-background p-4 rounded-lg border border-border shadow-lg">
             <Button onClick={handleSave} disabled={updateMutation.isPending}>

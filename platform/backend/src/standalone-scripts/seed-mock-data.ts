@@ -1,6 +1,5 @@
 import { pathToFileURL } from "node:url";
 import db, { schema } from "@/database";
-import { seedAdminUserAndDefaultOrg } from "@/database/seed";
 import logger from "@/logging";
 import {
   generateMockAgents,
@@ -17,9 +16,6 @@ async function seedMockData() {
     await db.delete(table);
   }
   logger.info("✅ Cleaned existing data");
-
-  // Default user and org
-  await seedAdminUserAndDefaultOrg();
 
   // Step 1: Create agents
   logger.info("\nCreating agents...");

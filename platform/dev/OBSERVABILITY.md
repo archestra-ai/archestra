@@ -1,21 +1,22 @@
-# Observability with OpenTelemetry and Jaeger
+# Observability with OpenTelemetry and Grafana Tempo
 
-This project includes distributed tracing using OpenTelemetry and Jaeger for monitoring and debugging API requests.
+This project includes distributed tracing using OpenTelemetry and Grafana Tempo for monitoring and debugging API requests.
 
 ## Overview
 
 The observability stack consists of:
 
 - **OpenTelemetry SDK**: Instruments the Fastify application to collect traces
-- **OpenTelemetry Collector**: Receives traces from the application and forwards them to Jaeger
-- **Jaeger**: Stores and visualizes distributed traces
+- **OpenTelemetry Collector**: Receives traces from the application and forwards them to Tempo
+- **Grafana Tempo**: Stores distributed traces
+- **Grafana**: Visualizes traces and metrics with a unified UI
 
 ## Architecture
 
 ```
-[Fastify App] --traces--> [OTel Collector] --traces--> [Jaeger]
-                                                           |
-                                                   [Jaeger UI (Browser)]
+[Fastify App] --traces--> [OTel Collector] --traces--> [Tempo]
+                                                          |
+                                                      [Grafana (Browser)]
 ```
 
 ## Quick Start
@@ -30,40 +31,45 @@ tilt up
 
 This will start:
 
-- **Jaeger UI**: http://localhost:16686
+- **Grafana UI**: http://localhost:3002
+- **Tempo API**: http://localhost:3200
 - **OTel Collector**: Listening on ports 4317 (gRPC) and 4318 (HTTP)
 
 ### Viewing Traces
 
-1. Open Jaeger UI at http://localhost:16686
-2. Select "Archestra Platform API" from the Service dropdown
-3. Click "Find Traces" to see all traces
-4. Click on any trace to see detailed span information
+1. Open Grafana UI at http://localhost:3002
+2. Navigate to "Explore" in the left sidebar
+3. Select "Tempo" from the datasource dropdown
+4. Use the "Search" tab to find traces or use TraceQL to query traces
+5. Click on any trace to see detailed span information
 
-#### Filtering Traces
+#### Searching and Filtering Traces
 
-You can filter traces using tags to narrow down specific types of requests:
+Tempo supports multiple ways to find and filter traces:
 
-**Filter by LLM Proxy Requests:**
+**Search by Tags:**
+In the Grafana Tempo datasource, use the Search tab to filter by resource attributes:
 
-- Tag: `route.category=llm-proxy`
-- Shows only requests to `/v1/openai/*`, `/v1/anthropic/*`, `/v1/gemini/*`
+- `service.name="Archestra Platform API"` - Shows traces from the API service
+- `route.category="llm-proxy"` - Shows only requests to `/v1/openai/*`, `/v1/anthropic/*`, `/v1/gemini/*`
+- `llm.provider="openai"` - Shows only OpenAI requests
+- `llm.model="gpt-4"` - Shows only requests using GPT-4
 
-**Filter by LLM Provider:**
+**TraceQL Queries:**
+Use TraceQL for more advanced filtering:
 
-- Tag: `llm.provider=openai` (or `anthropic`, `gemini`)
-- Shows only requests to a specific LLM provider
+```
+{ span.route.category="llm-proxy" && span.llm.provider="openai" && span.llm.model="gpt-4" }
+```
 
-**Filter by Model:**
+This shows only OpenAI GPT-4 requests with all their spans.
 
-- Tag: `llm.model=gpt-4` (or any other model name)
-- Shows only requests using a specific model
+**Filter by Agent Labels:**
+If agents have custom labels defined, you can filter by them:
 
-**Combine Multiple Tags:**
-You can add multiple tags to create more specific filters. For example:
-
-- `route.category=llm-proxy` + `llm.provider=openai` + `llm.model=gpt-4`
-- Shows only OpenAI GPT-4 requests
+```
+{ span.agent.environment="production" }
+```
 
 ## Configuration
 

@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
 - **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
 - **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
-- **Jaeger UI**: <http://localhost:16686/> (distributed tracing visualization)
+- **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
 - **Prometheus**: <http://localhost:9090/> (metrics storage, starts with Grafana)
 - **MCP Tool Calls API**: <http://localhost:9000/api/mcp-tool-calls> (GET paginated MCP tool call logs)
@@ -58,7 +58,7 @@ tilt trigger <pnpm-dev|wiremock|etc> # Trigger an update for the specified resou
 tilt trigger orlando-wiremock        # Start orlando WireMock test environment (port 9091)
 
 # Observability
-tilt trigger observability           # Start full observability stack (Jaeger, OTEL Collector, Prometheus, Grafana)
+tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
 docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
@@ -109,11 +109,11 @@ ARCHESTRA_LOGGING_LEVEL=info  # Options: trace, debug, info, warn, error, fatal
 
 ## Observability
 
-**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes for Jaeger filtering.
+**Tracing**: LLM proxy routes add agent data via `sprinkleTraceAttributes()`. Traces include `agent.name` and `agent.<label>` attributes. Traces stored in Grafana Tempo, viewable via Grafana UI.
 
 **Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_name` label for per-agent analysis.
 
-**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Jaeger, Prometheus, and Grafana with pre-configured datasources.
+**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
 ## Coding Conventions
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   organizationKeys,
@@ -33,12 +33,13 @@ export default function AppearanceSettingsPage() {
   }, [appearance]);
 
   useEffect(() => {
-    const themeChanged = selectedTheme !== (appearance?.theme || "cosmic-night");
+    const themeChanged =
+      selectedTheme !== (appearance?.theme || "cosmic-night");
     const fontChanged = selectedFont !== (appearance?.customFont || "lato");
     setHasChanges(themeChanged || fontChanged);
   }, [selectedTheme, selectedFont, appearance]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     await updateMutation.mutateAsync({
       theme: selectedTheme,
       customFont: selectedFont,
@@ -46,7 +47,7 @@ export default function AppearanceSettingsPage() {
     // Invalidate appearance query to refresh the data
     queryClient.invalidateQueries({ queryKey: organizationKeys.appearance() });
     setHasChanges(false);
-  };
+  }, [selectedTheme, selectedFont, updateMutation, queryClient]);
 
   const handleReset = () => {
     setSelectedTheme(appearance?.theme || "cosmic-night");
@@ -61,7 +62,7 @@ export default function AppearanceSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
         <div className="flex items-center justify-center h-64">
           <p className="text-lg text-muted-foreground">Loading...</p>
         </div>
@@ -70,7 +71,7 @@ export default function AppearanceSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 w-full">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Appearance</h1>
@@ -97,10 +98,7 @@ export default function AppearanceSettingsPage() {
 
         {hasChanges && (
           <div className="flex gap-3 sticky bottom-6 bg-background p-4 rounded-lg border border-border shadow-lg">
-            <Button
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-            >
+            <Button onClick={handleSave} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
             <Button

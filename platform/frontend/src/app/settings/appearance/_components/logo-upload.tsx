@@ -137,14 +137,6 @@ export function LogoUpload({
           className="hidden"
           onChange={handleFileSelect}
         />
-
-        <div className="text-sm text-muted-foreground">
-          {logoType === "custom" && (
-            <p className="text-xs mt-2">
-              Note: Custom logos will display "Powered by Archestra" below them.
-            </p>
-          )}
-        </div>
       </CardContent>
     </Card>
   );

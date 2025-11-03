@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
+import { N8nConnectionDialog } from "@/components/chat/n8n-connection-dialog";
 import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 import {
   Tooltip,
@@ -261,43 +262,51 @@ export default function ChatPage() {
                 {mcpTools.length > 0 && (
                   <div className="text-xs text-muted-foreground">
                     <TooltipProvider>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(mcpServerGroups).map(([serverName, tools]) => (
-                          <Tooltip key={serverName}>
-                            <TooltipTrigger asChild>
-                              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                <span className="font-medium">{serverName}</span>
-                                <span className="text-muted-foreground">
-                                  ({tools.length} {tools.length === 1 ? "tool" : "tools"})
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              className="max-w-sm max-h-64 overflow-y-auto"
-                            >
-                              <div className="space-y-1">
-                                {tools.map((tool) => (
-                                  <div
-                                    key={tool.name}
-                                    className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                  >
-                                    <div className="font-mono font-medium">
-                                      {tool.name.split("__")[1] || tool.name}
-                                    </div>
-                                    {tool.description && (
-                                      <div className="text-muted-foreground mt-0.5">
-                                        {tool.description}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(mcpServerGroups).map(([serverName, tools]) => (
+                            <Tooltip key={serverName}>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                                  <span className="font-medium">{serverName}</span>
+                                  <span className="text-muted-foreground">
+                                    ({tools.length} {tools.length === 1 ? "tool" : "tools"})
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="max-w-sm max-h-64 overflow-y-auto"
+                              >
+                                <div className="space-y-1">
+                                  {tools.map((tool) => (
+                                    <div
+                                      key={tool.name}
+                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                    >
+                                      <div className="font-mono font-medium">
+                                        {tool.name.split("__")[1] || tool.name}
                                       </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        ))}
+                                      {tool.description && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {tool.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </div>
+                        <N8nConnectionDialog />
                       </div>
                     </TooltipProvider>
+                  </div>
+                )}
+                {mcpTools.length === 0 && (
+                  <div className="flex justify-end">
+                    <N8nConnectionDialog />
                   </div>
                 )}
                 <PromptInput onSubmit={handleSubmit}>

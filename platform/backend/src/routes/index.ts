@@ -21,3 +21,4 @@ export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenPriceRoutes } from "./token-price";
 export { default as toolRoutes } from "./tool";
+export { default as userRoutes } from "./user";

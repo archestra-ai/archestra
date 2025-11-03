@@ -1,14 +1,15 @@
 "use client";
 
+import type { ArchestraMcpServerManifest } from "@shared/hey-api/clients/archestra-catalog/types.gen";
 import { useEffect, useState } from "react";
-import { useInternalMcpCatalog } from "@/lib/internal-mcp-catalog.query";
+import { useMcpRegistryServersInfinite } from "@/lib/external-mcp-catalog.query";
 import OnboardingStep from "../onboarding-step";
 import OptionButton from "../option-button";
 
 interface McpServerSelectionProps {
   isActive: boolean;
   isTransitioning: boolean;
-  onSelect: (serverId: string, serverName?: string) => void;
+  onSelect: (mcpServer: ArchestraMcpServerManifest) => void;
   onNext: () => void;
 }
 
@@ -18,17 +19,35 @@ export function McpServerSelection({
   onSelect,
   onNext,
 }: McpServerSelectionProps) {
-  const { data: catalogItems } = useInternalMcpCatalog();
-  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
-  const [selectedServerName, setSelectedServerName] = useState<string | null>(
-    null,
+  const { data, isLoading } = useMcpRegistryServersInfinite(
+    undefined,
+    "all",
+    3,
   );
+  const [selectedServer, setSelectedServer] =
+    useState<ArchestraMcpServerManifest | null>(null);
+
+  // Get first 3 servers from the external catalog
+  const catalogItems = data?.pages[0]?.servers?.slice(0, 3) || [];
 
   useEffect(() => {
-    if (selectedServerId) {
-      onSelect(selectedServerId, selectedServerName || undefined);
+    if (selectedServer) {
+      onSelect(selectedServer || undefined);
     }
-  }, [selectedServerId, selectedServerName, onSelect]);
+  }, [selectedServer, onSelect]);
+
+  if (isLoading) {
+    return (
+      <OnboardingStep
+        title="MCP Server Registry"
+        description="Select an MCP server to install from the registry"
+        isActive={isActive}
+        isTransitioning={isTransitioning}
+      >
+        <div className="text-sm text-slate-400">Loading MCP servers...</div>
+      </OnboardingStep>
+    );
+  }
 
   if (!catalogItems || catalogItems.length === 0) {
     return (
@@ -55,24 +74,25 @@ export function McpServerSelection({
       primaryAction={{
         label: "Continue",
         onClick: onNext,
-        disabled: !selectedServerId,
+        disabled: !selectedServer,
       }}
     >
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+      <div className="space-y-2 max-h-96 overflow-y-auto whitespace-normal break-words overflow-hidden">
         {catalogItems.map((item) => (
           <OptionButton
-            key={item.id}
-            active={selectedServerId === item.id}
+            key={item.name}
+            active={
+              (selectedServer?.server as any)?.url === (item.server as any).url
+            }
             onClick={() => {
-              setSelectedServerId(item.id);
-              setSelectedServerName(item.name);
+              setSelectedServer(item);
             }}
             className="justify-start h-auto p-3 w-full"
           >
             <div className="text-left w-full">
               <div className="font-semibold text-sm">{item.name}</div>
-              {item.version && (
-                <div className="text-xs text-slate-400">v{item.version}</div>
+              {item.description && (
+                <div className="text-xs text-slate-400">{item.description}</div>
               )}
             </div>
           </OptionButton>

@@ -56,6 +56,12 @@ export const SelectMcpServerInstallationRequestSchema = createSelectSchema(
   customServerConfig: McpServerInstallationRequestCustomServerConfigSchema,
 });
 
+// Extended schema for approve endpoint response that includes the created catalogId
+export const SelectMcpServerInstallationRequestWithCatalogIdSchema =
+  SelectMcpServerInstallationRequestSchema.extend({
+    catalogId: z.string().uuid().optional(),
+  });
+
 export const InsertMcpServerInstallationRequestSchema = createInsertSchema(
   schema.mcpServerInstallationRequestTable,
 ).extend({

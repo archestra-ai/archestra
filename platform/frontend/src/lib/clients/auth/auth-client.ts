@@ -2,6 +2,7 @@ import { ac, adminRole, memberRole } from "@shared";
 import {
   adminClient,
   apiKeyClient,
+  inferAdditionalFields,
   organizationClient,
 } from "better-auth/client/plugins";
 import { nextCookies } from "better-auth/next-js";
@@ -21,6 +22,13 @@ export const authClient = createAuthClient({
     nextCookies(),
     adminClient(),
     apiKeyClient(),
+    inferAdditionalFields({
+      user: {
+        onboardingCompleted: {
+          type: "boolean",
+        },
+      },
+    }),
   ],
   fetchOptions: {
     credentials: "include",

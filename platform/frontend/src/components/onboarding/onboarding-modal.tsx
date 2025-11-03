@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth.query";
-import { useHasFirstUserInteraction } from "@/lib/interaction.query";
+import { useUpdateUserOnboarding } from "@/lib/user.query";
 import { Button } from "../ui/button";
 import OnboardingWizard, {
   type OnboardingWizardHandle,
@@ -13,23 +13,30 @@ import OnboardingWizard, {
 export default function OnboardingModal() {
   const sessionQuery = useSession();
   const session = sessionQuery.data;
-  const { data: hasFirstInteraction } = useHasFirstUserInteraction({
-    refetchInterval: null,
-  });
 
-  const shouldShowOnboarding = Boolean(session?.user && !hasFirstInteraction);
   const [open, setOpen] = useState(false);
 
   const wizardRef = useRef<OnboardingWizardHandle | null>(null);
   const [step, setStep] = useState(0);
+
+  const shouldShowOnboarding = Boolean(
+    session?.user && session?.user.onboardingCompleted === false,
+  );
+
+  const updateUserOnboarding = useUpdateUserOnboarding();
 
   useEffect(() => {
     if (shouldShowOnboarding) {
       setOpen(true);
     }
   }, [shouldShowOnboarding]);
-
   const completeOnboarding = () => {
+    if (session?.user) {
+      updateUserOnboarding.mutateAsync({
+        id: session.session.userId,
+        data: { onboardingCompleted: true },
+      });
+    }
     setOpen(false);
   };
 

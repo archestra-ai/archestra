@@ -86,12 +86,16 @@ export default function OAuthCallbackPage() {
 
         const { catalogId, name, secretId } = await response.json();
 
+        // Check if we're in onboarding flow BEFORE installing
+        const isOnboarding = sessionStorage.getItem("onboarding_step");
+        const onboardingAgentId = sessionStorage.getItem("onboarding_agent_id");
+
         // Retrieve teams from sessionStorage if they were stored
         const teamsJson = sessionStorage.getItem("oauth_teams");
         const teams = teamsJson ? JSON.parse(teamsJson) : [];
 
         // Install the MCP server with the secret reference and teams
-        await installMutation.mutateAsync({
+        const installedServer = await installMutation.mutateAsync({
           name,
           catalogId,
           secretId,
@@ -103,6 +107,27 @@ export default function OAuthCallbackPage() {
 
         // Clean up the processing flag after successful installation
         sessionStorage.removeItem(processKey);
+
+        if (isOnboarding && onboardingAgentId) {
+          // Clear onboarding state
+          sessionStorage.removeItem("onboarding_step");
+          sessionStorage.removeItem("onboarding_agent_id");
+          sessionStorage.removeItem("onboarding_server_name");
+
+          // Redirect with resumeOnboarding flag so wizard can advance to tool selection
+          // Use the installed MCP server ID, not the catalog ID
+          const mcpServerId = installedServer?.id || "";
+
+          // Just add the mcpServerId to the existing URL params that were set before OAuth
+          // The URL should already have resumeOnboarding=true&agentId=X from before OAuth redirect
+          const currentUrl = new URL(window.location.origin + "/test-agent");
+          currentUrl.searchParams.set("resumeOnboarding", "true");
+          currentUrl.searchParams.set("agentId", onboardingAgentId);
+          currentUrl.searchParams.set("mcpServerId", mcpServerId);
+
+          window.location.href = currentUrl.toString();
+          return;
+        }
 
         // Redirect back to MCP catalog immediately
         // The mutation's onSuccess handler will show the success toast

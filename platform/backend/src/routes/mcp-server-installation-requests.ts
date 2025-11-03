@@ -10,6 +10,7 @@ import {
   McpServerInstallationRequestStatusSchema,
   RouteId,
   SelectMcpServerInstallationRequestSchema,
+  SelectMcpServerInstallationRequestWithCatalogIdSchema,
   UpdateMcpServerInstallationRequestSchema,
   UuidIdSchema,
 } from "@/types";
@@ -340,7 +341,7 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
           adminResponse: z.string().optional(),
         }),
         response: {
-          200: SelectMcpServerInstallationRequestSchema,
+          200: SelectMcpServerInstallationRequestWithCatalogIdSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,

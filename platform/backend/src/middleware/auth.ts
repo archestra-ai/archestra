@@ -446,6 +446,9 @@ const routePermissionsConfig: Partial<
   [RouteId.DeleteOrganizationLogo]: {
     organization: ["update"],
   },
+  [RouteId.UpdateUserOnboarding]: {
+    user: ["update"],
+  },
 };
 
 const authMiddleware = new AuthMiddleware();

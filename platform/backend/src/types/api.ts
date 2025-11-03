@@ -152,6 +152,9 @@ export const RouteId = {
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",
 
+  // User Routes
+  UpdateUserOnboarding: "updateUserOnboarding",
+
   // Team Routes
   GetTeams: "getTeams",
   CreateTeam: "createTeam",

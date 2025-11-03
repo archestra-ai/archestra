@@ -6240,6 +6240,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
         }> | null;
         createdAt: string;
         updatedAt: string;
+        catalogId?: string;
     };
 };
 
@@ -7591,6 +7592,15 @@ export type UpdateOrganizationCleanupIntervalErrors = {
             type: string;
         };
     };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
 };
 
 export type UpdateOrganizationCleanupIntervalError = UpdateOrganizationCleanupIntervalErrors[keyof UpdateOrganizationCleanupIntervalErrors];
@@ -7618,6 +7628,15 @@ export type GetOrganizationAppearanceErrors = {
      * Default Response
      */
     401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
         error: string | {
             message: string;
             type: string;
@@ -7672,6 +7691,15 @@ export type UpdateOrganizationAppearanceData = {
 };
 
 export type UpdateOrganizationAppearanceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
     /**
      * Default Response
      */
@@ -9008,3 +9036,77 @@ export type GetUnassignedToolsResponses = {
 };
 
 export type GetUnassignedToolsResponse = GetUnassignedToolsResponses[keyof GetUnassignedToolsResponses];
+
+export type UpdateUserOnboardingData = {
+    body?: {
+        onboardingCompleted?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/users/{id}/onboarding';
+};
+
+export type UpdateUserOnboardingErrors = {
+    /**
+     * Default Response
+     */
+    401: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: string | {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type UpdateUserOnboardingError = UpdateUserOnboardingErrors[keyof UpdateUserOnboardingErrors];
+
+export type UpdateUserOnboardingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        email: string;
+        emailVerified: boolean;
+        image: string | null;
+        createdAt: string;
+        updatedAt: string;
+        role: string | null;
+        banned: boolean | null;
+        banReason: string | null;
+        banExpires: string | null;
+        onboardingCompleted: boolean;
+    };
+};
+
+export type UpdateUserOnboardingResponse = UpdateUserOnboardingResponses[keyof UpdateUserOnboardingResponses];

@@ -1,10 +1,26 @@
 import { eq } from "drizzle-orm";
+import { cp } from "fs";
 import { auth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
-class User {
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  image: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  role: string | null;
+  banned: boolean | null;
+  banReason: string | null;
+  banExpires: Date | null;
+  onboardingCompleted: boolean;
+}
+
+class UserModel {
   static async createOrGetExistingDefaultAdminUser() {
     const email = config.auth.adminDefaultEmail;
     const password = config.auth.adminDefaultPassword;
@@ -51,6 +67,23 @@ class User {
       .limit(1);
     return user;
   }
+
+  static async setOnboardingCompleted(
+    userId: string,
+    isCompleted = true,
+  ): Promise<User | null> {
+    const user = await db
+      .update(schema.usersTable)
+      .set({ onboardingCompleted: isCompleted })
+      .where(eq(schema.usersTable.id, userId))
+      .returning();
+
+    if (!user) {
+      return null;
+    }
+
+    return user[0];
+  }
 }
 
-export default User;
+export default UserModel;

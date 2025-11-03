@@ -141,7 +141,7 @@ class McpServerInstallationRequestModel {
     id: string,
     reviewedBy: string,
     adminResponse?: string,
-  ): Promise<McpServerInstallationRequest | null> {
+  ): Promise<(McpServerInstallationRequest & { catalogId?: string }) | null> {
     // First, get the current request to check status and get data
     const currentRequest = await McpServerInstallationRequestModel.findById(id);
     if (!currentRequest) {
@@ -154,6 +154,7 @@ class McpServerInstallationRequestModel {
     }
 
     // Create internal catalog item based on request type
+    let createdCatalogId: string | undefined;
     try {
       if (currentRequest.externalCatalogId) {
         const externalServerResponse = await archestraCatalogSdk.getMcpServer({
@@ -164,7 +165,7 @@ class McpServerInstallationRequestModel {
           const externalServer = externalServerResponse.data;
 
           // Create internal catalog item from external server data
-          await InternalMcpCatalogModel.create({
+          const createdCatalog = await InternalMcpCatalogModel.create({
             name: externalServer.display_name || externalServer.name,
             version: undefined,
             serverType: externalServer.server.type,
@@ -179,13 +180,14 @@ class McpServerInstallationRequestModel {
             userConfig: externalServer.user_config,
             oauthConfig: rewriteOAuthRedirectUris(externalServer.oauth_config),
           });
+          createdCatalogId = createdCatalog?.id;
         }
       } else if (currentRequest.customServerConfig) {
         // Custom server request - use provided config
         const customConfig = currentRequest.customServerConfig;
 
         if (customConfig.type === "remote") {
-          await InternalMcpCatalogModel.create({
+          const createdCatalog = await InternalMcpCatalogModel.create({
             name: customConfig.name,
             version: customConfig.version,
             serverType: "remote",
@@ -194,13 +196,15 @@ class McpServerInstallationRequestModel {
             userConfig: customConfig.userConfig,
             oauthConfig: rewriteOAuthRedirectUris(customConfig.oauthConfig),
           });
+          createdCatalogId = createdCatalog?.id;
         } else if (customConfig.type === "local") {
-          await InternalMcpCatalogModel.create({
+          const createdCatalog = await InternalMcpCatalogModel.create({
             name: customConfig.name,
             version: customConfig.version,
             serverType: "local",
             localConfig: customConfig.localConfig,
           });
+          createdCatalogId = createdCatalog?.id;
         }
       }
     } catch (error) {
@@ -223,7 +227,9 @@ class McpServerInstallationRequestModel {
       .where(eq(schema.mcpServerInstallationRequestTable.id, id))
       .returning();
 
-    return updatedRequest || null;
+    return updatedRequest
+      ? { ...updatedRequest, catalogId: createdCatalogId }
+      : null;
   }
 
   static async decline(

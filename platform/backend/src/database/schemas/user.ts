@@ -15,6 +15,7 @@ const usersTable = pgTable("user", {
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
+  onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
 });
 
 export default usersTable;

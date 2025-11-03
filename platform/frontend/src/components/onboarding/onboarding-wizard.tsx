@@ -1,6 +1,8 @@
 "use client";
 
 import { FRAMEWORK_DOCS, FRAMEWORK_LABELS, type Framework } from "@shared";
+import type { ArchestraMcpServerManifest } from "@shared/hey-api/clients/archestra-catalog/types.gen";
+import { useSearchParams } from "next/navigation";
 import {
   forwardRef,
   useCallback,
@@ -9,8 +11,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAgents } from "@/lib/agent.query";
 import { useHasFirstUserInteraction } from "@/lib/interaction.query";
 import { DynamicInteraction } from "@/lib/interaction.utils";
+import { useMcpServers } from "@/lib/mcp-server.query";
 import { useDetectedTools } from "@/lib/tool.query";
 import OnboardingStep from "../onboarding-step";
 import OptionButton from "../option-button";
@@ -40,25 +44,52 @@ export default forwardRef(function OnboardingWizard(
   },
   ref: React.Ref<OnboardingWizardHandle | null>,
 ) {
-  const [step, setStep] = useState(0);
+  const searchParams = useSearchParams();
+
+  // Extract query params
+  const resumeOnboarding = searchParams.get("resumeOnboarding");
+  const queryAgentId = searchParams.get("agentId");
+  const queryMcpServerId = searchParams.get("mcpServerId");
+
+  // Determine initial step based on query params
+  const isResuming = resumeOnboarding === "true" && queryAgentId;
+  const initialStep = isResuming ? 5 : 0;
+  const initialMode = isResuming ? ("mcp-gateway" as OnboardingMode) : null;
+
+  const [step, setStep] = useState(initialStep);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [mode, setMode] = useState<OnboardingMode | null>(null);
+  const [mode, setMode] = useState<OnboardingMode | null>(initialMode);
   const [framework, setFramework] = useState<Framework>(
     Object.keys(FRAMEWORK_DOCS)[0] as Framework,
   );
-  const [selectedMcpServerId, setSelectedMcpServerId] = useState<string | null>(
-    null,
-  );
-  const [selectedMcpCatalogName, setSelectedMcpCatalogName] = useState<
-    string | null
-  >(null);
+  const [selectedMcpServer, setSelectedMcpServer] =
+    useState<ArchestraMcpServerManifest | null>(null);
   const [installedMcpServerId, setInstalledMcpServerId] = useState<
     string | null
-  >(null);
-  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
+  >(queryMcpServerId || null);
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>(
+    queryAgentId || null,
+  );
 
   const frameworks = Object.keys(FRAMEWORK_DOCS) as Array<Framework>;
-  const toolsDetectedRef = useRef(false);
+  const toolsDetectedRef = useRef(false); // Check for existing agents and MCP servers
+  const { data: existingAgents } = useAgents();
+  const { data: existingMcpServers } = useMcpServers();
+
+  const hasExistingAgent = (existingAgents?.length ?? 0) > 0;
+  const hasExistingMcpServer = (existingMcpServers?.length ?? 0) > 0;
+
+  // Auto-select first agent if one exists and we're in MCP gateway mode
+  /*useEffect(() => {
+    if (
+      mode === "mcp-gateway" &&
+      hasExistingAgent &&
+      !createdAgentId &&
+      existingAgents?.[0]
+    ) {
+      setCreatedAgentId(existingAgents[0].id);
+    }
+  }, [mode, hasExistingAgent, createdAgentId, existingAgents]);*/
 
   // Determine max step based on selected mode
   const getMaxStep = useCallback(() => {
@@ -97,6 +128,33 @@ export default forwardRef(function OnboardingWizard(
   useEffect(() => {
     onStepChange?.(step);
   }, [step, onStepChange]);
+
+  // Auto-advance through skipped steps when entering MCP gateway mode
+  /*useEffect(() => {
+    if (
+      mode === "mcp-gateway" &&
+      step === 2 &&
+      hasExistingAgent &&
+      createdAgentId
+    ) {
+      // Skip agent creation step
+      setTimeout(() => next(), 150);
+    }
+  }, [mode, step, hasExistingAgent, createdAgentId, next]);*/
+
+  useEffect(() => {
+    if (mode === "mcp-gateway" && step === 3 && hasExistingMcpServer) {
+      // Skip MCP server selection step
+      setTimeout(() => next(), 150);
+    }
+  }, [mode, step, hasExistingMcpServer, next]);
+
+  useEffect(() => {
+    if (mode === "mcp-gateway" && step === 4 && hasExistingMcpServer) {
+      // Skip MCP server installation step
+      setTimeout(() => next(), 150);
+    }
+  }, [mode, step, hasExistingMcpServer, next]);
 
   useImperativeHandle(
     ref,
@@ -366,8 +424,12 @@ export default forwardRef(function OnboardingWizard(
 
     // MCP GATEWAY PATH
     if (mode === "mcp-gateway") {
-      // Step 2: Create Agent
+      // Step 2: Create Agent (skip if agent exists)
       if (stepIndex === 2) {
+        if (hasExistingAgent && createdAgentId) {
+          // Skip to next step if agent already exists
+          //return null;
+        }
         return (
           <AgentCreation
             isActive={isActive}
@@ -380,46 +442,61 @@ export default forwardRef(function OnboardingWizard(
         );
       }
 
-      // Step 3: MCP Server Selection
+      // Step 3: MCP Server Selection (skip if MCP server exists)
       if (stepIndex === 3) {
+        if (hasExistingMcpServer && existingMcpServers?.[0]) {
+          // Skip to next step if MCP server already exists
+          return null;
+        }
         return (
           <McpServerSelection
             isActive={isActive}
             isTransitioning={isTransitioning}
-            onSelect={(id: string, name?: string) => {
-              setSelectedMcpServerId(id);
-              setSelectedMcpCatalogName(name || id);
+            onSelect={(mcpServer: ArchestraMcpServerManifest) => {
+              setSelectedMcpServer(mcpServer);
             }}
             onNext={next}
           />
         );
       }
 
-      // Step 4: MCP Server Installation
-      if (stepIndex === 4 && selectedMcpServerId && createdAgentId) {
-        return (
-          <McpServerInstallation
-            isActive={isActive}
-            isTransitioning={isTransitioning}
-            catalogId={selectedMcpServerId}
-            catalogName={selectedMcpCatalogName || "MCP Server"}
-            agentId={createdAgentId}
-            onComplete={(serverId) => {
-              setInstalledMcpServerId(serverId);
-              next();
-            }}
-          />
-        );
+      // Step 4: MCP Server Installation (skip if MCP server exists)
+      if (stepIndex === 4) {
+        if (hasExistingMcpServer && existingMcpServers?.[0]) {
+          // Skip to next step if MCP server already exists
+          return null;
+        }
+        if (selectedMcpServer && createdAgentId) {
+          return (
+            <McpServerInstallation
+              isActive={isActive}
+              isTransitioning={isTransitioning}
+              server={selectedMcpServer}
+              agentId={createdAgentId}
+              onComplete={(serverId) => {
+                setInstalledMcpServerId(serverId);
+                next();
+              }}
+            />
+          );
+        }
       }
 
       // Step 5: Tool Selection
       if (stepIndex === 5 && createdAgentId) {
+        // Use installed MCP server ID or fall back to first existing MCP server
+        const mcpServerId =
+          installedMcpServerId ||
+          (hasExistingMcpServer ? existingMcpServers?.[0]?.id : null);
+
         return (
           <ToolSelection
             isActive={isActive}
             isTransitioning={isTransitioning}
-            mcpServerId={installedMcpServerId}
-            mcpServerName={selectedMcpCatalogName || undefined}
+            mcpServerId={mcpServerId}
+            mcpServerName={
+              selectedMcpServer?.name || existingMcpServers?.[0]?.name
+            }
             agentId={createdAgentId}
             onComplete={() => {
               setTimeout(() => next(), 500);

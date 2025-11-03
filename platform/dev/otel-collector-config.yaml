@@ -19,9 +19,9 @@ processors:
         action: upsert
 
 exporters:
-  # Export to Jaeger
-  otlp/jaeger:
-    endpoint: jaeger:4317
+  # Export to Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
     tls:
       insecure: true
 
@@ -34,4 +34,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [otlp/jaeger, debug]
+      exporters: [otlp/tempo, debug]

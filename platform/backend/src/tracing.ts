@@ -16,44 +16,74 @@ const {
   api: { name, version },
 } = config;
 
-// Configure the OTLP exporter to send traces to the OpenTelemetry Collector
-const traceExporter = new OTLPTraceExporter({
-  url: config.observability.otel.otelExporterOtlpEndpoint,
-  headers: {},
-});
+let sdk: NodeSDK | null = null;
 
-// Create a resource with service information
-const resource = defaultResource().merge(
-  resourceFromAttributes({
+/**
+ * Initialize OpenTelemetry tracing with dynamic agent label keys
+ * @param labelKeys Array of agent label keys to include as resource attributes
+ */
+export async function initializeTracing(labelKeys: string[]): Promise<void> {
+  // If SDK is already initialized, shutdown and reinitialize
+  if (sdk) {
+    await sdk.shutdown();
+  }
+
+  // Configure the OTLP exporter to send traces to the OpenTelemetry Collector
+  const traceExporter = new OTLPTraceExporter({
+    url: config.observability.otel.otelExporterOtlpEndpoint,
+    headers: {},
+  });
+
+  // Create resource attributes object with service info and agent label keys
+  const resourceAttributes: Record<string, string> = {
     [ATTR_SERVICE_NAME]: name,
     [ATTR_SERVICE_VERSION]: version,
-  }),
-);
+  };
 
-// Initialize the OpenTelemetry SDK with auto-instrumentations
-const sdk = new NodeSDK({
-  resource,
-  traceExporter,
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      // Disable instrumentation for specific packages if needed
-      "@opentelemetry/instrumentation-fs": {
-        enabled: false, // File system operations can be noisy
-      },
-    }),
-  ],
-});
+  // Add agent label keys as resource attributes
+  // We set them to empty strings initially - they will be populated per-span via context
+  for (const labelKey of labelKeys) {
+    resourceAttributes[`agent.${labelKey}`] = "";
+  }
 
-// Start the SDK
-sdk.start();
+  // Create a resource with service information and agent label keys
+  const resource = defaultResource().merge(
+    resourceFromAttributes(resourceAttributes),
+  );
 
-// Gracefully shutdown the SDK on process exit
-process.on("SIGTERM", () => {
-  sdk
-    .shutdown()
-    .then(() => logger.info("Tracing terminated"))
-    .catch((error) => logger.error("Error terminating tracing", error))
-    .finally(() => process.exit(0));
-});
+  // Initialize the OpenTelemetry SDK with auto-instrumentations
+  sdk = new NodeSDK({
+    resource,
+    traceExporter,
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        // Disable instrumentation for specific packages if needed
+        "@opentelemetry/instrumentation-fs": {
+          enabled: false, // File system operations can be noisy
+        },
+      }),
+    ],
+  });
 
-export default sdk;
+  // Start the SDK
+  sdk.start();
+
+  logger.info(
+    `Tracing initialized with ${labelKeys.length} agent label keys: ${labelKeys.join(", ")}`,
+  );
+
+  // Gracefully shutdown the SDK on process exit
+  process.on("SIGTERM", () => {
+    if (sdk) {
+      sdk
+        .shutdown()
+        .then(() => logger.info("Tracing terminated"))
+        .catch((error) => logger.error("Error terminating tracing", error))
+        .finally(() => process.exit(0));
+    }
+  });
+}
+
+export function getTracingSDK(): NodeSDK | null {
+  return sdk;
+}

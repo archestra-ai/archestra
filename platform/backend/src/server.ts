@@ -1,6 +1,3 @@
-// Import tracing first to ensure auto-instrumentation works properly
-import "./tracing";
-
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import Fastify from "fastify";
@@ -12,8 +9,10 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
 import {
@@ -24,8 +23,10 @@ import {
   SupportedProvidersSchema,
 } from "@/types";
 import { seedDatabase } from "./database/seed";
+import { initializeMetrics } from "./llm-metrics";
 import logger from "./logging";
 import * as routes from "./routes";
+import { initializeTracing } from "./tracing";
 
 const {
   api: {
@@ -76,6 +77,20 @@ const start = async () => {
   try {
     // Seed database with demo data
     await seedDatabase();
+
+    // Fetch all unique agent label keys from the database
+    const labelKeysResult = await db
+      .select({ key: schema.labelKeyTable.key })
+      .from(schema.labelKeyTable);
+    const labelKeys = labelKeysResult.map((row) => row.key);
+
+    // Initialize tracing and metrics with agent label keys
+    await initializeTracing(labelKeys);
+    initializeMetrics(labelKeys);
+
+    logger.info(
+      `Observability initialized with ${labelKeys.length} agent label keys`,
+    );
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

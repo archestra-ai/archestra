@@ -1,16 +1,18 @@
 version: "3.8"
 
 services:
-  # Jaeger for distributed tracing UI
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: archestra-jaeger
+  # Grafana Tempo for distributed tracing storage
+  tempo:
+    image: grafana/tempo:latest
+    container_name: archestra-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-storage:/var/tempo
     ports:
-      - "16686:16686" # Jaeger UI
+      - "3200:3200" # Tempo HTTP API
       - "4317:4317" # OTLP gRPC receiver
       - "4318:4318" # OTLP HTTP receiver
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
     networks:
       - archestra-observability
     restart: unless-stopped
@@ -23,14 +25,14 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4319:4317" # OTLP gRPC (mapped to 4319 to avoid conflict with Jaeger)
-      - "4320:4318" # OTLP HTTP (mapped to 4320 to avoid conflict with Jaeger)
+      - "4319:4317" # OTLP gRPC (mapped to 4319 to avoid conflict with Tempo)
+      - "4320:4318" # OTLP HTTP (mapped to 4320 to avoid conflict with Tempo)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - archestra-observability
     depends_on:
-      - jaeger
+      - tempo
     restart: unless-stopped
 
   prometheus:
@@ -71,7 +73,7 @@ services:
       - archestra-observability
     depends_on:
       - prometheus
-      - jaeger
+      - tempo
     restart: unless-stopped
 
 networks:
@@ -81,3 +83,4 @@ networks:
 volumes:
   grafana-storage:
   prometheus-storage:
+  tempo-storage:

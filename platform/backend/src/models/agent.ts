@@ -7,6 +7,7 @@ import {
   eq,
   ilike,
   inArray,
+  min,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -164,35 +165,68 @@ class AgentModel {
     let agentsData: AgentWithToolsRow[];
     let totalResult: number;
 
-    if (sorting?.sortBy === "toolsCount") {
-      // Create a subquery to count tools per agent
-      const toolsCountSubquery = db
-        .select({
-          agentId: schema.agentToolsTable.agentId,
-          toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
-        })
-        .from(schema.agentToolsTable)
-        .groupBy(schema.agentToolsTable.agentId)
-        .as("toolsCounts");
-
-      // Get paginated agent IDs sorted by tools count
+    if (sorting?.sortBy === "toolsCount" || sorting?.sortBy === "team") {
       const direction = sorting.sortDirection === "asc" ? asc : desc;
-      // Use COALESCE to treat NULL as 0 when sorting
-      const toolsCountWithDefault = sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`;
-      const sortedAgents = await db
-        .select({
-          id: schema.agentsTable.id,
-          toolsCount: toolsCountSubquery.toolsCount,
-        })
-        .from(schema.agentsTable)
-        .leftJoin(
-          toolsCountSubquery,
-          eq(schema.agentsTable.id, toolsCountSubquery.agentId),
-        )
-        .where(whereClause)
-        .orderBy(direction(toolsCountWithDefault))
-        .limit(pagination.limit)
-        .offset(pagination.offset);
+      let sortedAgents: { id: string }[];
+
+      if (sorting.sortBy === "toolsCount") {
+        // Create a subquery to count tools per agent
+        const toolsCountSubquery = db
+          .select({
+            agentId: schema.agentToolsTable.agentId,
+            toolsCount: count(schema.agentToolsTable.toolId).as("toolsCount"),
+          })
+          .from(schema.agentToolsTable)
+          .groupBy(schema.agentToolsTable.agentId)
+          .as("toolsCounts");
+
+        // Use COALESCE to treat NULL as 0 when sorting
+        const toolsCountWithDefault = sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            toolsCountSubquery,
+            eq(schema.agentsTable.id, toolsCountSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(toolsCountWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      } else {
+        // sorting.sortBy === "team"
+        // Create a subquery to get the first team name (alphabetically) per agent
+        const teamNameSubquery = db
+          .select({
+            agentId: schema.agentTeamTable.agentId,
+            teamName: min(schema.team.name).as("teamName"),
+          })
+          .from(schema.agentTeamTable)
+          .leftJoin(
+            schema.team,
+            eq(schema.agentTeamTable.teamId, schema.team.id),
+          )
+          .groupBy(schema.agentTeamTable.agentId)
+          .as("teamNames");
+
+        // Use COALESCE to treat NULL as empty string when sorting
+        const teamNameWithDefault = sql`COALESCE(${teamNameSubquery.teamName}, '')`;
+        sortedAgents = await db
+          .select({
+            id: schema.agentsTable.id,
+          })
+          .from(schema.agentsTable)
+          .leftJoin(
+            teamNameSubquery,
+            eq(schema.agentsTable.id, teamNameSubquery.agentId),
+          )
+          .where(whereClause)
+          .orderBy(direction(teamNameWithDefault))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+      }
 
       const sortedAgentIds = sortedAgents.map((a) => a.id);
 
@@ -300,8 +334,9 @@ class AgentModel {
       case "createdAt":
         return direction(schema.agentsTable.createdAt);
       case "toolsCount":
-        // toolsCount sorting uses a separate query path (see lines 167-232).
-        // This fallback should never be reached for toolsCount.
+      case "team":
+        // toolsCount and team sorting use a separate query path (see lines 168-267).
+        // This fallback should never be reached for these sort types.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first

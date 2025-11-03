@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
+import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -161,6 +161,7 @@ function Agents() {
     | "name"
     | "createdAt"
     | "toolsCount"
+    | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -374,8 +375,17 @@ function Agents() {
       cell: ({ row }) => <div>{row.original.tools.length}</div>,
     },
     {
-      id: "teams",
-      header: "Teams",
+      id: "team",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Teams
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       cell: ({ row }) => (
         <AgentTeamsBadges teamIds={row.original.teams || []} teams={teams} />
       ),

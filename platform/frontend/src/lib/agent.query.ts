@@ -35,7 +35,7 @@ export function useAgents(params?: {
 export function useAgentsPaginated(params?: {
   limit?: number;
   offset?: number;
-  sortBy?: "name" | "createdAt" | "toolsCount";
+  sortBy?: "name" | "createdAt" | "toolsCount" | "team";
   sortDirection?: "asc" | "desc";
   name?: string;
 }) {

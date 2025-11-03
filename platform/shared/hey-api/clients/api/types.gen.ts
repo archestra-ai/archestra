@@ -2092,7 +2092,7 @@ export type GetAgentsData = {
         name?: string;
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'toolsCount';
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'team';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agents';

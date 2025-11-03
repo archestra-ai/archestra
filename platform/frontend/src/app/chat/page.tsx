@@ -152,7 +152,7 @@ export default function ChatPage() {
   });
 
   // useChat hook for streaming (AI SDK 5.0 - manages messages only)
-  const { messages, sendMessage, status, stop, setMessages } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat", // Must match backend route
       credentials: "include", // Send cookies for authentication
@@ -235,8 +235,6 @@ export default function ChatPage() {
     },
     {} as Record<string, McpTool[]>,
   );
-
-  const isLoading = status === "submitted" || status === "streaming";
 
   return (
     <div className="flex h-screen">

@@ -132,10 +132,10 @@ export async function getChatMcpTools(): Promise<Record<string, Tool>> {
         );
 
         // Construct Tool using jsonSchema() to wrap JSON Schema
-        // biome-ignore lint/suspicious/noExplicitAny: Tool execute function requires flexible typing for MCP integration
         aiTools[mcpTool.name] = {
           description: mcpTool.description || `Tool: ${mcpTool.name}`,
           inputSchema: jsonSchema(normalizedSchema),
+          // biome-ignore lint/suspicious/noExplicitAny: Tool execute function requires flexible typing for MCP integration
           execute: async (args: any) => {
             logger.info(
               { toolName: mcpTool.name, arguments: args },

@@ -15,11 +15,6 @@ import {
 export function N8nConnectionDialog() {
   const [open, setOpen] = useState(false);
 
-  const endpoint =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/api/chat`
-      : "/api/chat";
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };

@@ -8,6 +8,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
+import { PromptSuggestions } from "@/components/chat/prompt-suggestions";
 
 interface Conversation {
   id: string;
@@ -167,6 +168,18 @@ export default function ChatPage() {
     setInput("");
   };
 
+  const handleSelectPrompt = (prompt: string) => {
+    // Send the message directly instead of just filling the input
+    if (status === "submitted" || status === "streaming") {
+      return;
+    }
+
+    sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: prompt }],
+    });
+  };
+
   const isLoading = status === "submitted" || status === "streaming";
 
   return (
@@ -192,7 +205,11 @@ export default function ChatPage() {
           </div>
         ) : (
           <>
-            <ChatMessages messages={messages} />
+            {messages.length === 0 ? (
+              <PromptSuggestions onSelectPrompt={handleSelectPrompt} />
+            ) : (
+              <ChatMessages messages={messages} />
+            )}
             <ChatInput
               input={input}
               onInputChange={(e) => setInput(e.target.value)}

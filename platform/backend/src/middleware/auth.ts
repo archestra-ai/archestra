@@ -433,6 +433,7 @@ const routePermissionsConfig: Partial<
   },
   [RouteId.GetOverviewStatistics]: {
     interaction: ["read"],
+  },
   [RouteId.GetOrganizationAppearance]: {
     organization: ["read"],
   },

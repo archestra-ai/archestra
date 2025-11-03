@@ -32,18 +32,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
-  fastify.get(
-    "/api/organization/appearance",
-    {
-      schema: {
-        operationId: RouteId.GetOrganizationAppearance,
-        description: "Get organization appearance settings",
-        tags: ["Organization"],
-        response: {
-          200: OrganizationAppearanceSchema,
-          401: ErrorResponseSchema,
-          404: ErrorResponseSchema,
-          500: ErrorResponseSchema,
         },
       },
     },
@@ -88,6 +76,61 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
             limitCleanupInterval:
               schema.organizationsTable.limitCleanupInterval,
           });
+
+        return reply.send(organization);
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * Get organization appearance settings
+   */
+  fastify.get(
+    "/api/organization/appearance",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationAppearance,
+        description: "Get organization appearance settings",
+        tags: ["Organization"],
+        response: {
+          200: OrganizationAppearanceSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        if (!user.isAdmin) {
+          return reply.status(403).send({
+            error: {
+              message: "Only admins can view appearance settings",
+              type: "forbidden",
+            },
+          });
+        }
+
         // Get the organization
         const organization =
           await OrganizationModel.getOrCreateDefaultOrganization();
@@ -103,7 +146,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Return only appearance-related fields
         return reply.send({
-          limitCleanupInterval: organization.limitCleanupInterval,
           theme: organization.theme || "cosmic-night",
           customFont: organization.customFont || "lato",
           logoType: organization.logoType || "default",
@@ -148,6 +190,65 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
+    async (request, reply) => {
+      try {
+        const user = await getUserFromRequest(request);
+
+        if (!user) {
+          return reply.status(401).send({
+            error: {
+              message: "Unauthorized",
+              type: "unauthorized",
+            },
+          });
+        }
+
+        if (!user.organizationId) {
+          return reply.status(400).send({
+            error: {
+              message: "No organization found",
+              type: "bad_request",
+            },
+          });
+        }
+
+        const [organization] = await db
+          .select()
+          .from(schema.organizationsTable)
+          .where(eq(schema.organizationsTable.id, user.organizationId))
+          .limit(1);
+
+        if (!organization) {
+          return reply.status(404).send({
+            error: {
+              message: "Organization not found",
+              type: "not_found",
+            },
+          });
+        }
+
+        return reply.send({
+          id: organization.id,
+          name: organization.name,
+          slug: organization.slug,
+          limitCleanupInterval: organization.limitCleanupInterval,
+        });
+      } catch (error) {
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: {
+            message:
+              error instanceof Error ? error.message : "Internal server error",
+            type: "api_error",
+          },
+        });
+      }
+    },
+  );
+
+  /**
+   * Update organization appearance settings
+   */
   fastify.put(
     "/api/organization/appearance",
     {

@@ -141,9 +141,7 @@ class AgentModel {
     };
   }
 
-  static async getAgentOrCreateDefault(
-    name: string | undefined,
-  ): Promise<Agent> {
+  static async getAgentOrCreateDefault(name?: string): Promise<Agent> {
     // First, try to find an agent with isDefault=true
     const rows = await db
       .select()

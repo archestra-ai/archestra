@@ -14,8 +14,11 @@ import {
 } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { seedRequiredStartingData } from "@/database/seed";
+import logger from "@/logging";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
+import * as routes from "@/routes";
 import {
   Anthropic,
   Gemini,
@@ -23,9 +26,6 @@ import {
   SupportedProvidersDiscriminatorSchema,
   SupportedProvidersSchema,
 } from "@/types";
-import { seedDatabase } from "./database/seed";
-import logger from "./logging";
-import * as routes from "./routes";
 
 const {
   api: {
@@ -74,8 +74,7 @@ z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
 
 const start = async () => {
   try {
-    // Seed database with demo data
-    await seedDatabase();
+    await seedRequiredStartingData();
 
     // Initialize MCP Server Runtime (K8s-based)
     try {

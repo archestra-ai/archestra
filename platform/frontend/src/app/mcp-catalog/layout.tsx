@@ -14,16 +14,13 @@ export default function McpCatalogLayout({
       title="MCP Registry"
       description={
         <>
-          <p>
-            Self-hosted MCP registry allows you to manage your own list of MCP
-            servers and make them available to your agents.
-          </p>
-          <p>
-            You can also{" "}
-            {a === "admin"
-              ? "review and manage installation requests from your team members"
-              : "view your installation requests and their status"}
-          </p>
+          Self-hosted MCP registry allows you to manage your own list of MCP
+          servers and make them available to your agents.
+          <br />
+          You can also{" "}
+          {a === "admin"
+            ? "review and manage installation requests from your team members"
+            : "view your installation requests and their status"}
         </>
       }
       tabs={[

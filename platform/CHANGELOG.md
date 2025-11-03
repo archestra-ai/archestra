@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.29](https://github.com/archestra-ai/archestra/compare/platform-v0.0.28...platform-v0.0.29) (2025-11-03)
+
+
+### Bug Fixes
+
+* add missing `Service` RBAC permissions to k8s `ServiceAccount` ([#934](https://github.com/archestra-ai/archestra/issues/934)) ([8a2cb52](https://github.com/archestra-ai/archestra/commit/8a2cb5217638240fb50cbf57cf6bed86635adef2))
+
 ## [0.0.28](https://github.com/archestra-ai/archestra/compare/platform-v0.0.27...platform-v0.0.28) (2025-11-03)
 
 

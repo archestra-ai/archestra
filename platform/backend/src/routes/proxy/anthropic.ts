@@ -5,8 +5,8 @@ import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
+import { getObservableFetch, reportLLMTokens } from "@/llm-metrics";
 import { AgentModel, InteractionModel } from "@/models";
-import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
 import {
   type Agent,
   Anthropic,

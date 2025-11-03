@@ -9,10 +9,8 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
 import config from "@/config";
-import db, { schema } from "@/database";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { authMiddleware } from "@/middleware/auth";
 import {
@@ -25,6 +23,7 @@ import {
 import { seedDatabase } from "./database/seed";
 import { initializeMetrics } from "./llm-metrics";
 import logger from "./logging";
+import AgentLabelModel from "./models/agent-label";
 import * as routes from "./routes";
 import { initializeTracing } from "./tracing";
 
@@ -79,10 +78,7 @@ const start = async () => {
     await seedDatabase();
 
     // Fetch all unique agent label keys from the database
-    const labelKeysResult = await db
-      .select({ key: schema.labelKeyTable.key })
-      .from(schema.labelKeyTable);
-    const labelKeys = labelKeysResult.map((row) => row.key);
+    const labelKeys = await AgentLabelModel.getAllKeys();
 
     // Initialize tracing and metrics with agent label keys
     await initializeTracing(labelKeys);

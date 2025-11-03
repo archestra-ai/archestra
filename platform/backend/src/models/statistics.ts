@@ -310,21 +310,19 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for team statistics
-    console.log(
-      "Team statistics - Raw time series data for dasdsad:",
-      rawTimeSeriesData.filter((row) => row.teamName === "dasdsad"),
-    );
+    // Debug logging for 1h timeframe only
+    if (timeframe === "1h") {
+      console.log("Team statistics (1h) - Raw data:", rawTimeSeriesData);
+    }
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
     );
 
-    console.log(
-      "Team statistics - Grouped time series data for dasdsad:",
-      timeSeriesData.filter((row) => row.teamName === "dasdsad"),
-    );
+    if (timeframe === "1h") {
+      console.log("Team statistics (1h) - After grouping:", timeSeriesData);
+    }
 
     // Get team member counts
     const teamMemberCounts = await db
@@ -466,21 +464,19 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Debug logging for agent statistics
-    console.log(
-      "Agent statistics - Raw time series data for OpenAI/JS 5.8.1:",
-      rawTimeSeriesData.filter((row) => row.agentName === "OpenAI/JS 5.8.1"),
-    );
+    // Debug logging for 1h timeframe only
+    if (timeframe === "1h") {
+      console.log("Agent statistics (1h) - Raw data:", rawTimeSeriesData);
+    }
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
       timeframe,
     );
 
-    console.log(
-      "Agent statistics - Grouped time series data for OpenAI/JS 5.8.1:",
-      timeSeriesData.filter((row) => row.agentName === "OpenAI/JS 5.8.1"),
-    );
+    if (timeframe === "1h") {
+      console.log("Agent statistics (1h) - After grouping:", timeSeriesData);
+    }
 
     // Aggregate data by agent
     const agentMap = new Map<string, AgentStatistics>();

@@ -7,6 +7,7 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, InteractionModel } from "@/models";
 import { getObservableFetch, reportLLMTokens } from "@/models/llm-metrics";
+import LimitValidationService from "@/services/limit-validation";
 import {
   type Agent,
   Anthropic,
@@ -191,6 +192,31 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     });
 
     try {
+      // Check if current usage limits are already exceeded
+      const limitViolation =
+        await LimitValidationService.checkLimitsBeforeRequest(resolvedAgentId);
+
+      if (limitViolation) {
+        const [_refusalMessage, contentMessage] = limitViolation;
+
+        fastify.log.info(
+          {
+            resolvedAgentId,
+            reason: "token_cost_limit_exceeded",
+          },
+          "Anthropic request blocked due to token cost limit",
+        );
+
+        // Return error response similar to tool call blocking
+        return reply.status(429).send({
+          error: {
+            message: contentMessage,
+            type: "rate_limit_exceeded",
+            code: "token_cost_limit_exceeded",
+          },
+        });
+      }
+
       if (tools) {
         const transformedTools: Parameters<typeof utils.tools.persistTools>[0] =
           [];

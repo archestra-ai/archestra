@@ -32,28 +32,38 @@ export const InsertLimitSchema = createInsertSchema(schema.limitsTable, {
  */
 export const CreateLimitSchema = InsertLimitSchema.omit({
   id: true,
-  currentUsage: true,
+  currentUsageTokensIn: true,
+  currentUsageTokensOut: true,
   createdAt: true,
   updatedAt: true,
 }).refine(
   (data) => {
-    // Validation: mcp_server_calls requires mcpServerName
-    if (data.limitType === "mcp_server_calls" && !data.mcpServerName) {
-      return false;
+    // Validation: mcp_server_calls requires mcpServerName and should not have model
+    if (data.limitType === "mcp_server_calls") {
+      if (!data.mcpServerName) {
+        return false;
+      }
+      if (data.model) {
+        return false;
+      }
     }
-    // Validation: tool_calls requires both mcpServerName and toolName
-    if (
-      data.limitType === "tool_calls" &&
-      (!data.mcpServerName || !data.toolName)
-    ) {
-      return false;
+    // Validation: tool_calls requires both mcpServerName and toolName and should not have model
+    if (data.limitType === "tool_calls") {
+      if (!data.mcpServerName || !data.toolName) {
+        return false;
+      }
+      if (data.model) {
+        return false;
+      }
     }
-    // Validation: token_cost should not have mcp or tool specificity
-    if (
-      data.limitType === "token_cost" &&
-      (data.mcpServerName || data.toolName)
-    ) {
-      return false;
+    // Validation: token_cost requires model and should not have mcp or tool specificity
+    if (data.limitType === "token_cost") {
+      if (!data.model) {
+        return false;
+      }
+      if (data.mcpServerName || data.toolName) {
+        return false;
+      }
     }
     return true;
   },

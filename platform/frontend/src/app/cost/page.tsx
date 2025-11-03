@@ -307,6 +307,7 @@ function LimitInlineForm({
   onCancel,
   teams,
   mcpServers,
+  tokenPrices,
   hasOrganizationLimit,
   getTeamsWithLimits,
 }: {
@@ -316,6 +317,7 @@ function LimitInlineForm({
   onCancel: () => void;
   teams: any[];
   mcpServers: CatalogItem[];
+  tokenPrices: any[];
   hasOrganizationLimit: (
     limitType: "token_cost" | "mcp_server_calls",
     mcpServerName?: string,
@@ -332,6 +334,7 @@ function LimitInlineForm({
     entityId: initialData?.entityId || "",
     mcpServerName: initialData?.mcpServerName || "",
     limitValue: initialData?.limitValue?.toString() || "",
+    model: initialData?.model || "",
   });
 
   // Get teams with existing limits for this limit type and MCP server
@@ -355,7 +358,7 @@ function LimitInlineForm({
   const isValid =
     formData.limitValue &&
     (formData.entityType === "organization" || formData.entityId) &&
-    (limitType === "token_cost" || formData.mcpServerName);
+    (limitType === "token_cost" ? formData.model : formData.mcpServerName);
 
   return (
     <tr className="border-b">
@@ -483,6 +486,31 @@ function LimitInlineForm({
               </div>
             )}
 
+            {limitType === "token_cost" && (
+              <div className="flex items-center gap-2">
+                <Label htmlFor="model" className="text-sm whitespace-nowrap">
+                  Model
+                </Label>
+                <Select
+                  value={formData.model || ""}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, model: value }))
+                  }
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tokenPrices?.map((price) => (
+                      <SelectItem key={price.model} value={price.model}>
+                        {price.model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <Label htmlFor="limitValue" className="text-sm whitespace-nowrap">
                 Limit Value ({limitType === "token_cost" ? "cost $" : "calls"})
@@ -541,6 +569,7 @@ function LimitRow({
   onDelete,
   teams,
   mcpServers,
+  tokenPrices,
   getEntityName,
   getUsageStatus,
   hasOrganizationLimit,
@@ -554,6 +583,7 @@ function LimitRow({
   onDelete: () => void;
   teams: any[];
   mcpServers: CatalogItem[];
+  tokenPrices: any[];
   getEntityName: (limit: any) => string;
   getUsageStatus: (
     currentUsageTokensIn: number,
@@ -584,6 +614,7 @@ function LimitRow({
         onCancel={onCancel}
         teams={teams}
         mcpServers={mcpServers}
+        tokenPrices={tokenPrices}
         hasOrganizationLimit={hasOrganizationLimit}
         getTeamsWithLimits={getTeamsWithLimits}
       />
@@ -1791,6 +1822,7 @@ export default function CostPage() {
                           onCancel={handleCancelEdit}
                           teams={teams}
                           mcpServers={mcpServers}
+                          tokenPrices={tokenPrices}
                           hasOrganizationLimit={hasOrganizationLimit}
                           getTeamsWithLimits={getTeamsWithLimits}
                         />
@@ -1820,6 +1852,7 @@ export default function CostPage() {
                             onDelete={() => handleDeleteLimit(limit.id)}
                             teams={teams}
                             mcpServers={mcpServers}
+                            tokenPrices={tokenPrices}
                             getEntityName={getEntityName}
                             getUsageStatus={getUsageStatus}
                             hasOrganizationLimit={hasOrganizationLimit}
@@ -1883,6 +1916,7 @@ export default function CostPage() {
                           onCancel={handleCancelEdit}
                           teams={teams}
                           mcpServers={mcpServers}
+                          tokenPrices={tokenPrices}
                           hasOrganizationLimit={hasOrganizationLimit}
                           getTeamsWithLimits={getTeamsWithLimits}
                         />
@@ -1912,6 +1946,7 @@ export default function CostPage() {
                             onDelete={() => handleDeleteLimit(limit.id)}
                             teams={teams}
                             mcpServers={mcpServers}
+                            tokenPrices={tokenPrices}
                             getEntityName={getEntityName}
                             getUsageStatus={getUsageStatus}
                             hasOrganizationLimit={hasOrganizationLimit}

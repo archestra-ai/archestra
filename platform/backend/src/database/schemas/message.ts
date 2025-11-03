@@ -7,6 +7,7 @@ const messagesTable = pgTable("messages", {
     .notNull()
     .references(() => conversationsTable.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
+  // biome-ignore lint/suspicious/noExplicitAny: Stores complete UIMessage structure from AI SDK which is dynamic
   content: jsonb("content").$type<any>().notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });

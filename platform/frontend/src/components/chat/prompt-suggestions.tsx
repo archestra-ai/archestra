@@ -35,7 +35,7 @@ export function PromptSuggestions({ onSelectPrompt }: PromptSuggestionsProps) {
         <div className="grid gap-3">
           {DEFAULT_PROMPTS.map((suggestion, index) => (
             <Card
-              key={index}
+              key={suggestion.prompt}
               className="cursor-pointer hover:bg-accent transition-colors"
               onClick={() => onSelectPrompt(suggestion.prompt)}
             >

@@ -25,11 +25,14 @@ interface ChatMessagesProps {
 }
 
 // Type guards for tool parts
+// biome-ignore lint/suspicious/noExplicitAny: AI SDK message parts have dynamic structure
 function isToolPart(part: any): part is {
   type: string;
   state?: string;
   toolCallId?: string;
+  // biome-ignore lint/suspicious/noExplicitAny: Tool inputs are dynamic based on tool schema
   input?: any;
+  // biome-ignore lint/suspicious/noExplicitAny: Tool outputs are dynamic based on tool execution
   output?: any;
   errorText?: string;
 } {
@@ -103,9 +106,11 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
 
                   case "dynamic-tool": {
                     if (!isToolPart(part)) return null;
+                    // biome-ignore lint/suspicious/noExplicitAny: Dynamic tool parts have runtime-defined properties
                     const toolName = (part as any).toolName;
 
                     // Look ahead for tool result (same tool call ID)
+                    // biome-ignore lint/suspicious/noExplicitAny: Tool result structure varies by tool type
                     let toolResultPart: any = null;
                     const nextPart = message.parts[i + 1];
                     if (
@@ -159,6 +164,7 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
                       const toolName = part.type.replace("tool-", "");
 
                       // Look ahead for tool result (same tool call ID)
+                      // biome-ignore lint/suspicious/noExplicitAny: Tool result structure varies by tool type
                       let toolResultPart: any = null;
                       const nextPart = message.parts[i + 1];
                       if (

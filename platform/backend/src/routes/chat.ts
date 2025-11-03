@@ -525,6 +525,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (messagesToSave.length > 0) {
               // Append only new messages with timestamps
               const now = Date.now();
+              // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
               const messageData = messagesToSave.map((msg: any, index) => ({
                 conversationId,
                 role: msg.role,
@@ -566,6 +567,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         });
       }
+      // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
       return reply.send(response.body as any);
     },
   );

@@ -74,6 +74,7 @@ export async function getChatMcpClient() {
 /**
  * Validate and normalize JSON Schema for OpenAI
  */
+// biome-ignore lint/suspicious/noExplicitAny: JSON Schema structure is dynamic and varies by tool
 function normalizeJsonSchema(schema: any): any {
   // If schema is missing or invalid, return a minimal valid schema
   if (

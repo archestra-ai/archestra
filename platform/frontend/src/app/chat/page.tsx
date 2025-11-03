@@ -41,6 +41,7 @@ interface ConversationWithMessages extends Conversation {
 interface McpTool {
   name: string;
   description?: string;
+  // biome-ignore lint/suspicious/noExplicitAny: MCP tool schemas are dynamic and come from server
   inputSchema: any;
 }
 
@@ -190,6 +191,7 @@ export default function ChatPage() {
   }, [conversationId, conversation, setMessages]);
 
   const handleSubmit = (
+    // biome-ignore lint/suspicious/noExplicitAny: AI SDK PromptInput files type is dynamic
     message: { text?: string; files?: any[] },
     e: FormEvent<HTMLFormElement>,
   ) => {

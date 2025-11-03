@@ -5,6 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { N8nConnectionDialog } from "@/components/chat/n8n-connection-dialog";
@@ -15,14 +23,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
 
 interface Conversation {
   id: string;
@@ -161,7 +161,9 @@ export default function ChatPage() {
     onFinish: () => {
       // Invalidate the conversation query to refetch with new messages
       if (conversationId) {
-        queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
       }
     },
   });
@@ -192,7 +194,11 @@ export default function ChatPage() {
     e: FormEvent<HTMLFormElement>,
   ) => {
     e.preventDefault();
-    if (!message.text?.trim() || status === "submitted" || status === "streaming") {
+    if (
+      !message.text?.trim() ||
+      status === "submitted" ||
+      status === "streaming"
+    ) {
       return;
     }
 
@@ -215,17 +221,20 @@ export default function ChatPage() {
   };
 
   // Group tools by MCP server (prefix before "__")
-  const mcpServerGroups = mcpTools.reduce((acc, tool) => {
-    const prefix = tool.name.includes("__")
-      ? tool.name.split("__")[0]
-      : "other";
+  const mcpServerGroups = mcpTools.reduce(
+    (acc, tool) => {
+      const prefix = tool.name.includes("__")
+        ? tool.name.split("__")[0]
+        : "other";
 
-    if (!acc[prefix]) {
-      acc[prefix] = [];
-    }
-    acc[prefix].push(tool);
-    return acc;
-  }, {} as Record<string, McpTool[]>);
+      if (!acc[prefix]) {
+        acc[prefix] = [];
+      }
+      acc[prefix].push(tool);
+      return acc;
+    },
+    {} as Record<string, McpTool[]>,
+  );
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -264,40 +273,46 @@ export default function ChatPage() {
                     <TooltipProvider>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(mcpServerGroups).map(([serverName, tools]) => (
-                            <Tooltip key={serverName}>
-                              <TooltipTrigger asChild>
-                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
-                                  <span className="font-medium">{serverName}</span>
-                                  <span className="text-muted-foreground">
-                                    ({tools.length} {tools.length === 1 ? "tool" : "tools"})
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                className="max-w-sm max-h-64 overflow-y-auto"
-                              >
-                                <div className="space-y-1">
-                                  {tools.map((tool) => (
-                                    <div
-                                      key={tool.name}
-                                      className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
-                                    >
-                                      <div className="font-mono font-medium">
-                                        {tool.name.split("__")[1] || tool.name}
-                                      </div>
-                                      {tool.description && (
-                                        <div className="text-muted-foreground mt-0.5">
-                                          {tool.description}
+                          {Object.entries(mcpServerGroups).map(
+                            ([serverName, tools]) => (
+                              <Tooltip key={serverName}>
+                                <TooltipTrigger asChild>
+                                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary text-foreground cursor-default">
+                                    <span className="font-medium">
+                                      {serverName}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      ({tools.length}{" "}
+                                      {tools.length === 1 ? "tool" : "tools"})
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  className="max-w-sm max-h-64 overflow-y-auto"
+                                >
+                                  <div className="space-y-1">
+                                    {tools.map((tool) => (
+                                      <div
+                                        key={tool.name}
+                                        className="text-xs border-l-2 border-primary/30 pl-2 py-0.5"
+                                      >
+                                        <div className="font-mono font-medium">
+                                          {tool.name.split("__")[1] ||
+                                            tool.name}
                                         </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          ))}
+                                        {tool.description && (
+                                          <div className="text-muted-foreground mt-0.5">
+                                            {tool.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ),
+                          )}
                         </div>
                         <N8nConnectionDialog />
                       </div>

@@ -558,7 +558,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Send the Response body stream directly
-      return reply.send(response.body);
+      if (!response.body) {
+        return reply.status(400).send({
+          error: {
+            message: "No response body",
+            type: "bad_request",
+          },
+        });
+      }
+      return reply.send(response.body as any);
     },
   );
 
